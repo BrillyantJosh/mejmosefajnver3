@@ -16,11 +16,11 @@ export default function AdminSettings() {
   const [localName, setLocalName] = useState(appSettings?.app_name || "");
   const [localColors, setLocalColors] = useState<ThemeColors>(
     appSettings?.theme_colors || {
-      primary: "263 70% 50%",
+      primary: "160 70% 45%",
       primary_foreground: "0 0% 100%",
       secondary: "240 5% 96%",
       secondary_foreground: "240 10% 15%",
-      accent: "263 70% 50%",
+      accent: "160 70% 45%",
       accent_foreground: "0 0% 100%",
       background: "0 0% 100%",
       foreground: "240 10% 15%",
@@ -67,11 +67,11 @@ export default function AdminSettings() {
 
   const resetToDefaults = () => {
     const defaults: ThemeColors = {
-      primary: "263 70% 50%",
+      primary: "160 70% 45%",
       primary_foreground: "0 0% 100%",
       secondary: "240 5% 96%",
       secondary_foreground: "240 10% 15%",
-      accent: "263 70% 50%",
+      accent: "160 70% 45%",
       accent_foreground: "0 0% 100%",
       background: "0 0% 100%",
       foreground: "240 10% 15%",
