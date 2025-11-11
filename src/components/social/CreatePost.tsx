@@ -1,0 +1,386 @@
+import { useState, useEffect, useRef } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Loader2, ImagePlus, X } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNostrUserRoomSubscriptions } from "@/hooks/useNostrUserRoomSubscriptions";
+import { useNostrRooms } from "@/hooks/useNostrRooms";
+import { useAdmin } from "@/contexts/AdminContext";
+import { SimplePool, finalizeEvent } from "nostr-tools";
+import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { toast } from "@/hooks/use-toast";
+
+const DEFAULT_RELAYS = [
+  'wss://relay.lanavault.space',
+  'wss://relay.lanacoin-eternity.com',
+  'wss://relay.lanaheartvoice.com'
+];
+
+export function CreatePost() {
+  const { session } = useAuth();
+  const { appSettings } = useAdmin();
+  const { parameters: systemParameters } = useSystemParameters();
+  const { rooms } = useNostrRooms();
+  const { subscriptions } = useNostrUserRoomSubscriptions({
+    userPubkey: session?.nostrHexId || '',
+    userPrivateKey: session?.nostrPrivateKey || ''
+  });
+
+  const [content, setContent] = useState("");
+  const [selectedRoom, setSelectedRoom] = useState<string>("");
+  const [publishing, setPublishing] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
+    ? systemParameters.relays 
+    : DEFAULT_RELAYS;
+
+  // Always set default room from app_settings immediately
+  useEffect(() => {
+    if (appSettings?.default_rooms && appSettings.default_rooms.length > 0) {
+      setSelectedRoom(appSettings.default_rooms[0]);
+    }
+  }, [appSettings]);
+
+  // Get subscribed rooms (loading in background)
+  const subscribedRooms = rooms.filter(room => 
+    subscriptions.some(sub => sub.slug === room.slug && sub.status === 'active')
+  );
+
+  // Always include default rooms PLUS all subscribed rooms (remove duplicates)
+  const availableRooms = appSettings?.default_rooms 
+    ? [
+        ...appSettings.default_rooms.map(slug => ({
+          slug,
+          title: slug,
+          icon: undefined,
+          visibility: 'public' as const,
+          status: 'active' as const,
+          order: 0
+        })),
+        ...subscribedRooms.filter(room => !appSettings.default_rooms.includes(room.slug))
+      ]
+    : subscribedRooms;
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    if (files.length === 0) return;
+
+    // Check if adding these files would exceed the limit
+    if (selectedImages.length + files.length > 3) {
+      toast({
+        title: "Too many images",
+        description: "You can upload up to 3 images",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Show 60-day storage notice on first image selection
+    if (selectedImages.length === 0) {
+      toast({
+        title: "Storage notice",
+        description: "Images will be stored for 60 days on the server, then automatically deleted.",
+        duration: 5000
+      });
+    }
+
+    // Create preview URLs
+    const newPreviews = files.map(file => URL.createObjectURL(file));
+    setSelectedImages(prev => [...prev, ...files]);
+    setImagePreviews(prev => [...prev, ...newPreviews]);
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removeImage = (index: number) => {
+    // Revoke the preview URL to free memory
+    URL.revokeObjectURL(imagePreviews[index]);
+    
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const resizeImage = async (file: File, maxWidth: number = 1200): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Could not get canvas context'));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Failed to create blob'));
+            }
+          },
+          'image/jpeg',
+          0.85
+        );
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const uploadImages = async (): Promise<string[]> => {
+    if (selectedImages.length === 0) return [];
+
+    setUploading(true);
+    const uploadedUrls: string[] = [];
+
+    try {
+      for (const file of selectedImages) {
+        // Resize image
+        const resizedBlob = await resizeImage(file);
+        
+        // Generate unique filename
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${session?.nostrHexId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+        // Upload to Supabase Storage
+        const { data, error } = await supabase.storage
+          .from('post-images')
+          .upload(fileName, resizedBlob, {
+            contentType: 'image/jpeg',
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) {
+          console.error('Upload error:', error);
+          throw error;
+        }
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('post-images')
+          .getPublicUrl(data.path);
+
+        uploadedUrls.push(publicUrl);
+      }
+
+      return uploadedUrls;
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      toast({
+        title: "Error uploading images",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive"
+      });
+      return [];
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handlePost = async () => {
+    if (!content.trim() || !session?.nostrPrivateKey || !selectedRoom) {
+      toast({
+        title: "Error",
+        description: "Please enter content and select a room",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setPublishing(true);
+
+      // Upload images first if any are selected
+      const imageUrls = await uploadImages();
+      
+      const pool = new SimplePool();
+
+      // Create event with room tag and image tags
+      const privKeyBytes = new Uint8Array(session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+      
+      const tags: string[][] = [['a', selectedRoom]];
+      
+      // Add image URLs as imurl tags
+      imageUrls.forEach(url => {
+        tags.push(['imurl', url]);
+      });
+      
+      const event = finalizeEvent({
+        kind: 1,
+        created_at: Math.floor(Date.now() / 1000),
+        tags,
+        content: content.trim(),
+      }, privKeyBytes);
+
+      console.log('Publishing to relays:', relays);
+      console.log('Event:', event);
+
+      // Publish to relays - consider success if at least one relay accepts
+      const publishPromises = pool.publish(relays, event);
+      
+      // Create a promise that resolves when at least one relay succeeds
+      const publishArray = Array.from(publishPromises);
+      let successCount = 0;
+      let errorCount = 0;
+      
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          if (successCount === 0) {
+            reject(new Error('Publish timeout - no relays responded'));
+          } else {
+            resolve();
+          }
+        }, 10000);
+
+        publishArray.forEach((promise) => {
+          promise
+            .then(() => {
+              successCount++;
+              if (successCount === 1) {
+                clearTimeout(timeout);
+                resolve();
+              }
+            })
+            .catch(() => {
+              errorCount++;
+              if (errorCount === publishArray.length) {
+                clearTimeout(timeout);
+                reject(new Error('All relays failed to publish'));
+              }
+            });
+        });
+      });
+
+      toast({
+        title: "Published!",
+        description: "Your post was successfully published"
+      });
+
+      setContent("");
+      
+      // Clear images and previews
+      imagePreviews.forEach(url => URL.revokeObjectURL(url));
+      setSelectedImages([]);
+      setImagePreviews([]);
+      
+      // Close connections after a delay
+      setTimeout(() => pool.close(relays), 1000);
+    } catch (error) {
+      console.error('Error publishing post:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to publish post",
+        variant: "destructive"
+      });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  if (!session) return null;
+
+  return (
+    <Card>
+      <CardContent className="pt-6 space-y-3">
+        <Textarea
+          placeholder="What's on your mind?"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          className="min-h-[100px] resize-none"
+        />
+        
+        {imagePreviews.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {imagePreviews.map((preview, index) => (
+              <div key={index} className="relative">
+                <img 
+                  src={preview} 
+                  alt={`Preview ${index + 1}`}
+                  className="h-20 w-20 object-cover rounded-md border border-border"
+                />
+                <Button
+                  size="icon"
+                  variant="destructive"
+                  className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                  onClick={() => removeImage(index)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <Select value={selectedRoom} onValueChange={setSelectedRoom}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select a room" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableRooms.map((room) => (
+                <SelectItem key={room.slug} value={room.slug}>
+                  {room.icon && <span className="mr-2">{room.icon}</span>}
+                  {room.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={selectedImages.length >= 3 || uploading || publishing}
+            title="Add images (max 3)"
+          >
+            <ImagePlus className="h-4 w-4" />
+          </Button>
+
+          <Button 
+            onClick={handlePost} 
+            disabled={publishing || uploading || !content.trim() || !selectedRoom}
+            className="ml-auto"
+          >
+            {(publishing || uploading) ? <Loader2 className="h-4 w-4 animate-spin" /> : "Publish"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

@@ -1,0 +1,157 @@
+import { useState } from 'react';
+import { LinkPreview } from './LinkPreview';
+import { Button } from '@/components/ui/button';
+import { Languages, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+interface PostContentProps {
+  content: string;
+  tags?: string[][];
+}
+
+export function PostContent({ content, tags }: PostContentProps) {
+  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState<'sl' | 'en'>('sl');
+
+  const handleTranslate = async (language: 'sl' | 'en') => {
+    setIsTranslating(true);
+    setTargetLanguage(language);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('translate-post', {
+        body: { content, targetLanguage: language }
+      });
+
+      if (error) {
+        console.error('Translation error:', error);
+        toast.error('Translation failed. Please try again.');
+        return;
+      }
+
+      if (data?.translatedText) {
+        setTranslatedContent(data.translatedText);
+      }
+    } catch (error) {
+      console.error('Translation error:', error);
+      toast.error('Translation failed. Please try again.');
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const displayContent = translatedContent || content;
+
+  try {
+    // Extract image URLs from "imurl" tags
+    const imageUrls: string[] = tags
+      ? tags
+          .filter((tag) => tag[0] === 'imurl')
+          .map((tag) => tag[1])
+          .filter(Boolean)
+      : [];
+    
+    // Extract URLs from content (for link previews)
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urlMatches = displayContent.match(urlRegex);
+    const urls: string[] = urlMatches ? urlMatches : [];
+    
+    // Split content by URLs to render text and links separately
+    const parts = displayContent.split(urlRegex);
+    
+    return (
+      <div>
+        {/* Translation buttons */}
+        <div className="flex gap-2 mb-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleTranslate('sl')}
+            disabled={isTranslating}
+            className="h-7 text-xs"
+          >
+            {isTranslating && targetLanguage === 'sl' ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Languages className="h-3 w-3" />
+            )}
+            <span className="ml-1">SL</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleTranslate('en')}
+            disabled={isTranslating}
+            className="h-7 text-xs"
+          >
+            {isTranslating && targetLanguage === 'en' ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Languages className="h-3 w-3" />
+            )}
+            <span className="ml-1">EN</span>
+          </Button>
+          {translatedContent && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setTranslatedContent(null)}
+              className="h-7 text-xs"
+            >
+              Original
+            </Button>
+          )}
+        </div>
+
+        {/* Render text content */}
+        <p className="mb-4 whitespace-pre-wrap break-words">
+          {parts.map((part, index) => {
+            // Check if this part is a URL
+            if (urls.includes(part)) {
+              // Don't render the URL text, we'll show preview below
+              return null;
+            }
+            return <span key={`text-${index}`}>{part}</span>;
+          })}
+        </p>
+        
+        {/* Render images from imurl tags */}
+        {imageUrls.length > 0 && (
+          <div className={`mb-4 ${
+            imageUrls.length === 1 
+              ? 'grid grid-cols-1' 
+              : imageUrls.length === 2
+              ? 'grid grid-cols-2 gap-1'
+              : imageUrls.length === 3
+              ? 'grid grid-cols-3 gap-1'
+              : 'grid grid-cols-2 gap-1'
+          }`}>
+            {imageUrls.map((imageUrl, index) => (
+              <img
+                key={`image-${index}`}
+                src={imageUrl}
+                alt={`Post image ${index + 1}`}
+                className="w-full rounded-lg object-cover"
+                loading="lazy"
+              />
+            ))}
+          </div>
+        )}
+        
+        {/* Render link previews */}
+        {urls.length > 0 && (
+          <div className="space-y-2">
+            {urls.map((url, index) => (
+              <LinkPreview key={`link-${index}`} url={url} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  } catch (error) {
+    console.error('Error parsing post content:', error);
+    // Fallback - show plain text
+    return <p className="mb-4 whitespace-pre-wrap break-words">{displayContent}</p>;
+  }
+}
