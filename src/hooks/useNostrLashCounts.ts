@@ -61,7 +61,19 @@ export function useNostrLashCounts(postIds: string[]) {
         console.log('💜 Total KIND 39991 events found on relay:', allLashEvents.length);
         if (allLashEvents.length > 0) {
           console.log('💜 Sample LASH event:', allLashEvents[0]);
-          console.log('💜 Sample LASH tags:', allLashEvents[0]?.tags);
+          console.log('💜 Sample LASH tags (full):', JSON.stringify(allLashEvents[0]?.tags, null, 2));
+          
+          // Check for 'e' tags specifically
+          const eTags = allLashEvents[0]?.tags?.filter((tag: string[]) => tag[0] === 'e');
+          console.log('💜 Sample "e" tags:', eTags);
+          console.log('💜 Sample "e" tag values:', eTags?.map((t: string[]) => t[1]));
+          
+          // Check for 'd' tags
+          const dTags = allLashEvents[0]?.tags?.filter((tag: string[]) => tag[0] === 'd');
+          console.log('💜 Sample "d" tags:', dTags);
+          
+          // Show first 3 post IDs we're looking for
+          console.log('💜 Looking for post IDs (first 3):', postIds.slice(0, 3));
         }
 
         // Now fetch KIND 39991 events that reference these posts
