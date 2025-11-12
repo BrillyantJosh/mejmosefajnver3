@@ -24,7 +24,14 @@ export function useNostrLashCounts(postIds: string[]) {
     : DEFAULT_RELAYS;
 
   useEffect(() => {
-    if (postIds.length === 0) return;
+    console.log('🔍 useNostrLashCounts: Hook triggered');
+    console.log('🔍 useNostrLashCounts: postIds.length =', postIds.length);
+    console.log('🔍 useNostrLashCounts: postIds =', postIds);
+    
+    if (postIds.length === 0) {
+      console.log('⚠️ useNostrLashCounts: No postIds provided, skipping LASH count fetch');
+      return;
+    }
 
     let isSubscribed = true;
 
@@ -33,6 +40,7 @@ export function useNostrLashCounts(postIds: string[]) {
 
       try {
         console.log('💜 Fetching LASH counts for', postIds.length, 'posts');
+        console.log('💜 Post IDs:', postIds);
 
         // Fetch KIND 39991 events that reference these posts
         const lashEvents = await Promise.race([
@@ -50,12 +58,15 @@ export function useNostrLashCounts(postIds: string[]) {
         });
 
         console.log('💜 Found', lashEvents.length, 'LASH events');
+        console.log('💜 Sample event:', lashEvents[0]);
 
         if (!isSubscribed) return;
 
         // Count UNIQUE LASH IDs per post (filter out expired ones)
         const counts = new Map<string, number>();
         const postLashIds = new Map<string, Set<string>>(); // postId -> Set of unique lash IDs
+        
+        console.log('💜 Processing LASH events...');
         
         for (const event of lashEvents) {
           // Skip expired LASHes
@@ -84,6 +95,9 @@ export function useNostrLashCounts(postIds: string[]) {
         for (const [postId, lashIdSet] of postLashIds.entries()) {
           counts.set(postId, lashIdSet.size);
         }
+
+        console.log('💜 LASH counts calculated:', Array.from(counts.entries()));
+        console.log('💜 Total posts with LASHes:', counts.size);
 
         setLashCounts(counts);
         setLoading(false);
