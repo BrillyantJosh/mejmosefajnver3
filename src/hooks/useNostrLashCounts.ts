@@ -76,12 +76,12 @@ export function useNostrLashCounts(postIds: string[]) {
           console.log('💜 Looking for post IDs (first 3):', postIds.slice(0, 3));
         }
 
-        // Now fetch KIND 39991 events that reference these posts
-        console.log('💜 Step 2: Fetching LASH events for specific posts...');
-        const lashEvents = await Promise.race([
+        // Now fetch ALL recent KIND 39991 events and filter client-side
+        // (relay tag filtering may not work correctly on all relays)
+        console.log('💜 Step 2: Fetching ALL recent LASH events and filtering client-side...');
+        const allRecentLashEvents = await Promise.race([
           pool.querySync(relays, {
             kinds: [39991],
-            '#e': postIds, // Events that reference these post IDs
             limit: 1000
           }),
           new Promise<any[]>((_, reject) => 
@@ -90,6 +90,13 @@ export function useNostrLashCounts(postIds: string[]) {
         ]).catch(err => {
           console.error('❌ LASH query failed:', err);
           return [];
+        });
+        
+        // Filter to only events that reference our post IDs
+        const postIdSet = new Set(postIds);
+        const lashEvents = allRecentLashEvents.filter(event => {
+          const eTag = event.tags.find((tag: string[]) => tag[0] === 'e');
+          return eTag && eTag[1] && postIdSet.has(eTag[1]);
         });
 
         console.log('💜 Found', lashEvents.length, 'LASH events');
