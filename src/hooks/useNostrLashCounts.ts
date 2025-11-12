@@ -41,8 +41,31 @@ export function useNostrLashCounts(postIds: string[]) {
       try {
         console.log('💜 Fetching LASH counts for', postIds.length, 'posts');
         console.log('💜 Post IDs:', postIds);
+        console.log('💜 Querying relays:', relays);
 
-        // Fetch KIND 39991 events that reference these posts
+        // First, check if there are ANY KIND 39991 events at all
+        console.log('💜 Step 1: Checking for ANY KIND 39991 events on relay...');
+        const allLashEvents = await Promise.race([
+          pool.querySync(relays, {
+            kinds: [39991],
+            limit: 100  // Get first 100 to see if any exist
+          }),
+          new Promise<any[]>((_, reject) => 
+            setTimeout(() => reject(new Error('Check query timeout')), 5000)
+          )
+        ]).catch(err => {
+          console.error('❌ Check query failed:', err);
+          return [];
+        });
+        
+        console.log('💜 Total KIND 39991 events found on relay:', allLashEvents.length);
+        if (allLashEvents.length > 0) {
+          console.log('💜 Sample LASH event:', allLashEvents[0]);
+          console.log('💜 Sample LASH tags:', allLashEvents[0]?.tags);
+        }
+
+        // Now fetch KIND 39991 events that reference these posts
+        console.log('💜 Step 2: Fetching LASH events for specific posts...');
         const lashEvents = await Promise.race([
           pool.querySync(relays, {
             kinds: [39991],
