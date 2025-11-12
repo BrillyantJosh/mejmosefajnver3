@@ -14,13 +14,235 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      admin_users: {
+        Row: {
+          created_at: string | null
+          id: string
+          nostr_hex_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          nostr_hex_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          nostr_hex_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      app_settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string | null
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
+      direct_messages: {
+        Row: {
+          content: string
+          created_at: string
+          decrypted_content: string | null
+          event_id: string
+          id: string
+          kind: number | null
+          raw_event: Json | null
+          received_at: string | null
+          recipient_pubkey: string
+          sender_pubkey: string
+          tags: Json | null
+        }
+        Insert: {
+          content: string
+          created_at: string
+          decrypted_content?: string | null
+          event_id: string
+          id?: string
+          kind?: number | null
+          raw_event?: Json | null
+          received_at?: string | null
+          recipient_pubkey: string
+          sender_pubkey: string
+          tags?: Json | null
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          decrypted_content?: string | null
+          event_id?: string
+          id?: string
+          kind?: number | null
+          raw_event?: Json | null
+          received_at?: string | null
+          recipient_pubkey?: string
+          sender_pubkey?: string
+          tags?: Json | null
+        }
+        Relationships: []
+      }
+      dm_read_status: {
+        Row: {
+          conversation_pubkey: string
+          created_at: string | null
+          id: string
+          is_read: boolean
+          message_event_id: string
+          read_at: string | null
+          sender_pubkey: string
+          updated_at: string | null
+          user_nostr_id: string
+        }
+        Insert: {
+          conversation_pubkey: string
+          created_at?: string | null
+          id?: string
+          is_read?: boolean
+          message_event_id: string
+          read_at?: string | null
+          sender_pubkey: string
+          updated_at?: string | null
+          user_nostr_id: string
+        }
+        Update: {
+          conversation_pubkey?: string
+          created_at?: string | null
+          id?: string
+          is_read?: boolean
+          message_event_id?: string
+          read_at?: string | null
+          sender_pubkey?: string
+          updated_at?: string | null
+          user_nostr_id?: string
+        }
+        Relationships: []
+      }
+      nostr_profiles: {
+        Row: {
+          about: string | null
+          created_at: string
+          display_name: string | null
+          full_name: string | null
+          lana_wallet_id: string | null
+          last_fetched_at: string
+          nostr_hex_id: string
+          picture: string | null
+          raw_metadata: Json | null
+          updated_at: string
+        }
+        Insert: {
+          about?: string | null
+          created_at?: string
+          display_name?: string | null
+          full_name?: string | null
+          lana_wallet_id?: string | null
+          last_fetched_at?: string
+          nostr_hex_id: string
+          picture?: string | null
+          raw_metadata?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          about?: string | null
+          created_at?: string
+          display_name?: string | null
+          full_name?: string | null
+          lana_wallet_id?: string | null
+          last_fetched_at?: string
+          nostr_hex_id?: string
+          picture?: string | null
+          raw_metadata?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      transaction_history: {
+        Row: {
+          block_height: number
+          block_time: number
+          created_at: string
+          id: string
+          sender_pubkey: string
+          txid: string
+          used_utxos: string[]
+        }
+        Insert: {
+          block_height: number
+          block_time: number
+          created_at?: string
+          id?: string
+          sender_pubkey: string
+          txid: string
+          used_utxos: string[]
+        }
+        Update: {
+          block_height?: number
+          block_time?: number
+          created_at?: string
+          id?: string
+          sender_pubkey?: string
+          txid?: string
+          used_utxos?: string[]
+        }
+        Relationships: []
+      }
+      wallet_types: {
+        Row: {
+          created_at: string
+          description: string | null
+          display_order: number
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      cleanup_old_direct_messages: { Args: never; Returns: number }
+      get_user_nostr_hex_id: { Args: { user_id: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
