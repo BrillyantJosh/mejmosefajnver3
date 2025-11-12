@@ -62,8 +62,20 @@ export default function Feed() {
     : DEFAULT_RELAYS;
 
   // Get LASH counts for all posts
-  const postIds = useMemo(() => posts.map(p => p.id), [posts]);
-  const { lashCounts } = useNostrLashCounts(postIds);
+  const postIds = useMemo(() => {
+    const ids = posts.map(p => p.id);
+    console.log('📊 Feed: Computed postIds =', ids.length, 'IDs');
+    return ids;
+  }, [posts]);
+  
+  const { lashCounts, loading: lashCountsLoading } = useNostrLashCounts(postIds);
+  
+  // Log LASH counts when they change
+  useEffect(() => {
+    console.log('📊 Feed: lashCounts updated, size =', lashCounts.size);
+    console.log('📊 Feed: lashCounts entries =', Array.from(lashCounts.entries()));
+    console.log('📊 Feed: lashCountsLoading =', lashCountsLoading);
+  }, [lashCounts, lashCountsLoading]);
   
   // Combine relay LASH counts with local optimistic updates
   const displayLashCounts = useMemo(() => {
@@ -77,8 +89,16 @@ export default function Feed() {
       const current = combined.get(postId) || 0;
       combined.set(postId, current + increment);
     });
+    
+    console.log('📊 Feed: displayLashCounts =', Array.from(combined.entries()));
     return combined;
   }, [lashCounts, localLashCounts]);
+  
+  // Log posts when they change
+  useEffect(() => {
+    console.log('📊 Feed: posts.length =', posts.length);
+    console.log('📊 Feed: First 3 post IDs:', posts.slice(0, 3).map(p => p.id));
+  }, [posts]);
 
   // Filter posts based on selected filter mode
   const filteredPosts = useMemo(() => {
