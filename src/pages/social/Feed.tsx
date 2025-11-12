@@ -215,6 +215,12 @@ export default function Feed() {
         return newCounts;
       });
 
+      // Show success feedback to user
+      toast({
+        title: "LASH sent! 💜",
+        description: "Your LASH has been sent successfully"
+      });
+
       // Increment unpaid LASH count in header badge
       incrementUnpaidCount();
     } else {

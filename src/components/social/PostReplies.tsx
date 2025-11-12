@@ -95,13 +95,15 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
     }
   };
 
+  // Only re-fetch when postId changes, not when relays reference changes
+  // This prevents duplicate comment accumulation on every re-render
   useEffect(() => {
     fetchReplies();
 
     return () => {
       pool.close(relays);
     };
-  }, [postId, relays]);
+  }, [postId]); // ✅ Only postId dependency to prevent unnecessary refetches
 
   const handleSubmitComment = async () => {
     if (!commentText.trim() || !session?.nostrPrivateKey) {
