@@ -33,14 +33,23 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
   const [pool] = useState(() => new SimplePool());
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitProgress, setSubmitProgress] = useState('');
   const { session } = useAuth();
+  
+  // Detect mobile and older devices for optimized timeouts
+  const isMobile = /Mobile|Android|iPhone/i.test(navigator.userAgent);
+  const FETCH_TIMEOUT = isMobile ? 15000 : 5000; // 15s for mobile, 5s for desktop
+  const PUBLISH_TIMEOUT = isMobile ? 20000 : 10000; // 20s for mobile, 10s for desktop
 
-  const fetchReplies = async () => {
-    console.log('💬 Fetching replies for post:', postId.slice(0, 8));
-    setLoading(true);
+  const fetchReplies = async (skipLoadingState = false) => {
+    console.log('💬 Fetching replies for post:', postId.slice(0, 8), { isMobile, timeout: FETCH_TIMEOUT });
+    
+    if (!skipLoadingState) {
+      setLoading(true);
+    }
 
     try {
-      // Fetch all posts that reference this post ID
+      // Fetch all posts that reference this post ID with mobile-optimized timeout
       const replyEvents = await Promise.race([
         pool.querySync(relays, {
           kinds: [1],
@@ -48,7 +57,7 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
           limit: 100
         }),
         new Promise<Event[]>((_, reject) => 
-          setTimeout(() => reject(new Error('Replies query timeout')), 5000)
+          setTimeout(() => reject(new Error('Replies query timeout')), FETCH_TIMEOUT)
         )
       ]).catch(err => {
         console.error('❌ Replies query failed:', err);
@@ -112,6 +121,8 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
     }
 
     setIsSubmitting(true);
+    setSubmitProgress('Preparing comment...');
+    
     try {
       // Convert hex private key to Uint8Array
       const privateKeyBytes = new Uint8Array(
@@ -129,9 +140,24 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
         pubkey: session.nostrHexId
       };
 
+      setSubmitProgress('Signing comment...');
+      
       // Sign the event
       const signedEvent = finalizeEvent(commentEvent, privateKeyBytes);
 
+      // ✅ OPTIMISTIC UI: Add comment immediately
+      const optimisticReply: Reply = {
+        id: signedEvent.id,
+        pubkey: session.nostrHexId,
+        content: commentText,
+        created_at: signedEvent.created_at
+      };
+      
+      setReplies(prev => [...prev, optimisticReply]);
+      const savedComment = commentText;
+      setCommentText('');
+
+      setSubmitProgress(`Publishing to ${relays.length} relays...`);
       console.log('💬 Publishing comment to', relays.length, 'relays');
 
       // Publish to all relays with individual tracking
@@ -151,12 +177,12 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
           });
       });
 
-      // Wait for all with graceful timeout
+      // Wait for all with graceful timeout (mobile-optimized)
       try {
         await Promise.race([
           Promise.all(trackedPromises),
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Publish timeout')), 10000)
+            setTimeout(() => reject(new Error('Publish timeout')), PUBLISH_TIMEOUT)
           )
         ]);
       } catch (error) {
@@ -172,23 +198,28 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
       console.log(`📊 Comment Publish: ${successful}/${relays.length} successful`);
 
       if (successful === 0) {
+        // Rollback optimistic UI on complete failure
+        setReplies(prev => prev.filter(r => r.id !== signedEvent.id));
+        setCommentText(savedComment);
         throw new Error('All relays failed to publish comment');
       }
 
-      toast.success(`Comment posted successfully (${successful}/${relays.length} relays)`);
-      setCommentText('');
+      toast.success(`Comment posted! (${successful}/${relays.length} relays)`);
       
-      // Refresh replies after short delay
+      // ✅ CRITICAL FIX: Refresh in background without showing loading state
       setTimeout(() => {
-        setLoading(true);
-        fetchReplies();
-      }, 1500);
+        fetchReplies(true).catch(err => {
+          console.error('❌ Background refresh failed:', err);
+          // Don't show error to user - comment is already visible optimistically
+        });
+      }, 2000);
 
     } catch (error) {
       console.error('❌ Error posting comment:', error);
-      toast.error("Failed to post comment");
+      toast.error("Failed to post comment. Please try again.");
     } finally {
       setIsSubmitting(false);
+      setSubmitProgress('');
     }
   };
 
@@ -245,7 +276,7 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Posting...
+                  {submitProgress || 'Posting...'}
                 </>
               ) : (
                 <>
@@ -254,6 +285,11 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
                 </>
               )}
             </Button>
+            {submitProgress && (
+              <p className="text-xs text-muted-foreground mt-2">
+                {submitProgress}
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -280,7 +316,7 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Posting...
+                {submitProgress || 'Posting...'}
               </>
             ) : (
               <>
@@ -289,6 +325,11 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
               </>
             )}
           </Button>
+          {submitProgress && (
+            <p className="text-xs text-muted-foreground mt-2">
+              {submitProgress}
+            </p>
+          )}
         </div>
       )}
       
