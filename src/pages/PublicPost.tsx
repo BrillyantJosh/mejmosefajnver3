@@ -9,11 +9,23 @@ import { PostContent } from "@/components/social/PostContent";
 import { PostReplies } from "@/components/social/PostReplies";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 
-const DEFAULT_RELAYS = [
+// Lana-specific relays where posts are stored
+const LANA_RELAYS = [
+  'wss://relay.lanavault.space',
+  'wss://relay.lanacoin-eternity.com',
+  'wss://relay.lanaheartvoice.com',
+  'wss://relay.lovelana.org'
+];
+
+// Fallback to generic Nostr relays
+const FALLBACK_RELAYS = [
   'wss://relay.damus.io',
   'wss://nos.lol',
   'wss://relay.nostr.band'
 ];
+
+// Use Lana relays first, then fallback relays
+const DEFAULT_RELAYS = [...LANA_RELAYS, ...FALLBACK_RELAYS];
 
 export default function PublicPost() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -50,7 +62,10 @@ export default function PublicPost() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading post from Nostr relays...</p>
+        </div>
       </div>
     );
   }
@@ -58,13 +73,19 @@ export default function PublicPost() {
   if (error || !post) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="max-w-2xl w-full">
+        <div className="max-w-2xl w-full space-y-4">
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               {error || 'Post not found'}
             </AlertDescription>
           </Alert>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     );
