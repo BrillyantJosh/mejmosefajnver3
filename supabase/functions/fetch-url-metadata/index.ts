@@ -22,54 +22,80 @@ serve(async (req) => {
 
     console.log('Fetching metadata for URL:', url);
     
-    // Try HTTPS first if URL is HTTP
-    let fetchUrl = url;
-    if (url.startsWith('http://')) {
-      fetchUrl = url.replace('http://', 'https://');
-      console.log('Converting HTTP to HTTPS:', fetchUrl);
-    }
+    const fetchWithTimeout = async (fetchUrl: string, timeout = 10000) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
+      try {
+        const response = await fetch(fetchUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; LanaBot/1.0)',
+          },
+          redirect: 'follow',
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        return response;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+      }
+    };
     
     let response;
-    let lastError;
+    let fetchUrl = url;
     
+    // Try original URL first
     try {
       console.log('Attempting fetch with:', fetchUrl);
-      response = await fetch(fetchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; LanaBot/1.0)',
-        },
-        redirect: 'follow',
-      });
+      response = await fetchWithTimeout(fetchUrl);
       
       if (!response.ok) {
-        lastError = `HTTP ${response.status}: ${response.statusText}`;
-        throw new Error(lastError);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.log('Fetch error:', errorMessage);
+      console.log('Initial fetch error:', errorMessage);
       
-      // If HTTPS fails and we converted from HTTP, try original HTTP
-      if (fetchUrl !== url) {
-        console.log('HTTPS failed, trying original HTTP URL:', url);
+      // If original was HTTP and it failed, try HTTPS
+      if (url.startsWith('http://') && !url.startsWith('https://')) {
+        fetchUrl = url.replace('http://', 'https://');
+        console.log('Trying HTTPS variant:', fetchUrl);
+        
         try {
-          response = await fetch(url, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (compatible; LanaBot/1.0)',
-            },
-            redirect: 'follow',
-          });
+          response = await fetchWithTimeout(fetchUrl);
           
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
-        } catch (httpError) {
-          const httpErrorMessage = httpError instanceof Error ? httpError.message : String(httpError);
-          console.log('HTTP fetch also failed:', httpErrorMessage);
-          throw new Error(`Failed to fetch URL (tried both HTTPS and HTTP): ${errorMessage}`);
+        } catch (httpsError) {
+          const httpsErrorMessage = httpsError instanceof Error ? httpsError.message : String(httpsError);
+          console.log('HTTPS fetch also failed:', httpsErrorMessage);
+          
+          // Return a basic fallback metadata instead of throwing
+          const hostname = new URL(url).hostname;
+          return new Response(
+            JSON.stringify({
+              title: hostname,
+              description: '',
+              image: '',
+              siteName: hostname,
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
       } else {
-        throw new Error(`Failed to fetch URL: ${errorMessage}`);
+        // For HTTPS URLs that fail or other errors, return fallback
+        const hostname = new URL(url).hostname;
+        return new Response(
+          JSON.stringify({
+            title: hostname,
+            description: '',
+            image: '',
+            siteName: hostname,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     }
 
