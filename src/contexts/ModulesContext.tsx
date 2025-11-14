@@ -7,10 +7,17 @@ import { useSystemParameters } from './SystemParametersContext';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 import sellLanaImage from '@/assets/selllana-module.png';
-import buyLanaImage from '@/assets/buylana-module.png';
+import buyLanaImage from '@/assets/buylana-new-module.png';
 import marketplaceImage from '@/assets/marketplace-hero.png';
 import lana8wonderImage from '@/assets/lana8wonder-icon.png';
 import lanapaysImage from '@/assets/lanapays-module.png';
+import chatImage from '@/assets/chat-module.png';
+import socialImage from '@/assets/social-module.png';
+import walletImage from '@/assets/wallet-module.png';
+import lashImage from '@/assets/lash-module.png';
+import relaysImage from '@/assets/relays-module.png';
+import lanapaperImage from '@/assets/lanapaper-module.png';
+import offlinelanaImage from '@/assets/offlinelana-module.png';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
@@ -31,6 +38,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     icon: Users,
     path: '/social',
     gradient: 'from-blue-500 to-cyan-500',
+    image: socialImage,
     enabled: true,
     order: 1
   },
@@ -41,6 +49,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     icon: MessageSquare,
     path: '/chat',
     gradient: 'from-green-500 to-emerald-500',
+    image: chatImage,
     enabled: true,
     order: 2
   },
@@ -51,6 +60,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     icon: WalletIcon,
     path: '/wallet',
     gradient: 'from-orange-500 to-red-500',
+    image: walletImage,
     enabled: true,
     order: 3
   },
@@ -95,6 +105,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     icon: FileText,
     path: '/lana-paper',
     gradient: 'from-teal-500 to-cyan-500',
+    image: lanapaperImage,
     externalUrl: 'https://www.LanaPaper.online',
     enabled: false,
     order: 7
@@ -106,6 +117,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     icon: FileKey,
     path: '/offline-lana',
     gradient: 'from-slate-500 to-zinc-500',
+    image: offlinelanaImage,
     externalUrl: 'https://offlinelana.org',
     enabled: false,
     order: 8
@@ -117,6 +129,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     icon: Radio,
     path: '/relays',
     gradient: 'from-rose-500 to-pink-500',
+    image: relaysImage,
     enabled: false,
     order: 9
   },
@@ -149,6 +162,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     icon: Heart,
     path: '/lash/pay',
     gradient: 'from-red-500 to-rose-500',
+    image: lashImage,
     enabled: true,
     order: 12
   }
