@@ -22,15 +22,38 @@ serve(async (req) => {
 
     console.log('Fetching metadata for URL:', url);
     
-    // Fetch the URL
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; LanaBot/1.0)',
-      },
-    });
+    // Try HTTPS first if URL is HTTP
+    let fetchUrl = url;
+    if (url.startsWith('http://')) {
+      fetchUrl = url.replace('http://', 'https://');
+      console.log('Converting HTTP to HTTPS:', fetchUrl);
+    }
+    
+    let response;
+    try {
+      response = await fetch(fetchUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; LanaBot/1.0)',
+        },
+        redirect: 'follow',
+      });
+    } catch (error) {
+      // If HTTPS fails and we converted from HTTP, try original HTTP
+      if (fetchUrl !== url) {
+        console.log('HTTPS failed, trying original HTTP URL:', url);
+        response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; LanaBot/1.0)',
+          },
+          redirect: 'follow',
+        });
+      } else {
+        throw error;
+      }
+    }
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch URL: ${response.status}`);
+      throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
     }
 
     const html = await response.text();
