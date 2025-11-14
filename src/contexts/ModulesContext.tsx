@@ -10,7 +10,7 @@ import sellLanaImage from '@/assets/selllana-module.png';
 import buyLanaImage from '@/assets/buylana-module.png';
 import marketplaceImage from '@/assets/marketplace-hero.png';
 import lana8wonderImage from '@/assets/lana8wonder-icon.png';
-import lanapaysImage from '@/assets/lanapays-module.png';
+import lanapaysImage from '@/assets/lanapay-arrows.png';
 import chatImage from '@/assets/chat-module.png';
 import socialImage from '@/assets/social-module.png';
 import walletImage from '@/assets/wallet-module.png';
