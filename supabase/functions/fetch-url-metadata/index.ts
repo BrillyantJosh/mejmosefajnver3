@@ -30,30 +30,47 @@ serve(async (req) => {
     }
     
     let response;
+    let lastError;
+    
     try {
+      console.log('Attempting fetch with:', fetchUrl);
       response = await fetch(fetchUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; LanaBot/1.0)',
         },
         redirect: 'follow',
       });
+      
+      if (!response.ok) {
+        lastError = `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(lastError);
+      }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.log('Fetch error:', errorMessage);
+      
       // If HTTPS fails and we converted from HTTP, try original HTTP
       if (fetchUrl !== url) {
         console.log('HTTPS failed, trying original HTTP URL:', url);
-        response = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; LanaBot/1.0)',
-          },
-          redirect: 'follow',
-        });
+        try {
+          response = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; LanaBot/1.0)',
+            },
+            redirect: 'follow',
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+        } catch (httpError) {
+          const httpErrorMessage = httpError instanceof Error ? httpError.message : String(httpError);
+          console.log('HTTP fetch also failed:', httpErrorMessage);
+          throw new Error(`Failed to fetch URL (tried both HTTPS and HTTP): ${errorMessage}`);
+        }
       } else {
-        throw error;
+        throw new Error(`Failed to fetch URL: ${errorMessage}`);
       }
-    }
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
     }
 
     const html = await response.text();
