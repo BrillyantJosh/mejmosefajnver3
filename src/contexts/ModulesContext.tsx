@@ -18,6 +18,7 @@ import lashImage from '@/assets/lash-module.png';
 import relaysImage from '@/assets/relays-module.png';
 import lanapaperImage from '@/assets/lanapaper-module.png';
 import offlinelanaImage from '@/assets/offlinelana-module.png';
+import lanapayImage from '@/assets/lanapay-module.png';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
@@ -151,6 +152,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     icon: Shield,
     path: '/lanapay',
     gradient: 'from-cyan-500 to-blue-500',
+    image: lanapayImage,
     externalUrl: 'https://lanapay.online',
     enabled: false,
     order: 11
