@@ -31,6 +31,7 @@ export default function MyEvents() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRelays, setSelectedRelays] = useState<string[]>([]);
   const [isRelayFilterOpen, setIsRelayFilterOpen] = useState(false);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const EVENTS_PER_PAGE = 100;
 
   // Initialize selected relays when parameters load
@@ -216,6 +217,90 @@ export default function MyEvents() {
     }
   };
 
+  const handleDeleteSingle = async (eventId: string) => {
+    if (!session?.nostrPrivateKey || !parameters?.relays) return;
+
+    setDeletingEventId(eventId);
+    const pool = new SimplePool();
+
+    try {
+      const eventToDelete = events.find(e => e.id === eventId);
+      if (!eventToDelete) return;
+      
+      // Create deletion event (KIND 5)
+      const privateKeyBytes = new Uint8Array(
+        session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
+      );
+
+      const deletionEvent = finalizeEvent({
+        kind: 5,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [['e', eventId]],
+        content: 'Deleted from Lana Wallet',
+      }, privateKeyBytes);
+
+      console.log('📡 Publishing deletion event (KIND 5):', deletionEvent);
+      console.log('🔄 Publishing to', parameters.relays.length, 'relays...');
+
+      // Publish deletion event to relays with proper timeout handling
+      const publishResults = await Promise.allSettled(
+        parameters.relays.map(relay => {
+          console.log(`🔄 Connecting to ${relay}...`);
+          const publishPromises = pool.publish([relay], deletionEvent);
+          
+          return Promise.race([
+            Promise.all(publishPromises).then(() => {
+              console.log(`✅ ${relay}: Successfully published deletion event`);
+              return { relay, success: true };
+            }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Timeout after 8 seconds')), 8000)
+            )
+          ]).catch(error => {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            console.error(`❌ ${relay}: ${errorMsg}`);
+            return { relay, success: false, error: errorMsg };
+          });
+        })
+      );
+
+      const successfulRelays = publishResults.filter(
+        r => r.status === 'fulfilled' && (r.value as any).success
+      ).length;
+      
+      const failedRelays = publishResults.length - successfulRelays;
+
+      console.log(`📊 Deletion event published to ${successfulRelays}/${parameters.relays.length} relays`);
+
+      if (successfulRelays === 0) {
+        throw new Error("Failed to publish to any relay");
+      }
+
+      // Remove deleted event from local state
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+      setSelectedEvents(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(eventId);
+        return newSet;
+      });
+
+      toast({
+        title: "Event deleted",
+        description: `Deletion event (KIND 5) published to ${successfulRelays} relay${successfulRelays > 1 ? 's' : ''}${failedRelays > 0 ? `, ${failedRelays} failed` : ''}`,
+      });
+    } catch (error) {
+      console.error("❌ Failed to delete event:", error);
+      toast({
+        title: "Error",
+        description: "Failed to publish deletion event. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingEventId(null);
+      pool.close(parameters.relays);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -371,25 +456,40 @@ export default function MyEvents() {
                           disabled={isKind0}
                           className="mt-1 flex-shrink-0"
                         />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-4 mb-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant="outline">Kind {event.kind}</Badge>
-                              {isKind0 && (
-                                <Badge variant="secondary" className="text-xs">Cannot delete</Badge>
-                              )}
-                              <span className="text-xs text-muted-foreground">
-                                {new Date(event.created_at * 1000).toLocaleString()}
-                              </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-4 mb-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="outline">Kind {event.kind}</Badge>
+                                {isKind0 && (
+                                  <Badge variant="secondary" className="text-xs">Cannot delete</Badge>
+                                )}
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(event.created_at * 1000).toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteSingle(event.id)}
+                                  disabled={isKind0 || deletingEventId === event.id}
+                                  title={isKind0 ? "Cannot delete profile events" : "Delete this event"}
+                                >
+                                  {deletingEventId === event.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => toggleEventExpansion(event.id)}
+                                >
+                                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                </Button>
+                              </div>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleEventExpansion(event.id)}
-                            >
-                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </Button>
-                          </div>
                           <p className="text-sm font-mono text-muted-foreground break-all mb-2">
                             ID: {isExpanded ? event.id : `${event.id.substring(0, 32)}...`}
                           </p>
