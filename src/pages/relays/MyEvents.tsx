@@ -32,6 +32,7 @@ export default function MyEvents() {
   const [selectedRelays, setSelectedRelays] = useState<string[]>([]);
   const [isRelayFilterOpen, setIsRelayFilterOpen] = useState(false);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const [isSearchingAllHistory, setIsSearchingAllHistory] = useState(false);
   const EVENTS_PER_PAGE = 100;
 
   // Initialize selected relays when parameters load
@@ -106,6 +107,46 @@ export default function MyEvents() {
   const deselectAllRelays = () => {
     setSelectedRelays([]);
     localStorage.setItem('myevents_selected_relays', JSON.stringify([]));
+  };
+
+  const searchAllHistory = async () => {
+    if (!kindFilter || !session?.nostrHexId || !parameters?.relays || selectedRelays.length === 0) return;
+
+    const pool = new SimplePool();
+    setIsSearchingAllHistory(true);
+
+    try {
+      console.log(`Searching all history for Kind ${kindFilter} from ${selectedRelays.length} selected relays`);
+      const fetchedEvents = await pool.querySync(selectedRelays, {
+        authors: [session.nostrHexId],
+        kinds: [parseInt(kindFilter)],
+        limit: 10000 // Much higher limit to get all historical events
+      });
+
+      const sortedEvents = fetchedEvents.sort((a, b) => b.created_at - a.created_at);
+      
+      // Merge with existing events, removing duplicates
+      setEvents(prev => {
+        const eventMap = new Map(prev.map(e => [e.id, e]));
+        sortedEvents.forEach(e => eventMap.set(e.id, e));
+        return Array.from(eventMap.values()).sort((a, b) => b.created_at - a.created_at);
+      });
+
+      toast({
+        title: "Search complete",
+        description: `Found ${sortedEvents.length} events of Kind ${kindFilter}`,
+      });
+    } catch (error) {
+      console.error("Failed to search all history:", error);
+      toast({
+        title: "Search failed",
+        description: "Failed to fetch historical events",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSearchingAllHistory(false);
+      pool.close(selectedRelays);
+    }
   };
 
   // Filter events by kind if filter is active
@@ -355,16 +396,41 @@ export default function MyEvents() {
                     value={kindFilter}
                     onChange={(e) => setKindFilter(e.target.value)}
                     className="pl-9"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && kindFilter) {
+                        searchAllHistory();
+                      }
+                    }}
                   />
                 </div>
                 {kindFilter && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setKindFilter("")}
-                  >
-                    Clear
-                  </Button>
+                  <>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={searchAllHistory}
+                      disabled={isSearchingAllHistory}
+                    >
+                      {isSearchingAllHistory ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Searching...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="h-4 w-4 mr-2" />
+                          Search All
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setKindFilter("")}
+                    >
+                      Clear
+                    </Button>
+                  </>
                 )}
               </div>
 
