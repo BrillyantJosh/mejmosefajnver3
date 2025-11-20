@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -167,6 +167,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     image: lashImage,
     enabled: true,
     order: 12
+  },
+  {
+    id: 'lanamusic',
+    title: 'Lana Music',
+    description: 'Listen to LanaKnights.eu radio, songs, and albums',
+    icon: Music,
+    path: '/music',
+    gradient: 'from-pink-500 to-purple-500',
+    enabled: false,
+    order: 13
   }
 ];
 
@@ -210,7 +220,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'lana8wonder': 'Lana8Wonder',
     'lanapays': 'LanaPays',
     'lanapay': 'Lana Pay',
-    'lash': 'LASH'
+    'lash': 'LASH',
+    'lanamusic': 'Lana Music'
   };
   return mapping[id] || id;
 };
@@ -228,7 +239,10 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'OfflineLana': 'offlinelana',
     'Relays': 'relays',
     'Lana8Wonder': 'lana8wonder',
-    'LASH': 'lash'
+    'LanaPays': 'lanapays',
+    'Lana Pay': 'lanapay',
+    'LASH': 'lash',
+    'Lana Music': 'lanamusic'
   };
   return mapping[id] || null;
 };
