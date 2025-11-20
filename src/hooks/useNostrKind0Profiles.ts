@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SimplePool } from 'nostr-tools';
+import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 interface Kind0Profile {
   pubkey: string;
@@ -17,14 +18,17 @@ interface Kind0Profile {
 export const useNostrKind0Profiles = () => {
   const [profiles, setProfiles] = useState<Kind0Profile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { parameters } = useSystemParameters();
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      const relays = [
-        'wss://relay.damus.io',
-        'wss://relay.nostr.band',
-        'wss://nos.lol'
-      ];
+      if (!parameters?.relays || parameters.relays.length === 0) {
+        console.warn('No relays available');
+        setIsLoading(false);
+        return;
+      }
+
+      const relays = parameters.relays;
 
       const pool = new SimplePool();
       
@@ -70,7 +74,7 @@ export const useNostrKind0Profiles = () => {
     };
 
     fetchProfiles();
-  }, []);
+  }, [parameters]);
 
   return { profiles, isLoading };
 };
