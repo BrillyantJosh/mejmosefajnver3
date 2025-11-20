@@ -20,7 +20,7 @@ import Comments from "./pages/social/Comments";
 import LanaMusicLayout from "./pages/music/LanaMusicLayout";
 import Radio from "./pages/music/Radio";
 import Songs from "./pages/music/Songs";
-import Albums from "./pages/music/Albums";
+import Popular from "./pages/music/Popular";
 import LashLayout from "./pages/lash/LashLayout";
 import PayLashes from "./pages/lash/PayLashes";
 import ReceivedLashes from "./pages/lash/ReceivedLashes";
@@ -118,7 +118,7 @@ const App = () => (
                   <Route path="/music" element={<LanaMusicLayout />}>
                     <Route index element={<Radio />} />
                     <Route path="songs" element={<Songs />} />
-                    <Route path="albums" element={<Albums />} />
+                    <Route path="popular" element={<Popular />} />
                   </Route>
                   <Route 
                     path="/admin/settings"
