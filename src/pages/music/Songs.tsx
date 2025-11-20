@@ -22,17 +22,7 @@ export default function Songs() {
           <CardDescription>Listen to our latest tracks from Boomplay</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="w-full mb-6">
-            <iframe
-              src="https://www.boomplay.com/artists/115108800?srModel=COPYLINK&srList=WEB"
-              className="w-full h-[600px] rounded-lg border-0"
-              title="LanaKnights.eu Artist Page"
-            />
-          </div>
-          
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Featured Tracks</h3>
-            <div className="grid gap-4">
+          <div className="grid gap-4">
               {songs.map((song) => (
                 <div key={song.id} className="w-full">
                   <iframe
@@ -43,7 +33,6 @@ export default function Songs() {
                 </div>
               ))}
             </div>
-          </div>
         </CardContent>
       </Card>
     </div>
