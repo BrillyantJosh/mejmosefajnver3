@@ -1,11 +1,11 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Radio, Music, Disc3 } from "lucide-react";
+import { Radio, Music, TrendingUp } from "lucide-react";
 
 const musicNavItems = [
   { title: "Radio", path: "/music", icon: Radio },
   { title: "Songs", path: "/music/songs", icon: Music },
-  { title: "Albums", path: "/music/albums", icon: Disc3 },
+  { title: "Popular", path: "/music/popular", icon: TrendingUp },
 ];
 
 export default function LanaMusicLayout() {
