@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -19,6 +19,7 @@ import relaysImage from '@/assets/relays-module.png';
 import lanapaperImage from '@/assets/lanapaper-module.png';
 import offlinelanaImage from '@/assets/offlinelana-module.png';
 import lanapayImage from '@/assets/lanapay-module.png';
+import transparencyImage from '@/assets/transparency-module.png';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
@@ -177,6 +178,17 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-pink-500 to-purple-500',
     enabled: false,
     order: 13
+  },
+  {
+    id: 'lanatransparency',
+    title: 'Lana Transparency',
+    description: 'View Nostr profiles and wallet transparency information',
+    icon: Search,
+    path: '/transparency',
+    gradient: 'from-sky-500 to-blue-500',
+    image: transparencyImage,
+    enabled: true,
+    order: 14
   }
 ];
 
@@ -221,7 +233,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'lanapays': 'LanaPays',
     'lanapay': 'Lana Pay',
     'lash': 'LASH',
-    'lanamusic': 'Lana Music'
+    'lanamusic': 'Lana Music',
+    'lanatransparency': 'Lana Transparency'
   };
   return mapping[id] || id;
 };
@@ -242,7 +255,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'LanaPays': 'lanapays',
     'Lana Pay': 'lanapay',
     'LASH': 'lash',
-    'Lana Music': 'lanamusic'
+    'Lana Music': 'lanamusic',
+    'Lana Transparency': 'lanatransparency'
   };
   return mapping[id] || null;
 };
