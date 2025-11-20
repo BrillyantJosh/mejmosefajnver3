@@ -9,12 +9,14 @@ export default function Radio() {
           <CardDescription>Listen to our live Twitch stream</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="aspect-video w-full">
+          <div className="w-full">
             <iframe
-              src="https://player.twitch.tv/?channel=lanacoin&parent=lovable.dev"
-              className="w-full h-full rounded-lg border-0"
+              src="https://player.twitch.tv/?channel=lanacoin&parent=lovable.dev&parent=lovable.app"
+              frameBorder="0"
               allowFullScreen
               scrolling="no"
+              height="378"
+              className="w-full rounded-lg"
               title="LanaCoin Twitch Stream"
             />
           </div>
