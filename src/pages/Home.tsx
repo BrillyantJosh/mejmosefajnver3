@@ -11,17 +11,6 @@ export default function Home() {
   const activeModules = getEnabledModules();
   const inactiveModules = modules.filter(mod => !mod.enabled).sort((a, b) => a.order - b.order);
   return <div className="max-w-7xl mx-auto">
-      <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold mb-3">Welcome to Exeter</h1>
-        <p className="text-muted-foreground text-lg">Choose a section to get started</p>
-        
-        <Link to="/settings">
-          <Button variant="outline" className="mt-4">
-            <Settings className="h-4 w-4 mr-2" />
-            Manage modules and order
-          </Button>
-        </Link>
-      </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 mb-6">
         {activeModules.length === 0 ? <Card className="col-span-full">
@@ -69,7 +58,16 @@ export default function Home() {
                   <CardContent className="p-4 flex items-center gap-4">
                     <div className={`h-12 w-12 rounded-lg bg-gradient-to-br ${module.gradient} flex items-center justify-center flex-shrink-0`}>
                       <Icon className="h-6 w-6 text-white" />
-                    </div>
+      </div>
+
+      <div className="text-center mt-8 mb-8">
+        <Link to="/settings">
+          <Button variant="outline">
+            <Settings className="h-4 w-4 mr-2" />
+            Manage modules and order
+          </Button>
+        </Link>
+      </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-lg font-semibold mb-1">{module.title}</h3>
                       <p className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: module.description }} />
