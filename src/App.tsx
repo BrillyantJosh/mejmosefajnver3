@@ -38,6 +38,9 @@ import LanaPaysLocation from "./pages/lanapays/LanaPaysLocation";
 import LanaPaysOnline from "./pages/lanapays/LanaPaysOnline";
 import LanaPaysRedirect from "./pages/lanapays/LanaPaysRedirect";
 import BusinessUnitDetail from "./pages/lanapays/BusinessUnitDetail";
+import LanaTransparencyLayout from "./pages/transparency/LanaTransparencyLayout";
+import TransparencyProfiles from "./pages/transparency/Profiles";
+import TransparencyWallets from "./pages/transparency/Wallets";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -104,6 +107,11 @@ const App = () => (
                     <Route path="pay" element={<LanaPaysRedirect />} />
                   </Route>
                   <Route path="/lanapays/unit/:unitId" element={<BusinessUnitDetail />} />
+                  <Route path="/transparency" element={<LanaTransparencyLayout />}>
+                    <Route index element={<TransparencyProfiles />} />
+                    <Route path="profiles" element={<TransparencyProfiles />} />
+                    <Route path="wallets" element={<TransparencyWallets />} />
+                  </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/wallet/register" element={<RegisterWallet />} />
