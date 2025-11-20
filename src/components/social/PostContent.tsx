@@ -52,13 +52,44 @@ export function PostContent({ content, tags }: PostContentProps) {
           .filter(Boolean)
       : [];
     
+    // Extract and parse iframes from content
+    const iframeRegex = /<iframe[^>]*src=["']([^"']+)["'][^>]*>.*?<\/iframe>/gi;
+    const iframeMatches = Array.from(displayContent.matchAll(iframeRegex));
+    const iframes = iframeMatches.map(match => {
+      const fullMatch = match[0];
+      const src = match[1];
+      
+      // Only allow iframes from trusted domains
+      const trustedDomains = ['boomplay.com', 'youtube.com', 'youtu.be', 'twitch.tv'];
+      const isTrusted = trustedDomains.some(domain => src.includes(domain));
+      
+      if (!isTrusted) return null;
+      
+      // Extract width and height attributes
+      const widthMatch = fullMatch.match(/width=["']([^"']+)["']/i);
+      const heightMatch = fullMatch.match(/height=["']([^"']+)["']/i);
+      
+      return {
+        src,
+        width: widthMatch ? widthMatch[1] : '100%',
+        height: heightMatch ? heightMatch[1] : '420',
+        original: fullMatch
+      };
+    }).filter(Boolean);
+    
     // Extract URLs from content (for link previews)
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urlMatches = displayContent.match(urlRegex);
     const urls: string[] = urlMatches ? urlMatches : [];
     
-    // Split content by URLs to render text and links separately
-    const parts = displayContent.split(urlRegex);
+    // Remove iframe HTML and split content by URLs to render text and links separately
+    let contentWithoutIframes = displayContent;
+    iframes.forEach(iframe => {
+      if (iframe) {
+        contentWithoutIframes = contentWithoutIframes.replace(iframe.original, '');
+      }
+    });
+    const parts = contentWithoutIframes.split(urlRegex);
     
     return (
       <div>
@@ -135,6 +166,27 @@ export function PostContent({ content, tags }: PostContentProps) {
                 className="w-full rounded-lg object-cover"
                 loading="lazy"
               />
+            ))}
+          </div>
+        )}
+        
+        {/* Render iframes */}
+        {iframes.length > 0 && (
+          <div className="space-y-4 mb-4">
+            {iframes.map((iframe, index) => (
+              iframe && (
+                <div key={`iframe-${index}`} className="w-full">
+                  <iframe
+                    src={iframe.src}
+                    width={iframe.width}
+                    height={iframe.height}
+                    frameBorder="0"
+                    className="w-full rounded-lg"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              )
             ))}
           </div>
         )}
