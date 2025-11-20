@@ -45,7 +45,7 @@ export default function Albums() {
           <CardContent>
             <div className="aspect-video w-full">
               <iframe
-                src={`https://music.youtube.com/playlist?list=${selectedAlbum.playlistId}`}
+                src={`https://www.youtube.com/embed/videoseries?list=${selectedAlbum.playlistId}&autoplay=1&rel=0`}
                 className="w-full h-full rounded-lg"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
