@@ -58,16 +58,7 @@ export default function Home() {
                   <CardContent className="p-4 flex items-center gap-4">
                     <div className={`h-12 w-12 rounded-lg bg-gradient-to-br ${module.gradient} flex items-center justify-center flex-shrink-0`}>
                       <Icon className="h-6 w-6 text-white" />
-      </div>
-
-      <div className="text-center mt-8 mb-8">
-        <Link to="/settings">
-          <Button variant="outline">
-            <Settings className="h-4 w-4 mr-2" />
-            Manage modules and order
-          </Button>
-        </Link>
-      </div>
+                    </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-lg font-semibold mb-1">{module.title}</h3>
                       <p className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: module.description }} />
@@ -83,5 +74,14 @@ export default function Home() {
         })}
           </div>
         </div>}
+
+      <div className="text-center mt-8 mb-8">
+        <Link to="/settings">
+          <Button variant="outline">
+            <Settings className="h-4 w-4 mr-2" />
+            Manage modules and order
+          </Button>
+        </Link>
+      </div>
     </div>;
 }
