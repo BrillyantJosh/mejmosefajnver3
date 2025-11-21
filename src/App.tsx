@@ -41,6 +41,9 @@ import BusinessUnitDetail from "./pages/lanapays/BusinessUnitDetail";
 import LanaTransparencyLayout from "./pages/transparency/LanaTransparencyLayout";
 import TransparencyProfiles from "./pages/transparency/Profiles";
 import TransparencyWallets from "./pages/transparency/Wallets";
+import DonateLayout from "./pages/donate/DonateLayout";
+import DonatePending from "./pages/donate/Pending";
+import DonateDonated from "./pages/donate/Donated";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -111,6 +114,10 @@ const App = () => (
                     <Route index element={<TransparencyProfiles />} />
                     <Route path="profiles" element={<TransparencyProfiles />} />
                     <Route path="wallets" element={<TransparencyWallets />} />
+                  </Route>
+                  <Route path="/donate" element={<DonateLayout />}>
+                    <Route index element={<DonatePending />} />
+                    <Route path="donated" element={<DonateDonated />} />
                   </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />

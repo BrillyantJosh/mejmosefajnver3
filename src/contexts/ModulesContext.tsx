@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -67,6 +67,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     order: 3
   },
   {
+    id: 'letsdonate',
+    title: "Let's Donate",
+    description: 'Support projects and initiatives in the Lana ecosystem',
+    icon: HandHeart,
+    path: '/donate',
+    gradient: 'from-rose-500 to-pink-500',
+    enabled: true,
+    order: 4
+  },
+  {
     id: 'selllana',
     title: 'SellLana',
     description: 'Here you can see and Sell Your Lanas for FIAT (Peer2Peer)',
@@ -75,7 +85,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-yellow-500 to-amber-500',
     image: sellLanaImage,
     enabled: false,
-    order: 4
+    order: 5
   },
   {
     id: 'buylana',
@@ -86,7 +96,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-purple-500 to-pink-500',
     image: buyLanaImage,
     enabled: true,
-    order: 5
+    order: 6
   },
   {
     id: 'marketplace',
@@ -98,7 +108,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     image: marketplaceImage,
     imagePosition: 'object-[70%_20%]',
     enabled: false,
-    order: 6
+    order: 7
   },
   {
     id: 'lanapaper',
@@ -110,7 +120,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     image: lanapaperImage,
     externalUrl: 'https://www.LanaPaper.online',
     enabled: false,
-    order: 7
+    order: 8
   },
   {
     id: 'offlinelana',
@@ -122,7 +132,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     image: offlinelanaImage,
     externalUrl: 'https://offlinelana.org',
     enabled: false,
-    order: 8
+    order: 9
   },
   {
     id: 'relays',
@@ -133,7 +143,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-rose-500 to-pink-500',
     image: relaysImage,
     enabled: false,
-    order: 9
+    order: 10
   },
   {
     id: 'lana8wonder',
@@ -144,7 +154,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-violet-500 to-purple-500',
     image: lana8wonderImage,
     enabled: true,
-    order: 10
+    order: 11
   },
   {
     id: 'lanapay',
@@ -156,7 +166,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     image: lanapayImage,
     externalUrl: 'https://lanapay.online',
     enabled: false,
-    order: 11
+    order: 12
   },
   {
     id: 'lash',
@@ -167,7 +177,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-red-500 to-rose-500',
     image: lashImage,
     enabled: true,
-    order: 12
+    order: 13
   },
   {
     id: 'lanamusic',
@@ -177,7 +187,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     path: '/music',
     gradient: 'from-pink-500 to-purple-500',
     enabled: false,
-    order: 13
+    order: 14
   },
   {
     id: 'lanatransparency',
@@ -188,7 +198,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-sky-500 to-blue-500',
     image: transparencyImage,
     enabled: true,
-    order: 14
+    order: 15
   }
 ];
 
@@ -223,6 +233,7 @@ const mapToNostrId = (id: ModuleType): string => {
     'social': 'Social',
     'chat': 'Chat',
     'wallet': 'Wallet',
+    'letsdonate': "Let's Donate",
     'selllana': 'SellLana',
     'buylana': 'BuyLana',
     'marketplace': 'Marketplace',
@@ -245,6 +256,7 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Social': 'social',
     'Chat': 'chat',
     'Wallet': 'wallet',
+    "Let's Donate": 'letsdonate',
     'SellLana': 'selllana',
     'BuyLana': 'buylana',
     'Marketplace': 'marketplace',
