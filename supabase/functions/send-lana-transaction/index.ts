@@ -534,78 +534,122 @@ async function buildSignedTx(
     const locktime = new Uint8Array([0x00, 0x00, 0x00, 0x00]);
     const hashType = new Uint8Array([0x01, 0x00, 0x00, 0x00]);
     
-    // Process each input
-    const signedInputs = [];
-    console.log(`🔄 Starting to process ${selectedUTXOs.length} UTXOs...`);
+    // First, fetch all raw transactions and parse scriptPubKeys for ALL inputs
+    console.log(`🔄 Step 1: Fetching raw transactions for ${selectedUTXOs.length} UTXOs...`);
+    const inputData = [];
     
     for (let i = 0; i < selectedUTXOs.length; i++) {
       const utxo = selectedUTXOs[i];
-      console.log(`🔍 Processing UTXO ${i + 1}/${selectedUTXOs.length}: ${utxo.tx_hash}:${utxo.tx_pos}`);
+      console.log(`🔍 Fetching UTXO ${i + 1}/${selectedUTXOs.length}: ${utxo.tx_hash}:${utxo.tx_pos}`);
       
       try {
         const rawTx = await electrumCall('blockchain.transaction.get', [utxo.tx_hash], servers);
-        console.log(`📄 Retrieved raw transaction (${rawTx.length} chars)`);
-        
         const scriptPubkey = parseScriptPubkeyFromRawTx(rawTx, utxo.tx_pos);
-        console.log(`📜 Script pubkey parsed (${scriptPubkey.length} bytes)`);
-        
         const txid = hexToUint8Array(utxo.tx_hash).reverse();
         const voutBytes = new Uint8Array(4);
         new DataView(voutBytes.buffer).setUint32(0, utxo.tx_pos, true);
         
-        // Build all outputs
-        const allOutputs = new Uint8Array(outputs.reduce((total, output) => total + output.length, 0));
-        let offset = 0;
-        for (const output of outputs) {
-          allOutputs.set(output, offset);
-          offset += output.length;
-        }
-        
-        // Build preimage
-        const preimage = new Uint8Array([
-          ...version,
-          ...nTime,
-          selectedUTXOs.length,
-          ...txid,
-          ...voutBytes,
-          ...encodeVarint(scriptPubkey.length),
-          ...scriptPubkey,
-          0xff, 0xff, 0xff, 0xff,
-          outputCount,
-          ...allOutputs,
-          ...locktime,
-          ...hashType
-        ]);
-        
-        // Sign
-        const sighash = await sha256d(preimage);
-        console.log(`🔑 Sighash computed for input ${i + 1}`);
-        
-        const signature = signECDSA(privateKeyHex, sighash);
-        const signatureWithHashType = new Uint8Array([...signature, 0x01]);
-        const scriptSig = new Uint8Array([
-          ...pushData(signatureWithHashType),
-          ...pushData(publicKey)
-        ]);
-        
-        const signedInput = new Uint8Array([
-          ...txid,
-          ...voutBytes,
-          ...encodeVarint(scriptSig.length),
-          ...scriptSig,
-          0xff, 0xff, 0xff, 0xff
-        ]);
-        
-        signedInputs.push(signedInput);
-        console.log(`✅ Input ${i + 1} signed successfully`);
+        inputData.push({ txid, voutBytes, scriptPubkey, utxo });
+        console.log(`✅ Fetched UTXO ${i + 1}: script length ${scriptPubkey.length} bytes`);
       } catch (utxoError) {
-        console.error(`❌ Failed to process UTXO ${i + 1}:`, utxoError);
+        console.error(`❌ Failed to fetch UTXO ${i + 1}:`, utxoError);
         throw new Error(
-          `Failed to process UTXO ${i + 1}/${selectedUTXOs.length}: ${
+          `Failed to fetch UTXO ${i + 1}/${selectedUTXOs.length}: ${
             utxoError instanceof Error ? utxoError.message : 'Unknown error'
           }`
         );
       }
+    }
+    
+    console.log(`✅ All ${selectedUTXOs.length} UTXOs fetched successfully`);
+    
+    // Build all outputs once
+    const allOutputs = new Uint8Array(outputs.reduce((total, output) => total + output.length, 0));
+    let offset = 0;
+    for (const output of outputs) {
+      allOutputs.set(output, offset);
+      offset += output.length;
+    }
+    
+    // Step 2: Sign each input with proper SIGHASH ALL preimage
+    console.log(`🔄 Step 2: Signing ${inputData.length} inputs with proper SIGHASH ALL...`);
+    const signedInputs = [];
+    
+    for (let currentIndex = 0; currentIndex < inputData.length; currentIndex++) {
+      console.log(`🔑 Signing input ${currentIndex + 1}/${inputData.length}...`);
+      
+      // Build preimage with ALL inputs for SIGHASH ALL
+      // For the current input, use its scriptPubKey; for others, use empty script
+      const preimageInputs = [];
+      
+      for (let i = 0; i < inputData.length; i++) {
+        const { txid, voutBytes, scriptPubkey } = inputData[i];
+        
+        if (i === currentIndex) {
+          // Current input being signed - use the scriptPubKey
+          preimageInputs.push(new Uint8Array([
+            ...txid,
+            ...voutBytes,
+            ...encodeVarint(scriptPubkey.length),
+            ...scriptPubkey,
+            0xff, 0xff, 0xff, 0xff // sequence
+          ]));
+        } else {
+          // Other inputs - use empty script
+          preimageInputs.push(new Uint8Array([
+            ...txid,
+            ...voutBytes,
+            0x00, // empty script length
+            0xff, 0xff, 0xff, 0xff // sequence
+          ]));
+        }
+      }
+      
+      // Combine all preimage inputs
+      const allPreimageInputs = new Uint8Array(
+        preimageInputs.reduce((total, input) => total + input.length, 0)
+      );
+      let preimageOffset = 0;
+      for (const input of preimageInputs) {
+        allPreimageInputs.set(input, preimageOffset);
+        preimageOffset += input.length;
+      }
+      
+      // Build complete preimage for SIGHASH ALL
+      const preimage = new Uint8Array([
+        ...version,
+        ...nTime,
+        inputData.length,
+        ...allPreimageInputs,
+        outputCount,
+        ...allOutputs,
+        ...locktime,
+        ...hashType
+      ]);
+      
+      console.log(`📏 Preimage for input ${currentIndex + 1}: ${preimage.length} bytes`);
+      
+      // Sign this input
+      const sighash = await sha256d(preimage);
+      const signature = signECDSA(privateKeyHex, sighash);
+      const signatureWithHashType = new Uint8Array([...signature, 0x01]);
+      const scriptSig = new Uint8Array([
+        ...pushData(signatureWithHashType),
+        ...pushData(publicKey)
+      ]);
+      
+      // Build the signed input for final transaction
+      const { txid, voutBytes } = inputData[currentIndex];
+      const signedInput = new Uint8Array([
+        ...txid,
+        ...voutBytes,
+        ...encodeVarint(scriptSig.length),
+        ...scriptSig,
+        0xff, 0xff, 0xff, 0xff
+      ]);
+      
+      signedInputs.push(signedInput);
+      console.log(`✅ Input ${currentIndex + 1} signed successfully (scriptSig: ${scriptSig.length} bytes)`);
     }
     
     console.log(`✅✅✅ ALL ${selectedUTXOs.length} UTXOs PROCESSED SUCCESSFULLY!`);
@@ -613,17 +657,10 @@ async function buildSignedTx(
     
     // Build final transaction
     const allInputs = new Uint8Array(signedInputs.reduce((total, input) => total + input.length, 0));
-    let offset = 0;
+    let inputOffset = 0;
     for (const input of signedInputs) {
-      allInputs.set(input, offset);
-      offset += input.length;
-    }
-    
-    const allOutputs = new Uint8Array(outputs.reduce((total, output) => total + output.length, 0));
-    offset = 0;
-    for (const output of outputs) {
-      allOutputs.set(output, offset);
-      offset += output.length;
+      allInputs.set(input, inputOffset);
+      inputOffset += input.length;
     }
     
     console.log(`📦 Assembling final transaction: ${selectedUTXOs.length} inputs, ${outputCount} outputs...`);
@@ -643,7 +680,12 @@ async function buildSignedTx(
     console.log(`🎯 Final transaction built: ${finalTxHex.length} chars, ${selectedUTXOs.length} inputs, ${outputCount} outputs`);
     console.log(`📊 Transaction size: ${finalTxHex.length / 2} bytes`);
     
-    return finalTxHex;
+    return { 
+      txHex: finalTxHex, 
+      inputCount: selectedUTXOs.length, 
+      outputCount, 
+      selectedUTXOs 
+    };
   } catch (error) {
     console.error('❌ Transaction building error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown transaction error';
@@ -764,7 +806,14 @@ serve(async (req) => {
       console.log(`💰 Normal mode: sending ${amountSatoshis} satoshis (${(amountSatoshis / 100000000).toFixed(8)} LANA)`);
     }
     
-    const signedTx = await buildSignedTx(utxos, privateKey, recipients, fee, senderAddress, servers);
+    const { txHex: signedTx, inputCount, outputCount, selectedUTXOs } = await buildSignedTx(
+      utxos, 
+      privateKey, 
+      recipients, 
+      fee, 
+      senderAddress, 
+      servers
+    );
     console.log('✍️ Transaction signed successfully');
     
     console.log('🚀 Broadcasting transaction...');
@@ -774,6 +823,7 @@ serve(async (req) => {
     
     let resultStr = typeof broadcastResult === 'string' ? broadcastResult : String(broadcastResult);
     
+    // Enhanced TX rejected error handling with diagnostic info
     if (
       resultStr.includes('TX rejected') ||
       resultStr.includes('code') ||
@@ -783,7 +833,43 @@ serve(async (req) => {
       resultStr.includes('failed') ||
       resultStr.includes('Failed')
     ) {
-      throw new Error(`Transaction broadcast failed: ${resultStr}`);
+      // Log detailed diagnostic information
+      const diagnosticInfo = {
+        inputCount: selectedUTXOs.length,
+        outputCount: outputCount,
+        totalAmount: amountSatoshis,
+        fee: fee,
+        totalValue: utxos.reduce((sum: number, u: any) => sum + u.value, 0),
+        firstFewUTXOs: selectedUTXOs.slice(0, 3).map((u: any) => ({
+          hash: u.tx_hash.substring(0, 16) + '...',
+          value: u.value,
+          pos: u.tx_pos
+        })),
+        txSize: signedTx.length / 2
+      };
+      
+      console.error('❌ Transaction rejected by network:', {
+        error: resultStr,
+        diagnostic: diagnosticInfo
+      });
+      
+      const errorMsg = [
+        `Transaction broadcast failed: ${resultStr}`,
+        `\n📊 Diagnostic Info:`,
+        `  • Inputs: ${diagnosticInfo.inputCount}`,
+        `  • Outputs: ${diagnosticInfo.outputCount}`,
+        `  • Amount: ${(diagnosticInfo.totalAmount / 100000000).toFixed(8)} LANA`,
+        `  • Fee: ${(diagnosticInfo.fee / 100000000).toFixed(8)} LANA`,
+        `  • Transaction size: ${diagnosticInfo.txSize} bytes`,
+        diagnosticInfo.inputCount > 1 
+          ? `\n⚠️ Multi-input transaction detected. This may indicate fragmented wallet.`
+          : '',
+        diagnosticInfo.inputCount > 10
+          ? `\n💡 Recommendation: Consolidate UTXOs by sending all funds to yourself first.`
+          : ''
+      ].filter(Boolean).join('\n');
+      
+      throw new Error(errorMsg);
     }
     
     const txHash = resultStr.trim();
