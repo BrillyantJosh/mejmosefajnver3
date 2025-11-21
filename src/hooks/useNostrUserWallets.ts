@@ -99,7 +99,7 @@ export const useNostrUserWallets = (pubkey: string | null) => {
     };
 
     fetchWallets();
-  }, [pubkey, relays, parameters]);
+  }, [pubkey, relays.join(',')]);  // Only depend on pubkey and relays string
 
   return {
     wallets,
