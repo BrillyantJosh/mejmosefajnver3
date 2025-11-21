@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,11 +9,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useNostrDonationProposals } from "@/hooks/useNostrDonationProposals";
 import { useNostrDonationPayments } from "@/hooks/useNostrDonationPayments";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
+import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { useAuth } from "@/contexts/AuthContext";
 import { fiatToLana, getUserCurrency, formatCurrency, formatLana, lanaToLanoshi } from "@/lib/currencyConversion";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { Calendar, ExternalLink, CheckCircle } from "lucide-react";
+import { Calendar, ExternalLink, CheckCircle, Wallet } from "lucide-react";
 import { format } from "date-fns";
 
 interface DonationSelection {
@@ -33,17 +34,23 @@ export default function Pending() {
   const [selectedWallet, setSelectedWallet] = useState<string>("");
   const userCurrency = getUserCurrency();
 
-  // Update proposals with payment status
-  const proposalsWithStatus = proposals.map(proposal => {
-    const payment = payments.find(p => p.proposalDTag === proposal.d || p.proposalEventId === proposal.eventId);
-    return {
-      ...proposal,
-      isPaid: !!payment,
-      paymentTxId: payment?.txId
-    };
-  });
+  // Fetch wallet balances
+  const walletAddresses = useMemo(() => wallets.map(w => w.walletId), [wallets]);
+  const { balances, isLoading: balancesLoading } = useWalletBalances(walletAddresses);
 
-  const pendingProposals = proposalsWithStatus.filter(p => !p.isPaid);
+  // Update proposals with payment status - use useMemo to prevent constant re-renders
+  const proposalsWithStatus = useMemo(() => {
+    return proposals.map(proposal => {
+      const payment = payments.find(p => p.proposalDTag === proposal.d || p.proposalEventId === proposal.eventId);
+      return {
+        ...proposal,
+        isPaid: !!payment,
+        paymentTxId: payment?.txId
+      };
+    });
+  }, [proposals, payments]);
+
+  const pendingProposals = useMemo(() => proposalsWithStatus.filter(p => !p.isPaid), [proposalsWithStatus]);
 
   // Calculate total amount
   const totalLana = Array.from(selectedProposals).reduce((sum, proposalId) => {
@@ -61,6 +68,10 @@ export default function Pending() {
   }, 0);
 
   const totalInUserCurrency = formatCurrency(totalLana / 250, userCurrency); // Simplified conversion
+
+  // Get selected wallet balance
+  const selectedWalletBalance = selectedWallet ? (balances.get(selectedWallet) || 0) : 0;
+  const remainingBalance = selectedWalletBalance - totalLana;
 
   const handleToggleProposal = (proposalId: string) => {
     const newSet = new Set(selectedProposals);
@@ -157,11 +168,21 @@ export default function Pending() {
               <SelectValue placeholder="Choose a wallet..." />
             </SelectTrigger>
             <SelectContent>
-              {wallets.map(wallet => (
-                <SelectItem key={wallet.walletId} value={wallet.walletId}>
-                  {wallet.walletType} {wallet.note ? `- ${wallet.note}` : ''} ({wallet.walletId.substring(0, 8)}...)
-                </SelectItem>
-              ))}
+              {wallets.map(wallet => {
+                const balance = balances.get(wallet.walletId);
+                return (
+                  <SelectItem key={wallet.walletId} value={wallet.walletId}>
+                    <div className="flex items-center justify-between w-full gap-4">
+                      <span>
+                        {wallet.walletType} {wallet.note ? `- ${wallet.note}` : ''}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {balance !== undefined ? formatLana(balance) : '...'}
+                      </span>
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </CardContent>
@@ -251,19 +272,73 @@ export default function Pending() {
       {selectedProposals.size > 0 && (
         <Card>
           <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Amount</p>
-                <p className="text-2xl font-bold">{formatLana(totalLana)}</p>
-                <p className="text-sm text-muted-foreground">≈ {totalInUserCurrency}</p>
+            <div className="space-y-4">
+              {selectedWallet && (
+                <div className="space-y-3 pb-4 border-b">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Wallet className="h-4 w-4" />
+                    <span>Payment Breakdown</span>
+                  </div>
+                  
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Wallet Balance:</span>
+                      <span className="font-medium">{formatLana(selectedWalletBalance)}</span>
+                    </div>
+                    
+                    <div className="space-y-1 pl-4">
+                      {Array.from(selectedProposals).map((proposalId, index) => {
+                        const proposal = pendingProposals.find(p => p.eventId === proposalId);
+                        if (!proposal) return null;
+                        
+                        const amount = customAmounts[proposalId] !== undefined 
+                          ? customAmounts[proposalId] 
+                          : fiatToLana(parseFloat(proposal.fiatAmount), proposal.fiatCurrency);
+                        
+                        return (
+                          <div key={proposalId} className="flex justify-between text-muted-foreground">
+                            <span>Payment {index + 1} ({proposal.service}):</span>
+                            <span>-{formatLana(amount)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    <div className="flex justify-between pt-2 border-t">
+                      <span className="font-medium">Total Payment:</span>
+                      <span className="font-medium text-primary">-{formatLana(totalLana)}</span>
+                    </div>
+                    
+                    <div className="flex justify-between pt-2 border-t">
+                      <span className="font-semibold">Remaining Balance:</span>
+                      <span className={`font-semibold ${remainingBalance < 0 ? 'text-destructive' : 'text-success'}`}>
+                        {formatLana(remainingBalance)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Amount</p>
+                  <p className="text-2xl font-bold">{formatLana(totalLana)}</p>
+                  <p className="text-sm text-muted-foreground">≈ {totalInUserCurrency}</p>
+                </div>
+                <Button
+                  onClick={handleProceedToPayment}
+                  disabled={!selectedWallet || remainingBalance < 0}
+                  size="lg"
+                >
+                  Proceed to Payment
+                </Button>
               </div>
-              <Button
-                onClick={handleProceedToPayment}
-                disabled={!selectedWallet}
-                size="lg"
-              >
-                Proceed to Payment
-              </Button>
+              
+              {remainingBalance < 0 && (
+                <p className="text-sm text-destructive">
+                  Insufficient funds. You need {formatLana(Math.abs(remainingBalance))} more LANA.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
