@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { SimplePool, Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { arraysEqual } from '@/lib/arrayComparison';
 
 export interface DonationProposal {
   id: string;
@@ -91,9 +92,16 @@ export const useNostrDonationProposals = () => {
 
           // Sort by newest first
           parsedProposals.sort((a, b) => b.createdAt - a.createdAt);
-          setProposals(parsedProposals);
+          
+          // Only update state if data actually changed
+          if (!arraysEqual(parsedProposals, proposals)) {
+            console.log('📋 Proposals updated');
+            setProposals(parsedProposals);
+          }
         } else {
-          setProposals([]);
+          if (proposals.length > 0) {
+            setProposals([]);
+          }
         }
       } catch (error) {
         console.error('❌ Error fetching donation proposals:', error);
