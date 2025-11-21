@@ -93,6 +93,13 @@ export default function SendLana() {
       return;
     }
 
+    console.log('🚀 SendLana navigate:', { 
+      walletId, 
+      calculatedLana, 
+      selectedCurrency, 
+      inputAmount 
+    });
+
     navigate(`/send-lana/recipient?walletId=${walletId}&amount=${calculatedLana}&currency=${selectedCurrency}&inputAmount=${inputAmount}`);
   };
 
