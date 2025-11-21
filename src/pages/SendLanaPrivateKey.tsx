@@ -203,7 +203,7 @@ export default function SendLanaPrivateKey() {
         <CardHeader>
           <CardTitle>Enter Private Key</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Sending {amount} {currency} from ...{walletId.slice(-8)} to ...{recipientWalletId.slice(-8)}
+            Sending {amount} {currency} from ...{walletId.slice(-8)} to {recipientWalletId}
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
