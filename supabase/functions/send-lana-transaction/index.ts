@@ -660,6 +660,10 @@ serve(async (req) => {
     console.log('🚀 Starting LANA transaction...');
     const { senderAddress, recipientAddress, amount, privateKey, emptyWallet, electrumServers } = await req.json();
     
+    console.log('📋 Incoming request - Sender:', senderAddress);
+    console.log('📋 Incoming request - Recipient:', recipientAddress);
+    console.log('📋 Incoming request - Amount:', amount);
+    
     console.log('📋 Transaction parameters:', {
       senderAddress,
       recipientAddress,
