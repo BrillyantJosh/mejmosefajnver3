@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, ArrowRight, Scan, Key } from "lucide-react";
+import { ArrowLeft, ArrowRight, Scan, Key, Copy } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Html5Qrcode } from "html5-qrcode";
@@ -111,7 +111,11 @@ export default function SendLanaPrivateKey() {
         
         if (derivedIds.walletId !== walletId) {
           setIsPrivateKeyValid(false);
-          setValidationError("Private key does not match the sender wallet ID");
+          setValidationError(
+            `Private key does not match!\n` +
+            `Your key is for: ${derivedIds.walletId}\n` +
+            `But you're trying to send from: ${walletId}`
+          );
         } else {
           setIsPrivateKeyValid(true);
           setValidationError("");
@@ -141,6 +145,14 @@ export default function SendLanaPrivateKey() {
     try {
       setIsValidating(true);
       setError("");
+
+      console.log('🚀 SendLanaPrivateKey edge function call:', {
+        senderAddress: walletId,
+        recipientAddress: recipientWalletId,
+        amount: parseFloat(amount),
+        currency,
+        inputAmount
+      });
 
       toast.success("Broadcasting transaction...");
 
@@ -202,9 +214,47 @@ export default function SendLanaPrivateKey() {
       <Card>
         <CardHeader>
           <CardTitle>Enter Private Key</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Sending {amount} {currency} from ...{walletId.slice(-8)} to {recipientWalletId}
-          </p>
+          <div className="space-y-3 mt-4">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Sending from:</p>
+              <div className="flex items-center gap-2">
+                <p className="font-mono text-sm break-all flex-1">{walletId}</p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    navigator.clipboard.writeText(walletId);
+                    toast.success("Copied sender address");
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Sending to:</p>
+              <div className="flex items-center gap-2">
+                <p className="font-mono text-sm break-all flex-1">{recipientWalletId}</p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    navigator.clipboard.writeText(recipientWalletId);
+                    toast.success("Copied recipient address");
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="p-3 bg-primary/5 rounded-lg">
+              <p className="text-sm">
+                Amount: <span className="font-bold text-primary">{amount} {currency}</span>
+              </p>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           <Tabs value={selectedTab} onValueChange={setSelectedTab}>
