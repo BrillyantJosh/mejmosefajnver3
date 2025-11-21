@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -73,7 +73,7 @@ export default function Pending() {
   const selectedWalletBalance = selectedWallet ? (balances.get(selectedWallet) || 0) : 0;
   const remainingBalance = selectedWalletBalance - totalLana;
 
-  const handleToggleProposal = (proposalId: string) => {
+  const handleToggleProposal = useCallback((proposalId: string) => {
     const newSet = new Set(selectedProposals);
     if (newSet.has(proposalId)) {
       newSet.delete(proposalId);
@@ -84,14 +84,14 @@ export default function Pending() {
       newSet.add(proposalId);
     }
     setSelectedProposals(newSet);
-  };
+  }, [selectedProposals, customAmounts]);
 
-  const handleAmountChange = (proposalId: string, value: string) => {
+  const handleAmountChange = useCallback((proposalId: string, value: string) => {
     const amount = parseFloat(value);
     if (!isNaN(amount) && amount > 0) {
-      setCustomAmounts({ ...customAmounts, [proposalId]: amount });
+      setCustomAmounts(prev => ({ ...prev, [proposalId]: amount }));
     }
-  };
+  }, []);
 
   const handleProceedToPayment = () => {
     if (selectedProposals.size === 0) {

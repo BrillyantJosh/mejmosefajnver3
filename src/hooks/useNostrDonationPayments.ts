@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { SimplePool, Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { arraysEqual } from '@/lib/arrayComparison';
 
 export interface DonationPayment {
   id: string;
@@ -88,9 +89,15 @@ export const useNostrDonationPayments = () => {
             };
           });
 
-          setPayments(parsedPayments);
+          // Only update state if data actually changed
+          if (!arraysEqual(parsedPayments, payments)) {
+            console.log('💳 Payment status changed, updating...');
+            setPayments(parsedPayments);
+          }
         } else {
-          setPayments([]);
+          if (payments.length > 0) {
+            setPayments([]);
+          }
         }
       } catch (error) {
         console.error('❌ Error fetching donation payments:', error);
