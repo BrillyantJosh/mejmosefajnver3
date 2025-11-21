@@ -216,6 +216,14 @@ export default function SendLanaRecipient() {
       return;
     }
 
+    console.log('🚀 SendLanaRecipient navigate:', { 
+      walletId, 
+      recipientWalletId, 
+      amount, 
+      currency, 
+      inputAmount 
+    });
+
     // Navigate to private key entry page
     navigate(
       `/send-lana/private-key?walletId=${walletId}&recipientWalletId=${recipientWalletId}&amount=${amount}&currency=${currency}&inputAmount=${inputAmount}`
