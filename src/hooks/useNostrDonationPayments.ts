@@ -120,7 +120,7 @@ export const useNostrDonationPayments = () => {
     // Poll every 5 seconds for payment status updates
     const interval = setInterval(fetchPayments, 5000);
     return () => clearInterval(interval);
-  }, [relays.join(',')]);
+  }, [relays.join(','), hasLoadedOnce]);
 
   return {
     payments,

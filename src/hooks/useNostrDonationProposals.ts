@@ -124,7 +124,7 @@ export const useNostrDonationProposals = () => {
     // Poll every 10 seconds for updates
     const interval = setInterval(fetchProposals, 10000);
     return () => clearInterval(interval);
-  }, [relays.join(',')]);
+  }, [relays.join(','), hasLoadedOnce]);
 
   return {
     proposals,
