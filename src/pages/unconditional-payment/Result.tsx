@@ -98,7 +98,7 @@ export default function Result() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => window.open(`https://explorer.lanacoin.com/tx/${resultData.txid}`, '_blank')}
+                    onClick={() => window.open(`https://chainz.cryptoid.info/lana/tx.dws?${resultData.txid}`, '_blank')}
                   >
                     <ExternalLink className="h-4 w-4" />
                   </Button>
