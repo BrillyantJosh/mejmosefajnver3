@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search as SearchIcon, Calendar, Users } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Search as SearchIcon, Calendar, Users, User } from "lucide-react";
+import { getProxiedImageUrl } from '@/lib/imageProxy';
 import { useNostrClosedCases } from '@/hooks/useNostrClosedCases';
 import { useNostrProfilesCacheBulk } from '@/hooks/useNostrProfilesCacheBulk';
 import { useNostrRevenueSharesBatch } from '@/hooks/useNostrRevenueSharesBatch';
@@ -49,7 +51,8 @@ export default function Search() {
     
     const query = searchQuery.toLowerCase();
     return closedCases.filter(c => 
-      c.content.toLowerCase().includes(query) ||
+      c.initialContent.toLowerCase().includes(query) ||
+      c.title?.toLowerCase().includes(query) ||
       c.topic?.toLowerCase().includes(query)
     );
   }, [closedCases, searchQuery]);
@@ -136,21 +139,30 @@ export default function Search() {
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <CardTitle className="text-lg">{ownCase.topic || 'Untitled Case'}</CardTitle>
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <CardTitle className="text-lg">{ownCase.title || ownCase.topic || 'Untitled Case'}</CardTitle>
                         <Badge variant="secondary">zaprto</Badge>
+                        {ownCase.lang && (
+                          <Badge variant="outline" className="text-xs uppercase">
+                            {ownCase.lang}
+                          </Badge>
+                        )}
                       </div>
                       <CardDescription className="line-clamp-2">
-                        {ownCase.content}
+                        {ownCase.initialContent}
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4" />
-                      <span>{format(new Date(ownCase.createdAt * 1000), 'dd/MM/yyyy')}</span>
+                      <span>Začetek: {format(new Date(ownCase.startedAt * 1000), 'dd/MM/yyyy')}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      <span>Zaključek: {format(new Date(ownCase.closedAt * 1000), 'dd/MM/yyyy')}</span>
                     </div>
                   </div>
 
@@ -158,9 +170,15 @@ export default function Search() {
                     <div className="text-sm">
                       <span className="text-muted-foreground">Facilitator</span>
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="outline" className="font-normal">
+                        <Avatar className="h-6 w-6">
+                          <AvatarImage src={getProxiedImageUrl(facilitator.picture)} />
+                          <AvatarFallback>
+                            <User className="h-3 w-3" />
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium">
                           {facilitator.display_name || facilitator.full_name || `${ownCase.pubkey.slice(0, 8)}...`}
-                        </Badge>
+                        </span>
                       </div>
                     </div>
                   )}
@@ -172,11 +190,22 @@ export default function Search() {
                         <span>Udeleženci ({ownCase.participants.length})</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {ownCase.participants.slice(0, 5).map((pubkey) => (
-                          <Badge key={pubkey} variant="secondary" className="text-xs">
-                            {pubkey.slice(0, 2)} {pubkey.slice(2, 8)}...
-                          </Badge>
-                        ))}
+                        {ownCase.participants.slice(0, 5).map((pubkey) => {
+                          const profile = profiles[pubkey];
+                          return (
+                            <div key={pubkey} className="flex items-center gap-1.5 bg-secondary px-2 py-1 rounded-md">
+                              <Avatar className="h-5 w-5">
+                                <AvatarImage src={getProxiedImageUrl(profile?.picture)} />
+                                <AvatarFallback className="text-xs">
+                                  <User className="h-3 w-3" />
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-xs">
+                                {profile?.display_name || profile?.full_name || `${pubkey.slice(0, 2)} ${pubkey.slice(2, 8)}...`}
+                              </span>
+                            </div>
+                          );
+                        })}
                         {ownCase.participants.length > 5 && (
                           <Badge variant="secondary" className="text-xs">
                             +{ownCase.participants.length - 5} more
@@ -201,7 +230,7 @@ export default function Search() {
                     </div>
                     <Button 
                       className="bg-cyan-600 hover:bg-cyan-700"
-                      onClick={() => handleGetTranscript(ownCase.id, ownCase.topic || ownCase.content)}
+                      onClick={() => handleGetTranscript(ownCase.id, ownCase.title || ownCase.topic || ownCase.initialContent)}
                       disabled={revenueLoading || lanAmount === 0}
                     >
                       Pridobi
