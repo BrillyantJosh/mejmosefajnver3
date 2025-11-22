@@ -168,21 +168,26 @@ export default function Pending() {
               <SelectValue placeholder="Choose a wallet..." />
             </SelectTrigger>
             <SelectContent>
-              {wallets.map(wallet => {
-                const balance = balances.get(wallet.walletId);
-                return (
-                  <SelectItem key={wallet.walletId} value={wallet.walletId}>
-                    <div className="flex items-center justify-between w-full gap-4">
-                      <span>
-                        {wallet.walletType} {wallet.note ? `- ${wallet.note}` : ''}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {balance !== undefined ? formatLana(balance) : '...'}
-                      </span>
-                    </div>
-                  </SelectItem>
-                );
-              })}
+              {wallets
+                .filter(wallet => !wallet.walletType?.toLowerCase().includes('lana8wonder'))
+                .map(wallet => {
+                  const balance = balances.get(wallet.walletId);
+                  const displayText = wallet.note 
+                    ? `${wallet.note.substring(0, 25)}${wallet.note.length > 25 ? '...' : ''}`
+                    : wallet.walletType?.substring(0, 25) || '';
+                  return (
+                    <SelectItem key={wallet.walletId} value={wallet.walletId}>
+                      <div className="flex items-center justify-between w-full gap-4">
+                        <span className="truncate max-w-[200px]">
+                          {displayText}
+                        </span>
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">
+                          {balance !== undefined ? formatLana(balance) : '...'}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  );
+                })}
             </SelectContent>
           </Select>
         </CardContent>
