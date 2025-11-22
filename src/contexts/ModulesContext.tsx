@@ -199,6 +199,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     image: transparencyImage,
     enabled: true,
     order: 15
+  },
+  {
+    id: 'own',
+    title: 'OWN',
+    description: 'Unconditional Self Responsibility - manage your cases and responsibilities',
+    icon: Shield,
+    path: '/own',
+    gradient: 'from-indigo-500 to-purple-500',
+    enabled: true,
+    order: 16
   }
 ];
 
@@ -245,7 +255,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'lanapay': 'Lana Pay',
     'lash': 'LASH',
     'lanamusic': 'Lana Music',
-    'lanatransparency': 'Lana Transparency'
+    'lanatransparency': 'Lana Transparency',
+    'own': 'OWN'
   };
   return mapping[id] || id;
 };
@@ -268,7 +279,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Lana Pay': 'lanapay',
     'LASH': 'lash',
     'Lana Music': 'lanamusic',
-    'Lana Transparency': 'lanatransparency'
+    'Lana Transparency': 'lanatransparency',
+    'OWN': 'own'
   };
   return mapping[id] || null;
 };
