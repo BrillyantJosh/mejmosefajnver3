@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { SimplePool, finalizeEvent } from 'nostr-tools';
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 
 interface PaymentRecipient {
   proposalId: string;
@@ -23,6 +24,13 @@ interface PaymentRecipient {
   lanaAmount: number;
   lanoshiAmount: number;
   service: string;
+}
+
+interface RecipientSummaryWithPubkey {
+  wallet: string;
+  pubkey: string;
+  amount: number;
+  services: string[];
 }
 
 interface PaymentData {
@@ -116,12 +124,17 @@ export default function ConfirmPayment() {
     } else {
       acc.push({
         wallet: proposal.recipientWallet,
+        pubkey: proposal.recipientPubkey,
         amount: proposal.lanaAmount,
         services: [proposal.service]
       });
     }
     return acc;
-  }, [] as Array<{ wallet: string; amount: number; services: string[] }>) || [];
+  }, [] as RecipientSummaryWithPubkey[]) || [];
+
+  // Fetch profiles for all recipient pubkeys
+  const recipientPubkeys = recipientSummary.map(r => r.pubkey);
+  const { profiles: recipientProfiles } = useNostrProfilesCacheBulk(recipientPubkeys);
 
   const handleConfirmPayment = async () => {
     if (!privateKey || !isPrivateKeyValid || !paymentData) {
@@ -321,21 +334,30 @@ export default function ConfirmPayment() {
 
           <div className="space-y-3">
             <Label className="text-muted-foreground">To Recipients</Label>
-            {recipientSummary.map((recipient, index) => (
-              <div key={index} className="p-3 bg-muted rounded-lg space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <p className="font-mono text-sm break-all mb-1">{recipient.wallet}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {recipient.services.join(', ')}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{formatLana(recipient.amount)}</p>
+            {recipientSummary.map((recipient, index) => {
+              const profile = recipientProfiles.get(recipient.pubkey);
+              return (
+                <div key={index} className="p-3 bg-muted rounded-lg space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">To:</span>
+                        <span className="text-sm font-semibold">
+                          {profile?.display_name || profile?.full_name || 'Unknown'}
+                        </span>
+                      </div>
+                      <p className="font-mono text-xs break-all text-muted-foreground">{recipient.wallet}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {recipient.services.join(', ')}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">{formatLana(recipient.amount)}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="pt-4 border-t">
