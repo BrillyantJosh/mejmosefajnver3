@@ -140,6 +140,54 @@ export type Database = {
         }
         Relationships: []
       }
+      kind_38888: {
+        Row: {
+          created_at: number
+          electrum_servers: Json
+          event_id: string
+          exchange_rates: Json
+          fetched_at: string | null
+          id: string
+          pubkey: string
+          raw_event: Json
+          relays: Json
+          split: string | null
+          trusted_signers: Json | null
+          valid_from: number | null
+          version: string | null
+        }
+        Insert: {
+          created_at: number
+          electrum_servers: Json
+          event_id: string
+          exchange_rates: Json
+          fetched_at?: string | null
+          id?: string
+          pubkey: string
+          raw_event: Json
+          relays: Json
+          split?: string | null
+          trusted_signers?: Json | null
+          valid_from?: number | null
+          version?: string | null
+        }
+        Update: {
+          created_at?: number
+          electrum_servers?: Json
+          event_id?: string
+          exchange_rates?: Json
+          fetched_at?: string | null
+          id?: string
+          pubkey?: string
+          raw_event?: Json
+          relays?: Json
+          split?: string | null
+          trusted_signers?: Json | null
+          valid_from?: number | null
+          version?: string | null
+        }
+        Relationships: []
+      }
       nostr_profiles: {
         Row: {
           about: string | null

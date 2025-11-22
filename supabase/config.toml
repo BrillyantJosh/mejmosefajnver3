@@ -2,3 +2,6 @@ project_id = "emimbfrxykvrbrovbrsf"
 
 [functions.fetch-url-metadata]
 verify_jwt = false
+
+[functions.sync-kind-38888]
+verify_jwt = false
