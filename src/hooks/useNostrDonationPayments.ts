@@ -26,6 +26,7 @@ export const useNostrDonationPayments = () => {
   const { parameters } = useSystemParameters();
   const [payments, setPayments] = useState<DonationPayment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const relays = parameters?.relays || [];
 
   useEffect(() => {
@@ -36,7 +37,10 @@ export const useNostrDonationPayments = () => {
         return;
       }
 
-      setIsLoading(true);
+      // Loading indicator only for initial load
+      if (!hasLoadedOnce) {
+        setIsLoading(true);
+      }
       const pool = new SimplePool();
 
       try {
@@ -89,20 +93,33 @@ export const useNostrDonationPayments = () => {
             };
           });
 
-          setPayments(parsedPayments);
+          // Only update state if data actually changed
+          if (!arraysEqual(parsedPayments, payments)) {
+            console.log('💳 Payment status changed, updating...');
+            setPayments(parsedPayments);
+          }
         } else {
-          setPayments([]);
+          if (payments.length > 0) {
+            setPayments([]);
+          }
         }
       } catch (error) {
         console.error('❌ Error fetching donation payments:', error);
         setPayments([]);
       } finally {
-        setIsLoading(false);
+        if (!hasLoadedOnce) {
+          setIsLoading(false);
+          setHasLoadedOnce(true);
+        }
         pool.close(relays);
       }
     };
 
     fetchPayments();
+
+    // Poll every 5 seconds for payment status updates
+    const interval = setInterval(fetchPayments, 5000);
+    return () => clearInterval(interval);
   }, [relays.join(',')]);
 
   return {
