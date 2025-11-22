@@ -10,6 +10,7 @@ import { Camera, Wallet, ArrowRight, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { convertWifToIds } from "@/lib/crypto";
 import { formatLana } from "@/lib/currencyConversion";
+import { supabase } from "@/integrations/supabase/client";
 
 interface PaymentRecipient {
   proposalId: string;
@@ -116,32 +117,61 @@ export default function ConfirmPayment() {
     setIsProcessing(true);
 
     try {
-      // Here we would call the edge function to process the unconditional payment
-      // This would be similar to send-lana-transaction but for multiple outputs
+      console.log('🚀 Processing unconditional payment...');
       
-      // For now, show a placeholder
-      toast.success("Payment processing not yet fully implemented");
-      
-      // TODO: Implement the actual payment transaction
-      // This should:
-      // 1. Create a transaction with multiple outputs (one for each unique recipient wallet)
-      // 2. Sign the transaction with the private key
-      // 3. Broadcast it to the network
-      // 4. Create KIND 90901 events for each unconditional payment
-      // 5. Navigate to a success page
-      
-      console.log('Payment data:', {
-        senderWallet: paymentData.senderWallet,
-        recipients: recipientSummary,
-        totalLana: paymentData.totalLana,
-        privateKey: '***hidden***'
+      // Prepare recipients in the format expected by the edge function
+      const recipients = recipientSummary.map(r => ({
+        address: r.wallet,
+        amount: r.amount // in LANA
+      }));
+
+      // Get Electrum servers from session storage or use defaults
+      const storedServers = sessionStorage.getItem('electrumServers');
+      const electrum_servers = storedServers 
+        ? JSON.parse(storedServers)
+        : [
+            { host: "electrum1.lanacoin.com", port: 5097 },
+            { host: "electrum2.lanacoin.com", port: 5097 }
+          ];
+
+      console.log('📤 Calling edge function with:', {
+        sender_address: paymentData.senderWallet,
+        recipients: recipients,
+        electrum_servers: electrum_servers
       });
 
-      // Placeholder navigation
-      // navigate('/unconditional-payment/payment-result');
+      // Call the edge function
+      const { data, error } = await supabase.functions.invoke('send-unconditional-payment', {
+        body: {
+          sender_address: paymentData.senderWallet,
+          recipients: recipients,
+          private_key: privateKey,
+          electrum_servers: electrum_servers
+        }
+      });
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Payment transaction failed');
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Payment transaction failed');
+      }
+
+      console.log('✅ Transaction successful:', data.txid);
+      
+      // Clear session storage
+      sessionStorage.removeItem('pendingUnconditionalPayment');
+      
+      // Show success toast with transaction ID
+      toast.success(`Payment sent successfully! TX: ${data.txid.substring(0, 8)}...`);
+      
+      // Navigate back to completed payments
+      navigate('/unconditional-payment/completed');
       
     } catch (error) {
-      console.error('Payment error:', error);
+      console.error('❌ Payment error:', error);
       toast.error(error instanceof Error ? error.message : 'Payment failed');
     } finally {
       setIsProcessing(false);
