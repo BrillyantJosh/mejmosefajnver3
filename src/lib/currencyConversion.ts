@@ -60,12 +60,22 @@ export const lanoshiToLana = (lanoshi: number): number => {
 
 // Format currency for display
 export const formatCurrency = (amount: number, currency: string): string => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(amount);
+  // Validate currency code - must be a non-empty 3-letter string
+  if (!currency || currency.trim().length !== 3) {
+    return `${amount.toFixed(2)}`;
+  }
+  
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency.trim().toUpperCase(),
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  } catch (error) {
+    // Fallback if currency code is still invalid
+    return `${amount.toFixed(2)} ${currency}`;
+  }
 };
 
 // Format LANA for display
