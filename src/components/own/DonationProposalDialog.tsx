@@ -18,6 +18,7 @@ interface DonationProposalDialogProps {
   lanAmount: number;
   fiatAmount: number;
   fiatCurrency: string;
+  payerPubkey: string;
   existingRevenueShare?: RevenueShareEvent;
   onSuccess: () => void;
 }
@@ -44,6 +45,7 @@ export const DonationProposalDialog = ({
   lanAmount,
   fiatAmount,
   fiatCurrency,
+  payerPubkey,
   existingRevenueShare,
   onSuccess,
 }: DonationProposalDialogProps) => {
@@ -115,7 +117,8 @@ export const DonationProposalDialog = ({
           created_at: Math.floor(Date.now() / 1000),
           tags: [
             ["d", paymentId],
-            ["p", recipient.pubkey],
+            ["p", payerPubkey, "payer"],
+            ["p", recipient.pubkey, "recipient"],
             ["wallet", recipient.wallet_id],
             ["fiat", fiatCurrency, recipientFiatAmount.toFixed(2)],
             ["lana", recipientLanAmount.toFixed(2)],
