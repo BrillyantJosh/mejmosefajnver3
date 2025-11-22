@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { Users, Calendar, Globe } from "lucide-react";
+import CreateCaseDialog from "@/components/own/CreateCaseDialog";
 
 export default function MyCases() {
   const { cases, isLoading } = useNostrOwnCases();
@@ -38,16 +39,17 @@ export default function MyCases() {
   if (cases.length === 0) {
     return (
       <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold">My Cases</h2>
+            <p className="text-muted-foreground">View and manage your cases</p>
+          </div>
+          <CreateCaseDialog />
+        </div>
         <Card>
-          <CardHeader>
-            <CardTitle>My Cases</CardTitle>
-            <CardDescription>
-              View and manage your cases
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              No cases found. Your cases will appear here.
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground mb-4">
+              No cases found. Create your first case to get started.
             </p>
           </CardContent>
         </Card>
@@ -56,7 +58,15 @@ export default function MyCases() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold">My Cases</h2>
+          <p className="text-muted-foreground">{cases.length} active case{cases.length !== 1 ? 's' : ''}</p>
+        </div>
+        <CreateCaseDialog />
+      </div>
+      <div className="space-y-4">
       {cases.map((ownCase) => {
         const caseParticipants = ownCase.participants
           .map(pubkey => {
@@ -135,6 +145,7 @@ export default function MyCases() {
           </Card>
         );
       })}
+      </div>
     </div>
   );
 }
