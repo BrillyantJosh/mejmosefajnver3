@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search as SearchIcon, Calendar, Users, User } from "lucide-react";
+import { Search as SearchIcon, Calendar, Users, User, Loader2 } from "lucide-react";
 import { getProxiedImageUrl } from '@/lib/imageProxy';
 import { useNostrClosedCases } from '@/hooks/useNostrClosedCases';
 import { useNostrProfilesCacheBulk } from '@/hooks/useNostrProfilesCacheBulk';
@@ -172,7 +172,7 @@ export default function Search() {
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <CardTitle className="text-lg">{ownCase.title || ownCase.topic || 'Untitled Case'}</CardTitle>
                         <Badge variant="secondary">Closed</Badge>
-                        {isPaid && (
+                        {!paymentsLoading && isPaid && (
                           <Badge className="bg-green-500/10 text-green-700 hover:bg-green-500/20">
                             Paid
                           </Badge>
@@ -282,7 +282,10 @@ export default function Search() {
                         onClick={() => handleGetTranscript(ownCase.id, ownCase.recordId, ownCase.title || ownCase.topic || ownCase.initialContent)}
                         disabled={revenueLoading || paymentsLoading}
                       >
-                        {isPaid ? 'View Transcript' : 'Get Transcript'}
+                        {paymentsLoading && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        {paymentsLoading ? 'Checking payments...' : isPaid ? 'View Transcript' : 'Get Transcript'}
                       </Button>
                     )}
                   </div>
