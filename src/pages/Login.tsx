@@ -35,6 +35,22 @@ const Login = () => {
       return;
     }
 
+    // Check if relays are actually connected
+    if (!parameters || parameters.connectedRelays === 0) {
+      toast({
+        title: "Connection Error",
+        description: "Cannot connect to Nostr network relays. Please check your internet connection and try again in a moment. The system will automatically retry connecting to the relays.",
+        variant: "destructive",
+        duration: 8000
+      });
+      return;
+    }
+
+    // Warn if not all relays are connected
+    if (parameters.connectedRelays < parameters.relays.length) {
+      console.warn(`⚠️ Only ${parameters.connectedRelays}/${parameters.relays.length} relays connected`);
+    }
+
     setIsLoading(true);
     
     try {
