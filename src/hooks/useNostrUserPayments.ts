@@ -25,7 +25,7 @@ export const useNostrUserPayments = (): UseNostrUserPaymentsResult => {
 
     const filter: Filter = {
       kinds: [90900],
-      authors: [session.nostrHexId],
+      '#p': [session.nostrHexId],
       limit: 1000,
     };
 
@@ -33,13 +33,23 @@ export const useNostrUserPayments = (): UseNostrUserPaymentsResult => {
 
     const sub = pool.subscribeMany(relays, [filter] as any, {
       onevent: (event) => {
-        // Find the ["e", <event_id>, "", "87044"] tag
-        const processTag = event.tags.find(
-          (tag) => tag[0] === 'e' && tag[3] === '87044'
+        // Check if user is marked as "payer" (not "recipient")
+        const payerTag = event.tags.find(
+          (tag) => 
+            tag[0] === 'p' && 
+            tag[1] === session.nostrHexId && 
+            tag[2] === 'payer'
         );
         
-        if (processTag && processTag[1]) {
-          processIds.add(processTag[1]);
+        // Only if user is "payer", add the process ID
+        if (payerTag) {
+          const processTag = event.tags.find(
+            (tag) => tag[0] === 'e' && tag[3] === '87044'
+          );
+          
+          if (processTag && processTag[1]) {
+            processIds.add(processTag[1]);
+          }
         }
       },
       oneose: () => {
