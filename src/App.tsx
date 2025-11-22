@@ -46,6 +46,10 @@ import UnconditionalPaymentPending from "./pages/unconditional-payment/Pending";
 import UnconditionalPaymentCompleted from "./pages/unconditional-payment/Completed";
 import UnconditionalPaymentConfirmPayment from "./pages/unconditional-payment/ConfirmPayment";
 import UnconditionalPaymentResult from "./pages/unconditional-payment/Result";
+import OwnLayout from "./pages/own/OwnLayout";
+import Own from "./pages/own/Own";
+import OwnSearch from "./pages/own/Search";
+import OwnMyCases from "./pages/own/MyCases";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -127,6 +131,11 @@ const App = () => (
                   <Route path="/donate" element={<Navigate to="/unconditional-payment" replace />} />
                   <Route path="/donate/donated" element={<Navigate to="/unconditional-payment/completed" replace />} />
                   <Route path="/donate/confirm-payment" element={<Navigate to="/unconditional-payment/confirm-payment" replace />} />
+                  <Route path="/own" element={<OwnLayout />}>
+                    <Route index element={<Own />} />
+                    <Route path="search" element={<OwnSearch />} />
+                    <Route path="my-cases" element={<OwnMyCases />} />
+                  </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/wallet/register" element={<RegisterWallet />} />
