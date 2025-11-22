@@ -25,22 +25,15 @@ export interface DonationPayment {
 export const useNostrDonationPayments = () => {
   const { parameters } = useSystemParameters();
   const [payments, setPayments] = useState<DonationPayment[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const relays = parameters?.relays || [];
 
   useEffect(() => {
     const fetchPayments = async () => {
       if (relays.length === 0) {
         setPayments([]);
-        setIsLoading(false);
         return;
       }
 
-      // Loading indicator only for initial load
-      if (!hasLoadedOnce) {
-        setIsLoading(true);
-      }
       const pool = new SimplePool();
 
       try {
@@ -107,10 +100,6 @@ export const useNostrDonationPayments = () => {
         console.error('❌ Error fetching donation payments:', error);
         setPayments([]);
       } finally {
-        if (!hasLoadedOnce) {
-          setIsLoading(false);
-          setHasLoadedOnce(true);
-        }
         pool.close(relays);
       }
     };
@@ -120,10 +109,9 @@ export const useNostrDonationPayments = () => {
     // Poll every 5 seconds for payment status updates
     const interval = setInterval(fetchPayments, 5000);
     return () => clearInterval(interval);
-  }, [relays.join(','), hasLoadedOnce]);
+  }, [relays.join(',')]);
 
   return {
-    payments,
-    isLoading
+    payments
   };
 };

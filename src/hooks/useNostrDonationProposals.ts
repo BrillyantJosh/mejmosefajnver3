@@ -27,22 +27,15 @@ export interface DonationProposal {
 export const useNostrDonationProposals = () => {
   const { parameters } = useSystemParameters();
   const [proposals, setProposals] = useState<DonationProposal[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const relays = parameters?.relays || [];
 
   useEffect(() => {
     const fetchProposals = async () => {
       if (relays.length === 0) {
         setProposals([]);
-        setIsLoading(false);
         return;
       }
 
-      // Loading indicator only for initial load
-      if (!hasLoadedOnce) {
-        setIsLoading(true);
-      }
       const pool = new SimplePool();
 
       try {
@@ -111,10 +104,6 @@ export const useNostrDonationProposals = () => {
         console.error('❌ Error fetching donation proposals:', error);
         setProposals([]);
       } finally {
-        if (!hasLoadedOnce) {
-          setIsLoading(false);
-          setHasLoadedOnce(true);
-        }
         pool.close(relays);
       }
     };
@@ -124,10 +113,9 @@ export const useNostrDonationProposals = () => {
     // Poll every 10 seconds for updates
     const interval = setInterval(fetchProposals, 10000);
     return () => clearInterval(interval);
-  }, [relays.join(','), hasLoadedOnce]);
+  }, [relays.join(',')]);
 
   return {
-    proposals,
-    isLoading
+    proposals
   };
 };
