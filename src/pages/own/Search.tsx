@@ -12,6 +12,7 @@ import { useNostrClosedCases } from '@/hooks/useNostrClosedCases';
 import { useNostrProfilesCacheBulk } from '@/hooks/useNostrProfilesCacheBulk';
 import { useNostrRevenueSharesBatch } from '@/hooks/useNostrRevenueSharesBatch';
 import { useNostrDonationProposal } from '@/hooks/useNostrDonationProposal';
+import { useNostrUserPayments } from '@/hooks/useNostrUserPayments';
 import { useAuth } from '@/contexts/AuthContext';
 import { DonationProposalDialog } from '@/components/own/DonationProposalDialog';
 import { fiatToLana, fiatToFiat, formatCurrency, formatLana, getUserCurrency } from '@/lib/currencyConversion';
@@ -25,6 +26,7 @@ export default function Search() {
   const [selectedCase, setSelectedCase] = useState<{ id: string; title: string; revenueShare?: RevenueShareEvent } | null>(null);
   
   const { closedCases, isLoading: casesLoading } = useNostrClosedCases();
+  const { paidProcessIds, isLoading: paymentsLoading } = useNostrUserPayments();
   
   // Get all unique pubkeys for profile fetching
   const allPubkeys = useMemo(() => {
@@ -84,8 +86,17 @@ export default function Search() {
   };
   
   const handleGetTranscript = (caseId: string, caseTitle: string) => {
-    // Strip "own:" prefix for revenue share lookup
+    // Strip "own:" prefix for checking if already paid
     const lookupId = caseId.replace(/^own:/, '');
+    const isPaid = paidProcessIds.has(lookupId);
+    
+    // If already paid, navigate directly to transcript
+    if (isPaid) {
+      navigate(`/own/transcript/${caseId}`);
+      return;
+    }
+    
+    // Otherwise, show payment dialog
     const revenueShareForCase = revenueShares[lookupId];
     
     setSelectedCase({ 
@@ -148,6 +159,8 @@ export default function Search() {
           filteredCases.map((ownCase) => {
             const { lanAmount, userFiatAmount, userCurrency, sourceFiatAmount, sourceCurrency, visibility } = calculatePrices(ownCase.id);
             const facilitator = profiles.get(ownCase.pubkey);
+            const lookupId = ownCase.id.replace(/^own:/, '');
+            const isPaid = paidProcessIds.has(lookupId);
             
             return (
               <Card key={ownCase.id} className="hover:shadow-md transition-shadow">
@@ -157,6 +170,11 @@ export default function Search() {
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <CardTitle className="text-lg">{ownCase.title || ownCase.topic || 'Untitled Case'}</CardTitle>
                         <Badge variant="secondary">Closed</Badge>
+                        {isPaid && (
+                          <Badge className="bg-green-500/10 text-green-700 hover:bg-green-500/20">
+                            Paid
+                          </Badge>
+                        )}
                         {ownCase.lang && (
                           <Badge variant="outline" className="text-xs uppercase">
                             {ownCase.lang}
@@ -260,9 +278,9 @@ export default function Search() {
                       <Button 
                         className="bg-cyan-600 hover:bg-cyan-700"
                         onClick={() => handleGetTranscript(ownCase.id, ownCase.title || ownCase.topic || ownCase.initialContent)}
-                        disabled={revenueLoading}
+                        disabled={revenueLoading || paymentsLoading}
                       >
-                        Get Transcript
+                        {isPaid ? 'View Transcript' : 'Get Transcript'}
                       </Button>
                     )}
                   </div>
