@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.sync-kind-38888]
 verify_jwt = false
+
+[functions.refresh-nostr-profiles]
+verify_jwt = false
