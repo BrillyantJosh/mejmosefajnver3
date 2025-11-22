@@ -26,7 +26,7 @@ interface DonationSelection {
 export default function Pending() {
   const { session } = useAuth();
   const navigate = useNavigate();
-  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals();
+  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(session?.nostrHexId);
   const { payments } = useNostrDonationPayments();
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
   

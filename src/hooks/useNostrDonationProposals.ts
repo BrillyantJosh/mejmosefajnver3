@@ -6,6 +6,7 @@ import { arraysEqual } from '@/lib/arrayComparison';
 export interface DonationProposal {
   id: string;
   d: string;
+  payerPubkey: string;
   recipientPubkey: string;
   wallet: string;
   fiatCurrency: string;
@@ -24,7 +25,7 @@ export interface DonationProposal {
   paymentTxId?: string;
 }
 
-export const useNostrDonationProposals = () => {
+export const useNostrDonationProposals = (userPubkey?: string) => {
   const { parameters } = useSystemParameters();
   const [proposals, setProposals] = useState<DonationProposal[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,11 +49,18 @@ export const useNostrDonationProposals = () => {
       try {
         console.log('📥 Fetching KIND 90900 donation proposals...');
 
+        const filter: any = {
+          kinds: [90900],
+          limit: 100
+        };
+
+        // Filter by payer if userPubkey is provided
+        if (userPubkey) {
+          filter['#p'] = [userPubkey];
+        }
+
         const events = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [90900],
-            limit: 100
-          }),
+          pool.querySync(relays, filter),
           new Promise<Event[]>((_, reject) =>
             setTimeout(() => reject(new Error('Timeout')), 10000)
           )
@@ -61,38 +69,50 @@ export const useNostrDonationProposals = () => {
         if (events && events.length > 0) {
           console.log(`✅ Found ${events.length} donation proposals`);
 
-          const parsedProposals: DonationProposal[] = events.map(event => {
-            const dTag = event.tags.find(t => t[0] === 'd')?.[1] || '';
-            const pTag = event.tags.find(t => t[0] === 'p')?.[1] || '';
-            const walletTag = event.tags.find(t => t[0] === 'wallet')?.[1] || '';
-            const fiatTag = event.tags.find(t => t[0] === 'fiat');
-            const lanaTag = event.tags.find(t => t[0] === 'lana')?.[1] || '';
-            const lanoshiTag = event.tags.find(t => t[0] === 'lanoshi')?.[1] || '';
-            const typeTag = event.tags.find(t => t[0] === 'type')?.[1] || '';
-            const serviceTag = event.tags.find(t => t[0] === 'service')?.[1] || '';
-            const refTag = event.tags.find(t => t[0] === 'ref')?.[1];
-            const expiresTag = event.tags.find(t => t[0] === 'expires')?.[1];
-            const urlTag = event.tags.find(t => t[0] === 'url')?.[1];
+          const parsedProposals: DonationProposal[] = events
+            .map(event => {
+              const dTag = event.tags.find(t => t[0] === 'd')?.[1] || '';
+              
+              // Separate payer and recipient p tags
+              const payerTag = event.tags.find(t => t[0] === 'p' && t[2] === 'payer')?.[1];
+              const recipientTag = event.tags.find(t => t[0] === 'p' && t[2] === 'recipient')?.[1] || '';
+              
+              // If userPubkey filter is requested, verify this user is the payer
+              if (userPubkey && payerTag !== userPubkey) {
+                return null; // Skip this proposal
+              }
+              
+              const walletTag = event.tags.find(t => t[0] === 'wallet')?.[1] || '';
+              const fiatTag = event.tags.find(t => t[0] === 'fiat');
+              const lanaTag = event.tags.find(t => t[0] === 'lana')?.[1] || '';
+              const lanoshiTag = event.tags.find(t => t[0] === 'lanoshi')?.[1] || '';
+              const typeTag = event.tags.find(t => t[0] === 'type')?.[1] || '';
+              const serviceTag = event.tags.find(t => t[0] === 'service')?.[1] || '';
+              const refTag = event.tags.find(t => t[0] === 'ref')?.[1];
+              const expiresTag = event.tags.find(t => t[0] === 'expires')?.[1];
+              const urlTag = event.tags.find(t => t[0] === 'url')?.[1];
 
-            return {
-              id: event.id,
-              d: dTag,
-              recipientPubkey: pTag,
-              wallet: walletTag,
-              fiatCurrency: fiatTag?.[1] || '',
-              fiatAmount: fiatTag?.[2] || '',
-              lanaAmount: lanaTag,
-              lanoshiAmount: lanoshiTag,
-              type: typeTag,
-              service: serviceTag,
-              ref: refTag,
-              expires: expiresTag ? parseInt(expiresTag) : undefined,
-              url: urlTag,
-              content: event.content,
-              createdAt: event.created_at,
-              eventId: event.id
-            };
-          });
+              return {
+                id: event.id,
+                d: dTag,
+                payerPubkey: payerTag || '',
+                recipientPubkey: recipientTag,
+                wallet: walletTag,
+                fiatCurrency: fiatTag?.[1] || '',
+                fiatAmount: fiatTag?.[2] || '',
+                lanaAmount: lanaTag,
+                lanoshiAmount: lanoshiTag,
+                type: typeTag,
+                service: serviceTag,
+                ref: refTag,
+                expires: expiresTag ? parseInt(expiresTag) : undefined,
+                url: urlTag,
+                content: event.content,
+                createdAt: event.created_at,
+                eventId: event.id
+              } as DonationProposal;
+            })
+            .filter(p => p !== null) as DonationProposal[];
 
           // Sort by newest first
           parsedProposals.sort((a, b) => b.createdAt - a.createdAt);
