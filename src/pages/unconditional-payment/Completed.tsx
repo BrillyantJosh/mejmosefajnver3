@@ -6,7 +6,7 @@ import { formatLana, formatCurrency } from "@/lib/currencyConversion";
 import { CheckCircle, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 
-export default function Donated() {
+export default function Completed() {
   const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals();
   const { payments, isLoading: paymentsLoading } = useNostrDonationPayments();
 
@@ -28,7 +28,7 @@ export default function Donated() {
     return (
       <Card>
         <CardContent className="p-12 text-center">
-          <p className="text-muted-foreground">You haven't made any donations yet.</p>
+          <p className="text-muted-foreground">You haven't made any unconditional payments yet.</p>
         </CardContent>
       </Card>
     );

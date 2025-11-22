@@ -67,11 +67,11 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     order: 3
   },
   {
-    id: 'letsdonate',
-    title: "Let's Donate",
-    description: 'Support projects and initiatives in the Lana ecosystem',
+    id: 'unconditionalpayment',
+    title: 'Unconditional Payment',
+    description: 'Send unconditional payments to projects and initiatives in the Lana ecosystem',
     icon: HandHeart,
-    path: '/donate',
+    path: '/unconditional-payment',
     gradient: 'from-rose-500 to-pink-500',
     enabled: true,
     order: 4
@@ -233,7 +233,7 @@ const mapToNostrId = (id: ModuleType): string => {
     'social': 'Social',
     'chat': 'Chat',
     'wallet': 'Wallet',
-    'letsdonate': "Let's Donate",
+    'unconditionalpayment': 'Unconditional Payment',
     'selllana': 'SellLana',
     'buylana': 'BuyLana',
     'marketplace': 'Marketplace',
@@ -256,7 +256,7 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Social': 'social',
     'Chat': 'chat',
     'Wallet': 'wallet',
-    "Let's Donate": 'letsdonate',
+    'Unconditional Payment': 'unconditionalpayment',
     'SellLana': 'selllana',
     'BuyLana': 'buylana',
     'Marketplace': 'marketplace',
