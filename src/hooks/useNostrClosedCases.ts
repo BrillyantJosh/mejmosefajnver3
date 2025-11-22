@@ -9,10 +9,13 @@ export interface ClosedCase {
   status: string;
   lang: string;
   participants: string[];
+  title?: string;
   topic?: string;
   triggerEventId?: string;
   lanacoinTxid?: string;
-  createdAt: number;
+  startedAt: number;
+  closedAt: number;
+  initialContent: string;
 }
 
 export const useNostrClosedCases = () => {
@@ -87,6 +90,7 @@ export const useNostrClosedCases = () => {
           const start = processId ? startById.get(processId) : undefined;
 
           const statusTag = record.tags.find(t => t[0] === 'status');
+          const titleTag = record.tags.find(t => t[0] === 'title');
           const langTagRecord = record.tags.find(t => t[0] === 'lang');
           const langTagStart = start?.tags.find(t => t[0] === 'lang');
           const topicTag = record.tags.find(t => t[0] === 'topic') || start?.tags.find(t => t[0] === 'topic');
@@ -98,6 +102,7 @@ export const useNostrClosedCases = () => {
 
           const lang = langTagRecord?.[1] || langTagStart?.[1] || 'en';
           const closedAt = closedAtTag ? parseInt(closedAtTag[1]) : record.created_at;
+          const startedAt = start?.created_at || (openedAtTag ? parseInt(openedAtTag[1]) : closedAt);
 
           const initialContent = start?.content || '';
           const finalContent = record.content || '';
@@ -106,21 +111,24 @@ export const useNostrClosedCases = () => {
           const initiatorPubkey = initiatorFromRoles?.[1] || start?.pubkey || record.pubkey;
 
           return {
-            id: processId,              // = 87044 event id (critical for revenue share lookup)
-            pubkey: initiatorPubkey,    // initiator pubkey
-            content: finalContent || initialContent, // prefer final report, fallback to initial reason
+            id: processId,
+            pubkey: initiatorPubkey,
+            content: finalContent || initialContent,
             status: statusTag?.[1] || 'closed',
             lang,
             participants,
+            title: titleTag?.[1],
             topic: topicTag?.[1],
             triggerEventId: processId,
             lanacoinTxid: undefined,
-            createdAt: closedAt,
+            startedAt,
+            closedAt,
+            initialContent,
           };
         });
 
         // Step 7: Sort by closed date, newest first
-        cases.sort((a, b) => b.createdAt - a.createdAt);
+        cases.sort((a, b) => b.closedAt - a.closedAt);
 
         console.log(`🎯 Final closed cases: ${cases.length}`);
         if (cases.length > 0) {
