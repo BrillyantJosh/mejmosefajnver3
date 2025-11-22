@@ -132,7 +132,7 @@ export default function Search() {
         ) : (
           filteredCases.map((ownCase) => {
             const { lanAmount, fiatAmount, currency } = calculatePrices(ownCase.id);
-            const facilitator = profiles[ownCase.pubkey];
+            const facilitator = profiles.get(ownCase.pubkey);
             
             return (
               <Card key={ownCase.id} className="hover:shadow-md transition-shadow">
@@ -191,7 +191,7 @@ export default function Search() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {ownCase.participants.slice(0, 5).map((pubkey) => {
-                          const profile = profiles[pubkey];
+                          const profile = profiles.get(pubkey);
                           return (
                             <div key={pubkey} className="flex items-center gap-1.5 bg-secondary px-2 py-1 rounded-md">
                               <Avatar className="h-5 w-5">
