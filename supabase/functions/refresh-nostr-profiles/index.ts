@@ -85,15 +85,16 @@ serve(async (req) => {
       );
     }
 
-    // Fetch system parameters for relays
-    const { data: settings } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'system_parameters')
+    // Fetch relays from kind_38888 table (latest system parameters)
+    const { data: systemParams } = await supabase
+      .from('kind_38888')
+      .select('relays')
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single();
 
-    const relays = settings?.value?.relays || DEFAULT_RELAYS;
-    console.log(`📡 Using relays: ${relays.join(', ')}`);
+    const relays = systemParams?.relays || DEFAULT_RELAYS;
+    console.log(`📡 Using ${relays.length} relays from KIND 38888: ${relays.join(', ')}`);
     console.log(`🎯 Searching for ${pubkeysToRefresh.length} pubkeys:`, pubkeysToRefresh.slice(0, 5).map(pk => pk.substring(0, 16) + '...'));
 
     // Fetch profiles from Nostr
