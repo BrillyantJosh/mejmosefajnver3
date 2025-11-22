@@ -344,7 +344,13 @@ export default function Pending() {
                 </Button>
               </div>
               
-              {remainingBalance < 0 && (
+              {!selectedWallet && (
+                <p className="text-sm text-destructive">
+                  Please select a wallet to proceed with payment.
+                </p>
+              )}
+              
+              {selectedWallet && remainingBalance < 0 && (
                 <p className="text-sm text-destructive">
                   Insufficient funds. You need {formatLana(Math.abs(remainingBalance))} more LANA.
                 </p>
