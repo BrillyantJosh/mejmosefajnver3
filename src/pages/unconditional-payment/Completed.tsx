@@ -25,7 +25,10 @@ export default function Completed() {
   // Fetch profiles for all recipients
   const { profiles } = useNostrProfilesCacheBulk(recipientPubkeys);
 
-  if ((proposalsLoading && proposals.length === 0) || (paymentsLoading && payments.length === 0)) {
+  // Show loading only if actually loading AND no data yet
+  const isInitialLoading = (proposalsLoading && proposals.length === 0) || (paymentsLoading && payments.length === 0);
+
+  if (isInitialLoading) {
     return (
       <div className="space-y-4">
         {[1, 2, 3].map(i => (
