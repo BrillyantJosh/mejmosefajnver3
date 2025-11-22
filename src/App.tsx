@@ -50,6 +50,7 @@ import OwnLayout from "./pages/own/OwnLayout";
 import Own from "./pages/own/Own";
 import OwnSearch from "./pages/own/Search";
 import OwnMyCases from "./pages/own/MyCases";
+import OwnTranscript from "./pages/own/Transcript";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -135,6 +136,7 @@ const App = () => (
                     <Route index element={<Own />} />
                     <Route path="search" element={<OwnSearch />} />
                     <Route path="my-cases" element={<OwnMyCases />} />
+                    <Route path="transcript/:caseId" element={<OwnTranscript />} />
                   </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />

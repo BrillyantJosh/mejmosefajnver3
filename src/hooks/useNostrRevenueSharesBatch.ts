@@ -19,17 +19,12 @@ export const useNostrRevenueSharesBatch = (processRecordIds: string[]) => {
       const pool = new SimplePool();
 
       try {
-        console.log('🔍 [Revenue Shares] Searching for process IDs:', processRecordIds);
-        
         // Fetch all revenue share configurations for the given process record IDs
         const revenueEvents = await pool.querySync(relays, {
           kinds: [87945],
           '#e': processRecordIds,
           limit: 500
         });
-
-        console.log('📥 [Revenue Shares] Fetched events:', revenueEvents.length);
-        console.log('📥 [Revenue Shares] Events:', revenueEvents);
 
         const sharesMap: Record<string, RevenueShareEvent> = {};
 
@@ -60,15 +55,11 @@ export const useNostrRevenueSharesBatch = (processRecordIds: string[]) => {
             // Keep only the most recent revenue share for each process
             if (!sharesMap[processRecordId] || sharesMap[processRecordId].createdAt < share.createdAt) {
               sharesMap[processRecordId] = share;
-              console.log('✅ [Revenue Shares] Added share for process:', processRecordId);
             }
           } catch (error) {
-            console.error('❌ [Revenue Shares] Error parsing revenue share event:', error);
+            console.error('Error parsing revenue share event:', error);
           }
         });
-
-        console.log('🗺️ [Revenue Shares] Final sharesMap keys:', Object.keys(sharesMap));
-        console.log('🗺️ [Revenue Shares] Final sharesMap:', sharesMap);
         
         setRevenueShares(sharesMap);
       } catch (error) {
