@@ -123,34 +123,47 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
         console.warn('Failed to parse event content for trusted_signers:', error);
       }
 
-      // Test relay connections with actual subscription attempt
-      console.log('Testing relay connections...');
+      // Test relay connections with WebSocket (more reliable than event fetching)
+      console.log('Testing relay connections with WebSocket...');
       const relayStatuses: RelayStatus[] = await Promise.all(
         relays.map(async (relayUrl) => {
           const startTime = Date.now();
           try {
-            const testPool = new SimplePool();
-            
-            // Try to actually fetch something from the relay
-            await Promise.race([
-              testPool.get([relayUrl], { kinds: [1], limit: 1 }),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Relay timeout')), 5000)
-              )
-            ]);
-            
-            testPool.close([relayUrl]);
-            
-            const responseTime = Date.now() - startTime;
-            console.log(`✅ Relay ${relayUrl} connected in ${responseTime}ms`);
-            
-            return {
-              url: relayUrl,
-              connected: true,
-              responseTime
-            };
+            return await new Promise<RelayStatus>((resolve) => {
+              const ws = new WebSocket(relayUrl);
+              
+              const timeout = setTimeout(() => {
+                ws.close();
+                console.warn(`❌ Relay ${relayUrl} connection timeout`);
+                resolve({
+                  url: relayUrl,
+                  connected: false
+                });
+              }, 5000);
+
+              ws.onopen = () => {
+                clearTimeout(timeout);
+                const responseTime = Date.now() - startTime;
+                console.log(`✅ Relay ${relayUrl} connected in ${responseTime}ms`);
+                ws.close();
+                resolve({
+                  url: relayUrl,
+                  connected: true,
+                  responseTime
+                });
+              };
+
+              ws.onerror = (error) => {
+                clearTimeout(timeout);
+                console.warn(`❌ Relay ${relayUrl} failed to connect:`, error);
+                resolve({
+                  url: relayUrl,
+                  connected: false
+                });
+              };
+            });
           } catch (error) {
-            console.warn(`❌ Relay ${relayUrl} failed to connect:`, error);
+            console.warn(`❌ Relay ${relayUrl} connection error:`, error);
             return {
               url: relayUrl,
               connected: false
