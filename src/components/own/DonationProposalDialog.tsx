@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { SimplePool, EventTemplate, finalizeEvent } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
-import { useNostrRevenueShare } from '@/hooks/useNostrRevenueShare';
+import { useNostrRevenueShare, RevenueShareEvent } from '@/hooks/useNostrRevenueShare';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface DonationProposalDialogProps {
@@ -16,6 +16,7 @@ interface DonationProposalDialogProps {
   lanAmount: number;
   fiatAmount: number;
   fiatCurrency: string;
+  existingRevenueShare?: RevenueShareEvent;
   onSuccess: () => void;
 }
 
@@ -39,6 +40,7 @@ export const DonationProposalDialog = ({
   lanAmount,
   fiatAmount,
   fiatCurrency,
+  existingRevenueShare,
   onSuccess,
 }: DonationProposalDialogProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,8 +52,11 @@ export const DonationProposalDialog = ({
     ? processRecordId.substring(4) 
     : processRecordId;
   
-  const { revenueShare } = useNostrRevenueShare(rawProcessRecordId);
+  const { revenueShare: fetchedRevenueShare, isLoading } = useNostrRevenueShare(rawProcessRecordId);
   const { session } = useAuth();
+  
+  // Use existing revenue share if provided, otherwise use fetched one
+  const effectiveRevenueShare = existingRevenueShare ?? fetchedRevenueShare;
 
   const getRelays = (): string[] => {
     return parameters?.relays || [];
@@ -72,7 +77,7 @@ export const DonationProposalDialog = ({
       }
 
       // 2. Validate revenue share configuration
-      if (!revenueShare?.data?.revenue_share || revenueShare.data.revenue_share.length === 0) {
+      if (!effectiveRevenueShare?.data?.revenue_share || effectiveRevenueShare.data.revenue_share.length === 0) {
         toast({
           title: "Error",
           description: "Revenue share configuration not found",
@@ -87,7 +92,7 @@ export const DonationProposalDialog = ({
       const privateKeyBytes = hexToBytes(session.nostrPrivateKey);
 
       // 3. Create one KIND 90900 event for EACH recipient
-      const eventPromises = revenueShare.data.revenue_share.map(async (recipient) => {
+      const eventPromises = effectiveRevenueShare.data.revenue_share.map(async (recipient) => {
         // Calculate this recipient's share
         const recipientFiatAmount = fiatAmount * (recipient.share_percent / 100);
         const recipientLanAmount = lanAmount * (recipient.share_percent / 100);
@@ -110,7 +115,7 @@ export const DonationProposalDialog = ({
             ["role", recipient.role],
             ["share_percent", recipient.share_percent.toString()],
             ["service", serviceName],
-            ["e", processRecordId, "", "process"],
+            ["e", rawProcessRecordId, "", "process"],
             ["expires", (Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60).toString()]
           ],
           content: `Unconditional payment share (${recipient.share_percent}% as ${recipient.role}) to access the transcript for: "${caseTitle}". Total payment: ${fiatAmount} ${fiatCurrency}.`
@@ -178,7 +183,7 @@ export const DonationProposalDialog = ({
 
       toast({
         title: "Payment Proposals Sent",
-        description: `Payment proposals sent to ${revenueShare.data.revenue_share.length} recipients! (${successCount}/${totalAttempts} relay connections)`,
+        description: `Payment proposals sent to ${effectiveRevenueShare.data.revenue_share.length} recipients! (${successCount}/${totalAttempts} relay connections)`,
       });
 
       onSuccess();
@@ -229,7 +234,7 @@ export const DonationProposalDialog = ({
             <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button onClick={handleConfirm} disabled={isSubmitting}>
+            <Button onClick={handleConfirm} disabled={isSubmitting || (isLoading && !existingRevenueShare)}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirm Payment
             </Button>
