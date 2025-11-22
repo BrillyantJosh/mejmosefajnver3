@@ -25,6 +25,17 @@ export default function Completed() {
   // Fetch profiles for all recipients
   const { profiles } = useNostrProfilesCacheBulk(recipientPubkeys);
 
+  console.log('🔍 Completed page debug:', {
+    paymentsCount: payments.length,
+    proposalsCount: proposals.length,
+    paymentsLoading,
+    proposalsLoading,
+    profilesCount: profiles.size,
+    recipientPubkeys: recipientPubkeys.length,
+    samplePayment: payments[0],
+    profilesMapKeys: Array.from(profiles.keys()).slice(0, 3)
+  });
+
   if ((proposalsLoading && proposals.length === 0) || (paymentsLoading && payments.length === 0)) {
     return (
       <div className="space-y-4">
@@ -53,7 +64,7 @@ export default function Completed() {
     <div className="space-y-4">
       {payments.map(payment => {
         const proposal = proposals.find(p => p.d === payment.proposalDTag || p.eventId === payment.proposalEventId);
-        const recipientProfile = profiles[payment.recipientPubkey];
+        const recipientProfile = profiles.get(payment.recipientPubkey);
         const recipientName = recipientProfile?.display_name || recipientProfile?.full_name || 'Unknown';
         const recipientWallet = payment.toWallet || proposal?.wallet;
 
