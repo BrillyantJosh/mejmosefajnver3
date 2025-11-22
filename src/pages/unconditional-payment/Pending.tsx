@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { fiatToLana, getUserCurrency, formatCurrency, formatLana, lanaToLanoshi } from "@/lib/currencyConversion";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { Calendar, ExternalLink, CheckCircle, Wallet } from "lucide-react";
+import { Calendar, ExternalLink, Wallet } from "lucide-react";
 import { format } from "date-fns";
 
 interface DonationSelection {
@@ -33,6 +33,11 @@ export default function Pending() {
   const [customAmounts, setCustomAmounts] = useState<{ [key: string]: number }>({});
   const [selectedWallet, setSelectedWallet] = useState<string>("");
   const userCurrency = getUserCurrency();
+
+  // Cleanup old sessionStorage key
+  useEffect(() => {
+    sessionStorage.removeItem('pendingDonationPayment');
+  }, []);
 
   // Fetch wallet balances
   const walletAddresses = useMemo(() => wallets.map(w => w.walletId), [wallets]);
@@ -95,7 +100,7 @@ export default function Pending() {
 
   const handleProceedToPayment = () => {
     if (selectedProposals.size === 0) {
-      toast.error("Please select at least one donation");
+      toast.error("Please select at least one payment");
       return;
     }
     
@@ -125,10 +130,10 @@ export default function Pending() {
       totalLana
     };
 
-    sessionStorage.setItem('pendingDonationPayment', JSON.stringify(paymentData));
+    sessionStorage.setItem('pendingUnconditionalPayment', JSON.stringify(paymentData));
     
     // Navigate to payment confirmation page
-    navigate('/donate/confirm-payment');
+    navigate('/unconditional-payment/confirm-payment');
   };
 
   if ((proposalsLoading && proposals.length === 0) || walletsLoading) {
@@ -149,7 +154,7 @@ export default function Pending() {
     return (
       <Card>
         <CardContent className="p-12 text-center">
-          <p className="text-muted-foreground">No pending donation proposals at the moment.</p>
+          <p className="text-muted-foreground">No pending payment proposals at the moment.</p>
         </CardContent>
       </Card>
     );
@@ -193,7 +198,7 @@ export default function Pending() {
         </CardContent>
       </Card>
 
-      {/* Donation Proposals */}
+      {/* Payment Proposals */}
       <div className="space-y-4">
         {pendingProposals.map(proposal => {
           const isSelected = selectedProposals.has(proposal.eventId);

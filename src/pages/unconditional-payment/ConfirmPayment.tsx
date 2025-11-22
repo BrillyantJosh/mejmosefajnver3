@@ -10,7 +10,6 @@ import { Camera, Wallet, ArrowRight, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { convertWifToIds } from "@/lib/crypto";
 import { formatLana } from "@/lib/currencyConversion";
-import { supabase } from "@/integrations/supabase/client";
 
 interface PaymentRecipient {
   proposalId: string;
@@ -40,10 +39,10 @@ export default function ConfirmPayment() {
 
   useEffect(() => {
     // Load payment data from session storage
-    const storedData = sessionStorage.getItem('pendingDonationPayment');
+    const storedData = sessionStorage.getItem('pendingUnconditionalPayment');
     if (!storedData) {
       toast.error("No payment data found");
-      navigate('/donate');
+      navigate('/unconditional-payment');
       return;
     }
 
@@ -52,7 +51,7 @@ export default function ConfirmPayment() {
       setPaymentData(data);
     } catch (error) {
       toast.error("Invalid payment data");
-      navigate('/donate');
+      navigate('/unconditional-payment');
     }
   }, [navigate]);
 
@@ -117,7 +116,7 @@ export default function ConfirmPayment() {
     setIsProcessing(true);
 
     try {
-      // Here we would call the edge function to process the donation payment
+      // Here we would call the edge function to process the unconditional payment
       // This would be similar to send-lana-transaction but for multiple outputs
       
       // For now, show a placeholder
@@ -128,7 +127,7 @@ export default function ConfirmPayment() {
       // 1. Create a transaction with multiple outputs (one for each unique recipient wallet)
       // 2. Sign the transaction with the private key
       // 3. Broadcast it to the network
-      // 4. Create KIND 90901 events for each donation payment
+      // 4. Create KIND 90901 events for each unconditional payment
       // 5. Navigate to a success page
       
       console.log('Payment data:', {
@@ -139,7 +138,7 @@ export default function ConfirmPayment() {
       });
 
       // Placeholder navigation
-      // navigate('/donate/payment-result');
+      // navigate('/unconditional-payment/payment-result');
       
     } catch (error) {
       console.error('Payment error:', error);
@@ -158,13 +157,13 @@ export default function ConfirmPayment() {
       <div className="mb-6">
         <Button
           variant="ghost"
-          onClick={() => navigate('/donate')}
+          onClick={() => navigate('/unconditional-payment')}
           className="mb-4"
         >
-          ← Back to Donations
+          ← Back to Payments
         </Button>
         <h1 className="text-3xl font-bold">Confirm Payment</h1>
-        <p className="text-muted-foreground">Review and authorize your donation payment</p>
+        <p className="text-muted-foreground">Review and authorize your unconditional payment</p>
       </div>
 
       {/* Payment Summary */}
