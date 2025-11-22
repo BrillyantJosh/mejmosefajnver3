@@ -33,9 +33,9 @@ export const useNostrUserPayments = (): UseNostrUserPaymentsResult => {
 
     const sub = pool.subscribeMany(relays, [filter] as any, {
       onevent: (event) => {
-        // Find the ["e", <event_id>, "", "process"] tag
+        // Find the ["e", <event_id>, "", "87044"] tag
         const processTag = event.tags.find(
-          (tag) => tag[0] === 'e' && tag[3] === 'process'
+          (tag) => tag[0] === 'e' && tag[3] === '87044'
         );
         
         if (processTag && processTag[1]) {

@@ -23,7 +23,7 @@ export default function Search() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCase, setSelectedCase] = useState<{ id: string; title: string; revenueShare?: RevenueShareEvent } | null>(null);
+  const [selectedCase, setSelectedCase] = useState<{ id: string; recordId: string; transcriptId?: string; title: string; revenueShare?: RevenueShareEvent } | null>(null);
   
   const { closedCases, isLoading: casesLoading } = useNostrClosedCases();
   const { paidProcessIds, isLoading: paymentsLoading } = useNostrUserPayments();
@@ -85,7 +85,7 @@ export default function Search() {
     return { lanAmount, userFiatAmount, userCurrency, sourceFiatAmount, sourceCurrency, visibility };
   };
   
-  const handleGetTranscript = (caseId: string, caseTitle: string) => {
+  const handleGetTranscript = (caseId: string, recordId: string, caseTitle: string) => {
     // Strip "own:" prefix for checking if already paid
     const lookupId = caseId.replace(/^own:/, '');
     const isPaid = paidProcessIds.has(lookupId);
@@ -100,7 +100,9 @@ export default function Search() {
     const revenueShareForCase = revenueShares[lookupId];
     
     setSelectedCase({ 
-      id: caseId, 
+      id: caseId,
+      recordId: recordId,
+      transcriptId: revenueShareForCase?.transcriptEventId,
       title: caseTitle,
       revenueShare: revenueShareForCase
     });
@@ -277,7 +279,7 @@ export default function Search() {
                     {visibility === 'public' && lanAmount > 0 && (
                       <Button 
                         className="bg-cyan-600 hover:bg-cyan-700"
-                        onClick={() => handleGetTranscript(ownCase.id, ownCase.title || ownCase.topic || ownCase.initialContent)}
+                        onClick={() => handleGetTranscript(ownCase.id, ownCase.recordId, ownCase.title || ownCase.topic || ownCase.initialContent)}
                         disabled={revenueLoading || paymentsLoading}
                       >
                         {isPaid ? 'View Transcript' : 'Get Transcript'}
@@ -296,6 +298,8 @@ export default function Search() {
           isOpen={!!selectedCase}
           onClose={() => setSelectedCase(null)}
           processRecordId={selectedCase.id}
+          recordEventId={selectedCase.recordId}
+          transcriptEventId={selectedCase.transcriptId}
           caseTitle={selectedCase.title}
           lanAmount={calculatePrices(selectedCase.id).lanAmount}
           fiatAmount={calculatePrices(selectedCase.id).userFiatAmount}
