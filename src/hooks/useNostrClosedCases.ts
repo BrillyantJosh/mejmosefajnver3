@@ -4,6 +4,7 @@ import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 export interface ClosedCase {
   id: string;
+  recordId: string;
   pubkey: string;
   content: string;
   status: string;
@@ -112,6 +113,7 @@ export const useNostrClosedCases = () => {
 
           return {
             id: processId,
+            recordId: record.id,
             pubkey: initiatorPubkey,
             content: finalContent || initialContent,
             status: statusTag?.[1] || 'closed',
