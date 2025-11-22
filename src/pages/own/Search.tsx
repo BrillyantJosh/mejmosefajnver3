@@ -58,9 +58,14 @@ export default function Search() {
   }, [closedCases, searchQuery]);
   
   const calculatePrices = (processRecordId: string) => {
+    console.log('💰 [Calculate Prices] Looking up processRecordId:', processRecordId);
+    console.log('💰 [Calculate Prices] Available revenue share keys:', Object.keys(revenueShares));
+    
     const revenueShare = revenueShares[processRecordId];
+    console.log('💰 [Calculate Prices] Found revenue share:', revenueShare);
     
     if (!revenueShare?.data?.donation_amount) {
+      console.log('❌ [Calculate Prices] No revenue share or donation amount for:', processRecordId);
       return { lanAmount: 0, userFiatAmount: 0, userCurrency: 'EUR', sourceFiatAmount: 0, sourceCurrency: 'EUR', visibility: 'private' };
     }
 
@@ -69,15 +74,27 @@ export default function Search() {
     const userCurrency = getUserCurrency();
     const visibility = revenueShare.visibility || 'private';
     
+    console.log('💰 [Calculate Prices] Parsed data:', {
+      sourceFiatAmount,
+      sourceCurrency,
+      userCurrency,
+      visibility
+    });
+    
     // Convert source fiat to LANA
     const lanAmount = fiatToLana(sourceFiatAmount, sourceCurrency);
+    console.log('💰 [Calculate Prices] LANA amount:', lanAmount);
     
     // Convert source fiat to user's fiat currency
     const userFiatAmount = sourceCurrency === userCurrency 
       ? sourceFiatAmount 
       : fiatToFiat(sourceFiatAmount, sourceCurrency, userCurrency);
+    console.log('💰 [Calculate Prices] User fiat amount:', userFiatAmount);
     
-    return { lanAmount, userFiatAmount, userCurrency, sourceFiatAmount, sourceCurrency, visibility };
+    const result = { lanAmount, userFiatAmount, userCurrency, sourceFiatAmount, sourceCurrency, visibility };
+    console.log('✅ [Calculate Prices] Final result:', result);
+    
+    return result;
   };
   
   const handleGetTranscript = (caseId: string, caseTitle: string) => {
@@ -137,6 +154,12 @@ export default function Search() {
           </Card>
         ) : (
           filteredCases.map((ownCase) => {
+            console.log('🔍 [Case] Processing case:', {
+              id: ownCase.id,
+              title: ownCase.title || ownCase.topic,
+              initialContent: ownCase.initialContent?.substring(0, 50)
+            });
+            
             const { lanAmount, userFiatAmount, userCurrency, sourceFiatAmount, sourceCurrency, visibility } = calculatePrices(ownCase.id);
             const facilitator = profiles.get(ownCase.pubkey);
             
