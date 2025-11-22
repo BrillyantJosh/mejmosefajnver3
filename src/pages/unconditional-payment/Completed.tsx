@@ -1,14 +1,25 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useNostrDonationProposals } from "@/hooks/useNostrDonationProposals";
 import { useNostrDonationPayments } from "@/hooks/useNostrDonationPayments";
+import { useNostrSellerProfiles } from "@/hooks/useNostrSellerProfiles";
 import { formatLana, formatCurrency } from "@/lib/currencyConversion";
-import { CheckCircle, ExternalLink } from "lucide-react";
+import { CheckCircle, ExternalLink, User } from "lucide-react";
 import { format } from "date-fns";
+import { useMemo } from "react";
 
 export default function Completed() {
   const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals();
   const { payments, isLoading: paymentsLoading } = useNostrDonationPayments();
+  
+  // Extract unique recipient pubkeys
+  const recipientPubkeys = useMemo(() => {
+    return Array.from(new Set(payments.map(p => p.recipientPubkey)));
+  }, [payments]);
+  
+  // Fetch profiles for all recipients
+  const { profiles, isLoading: profilesLoading } = useNostrSellerProfiles(recipientPubkeys);
 
   if ((proposalsLoading && proposals.length === 0) || (paymentsLoading && payments.length === 0)) {
     return (
@@ -38,6 +49,7 @@ export default function Completed() {
     <div className="space-y-4">
       {payments.map(payment => {
         const proposal = proposals.find(p => p.d === payment.proposalDTag || p.eventId === payment.proposalEventId);
+        const profile = profiles.get(payment.recipientPubkey);
 
         return (
           <Card key={payment.id}>
@@ -47,7 +59,7 @@ export default function Completed() {
                   <CheckCircle className="h-6 w-6 text-green-500" />
                 </div>
                 
-                <div className="flex-1 space-y-2">
+                <div className="flex-1 space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-semibold">{payment.service}</h3>
                     <span className="text-sm font-medium text-green-600">
@@ -57,6 +69,26 @@ export default function Completed() {
                   
                   {proposal && (
                     <p className="text-sm text-muted-foreground">{proposal.content}</p>
+                  )}
+                  
+                  {/* Profile Information */}
+                  {profile && (
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={profile.picture} alt={profile.name || profile.display_name} />
+                        <AvatarFallback>
+                          <User className="h-5 w-5" />
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">
+                          {profile.display_name || profile.name || 'Anonymous'}
+                        </div>
+                        {profile.name && profile.display_name && profile.name !== profile.display_name && (
+                          <div className="text-xs text-muted-foreground truncate">{profile.name}</div>
+                        )}
+                      </div>
+                    </div>
                   )}
                   
                   <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
