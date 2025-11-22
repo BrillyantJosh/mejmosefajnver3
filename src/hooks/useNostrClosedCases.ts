@@ -32,8 +32,9 @@ export const useNostrClosedCases = () => {
       const pool = new SimplePool();
 
       try {
+        // Fetch KIND 37044 (master process record) with status="closed"
         const events = await pool.querySync(relays, {
-          kinds: [87044],
+          kinds: [37044],
           '#status': ['closed'],
           limit: 100
         });
@@ -43,20 +44,21 @@ export const useNostrClosedCases = () => {
           const langTag = event.tags.find((tag) => tag[0] === 'lang');
           const participantTags = event.tags.filter((tag) => tag[0] === 'p');
           const topicTag = event.tags.find((tag) => tag[0] === 'topic');
-          const triggerTag = event.tags.find((tag) => tag[0] === 'e' && tag[2] === 'trigger');
+          const dTag = event.tags.find((tag) => tag[0] === 'd'); // References 87044 event
           const txidTag = event.tags.find((tag) => tag[0] === 'lanacoin_txid');
+          const closedAtTag = event.tags.find((tag) => tag[0] === 'closed_at');
 
           return {
-            id: event.id,
+            id: dTag?.[1] || event.id, // Use the referenced 87044 ID if available
             pubkey: event.pubkey,
             content: event.content,
             status: statusTag?.[1] || 'closed',
             lang: langTag?.[1] || 'en',
             participants: participantTags.map((tag) => tag[1]),
             topic: topicTag?.[1],
-            triggerEventId: triggerTag?.[1],
+            triggerEventId: dTag?.[1], // Reference to original 87044 event
             lanacoinTxid: txidTag?.[1],
-            createdAt: event.created_at,
+            createdAt: closedAtTag ? parseInt(closedAtTag[1]) : event.created_at,
           };
         });
 
