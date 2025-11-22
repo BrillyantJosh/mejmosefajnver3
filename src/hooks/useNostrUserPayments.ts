@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { SimplePool, Filter } from 'nostr-tools';
+import { SimplePool, Filter, Event as NostrEvent } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -15,66 +15,76 @@ export const useNostrUserPayments = (): UseNostrUserPaymentsResult => {
   const { session } = useAuth();
 
   useEffect(() => {
-    if (!session?.nostrHexId || !parameters?.relays) {
-      setIsLoading(false);
-      return;
-    }
+    const fetchPayments = async () => {
+      if (!session?.nostrHexId || !parameters?.relays || parameters.relays.length === 0) {
+        console.log('💳 Skipping payment check: missing user or relays');
+        setIsLoading(false);
+        return;
+      }
 
-    const pool = new SimplePool();
-    const relays = parameters.relays;
+      setIsLoading(true);
 
-    const filter: Filter = {
-      kinds: [90900],
-      '#p': [session.nostrHexId],
-      limit: 1000,
-    };
+      const relays = parameters.relays;
+      const pool = new SimplePool();
 
-    const processIds = new Set<string>();
+      try {
+        const filter: Filter = {
+          kinds: [90900],
+          '#p': [session.nostrHexId],
+          limit: 1000,
+        };
 
-    const sub = pool.subscribeMany(relays, [filter] as any, {
-      onevent: (event) => {
-        // Check if user is marked as "payer" (not "recipient")
-        const payerTag = event.tags.find(
-          (tag) => 
-            tag[0] === 'p' && 
-            tag[1] === session.nostrHexId && 
-            tag[2] === 'payer'
-        );
-        
-        // Only if user is "payer", add the process ID
-        if (payerTag) {
+        console.log('💳 Fetching KIND 90900 payment proposals for user:', {
+          user: session.nostrHexId,
+          relays,
+          filter,
+        });
+
+        const events = await pool.querySync(relays, filter);
+        console.log(`💳 Found ${events.length} KIND 90900 events for user as #p`);
+
+        const ids = new Set<string>();
+
+        (events as NostrEvent[]).forEach((event) => {
+          // 1) User must be explicitly marked as "payer"
+          const payerTag = event.tags.find(
+            (tag) =>
+              tag[0] === 'p' &&
+              tag[1] === session.nostrHexId &&
+              tag[2] === 'payer'
+          );
+          if (!payerTag) return;
+
+          // 2) Find e-tag with marker '87044' (3- or 4-element format)
           const processTag = event.tags.find((tag) => {
             if (tag[0] !== 'e') return false;
             // Support both ["e", id, "87044"] and ["e", id, "", "87044"]
             const marker = tag[3] ?? tag[2];
             return marker === '87044';
           });
-          
+
           if (processTag && processTag[1]) {
-            processIds.add(processTag[1]);
+            console.log('💳 Matched payment proposal for process:', {
+              eventId: event.id,
+              processId: processTag[1],
+              payerPubkey: session.nostrHexId,
+            });
+            ids.add(processTag[1]);
           }
-        }
-      },
-      oneose: () => {
-        setPaidProcessIds(new Set(processIds));
+        });
+
+        console.log('✅ Final paid process IDs:', Array.from(ids));
+        setPaidProcessIds(ids);
+      } catch (error) {
+        console.error('❌ Error fetching user payments (KIND 90900):', error);
+        setPaidProcessIds(new Set());
+      } finally {
         setIsLoading(false);
-        sub.close();
         pool.close(relays);
-      },
-    });
-
-    const timeout = setTimeout(() => {
-      setPaidProcessIds(new Set(processIds));
-      setIsLoading(false);
-      sub.close();
-      pool.close(relays);
-    }, 8000);
-
-    return () => {
-      clearTimeout(timeout);
-      sub.close();
-      pool.close(relays);
+      }
     };
+
+    fetchPayments();
   }, [session?.nostrHexId, parameters?.relays]);
 
   return { paidProcessIds, isLoading };
