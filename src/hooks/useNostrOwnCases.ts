@@ -14,6 +14,7 @@ export interface OwnCase {
   triggerEventId?: string;
   lanacoinTxid?: string;
   createdAt: number;
+  userRole: 'initiated' | 'participant';
 }
 
 export const useNostrOwnCases = () => {
@@ -40,10 +41,26 @@ export const useNostrOwnCases = () => {
       const pool = new SimplePool();
       
       try {
-        const events = await pool.querySync(relays, {
+        // Fetch both cases created by user and cases where user is a participant
+        const authoredEvents = await pool.querySync(relays, {
           kinds: [87044],
-          authors: [session.nostrHexId], // Only cases created by current user
+          authors: [session.nostrHexId],
         });
+        
+        const participantEvents = await pool.querySync(relays, {
+          kinds: [87044],
+          "#p": [session.nostrHexId],
+        });
+        
+        // Combine and deduplicate events
+        const allEvents = [...authoredEvents];
+        participantEvents.forEach(event => {
+          if (!allEvents.find(e => e.id === event.id)) {
+            allEvents.push(event);
+          }
+        });
+        
+        const events = allEvents;
 
         const parsedCases: OwnCase[] = events.map((event: any) => {
           const tags = event.tags || [];
@@ -54,6 +71,8 @@ export const useNostrOwnCases = () => {
           const txidTag = tags.find((tag: string[]) => tag[0] === 'lanacoin_txid');
           const participantTags = tags.filter((tag: string[]) => tag[0] === 'p');
 
+          const userRole = event.pubkey === session.nostrHexId ? 'initiated' : 'participant';
+          
           return {
             id: event.id,
             creatorPubkey: event.pubkey,
@@ -65,6 +84,7 @@ export const useNostrOwnCases = () => {
             triggerEventId: triggerTag?.[1],
             lanacoinTxid: txidTag?.[1],
             createdAt: event.created_at,
+            userRole,
           };
         });
 

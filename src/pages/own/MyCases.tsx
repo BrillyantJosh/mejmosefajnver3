@@ -90,9 +90,14 @@ export default function MyCases() {
                     </CardDescription>
                   )}
                 </div>
-                <Badge variant={ownCase.status === 'opened' ? 'default' : 'secondary'}>
-                  {ownCase.status}
-                </Badge>
+                <div className="flex gap-2">
+                  <Badge variant={ownCase.userRole === 'initiated' ? 'default' : 'secondary'}>
+                    {ownCase.userRole === 'initiated' ? 'Initiated' : 'Participant'}
+                  </Badge>
+                  <Badge variant={ownCase.status === 'opened' ? 'default' : 'outline'}>
+                    {ownCase.status}
+                  </Badge>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
