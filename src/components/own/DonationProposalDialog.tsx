@@ -12,6 +12,8 @@ interface DonationProposalDialogProps {
   isOpen: boolean;
   onClose: () => void;
   processRecordId: string;
+  recordEventId: string;
+  transcriptEventId?: string;
   caseTitle: string;
   lanAmount: number;
   fiatAmount: number;
@@ -36,6 +38,8 @@ export const DonationProposalDialog = ({
   isOpen,
   onClose,
   processRecordId,
+  recordEventId,
+  transcriptEventId,
   caseTitle,
   lanAmount,
   fiatAmount,
@@ -91,6 +95,11 @@ export const DonationProposalDialog = ({
       const relays = getRelays();
       const privateKeyBytes = hexToBytes(session.nostrPrivateKey);
 
+      // Strip "own:" prefix for all event IDs
+      const rawProcessId = processRecordId.replace(/^own:/, '');
+      const rawRecordId = recordEventId.replace(/^own:/, '');
+      const rawTranscriptId = transcriptEventId?.replace(/^own:/, '') || '';
+
       // 3. Create one KIND 90900 event for EACH recipient
       const eventPromises = effectiveRevenueShare.data.revenue_share.map(async (recipient) => {
         // Calculate this recipient's share
@@ -115,7 +124,9 @@ export const DonationProposalDialog = ({
             ["role", recipient.role],
             ["share_percent", recipient.share_percent.toString()],
             ["service", serviceName],
-            ["e", rawProcessRecordId, "", "process"],
+            ["e", rawProcessId, "", "87044"],
+            ["e", rawRecordId, "", "37044"],
+            ...(rawTranscriptId ? [["e", rawTranscriptId, "", "87944"]] : []),
             ["expires", (Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60).toString()]
           ],
           content: `Unconditional payment share (${recipient.share_percent}% as ${recipient.role}) to access the transcript for: "${caseTitle}". Total payment: ${fiatAmount} ${fiatCurrency}.`
