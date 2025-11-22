@@ -102,21 +102,33 @@ export default function MyCases() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Participants */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Participants:</span>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {caseParticipants.map((participant) => (
-                    <div key={participant.pubkey} className="flex items-center gap-1.5">
-                      <Avatar className="h-6 w-6">
-                        <AvatarImage src={getProxiedImageUrl(participant.picture)} />
-                        <AvatarFallback className="text-xs">
-                          {participant.name.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm">{participant.name}</span>
-                    </div>
-                  ))}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">Participants:</span>
+                </div>
+                <div className="flex flex-col gap-2 ml-6">
+                  {caseParticipants.map((participant) => {
+                    const profile = participantProfiles.get(participant.pubkey);
+                    return (
+                      <div key={participant.pubkey} className="flex items-center justify-between gap-4 p-2 rounded-md bg-secondary/50">
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={getProxiedImageUrl(participant.picture)} />
+                            <AvatarFallback className="text-xs">
+                              {participant.name.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm font-medium">{participant.name}</span>
+                        </div>
+                        {profile?.lana_wallet_id && (
+                          <div className="text-xs text-muted-foreground font-mono">
+                            {profile.lana_wallet_id}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
