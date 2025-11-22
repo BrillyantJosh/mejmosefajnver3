@@ -37,9 +37,9 @@ export default function Search() {
   
   const { profiles } = useNostrProfilesCacheBulk(allPubkeys);
   
-  // Get all case IDs for revenue share fetching
+  // Get all case IDs for revenue share fetching (strip "own:" prefix for Nostr event matching)
   const processRecordIds = useMemo(() => 
-    closedCases.map(c => c.id), 
+    closedCases.map(c => c.id.replace(/^own:/, '')), 
     [closedCases]
   );
   
@@ -61,7 +61,9 @@ export default function Search() {
     console.log('💰 [Calculate Prices] Looking up processRecordId:', processRecordId);
     console.log('💰 [Calculate Prices] Available revenue share keys:', Object.keys(revenueShares));
     
-    const revenueShare = revenueShares[processRecordId];
+    // Strip "own:" prefix for revenue share lookup
+    const lookupId = processRecordId.replace(/^own:/, '');
+    const revenueShare = revenueShares[lookupId];
     console.log('💰 [Calculate Prices] Found revenue share:', revenueShare);
     
     if (!revenueShare?.data?.donation_amount) {
@@ -219,7 +221,7 @@ export default function Search() {
                         <span>Participants ({ownCase.participants.length})</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {ownCase.participants.slice(0, 5).map((pubkey) => {
+                        {Array.from(new Set(ownCase.participants)).slice(0, 5).map((pubkey) => {
                           const profile = profiles.get(pubkey);
                           return (
                             <div key={pubkey} className="flex items-center gap-1.5 bg-secondary px-2 py-1 rounded-md">
