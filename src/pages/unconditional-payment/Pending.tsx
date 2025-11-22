@@ -11,6 +11,7 @@ import { useNostrDonationPayments } from "@/hooks/useNostrDonationPayments";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { fiatToLana, getUserCurrency, formatCurrency, formatLana, lanaToLanoshi } from "@/lib/currencyConversion";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -56,6 +57,13 @@ export default function Pending() {
   }, [proposals, payments]);
 
   const pendingProposals = useMemo(() => proposalsWithStatus.filter(p => !p.isPaid), [proposalsWithStatus]);
+
+  // Fetch profiles for all recipient pubkeys
+  const recipientPubkeys = useMemo(() => 
+    Array.from(new Set(pendingProposals.map(p => p.recipientPubkey))),
+    [pendingProposals]
+  );
+  const { profiles: recipientProfiles } = useNostrProfilesCacheBulk(recipientPubkeys);
 
   // Calculate total amount
   const totalLana = Array.from(selectedProposals).reduce((sum, proposalId) => {
@@ -228,6 +236,27 @@ export default function Pending() {
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground mb-2">{proposal.content}</p>
+                      
+                      {/* Recipient Information */}
+                      <div className="mb-2 p-2 bg-muted/50 rounded space-y-1">
+                        {(() => {
+                          const profile = recipientProfiles.get(proposal.recipientPubkey);
+                          return (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-medium text-muted-foreground">Recipient:</span>
+                                <span className="text-xs font-medium">
+                                  {profile?.display_name || profile?.full_name || 'Unknown'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Wallet:</span>
+                                <span className="text-xs font-mono">{proposal.wallet}</span>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
                       
                       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
                         {proposal.ref && (
