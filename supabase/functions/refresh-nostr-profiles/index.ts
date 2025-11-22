@@ -35,9 +35,12 @@ serve(async (req) => {
 
     const url = new URL(req.url);
     const mode = url.searchParams.get('mode') || 'stale';
+    const daysParam = url.searchParams.get('days') || '30';
 
-    const BATCH_SIZE = 100; // Max 100 profiles per request
+    const BATCH_SIZE = 100; // Max 100 profiles per request for specific modes
     let pubkeysToRefresh: string[] = [];
+    let discoverMode = false;
+    let discoverSince: number | undefined;
 
     // Determine which profiles to refresh
     if (req.method === 'POST') {
@@ -45,6 +48,12 @@ serve(async (req) => {
       const requestedPubkeys = body.pubkeys || [];
       pubkeysToRefresh = requestedPubkeys.slice(0, BATCH_SIZE);
       console.log(`📬 Manual refresh requested for ${requestedPubkeys.length} pubkeys, processing first ${pubkeysToRefresh.length}`);
+    } else if (mode === 'discover') {
+      // Discover ALL profiles from relays (not just existing ones in DB)
+      const days = parseInt(daysParam);
+      discoverSince = Math.floor(Date.now() / 1000) - (days * 24 * 60 * 60);
+      discoverMode = true;
+      console.log(`🔍 DISCOVER MODE: Fetching ALL KIND 0 profiles from relays (last ${days} days)`);
     } else if (mode === 'stale') {
       // Refresh profiles older than 24 hours, oldest first, limited to batch
       const { data, error } = await supabase
@@ -77,7 +86,7 @@ serve(async (req) => {
       console.log(`🔄 Refreshing ${pubkeysToRefresh.length} oldest profiles (batch: ${BATCH_SIZE})`);
     }
 
-    if (pubkeysToRefresh.length === 0) {
+    if (!discoverMode && pubkeysToRefresh.length === 0) {
       console.log('✅ No profiles to refresh');
       return new Response(
         JSON.stringify({ success: true, refreshed: 0, message: 'No profiles to refresh' }),
@@ -95,7 +104,12 @@ serve(async (req) => {
 
     const relays = systemParams?.relays || DEFAULT_RELAYS;
     console.log(`📡 Using ${relays.length} relays from KIND 38888: ${relays.join(', ')}`);
-    console.log(`🎯 Searching for ${pubkeysToRefresh.length} pubkeys:`, pubkeysToRefresh.slice(0, 5).map(pk => pk.substring(0, 16) + '...'));
+    
+    if (discoverMode) {
+      console.log(`🎯 DISCOVER: Fetching ALL KIND 0 profiles (since timestamp: ${discoverSince})`);
+    } else {
+      console.log(`🎯 Searching for ${pubkeysToRefresh.length} pubkeys:`, pubkeysToRefresh.slice(0, 5).map(pk => pk.substring(0, 16) + '...'));
+    }
 
     // Fetch profiles from Nostr
     const pool = new SimplePool();
@@ -103,14 +117,22 @@ serve(async (req) => {
     let fetchErrors = 0;
 
     try {
-      console.log(`🔍 Fetching ${pubkeysToRefresh.length} profiles from Nostr...`);
       const startTime = Date.now();
       
+      // Build filter
+      const filter: any = { kinds: [0] };
+      if (discoverMode) {
+        if (discoverSince) {
+          filter.since = discoverSince;
+        }
+        console.log(`🔍 Fetching ALL KIND 0 profiles from Nostr (no author filter)...`);
+      } else {
+        filter.authors = pubkeysToRefresh;
+        console.log(`🔍 Fetching ${pubkeysToRefresh.length} specific profiles from Nostr...`);
+      }
+      
       const events = await Promise.race([
-        pool.querySync(relays, {
-          kinds: [0],
-          authors: pubkeysToRefresh,
-        }),
+        pool.querySync(relays, filter),
         new Promise<NostrEvent[]>((_, reject) => 
           setTimeout(() => reject(new Error('Profile fetch timeout')), 30000)
         )
@@ -176,18 +198,19 @@ serve(async (req) => {
       console.log(`💾 Upserted ${upsertedCount} profiles to database`);
     }
 
-    const notFound = pubkeysToRefresh.length - profiles.length - fetchErrors;
+    const notFound = discoverMode ? 0 : (pubkeysToRefresh.length - profiles.length - fetchErrors);
     console.log(`📊 Stats: ${upsertedCount} updated, ${fetchErrors} parse errors, ${notFound} not found`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         refreshed: upsertedCount,
-        total_requested: pubkeysToRefresh.length,
+        total_requested: discoverMode ? 'all' : pubkeysToRefresh.length,
         parseErrors: fetchErrors,
         notFound,
         mode,
-        batchSize: BATCH_SIZE
+        discoverMode,
+        batchSize: discoverMode ? 'unlimited' : BATCH_SIZE
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
