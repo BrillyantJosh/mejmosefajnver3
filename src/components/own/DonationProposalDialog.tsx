@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { SimplePool, EventTemplate, finalizeEvent } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrRevenueShare } from '@/hooks/useNostrRevenueShare';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface DonationProposalDialogProps {
   isOpen: boolean;
@@ -44,6 +45,7 @@ export const DonationProposalDialog = ({
   const { toast } = useToast();
   const { parameters } = useSystemParameters();
   const { revenueShare } = useNostrRevenueShare(processRecordId);
+  const { session } = useAuth();
 
   const getRelays = (): string[] => {
     return parameters?.relays || [];
@@ -53,22 +55,11 @@ export const DonationProposalDialog = ({
     setIsSubmitting(true);
 
     try {
-      // 1. Validate app settings
-      const appSettingsJson = sessionStorage.getItem('app_settings');
-      if (!appSettingsJson) {
+      // 1. Validate user authentication
+      if (!session?.nostrPrivateKey || !session?.nostrHexId) {
         toast({
-          title: "Configuration Error",
-          description: "App settings not found",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const appSettings = JSON.parse(appSettingsJson);
-      if (!appSettings?.main_key_nostr || !appSettings?.main_wallet || !appSettings?.main_nostr_hex_id) {
-        toast({
-          title: "Configuration Error",
-          description: "Missing app configuration. Please configure app settings.",
+          title: "Authentication Error",
+          description: "You must be logged in to create payment proposals",
           variant: "destructive",
         });
         return;
@@ -87,7 +78,7 @@ export const DonationProposalDialog = ({
       const serviceName = "www.OwnEverything.com";
       const pool = new SimplePool();
       const relays = getRelays();
-      const privateKeyBytes = hexToBytes(appSettings.main_key_nostr);
+      const privateKeyBytes = hexToBytes(session.nostrPrivateKey);
 
       // 3. Create one KIND 90900 event for EACH recipient
       const eventPromises = revenueShare.data.revenue_share.map(async (recipient) => {
