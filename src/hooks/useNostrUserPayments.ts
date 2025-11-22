@@ -43,9 +43,12 @@ export const useNostrUserPayments = (): UseNostrUserPaymentsResult => {
         
         // Only if user is "payer", add the process ID
         if (payerTag) {
-          const processTag = event.tags.find(
-            (tag) => tag[0] === 'e' && tag[3] === '87044'
-          );
+          const processTag = event.tags.find((tag) => {
+            if (tag[0] !== 'e') return false;
+            // Support both ["e", id, "87044"] and ["e", id, "", "87044"]
+            const marker = tag[3] ?? tag[2];
+            return marker === '87044';
+          });
           
           if (processTag && processTag[1]) {
             processIds.add(processTag[1]);
