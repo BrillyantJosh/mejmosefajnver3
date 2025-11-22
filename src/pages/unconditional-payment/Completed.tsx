@@ -74,7 +74,7 @@ export default function Completed() {
                       {payment.txId.substring(0, 16)}...{payment.txId.substring(payment.txId.length - 8)}
                     </code>
                     <a
-                      href={`https://explorer.lanacoin.com/tx/${payment.txId}`}
+                      href={`https://chainz.cryptoid.info/lana/tx.dws?${payment.txId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-primary hover:underline"
