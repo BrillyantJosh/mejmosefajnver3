@@ -44,6 +44,7 @@ import TransparencyWallets from "./pages/transparency/Wallets";
 import DonateLayout from "./pages/donate/DonateLayout";
 import DonatePending from "./pages/donate/Pending";
 import DonateDonated from "./pages/donate/Donated";
+import DonateConfirmPayment from "./pages/donate/ConfirmPayment";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -119,6 +120,7 @@ const App = () => (
                     <Route index element={<DonatePending />} />
                     <Route path="donated" element={<DonateDonated />} />
                   </Route>
+                  <Route path="/donate/confirm-payment" element={<DonateConfirmPayment />} />
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/wallet/register" element={<RegisterWallet />} />
