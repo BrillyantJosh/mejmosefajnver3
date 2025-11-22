@@ -28,7 +28,6 @@ export const useNostrDonationProposals = () => {
   const { parameters } = useSystemParameters();
   const [proposals, setProposals] = useState<DonationProposal[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const relays = parameters?.relays || [];
 
   useEffect(() => {
@@ -39,10 +38,7 @@ export const useNostrDonationProposals = () => {
         return;
       }
 
-      // Loading indicator only for initial load
-      if (!hasLoadedOnce) {
-        setIsLoading(true);
-      }
+      setIsLoading(true);
       const pool = new SimplePool();
 
       try {
@@ -96,34 +92,20 @@ export const useNostrDonationProposals = () => {
 
           // Sort by newest first
           parsedProposals.sort((a, b) => b.createdAt - a.createdAt);
-          
-          // Only update state if data actually changed
-          if (!arraysEqual(parsedProposals, proposals)) {
-            console.log('📋 Proposals updated');
-            setProposals(parsedProposals);
-          }
+          setProposals(parsedProposals);
         } else {
-          if (proposals.length > 0) {
-            setProposals([]);
-          }
+          setProposals([]);
         }
       } catch (error) {
         console.error('❌ Error fetching donation proposals:', error);
         setProposals([]);
       } finally {
-        if (!hasLoadedOnce) {
-          setIsLoading(false);
-          setHasLoadedOnce(true);
-        }
+        setIsLoading(false);
         pool.close(relays);
       }
     };
 
     fetchProposals();
-
-    // Poll every 10 seconds for updates
-    const interval = setInterval(fetchProposals, 10000);
-    return () => clearInterval(interval);
   }, [relays.join(',')]);
 
   return {
