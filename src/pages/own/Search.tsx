@@ -16,12 +16,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { DonationProposalDialog } from '@/components/own/DonationProposalDialog';
 import { fiatToLana, fiatToFiat, formatCurrency, formatLana, getUserCurrency } from '@/lib/currencyConversion';
 import { format } from 'date-fns';
+import { RevenueShareEvent } from '@/hooks/useNostrRevenueShare';
 
 export default function Search() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCase, setSelectedCase] = useState<{ id: string; title: string } | null>(null);
+  const [selectedCase, setSelectedCase] = useState<{ id: string; title: string; revenueShare?: RevenueShareEvent } | null>(null);
   
   const { closedCases, isLoading: casesLoading } = useNostrClosedCases();
   
@@ -83,9 +84,15 @@ export default function Search() {
   };
   
   const handleGetTranscript = (caseId: string, caseTitle: string) => {
-    // Check if user already has payment proposal
-    // This will be handled by the dialog component
-    setSelectedCase({ id: caseId, title: caseTitle });
+    // Strip "own:" prefix for revenue share lookup
+    const lookupId = caseId.replace(/^own:/, '');
+    const revenueShareForCase = revenueShares[lookupId];
+    
+    setSelectedCase({ 
+      id: caseId, 
+      title: caseTitle,
+      revenueShare: revenueShareForCase
+    });
   };
   
   const handlePaymentSuccess = () => {
@@ -275,6 +282,7 @@ export default function Search() {
           lanAmount={calculatePrices(selectedCase.id).lanAmount}
           fiatAmount={calculatePrices(selectedCase.id).userFiatAmount}
           fiatCurrency={calculatePrices(selectedCase.id).userCurrency}
+          existingRevenueShare={selectedCase.revenueShare}
           onSuccess={handlePaymentSuccess}
         />
       )}
