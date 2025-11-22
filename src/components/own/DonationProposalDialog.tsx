@@ -175,7 +175,8 @@ export const DonationProposalDialog = ({
 
       // 5. Check success rate
       const successCount = allResults.filter(r => r.success).length;
-      const totalAttempts = allResults.length;
+      const successfulRelays = new Set(allResults.filter(r => r.success).map(r => r.relay));
+      const totalRelays = relays.length;
 
       if (successCount === 0) {
         throw new Error('Failed to publish to any relay');
@@ -183,7 +184,7 @@ export const DonationProposalDialog = ({
 
       toast({
         title: "Payment Proposals Sent",
-        description: `Payment proposals sent to ${effectiveRevenueShare.data.revenue_share.length} recipients! (${successCount}/${totalAttempts} relay connections)`,
+        description: `Payment proposals sent to ${effectiveRevenueShare.data.revenue_share.length} recipients! (${successfulRelays.size}/${totalRelays} relays)`,
       });
 
       onSuccess();
