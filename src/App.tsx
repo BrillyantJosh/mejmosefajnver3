@@ -45,6 +45,7 @@ import UnconditionalPaymentLayout from "./pages/unconditional-payment/Unconditio
 import UnconditionalPaymentPending from "./pages/unconditional-payment/Pending";
 import UnconditionalPaymentCompleted from "./pages/unconditional-payment/Completed";
 import UnconditionalPaymentConfirmPayment from "./pages/unconditional-payment/ConfirmPayment";
+import UnconditionalPaymentResult from "./pages/unconditional-payment/Result";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -121,6 +122,7 @@ const App = () => (
                     <Route path="completed" element={<UnconditionalPaymentCompleted />} />
                   </Route>
                   <Route path="/unconditional-payment/confirm-payment" element={<UnconditionalPaymentConfirmPayment />} />
+                  <Route path="/unconditional-payment/result" element={<UnconditionalPaymentResult />} />
                   {/* Backward compatibility redirects */}
                   <Route path="/donate" element={<Navigate to="/unconditional-payment" replace />} />
                   <Route path="/donate/donated" element={<Navigate to="/unconditional-payment/completed" replace />} />

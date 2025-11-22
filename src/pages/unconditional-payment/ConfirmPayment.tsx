@@ -11,6 +11,9 @@ import { toast } from "sonner";
 import { convertWifToIds } from "@/lib/crypto";
 import { formatLana } from "@/lib/currencyConversion";
 import { supabase } from "@/integrations/supabase/client";
+import { SimplePool, finalizeEvent } from 'nostr-tools';
+import { useAuth } from "@/contexts/AuthContext";
+import { useSystemParameters } from "@/contexts/SystemParametersContext";
 
 interface PaymentRecipient {
   proposalId: string;
@@ -28,8 +31,16 @@ interface PaymentData {
   totalLana: number;
 }
 
+const DEFAULT_RELAYS = [
+  'wss://relay.lanavault.space',
+  'wss://relay.lanacoin-eternity.com',
+  'wss://relay.lanaheartvoice.com'
+];
+
 export default function ConfirmPayment() {
   const navigate = useNavigate();
+  const { session } = useAuth();
+  const { parameters } = useSystemParameters();
   const [privateKey, setPrivateKey] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [isPrivateKeyValid, setIsPrivateKeyValid] = useState(false);
@@ -37,6 +48,10 @@ export default function ConfirmPayment() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const relays = parameters?.relays && parameters.relays.length > 0 
+    ? parameters.relays 
+    : DEFAULT_RELAYS;
 
   useEffect(() => {
     // Load payment data from session storage
@@ -114,6 +129,11 @@ export default function ConfirmPayment() {
       return;
     }
 
+    if (!session?.nostrPrivateKey || !session?.nostrHexId) {
+      toast.error("Nostr authentication required");
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -161,14 +181,101 @@ export default function ConfirmPayment() {
 
       console.log('✅ Transaction successful:', data.txid);
       
-      // Clear session storage
+      // Create and publish KIND 90901 events for each proposal
+      const pool = new SimplePool();
+      const relayResults: Array<{ proposalId: string; relay: string; success: boolean; error?: string }> = [];
+
+      console.log(`📝 Creating KIND 90901 events for ${paymentData.selectedProposals.length} proposals...`);
+
+      for (const proposal of paymentData.selectedProposals) {
+        try {
+          // Create KIND 90901 event
+          const eventTemplate = {
+            kind: 90901,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [
+              ['proposal', proposal.proposalDTag],
+              ['p', proposal.recipientPubkey],
+              ['from_wallet', paymentData.senderWallet],
+              ['to_wallet', proposal.recipientWallet],
+              ['amount_lana', proposal.lanaAmount.toString()],
+              ['amount_lanoshi', proposal.lanoshiAmount.toString()],
+              ['tx', data.txid],
+              ['service', proposal.service],
+              ['timestamp_paid', Math.floor(Date.now() / 1000).toString()],
+              ['e', proposal.proposalId, '', 'proposal'],
+              ['type', 'unconditional_payment_confirmation']
+            ],
+            content: `Unconditional payment successfully received for proposal ${proposal.proposalDTag}.`,
+            pubkey: session.nostrHexId
+          };
+
+          // Sign the event
+          const privateKeyBytes = new Uint8Array(
+            session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
+          );
+          const signedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
+
+          console.log(`📡 Publishing KIND 90901 for proposal ${proposal.proposalDTag}...`);
+
+          // Publish to all relays
+          const publishPromises = pool.publish(relays, signedEvent);
+
+          // Track each relay result
+          const trackedPromises = publishPromises.map((promise, idx) => {
+            const relay = relays[idx];
+            return promise
+              .then(() => {
+                console.log(`✅ KIND 90901 published to ${relay}`);
+                relayResults.push({ proposalId: proposal.proposalDTag, relay, success: true });
+                return { relay, success: true };
+              })
+              .catch((err) => {
+                console.error(`❌ Failed to publish to ${relay}:`, err);
+                const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+                relayResults.push({ proposalId: proposal.proposalDTag, relay, success: false, error: errorMsg });
+                return { relay, success: false, error: err };
+              });
+          });
+
+          // Wait for publishing with timeout
+          try {
+            await Promise.race([
+              Promise.all(trackedPromises),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Publish timeout')), 10000)
+              )
+            ]);
+          } catch (error) {
+            console.warn('⚠️ Publish timeout for proposal:', proposal.proposalDTag);
+          }
+
+        } catch (error) {
+          console.error(`❌ Error creating KIND 90901 for proposal ${proposal.proposalDTag}:`, error);
+        }
+      }
+
+      pool.close(relays);
+
+      // Store result data for result page
+      const resultData = {
+        txid: data.txid,
+        totalAmount: paymentData.totalLana,
+        recipients: recipientSummary,
+        relayResults: relayResults,
+        timestamp: new Date().toISOString()
+      };
+
+      sessionStorage.setItem('unconditionalPaymentResult', JSON.stringify(resultData));
+      
+      // Clear pending payment data
       sessionStorage.removeItem('pendingUnconditionalPayment');
       
-      // Show success toast with transaction ID
+      // Show success toast
       toast.success(`Payment sent successfully! TX: ${data.txid.substring(0, 8)}...`);
       
-      // Navigate back to completed payments
-      navigate('/unconditional-payment/completed');
+      // Navigate to result page
+      navigate('/unconditional-payment/result');
       
     } catch (error) {
       console.error('❌ Payment error:', error);
