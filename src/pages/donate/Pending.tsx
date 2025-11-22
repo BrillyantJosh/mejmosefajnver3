@@ -131,7 +131,7 @@ export default function Pending() {
     navigate('/donate/confirm-payment');
   };
 
-  if (proposalsLoading || walletsLoading) {
+  if ((proposalsLoading && proposals.length === 0) || walletsLoading) {
     return (
       <div className="space-y-4">
         {[1, 2, 3].map(i => (

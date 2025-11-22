@@ -10,7 +10,7 @@ export default function Donated() {
   const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals();
   const { payments, isLoading: paymentsLoading } = useNostrDonationPayments();
 
-  if (proposalsLoading || paymentsLoading) {
+  if ((proposalsLoading && proposals.length === 0) || (paymentsLoading && payments.length === 0)) {
     return (
       <div className="space-y-4">
         {[1, 2, 3].map(i => (
