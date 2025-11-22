@@ -32,10 +32,6 @@ const createCaseSchema = z.object({
     .min(10, { message: "Reason must be at least 10 characters" })
     .max(1000, { message: "Reason must be less than 1000 characters" }),
   lang: z.string().min(2).max(2, { message: "Language code must be 2 characters" }),
-  topic: z.string().max(200, { message: "Topic must be less than 200 characters" }).optional(),
-  triggerEventId: z.string().optional(),
-  lanacoinTxid: z.string().optional(),
-  reference: z.string().max(500, { message: "Reference must be less than 500 characters" }).optional(),
 });
 
 type CreateCaseFormData = z.infer<typeof createCaseSchema>;
@@ -55,11 +51,7 @@ export default function CreateCaseDialog() {
   
   const [formData, setFormData] = useState<CreateCaseFormData>({
     content: "",
-    lang: "en",
-    topic: "",
-    triggerEventId: "",
-    lanacoinTxid: "",
-    reference: "",
+    lang: "sl",
   });
 
   const { profiles, isLoading: profilesLoading } = useNostrKind0Profiles();
@@ -137,19 +129,6 @@ export default function CreateCaseDialog() {
         ...selectedParticipants.map(p => ["p", p.pubkey]),
       ];
 
-      if (validation.data.topic?.trim()) {
-        tags.push(["topic", validation.data.topic.trim()]);
-      }
-      if (validation.data.triggerEventId?.trim()) {
-        tags.push(["e", validation.data.triggerEventId.trim(), "trigger"]);
-      }
-      if (validation.data.lanacoinTxid?.trim()) {
-        tags.push(["lanacoin_txid", validation.data.lanacoinTxid.trim()]);
-      }
-      if (validation.data.reference?.trim()) {
-        tags.push(["ref", validation.data.reference.trim()]);
-      }
-
       // Create and sign event
       const privateKeyBytes = hexToBytes(session.nostrPrivateKey);
       const event = finalizeEvent({
@@ -161,7 +140,18 @@ export default function CreateCaseDialog() {
 
       // Publish to relays
       const publishPromises = pool.publish(relays, event);
-      await Promise.race(publishPromises);
+      
+      // Wait for at least one relay to accept
+      const results = [];
+      for await (const relay of publishPromises) {
+        results.push(relay);
+        // Break after first successful publish
+        break;
+      }
+      
+      if (results.length === 0) {
+        throw new Error('Failed to publish to any relay');
+      }
 
       toast({
         title: "Success",
@@ -171,11 +161,7 @@ export default function CreateCaseDialog() {
       // Reset form
       setFormData({
         content: "",
-        lang: "en",
-        topic: "",
-        triggerEventId: "",
-        lanacoinTxid: "",
-        reference: "",
+        lang: "sl",
       });
       setSelectedParticipants([]);
       setOpen(false);
@@ -197,11 +183,7 @@ export default function CreateCaseDialog() {
   const resetForm = () => {
     setFormData({
       content: "",
-      lang: "en",
-      topic: "",
-      triggerEventId: "",
-      lanacoinTxid: "",
-      reference: "",
+      lang: "sl",
     });
     setSelectedParticipants([]);
     setSearchTerm("");
@@ -316,13 +298,16 @@ export default function CreateCaseDialog() {
 
             {/* Search Results */}
             {searchTerm && (
-              <div className="border rounded-lg max-h-48 overflow-y-auto">
+              <div className="border rounded-lg max-h-64 overflow-y-auto">
                 {profilesLoading ? (
                   <div className="space-y-2 p-2">
                     {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex items-center gap-3 p-2">
-                        <Skeleton className="h-8 w-8 rounded-full" />
-                        <Skeleton className="h-4 w-32" />
+                      <div key={i} className="flex items-center gap-3 p-3">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <div className="flex-1">
+                          <Skeleton className="h-4 w-32 mb-1" />
+                          <Skeleton className="h-3 w-48" />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -336,9 +321,9 @@ export default function CreateCaseDialog() {
                       <div
                         key={profile.pubkey}
                         onClick={() => addParticipant(profile)}
-                        className="flex items-center gap-3 p-2 rounded-md cursor-pointer hover:bg-muted transition-colors"
+                        className="flex items-start gap-3 p-3 rounded-md cursor-pointer hover:bg-muted transition-colors"
                       >
-                        <Avatar className="h-8 w-8">
+                        <Avatar className="h-10 w-10 flex-shrink-0">
                           <AvatarImage src={getProxiedImageUrl(profile.picture)} />
                           <AvatarFallback>
                             <User className="h-4 w-4" />
@@ -348,7 +333,17 @@ export default function CreateCaseDialog() {
                           <p className="text-sm font-medium truncate">
                             {profile.display_name || profile.name || "Anonymous"}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate">
+                          {profile.name && profile.display_name && profile.name !== profile.display_name && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              @{profile.name}
+                            </p>
+                          )}
+                          {profile.about && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                              {profile.about}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground/70 truncate mt-0.5">
                             {profile.pubkey.substring(0, 16)}...
                           </p>
                         </div>
@@ -360,56 +355,6 @@ export default function CreateCaseDialog() {
             )}
           </div>
 
-          {/* Optional Fields */}
-          <div className="space-y-4 pt-4 border-t">
-            <h3 className="text-sm font-medium text-muted-foreground">Optional Information</h3>
-            
-            <div className="space-y-2">
-              <Label htmlFor="topic">Topic</Label>
-              <Input
-                id="topic"
-                placeholder="E.g., Communication expectations"
-                value={formData.topic}
-                onChange={(e) => setFormData(prev => ({ ...prev, topic: e.target.value }))}
-              />
-              {errors.topic && (
-                <p className="text-sm text-destructive">{errors.topic}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="lanacoinTxid">LanaCoin Transaction ID</Label>
-              <Input
-                id="lanacoinTxid"
-                placeholder="Transaction ID if related to a payment"
-                value={formData.lanacoinTxid}
-                onChange={(e) => setFormData(prev => ({ ...prev, lanacoinTxid: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="triggerEventId">Trigger Event ID</Label>
-              <Input
-                id="triggerEventId"
-                placeholder="Nostr event ID that triggered this process"
-                value={formData.triggerEventId}
-                onChange={(e) => setFormData(prev => ({ ...prev, triggerEventId: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="reference">Reference</Label>
-              <Input
-                id="reference"
-                placeholder="External reference, document, or link"
-                value={formData.reference}
-                onChange={(e) => setFormData(prev => ({ ...prev, reference: e.target.value }))}
-              />
-              {errors.reference && (
-                <p className="text-sm text-destructive">{errors.reference}</p>
-              )}
-            </div>
-          </div>
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4">
