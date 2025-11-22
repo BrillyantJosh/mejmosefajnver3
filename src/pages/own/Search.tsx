@@ -293,21 +293,22 @@ export default function Search() {
         )}
       </div>
 
-      {selectedCase && (
-        <DonationProposalDialog
-          isOpen={!!selectedCase}
-          onClose={() => setSelectedCase(null)}
-          processRecordId={selectedCase.id}
-          recordEventId={selectedCase.recordId}
-          transcriptEventId={selectedCase.transcriptId}
-          caseTitle={selectedCase.title}
-          lanAmount={calculatePrices(selectedCase.id).lanAmount}
-          fiatAmount={calculatePrices(selectedCase.id).userFiatAmount}
-          fiatCurrency={calculatePrices(selectedCase.id).userCurrency}
-          existingRevenueShare={selectedCase.revenueShare}
-          onSuccess={handlePaymentSuccess}
-        />
-      )}
+        {selectedCase && (
+          <DonationProposalDialog
+            isOpen={!!selectedCase}
+            onClose={() => setSelectedCase(null)}
+            processRecordId={selectedCase.id}
+            recordEventId={selectedCase.recordId}
+            transcriptEventId={selectedCase.transcriptId}
+            caseTitle={selectedCase.title}
+            lanAmount={calculatePrices(selectedCase.id).lanAmount}
+            fiatAmount={calculatePrices(selectedCase.id).userFiatAmount}
+            fiatCurrency={calculatePrices(selectedCase.id).userCurrency}
+            payerPubkey={session?.nostrHexId || ''}
+            existingRevenueShare={selectedCase.revenueShare}
+            onSuccess={handlePaymentSuccess}
+          />
+        )}
     </div>
   );
 }
