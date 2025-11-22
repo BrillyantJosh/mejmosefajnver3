@@ -44,7 +44,13 @@ export const DonationProposalDialog = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const { parameters } = useSystemParameters();
-  const { revenueShare } = useNostrRevenueShare(processRecordId);
+  
+  // Strip "own:" prefix from processRecordId before querying
+  const rawProcessRecordId = processRecordId.startsWith('own:') 
+    ? processRecordId.substring(4) 
+    : processRecordId;
+  
+  const { revenueShare } = useNostrRevenueShare(rawProcessRecordId);
   const { session } = useAuth();
 
   const getRelays = (): string[] => {
