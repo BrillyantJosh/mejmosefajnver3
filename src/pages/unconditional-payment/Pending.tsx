@@ -177,9 +177,11 @@ export default function Pending() {
                 .filter(wallet => !wallet.walletType?.toLowerCase().includes('lana8wonder'))
                 .map(wallet => {
                   const balance = balances.get(wallet.walletId);
+                  const walletType = wallet.walletType || 'Wallet';
+                  const addressPreview = wallet.walletId.substring(0, 8) + '...';
                   const displayText = wallet.note 
-                    ? `${wallet.note.substring(0, 25)}${wallet.note.length > 25 ? '...' : ''}`
-                    : wallet.walletType?.substring(0, 25) || '';
+                    ? `${wallet.note.substring(0, 20)}${wallet.note.length > 20 ? '...' : ''}`
+                    : `${walletType} - ${addressPreview}`;
                   return (
                     <SelectItem key={wallet.walletId} value={wallet.walletId}>
                       <div className="flex items-center justify-between w-full gap-4">
