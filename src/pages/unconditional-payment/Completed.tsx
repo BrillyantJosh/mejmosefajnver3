@@ -10,8 +10,8 @@ import { format } from "date-fns";
 import { useMemo } from "react";
 
 export default function Completed() {
-  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals();
-  const { payments, isLoading: paymentsLoading } = useNostrDonationPayments();
+  const { proposals } = useNostrDonationProposals();
+  const { payments } = useNostrDonationPayments();
 
   // Collect all unique recipient pubkeys
   const recipientPubkeys = useMemo(() => {
@@ -28,27 +28,11 @@ export default function Completed() {
   console.log('🔍 Completed page debug:', {
     paymentsCount: payments.length,
     proposalsCount: proposals.length,
-    paymentsLoading,
-    proposalsLoading,
     profilesCount: profiles.size,
     recipientPubkeys: recipientPubkeys.length,
     samplePayment: payments[0],
     profilesMapKeys: Array.from(profiles.keys()).slice(0, 3)
   });
-
-  if ((proposalsLoading && proposals.length === 0) || (paymentsLoading && payments.length === 0)) {
-    return (
-      <div className="space-y-4">
-        {[1, 2, 3].map(i => (
-          <Card key={i}>
-            <CardContent className="p-6">
-              <Skeleton className="h-24 w-full" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
-  }
 
   if (payments.length === 0) {
     return (

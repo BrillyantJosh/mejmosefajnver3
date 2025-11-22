@@ -26,7 +26,7 @@ interface DonationSelection {
 export default function Pending() {
   const { session } = useAuth();
   const navigate = useNavigate();
-  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals();
+  const { proposals } = useNostrDonationProposals();
   const { payments } = useNostrDonationPayments();
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
   
@@ -144,7 +144,7 @@ export default function Pending() {
     navigate('/unconditional-payment/confirm-payment');
   };
 
-  if ((proposalsLoading && proposals.length === 0) || walletsLoading) {
+  if (walletsLoading) {
     return (
       <div className="space-y-4">
         {[1, 2, 3].map(i => (
