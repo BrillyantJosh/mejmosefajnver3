@@ -1,4 +1,5 @@
 import { useNostrUnregisteredWallets } from '@/hooks/useNostrUnregisteredWallets';
+import { useWalletBalances } from '@/hooks/useWalletBalances';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,12 +8,27 @@ import { nip19 } from 'nostr-tools';
 import AddWalletDialog from '@/components/unregistered-wallets/AddWalletDialog';
 import WalletCard from '@/components/unregistered-wallets/WalletCard';
 import { useAuth } from '@/contexts/AuthContext';
+import { useMemo } from 'react';
 
 export default function UnregisteredWallets() {
   const { lists, isLoading, refetch } = useNostrUnregisteredWallets();
   const { session } = useAuth();
 
   const myList = lists.find(list => list.ownerPubkey === session?.nostrHexId);
+  
+  const myWalletAddresses = useMemo(() => 
+    myList?.wallets.map(w => w.address) || [], 
+    [myList]
+  );
+  
+  const { totalBalance, isLoading: balancesLoading } = useWalletBalances(myWalletAddresses);
+
+  const formatBalance = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
 
   const getNpubShort = (hex: string) => {
     try {
@@ -60,16 +76,41 @@ export default function UnregisteredWallets() {
         {session && (
           <Card className="border-primary/20 bg-primary/5">
             <CardHeader>
-              <CardTitle className="text-lg">My Unregistered Wallets</CardTitle>
-              <CardDescription>
-                {myList 
-                  ? `You have ${myList.wallets.length} wallet${myList.wallets.length !== 1 ? 's' : ''} in your list`
-                  : 'You haven\'t published a list yet'}
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle className="text-lg">My Unregistered Wallets</CardTitle>
+                  <CardDescription>
+                    {myList 
+                      ? `You have ${myList.wallets.length} wallet${myList.wallets.length !== 1 ? 's' : ''} in your list`
+                      : 'You haven\'t published a list yet'}
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  {myList && (
+                    <Badge variant="secondary">
+                      {myList.wallets.length} wallet{myList.wallets.length !== 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                  <AddWalletDialog onSuccess={refetch} />
+                </div>
+              </div>
             </CardHeader>
-            <CardContent>
-              <AddWalletDialog onSuccess={refetch} />
-            </CardContent>
+            {myList && myList.wallets.length > 0 && (
+              <CardContent>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-background border mb-4">
+                  <span className="text-sm font-medium">Total Balance:</span>
+                  <div className="flex items-center gap-2">
+                    {balancesLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <span className="text-lg font-bold text-primary">
+                        {formatBalance(totalBalance)} LANA
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            )}
           </Card>
         )}
       </div>
@@ -93,14 +134,9 @@ export default function UnregisteredWallets() {
             <Card key={list.eventId}>
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div className="space-y-1 flex-1">
-                    <CardTitle className="text-lg">
-                      Owner: {getNpubShort(list.ownerPubkey)}
-                    </CardTitle>
-                    <CardDescription>
-                      Published: {formatDate(list.createdAt)}
-                    </CardDescription>
-                  </div>
+                  <CardDescription>
+                    Published: {formatDate(list.createdAt)}
+                  </CardDescription>
                   <Badge variant="secondary" className="ml-4">
                     {list.wallets.length} wallet{list.wallets.length !== 1 ? 's' : ''}
                   </Badge>
