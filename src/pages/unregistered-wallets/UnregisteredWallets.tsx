@@ -4,9 +4,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Loader2, RefreshCw, Wallet } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
+import AddWalletDialog from '@/components/unregistered-wallets/AddWalletDialog';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function UnregisteredWallets() {
   const { lists, isLoading, refetch } = useNostrUnregisteredWallets();
+  const { session } = useAuth();
+
+  const myList = lists.find(list => list.ownerPubkey === session?.nostrHexId);
 
   const getNpubShort = (hex: string) => {
     try {
@@ -29,25 +34,43 @@ export default function UnregisteredWallets() {
 
   return (
     <div className="max-w-7xl mx-auto p-6 pb-20">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Unregistered Wallets</h1>
-          <p className="text-muted-foreground">
-            Self-declared lists of unregistered LanaCoin wallets from users
-          </p>
+      <div className="space-y-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Unregistered Wallets</h1>
+            <p className="text-muted-foreground">
+              Self-declared lists of unregistered LanaCoin wallets from users
+            </p>
+          </div>
+          <Button
+            onClick={() => refetch()}
+            disabled={isLoading}
+            variant="outline"
+            size="sm"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </Button>
         </div>
-        <Button
-          onClick={() => refetch()}
-          disabled={isLoading}
-          variant="outline"
-          size="sm"
-        >
-          {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-        </Button>
+
+        {session && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="text-lg">My Unregistered Wallets</CardTitle>
+              <CardDescription>
+                {myList 
+                  ? `You have ${myList.wallets.length} wallet${myList.wallets.length !== 1 ? 's' : ''} in your list`
+                  : 'You haven\'t published a list yet'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AddWalletDialog onSuccess={refetch} />
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {isLoading && lists.length === 0 ? (
