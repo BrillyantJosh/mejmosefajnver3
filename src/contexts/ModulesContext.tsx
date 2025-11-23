@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -209,6 +209,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-indigo-500 to-purple-500',
     enabled: true,
     order: 16
+  },
+  {
+    id: 'rock',
+    title: 'ROCK',
+    description: 'I know this person - Give and receive endorsements to build a web of trust',
+    icon: CheckCircle,
+    path: '/rock',
+    gradient: 'from-green-500 to-emerald-500',
+    enabled: true,
+    order: 17
   }
 ];
 
@@ -256,7 +266,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'lash': 'LASH',
     'lanamusic': 'Lana Music',
     'lanatransparency': 'Lana Transparency',
-    'own': 'OWN'
+    'own': 'OWN',
+    'rock': 'ROCK'
   };
   return mapping[id] || id;
 };
@@ -280,7 +291,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'LASH': 'lash',
     'Lana Music': 'lanamusic',
     'Lana Transparency': 'lanatransparency',
-    'OWN': 'own'
+    'OWN': 'own',
+    'ROCK': 'rock'
   };
   return mapping[id] || null;
 };
