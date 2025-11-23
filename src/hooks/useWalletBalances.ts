@@ -13,6 +13,7 @@ interface WalletBalancesResult {
   balances: Map<string, number>;
   isLoading: boolean;
   error: string | null;
+  totalBalance: number;
 }
 
 export const useWalletBalances = (walletAddresses: string[]): WalletBalancesResult => {
@@ -20,6 +21,7 @@ export const useWalletBalances = (walletAddresses: string[]): WalletBalancesResu
   const [balances, setBalances] = useState<Map<string, number>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [totalBalance, setTotalBalance] = useState(0);
 
   useEffect(() => {
     const fetchBalances = async () => {
@@ -52,10 +54,13 @@ export const useWalletBalances = (walletAddresses: string[]): WalletBalancesResu
 
         if (data?.wallets) {
           const balanceMap = new Map<string, number>();
+          let total = 0;
           data.wallets.forEach((wallet: WalletBalance) => {
             balanceMap.set(wallet.wallet_id, wallet.balance);
+            total += wallet.balance;
           });
           setBalances(balanceMap);
+          setTotalBalance(total);
         }
       } catch (err) {
         console.error('Error fetching wallet balances:', err);
@@ -68,5 +73,5 @@ export const useWalletBalances = (walletAddresses: string[]): WalletBalancesResu
     fetchBalances();
   }, [walletAddresses.join(','), parameters?.electrumServers]);
 
-  return { balances, isLoading, error };
+  return { balances, isLoading, error, totalBalance };
 };
