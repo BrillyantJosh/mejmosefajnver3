@@ -3,10 +3,11 @@ import { useNostrSellerProfiles } from "@/hooks/useNostrSellerProfiles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { RockCheck } from "@/components/rock/RockCheck";
-import { GrantRockDialog } from "@/components/rock/GrantRockDialog";
-import { Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Loader2, Plus } from "lucide-react";
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 
 const familiarityLabels = {
   real_life: 'Real Life',
@@ -30,7 +31,7 @@ const relationLabels: Record<string, string> = {
 };
 
 export default function Grant() {
-  const [refreshKey, setRefreshKey] = useState(0);
+  const navigate = useNavigate();
   const { references, isLoading } = useNostrRockGiven();
   
   const targetPubkeys = useMemo(
@@ -55,7 +56,13 @@ export default function Grant() {
           <h2 className="text-xl font-semibold">ROCK Endorsements Given</h2>
           <p className="text-sm text-muted-foreground">People you've endorsed</p>
         </div>
-        <GrantRockDialog onSuccess={() => setRefreshKey(prev => prev + 1)} />
+        <Button 
+          className="bg-green-600 hover:bg-green-700"
+          onClick={() => navigate('/rock/grant-new')}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Grant ROCK
+        </Button>
       </div>
 
       {isLoading ? (
