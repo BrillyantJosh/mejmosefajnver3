@@ -13,4 +13,5 @@ export interface NostrProfile {
   lanaWalletID?: string;
   whoAreYou?: string;
   orgasmic_profile?: string;
+  statement_of_responsibility?: string;
 }
