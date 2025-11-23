@@ -109,6 +109,19 @@ export default function UnregisteredWallets() {
                     )}
                   </div>
                 </div>
+                <div className="space-y-2">
+                  {myList.wallets.map((wallet, idx) => (
+                    <WalletCard 
+                      key={idx} 
+                      address={wallet.address} 
+                      note={wallet.note}
+                      canDelete={true}
+                      userPubkey={session?.nostrHexId}
+                      privateKey={session?.nostrPrivateKey}
+                      onDeleted={refetch}
+                    />
+                  ))}
+                </div>
               </CardContent>
             )}
           </Card>
