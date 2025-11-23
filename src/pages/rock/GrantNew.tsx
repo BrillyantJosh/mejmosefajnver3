@@ -97,14 +97,66 @@ export default function GrantNew() {
 
       console.log('🪨 Publishing KIND 87033 ROCK event:', signedEvent);
 
-      // Publish to relays
-      const results = await Promise.allSettled(
-        parameters.relays.map(relay => pool.publish([relay], signedEvent))
-      );
+      // Publish to relays with proper timeout handling
+      const publishResults: Array<{ relay: string; success: boolean; error?: string }> = [];
 
+      const publishPromises = parameters.relays.map(async (relay: string) => {
+        console.log(`🔄 Publishing ROCK to ${relay}...`);
+        
+        return new Promise<void>((resolve) => {
+          // Outer timeout: 10s - guards against relay never responding
+          const timeout = setTimeout(() => {
+            publishResults.push({ relay, success: false, error: 'Connection timeout (10s)' });
+            console.error(`❌ ${relay}: Timeout`);
+            resolve();
+          }, 10000);
+
+          try {
+            const pubs = pool.publish([relay], signedEvent);
+            
+            // Inner timeout: 8s - guards against publish promise hanging
+            Promise.race([
+              Promise.all(pubs),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Publish timeout')), 8000)
+              )
+            ]).then(() => {
+              clearTimeout(timeout);
+              publishResults.push({ relay, success: true });
+              console.log(`✅ ${relay}: ROCK published successfully`);
+              resolve();
+            }).catch((error) => {
+              clearTimeout(timeout);
+              const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+              publishResults.push({ relay, success: false, error: errorMsg });
+              console.error(`❌ ${relay}: ${errorMsg}`);
+              resolve();
+            });
+          } catch (error) {
+            clearTimeout(timeout);
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            publishResults.push({ relay, success: false, error: errorMsg });
+            console.error(`❌ ${relay}: ${errorMsg}`);
+            resolve();
+          }
+        });
+      });
+
+      // Wait for ALL relays to complete or timeout
+      await Promise.all(publishPromises);
+
+      // Close pool in finally block
       pool.close(parameters.relays);
 
-      const successCount = results.filter(r => r.status === 'fulfilled').length;
+      const successCount = publishResults.filter(r => r.success).length;
+      
+      console.log('📊 ROCK publishing summary:', {
+        eventId: signedEvent.id,
+        total: publishResults.length,
+        successful: successCount,
+        failed: publishResults.filter(r => !r.success).length,
+        details: publishResults
+      });
       
       if (successCount > 0) {
         toast.success(`ROCK endorsement published to ${successCount} relay(s)`);
