@@ -37,6 +37,11 @@ const profileSchema = z.object({
   lang: z.string().min(1, "Language is required"),
   interests: z.string().min(1, "At least one interest is required"),
   intimateInterests: z.string().min(1, "At least one intimate interest is required"),
+  statement_of_responsibility: z.string()
+    .min(10, "Statement must be at least 10 characters")
+    .refine((val) => val.toLowerCase().includes('responsibility'), {
+      message: "Statement must include the word 'responsibility' or semantically confirm acceptance",
+    }),
   
   // Optional fields
   picture: z.string().url().optional().or(z.literal("")),
@@ -100,6 +105,7 @@ export default function Profile() {
       lang: "en",
       interests: "",
       intimateInterests: "",
+      statement_of_responsibility: "",
       picture: "",
       website: "",
       nip05: "",
@@ -132,6 +138,7 @@ export default function Profile() {
         longitude: profile.longitude || 0,
         interests: profile.interests?.join(', ') || '',
         intimateInterests: profile.intimateInterests?.join(', ') || '',
+        statement_of_responsibility: profile.statement_of_responsibility || '',
         lanoshi2lash: profile.lanoshi2lash || '',
         lanaWalletID: profile.lanaWalletID || '',
         whoAreYou: profile.whoAreYou as "Human" | "EI" || 'Human',
@@ -511,6 +518,12 @@ export default function Profile() {
                   <Label className="text-muted-foreground">Orgasmic Profile</Label>
                   <p className="break-words">{profile.orgasmic_profile}</p>
                 </div>
+                {profile.statement_of_responsibility && (
+                  <div className="md:col-span-2">
+                    <Label className="text-muted-foreground">Statement of Self-Responsibility</Label>
+                    <p className="break-words">{profile.statement_of_responsibility}</p>
+                  </div>
+                )}
               </div>
 
               {profile.payment_methods && profile.payment_methods.length > 0 && (
@@ -917,6 +930,27 @@ export default function Profile() {
                             {...field} 
                           />
                         </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="statement_of_responsibility"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-destructive">Statement of Self-Responsibility *</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            placeholder="Write in your own words that you accept unconditional self-responsibility inside the Lana World..."
+                            className="min-h-[100px]"
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          You must explicitly accept unconditional self-responsibility before saving your profile. Must include the word "responsibility" and be at least 10 characters.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
