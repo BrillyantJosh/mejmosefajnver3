@@ -53,86 +53,138 @@ export default function WalletCard({
     }
 
     setIsDeleting(true);
-    const pool = new SimplePool();
+    let updatedWallets: string[][] = [];
 
     try {
-      // Fetch existing wallets
-      const filter = {
-        kinds: [30289],
-        authors: [userPubkey],
-        '#d': [userPubkey],
-        limit: 1
-      };
+      // 1. Fetch existing wallets with dedicated pool
+      const queryPool = new SimplePool();
+      
+      try {
+        const filter = {
+          kinds: [30289],
+          authors: [userPubkey],
+          '#d': [userPubkey],
+          limit: 1
+        };
 
-      const events = await pool.querySync(parameters.relays, filter);
-      const existingEvent = events[0];
+        console.log('🔄 Fetching existing wallet list...');
+        const events = await queryPool.querySync(parameters.relays, filter);
+        const existingEvent = events[0];
 
-      if (!existingEvent) {
-        toast.error('Wallet list not found');
-        setIsDeleting(false);
-        return;
+        if (!existingEvent) {
+          toast.error('Wallet list not found');
+          setIsDeleting(false);
+          return;
+        }
+
+        // 2. Filter out the deleted wallet
+        updatedWallets = existingEvent.tags
+          .filter(t => t[0] === 'w' && t.length >= 2)
+          .filter(t => t[1] !== address);
+
+        console.log(`📝 Removing wallet. Current: ${existingEvent.tags.filter(t => t[0] === 'w').length}, After: ${updatedWallets.length}`);
+
+      } finally {
+        queryPool.close(parameters.relays);
       }
 
-      // Filter out the deleted wallet
-      const updatedWallets = existingEvent.tags
-        .filter(t => t[0] === 'w' && t.length >= 2)
-        .filter(t => t[1] !== address);
+      // 3. Create and publish event with new pool and robust error handling
+      const publishPool = new SimplePool();
+      const relays = parameters.relays;
+      const results: Array<{ relay: string; success: boolean; error?: string }> = [];
 
-      // Create new event
-      const hexToBytes = (hex: string): Uint8Array => {
-        const bytes = new Uint8Array(hex.length / 2);
-        for (let i = 0; i < hex.length; i += 2) {
-          bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+      try {
+        const hexToBytes = (hex: string): Uint8Array => {
+          const bytes = new Uint8Array(hex.length / 2);
+          for (let i = 0; i < hex.length; i += 2) {
+            bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+          }
+          return bytes;
+        };
+
+        const privateKeyBytes = hexToBytes(privateKey);
+        const signedEvent = finalizeEvent({
+          kind: 30289,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            ['d', userPubkey],
+            ['p', userPubkey],
+            ['status', 'active'],
+            ...updatedWallets
+          ],
+          content: ''
+        }, privateKeyBytes) as VerifiedEvent;
+
+        console.log('✍️ Event signed:', {
+          id: signedEvent.id,
+          kind: signedEvent.kind,
+          wallets: updatedWallets.length
+        });
+
+        const publishPromises = relays.map(async (relay: string) => {
+          console.log(`🔄 Publishing deletion to ${relay}...`);
+
+          return new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => {
+              results.push({ relay, success: false, error: 'Timeout (10s)' });
+              console.error(`❌ ${relay}: Timeout`);
+              resolve();
+            }, 10000);
+
+            try {
+              const pubs = publishPool.publish([relay], signedEvent);
+
+              Promise.race([
+                Promise.all(pubs),
+                new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error('Publish timeout')), 8000)
+                )
+              ]).then(() => {
+                clearTimeout(timeout);
+                results.push({ relay, success: true });
+                console.log(`✅ ${relay}: Deleted successfully`);
+                resolve();
+              }).catch((error) => {
+                clearTimeout(timeout);
+                const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+                results.push({ relay, success: false, error: errorMsg });
+                console.error(`❌ ${relay}: ${errorMsg}`);
+                resolve();
+              });
+            } catch (error) {
+              clearTimeout(timeout);
+              const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+              results.push({ relay, success: false, error: errorMsg });
+              console.error(`❌ ${relay}: ${errorMsg}`);
+              resolve();
+            }
+          });
+        });
+
+        await Promise.all(publishPromises);
+
+        const successCount = results.filter(r => r.success).length;
+        console.log(`📊 Wallet deletion published to ${successCount}/${relays.length} relays`);
+
+        if (successCount === 0) {
+          throw new Error('Failed to publish to any relay');
         }
-        return bytes;
-      };
 
-      const privateKeyBytes = hexToBytes(privateKey);
-      
-      const event = finalizeEvent({
-        kind: 30289,
-        created_at: Math.floor(Date.now() / 1000),
-        tags: [
-          ['d', userPubkey],
-          ['p', userPubkey],
-          ['status', 'active'],
-          ...updatedWallets
-        ],
-        content: ''
-      }, privateKeyBytes) as VerifiedEvent;
-
-      // Publish to relays and wait for confirmation
-      const publishPromises = parameters.relays.map(async (relay) => {
-        try {
-          const pub = pool.publish([relay], event);
-          await pub;
-          console.log(`✅ Published deletion to ${relay}`);
-          return true;
-        } catch (err) {
-          console.error(`❌ Failed to publish to ${relay}:`, err);
-          return false;
-        }
-      });
-
-      const results = await Promise.all(publishPromises);
-      const successCount = results.filter(r => r).length;
-
-      if (successCount > 0) {
-        console.log(`✅ Wallet deleted and published to ${successCount}/${parameters.relays.length} relays`);
-        toast.success('Wallet deleted successfully');
+        toast.success(`Wallet deleted! Published to ${successCount}/${relays.length} relays`);
         
         // Wait a moment before refreshing to allow relays to process
         setTimeout(() => {
           onDeleted?.();
         }, 500);
-      } else {
-        throw new Error('Failed to publish to any relay');
+
+      } finally {
+        publishPool.close(relays);
       }
+
     } catch (error) {
-      console.error('Error deleting wallet:', error);
-      toast.error('Failed to delete wallet');
+      console.error('❌ Error deleting wallet:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete wallet');
     } finally {
-      pool.close(parameters.relays);
       setIsDeleting(false);
     }
   };
