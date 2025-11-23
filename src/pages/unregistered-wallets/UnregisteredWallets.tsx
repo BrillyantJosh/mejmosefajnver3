@@ -128,54 +128,6 @@ export default function UnregisteredWallets() {
         )}
       </div>
 
-      {isLoading && lists.length === 0 ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      ) : lists.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-20">
-            <Wallet className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground text-center">
-              No unregistered wallet lists found on relays
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {lists.map((list) => (
-            <Card key={list.eventId}>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <CardDescription>
-                    Published: {formatDate(list.createdAt)}
-                  </CardDescription>
-                  <Badge variant="secondary" className="ml-4">
-                    {list.wallets.length} wallet{list.wallets.length !== 1 ? 's' : ''}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {list.wallets.length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic">
-                    No wallets in this list
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {list.wallets.map((wallet, idx) => (
-                      <WalletCard
-                        key={idx}
-                        address={wallet.address}
-                        note={wallet.note}
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
