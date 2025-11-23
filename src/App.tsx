@@ -55,6 +55,7 @@ import RockLayout from "./pages/rock/RockLayout";
 import RockGrant from "./pages/rock/Grant";
 import RockGrantNew from "./pages/rock/GrantNew";
 import RockReceived from "./pages/rock/Received";
+import UnregisteredWallets from "./pages/unregistered-wallets/UnregisteredWallets";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -147,6 +148,7 @@ const App = () => (
             <Route path="grant-new" element={<RockGrantNew />} />
             <Route path="received" element={<RockReceived />} />
           </Route>
+          <Route path="/unregistered-wallets" element={<UnregisteredWallets />} />
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/wallet/register" element={<RegisterWallet />} />
