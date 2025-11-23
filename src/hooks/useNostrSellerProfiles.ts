@@ -7,6 +7,7 @@ export interface SellerProfile {
   name?: string;
   display_name?: string;
   picture?: string;
+  about?: string;
 }
 
 export const useNostrSellerProfiles = (pubkeys: string[]) => {
@@ -23,6 +24,7 @@ export const useNostrSellerProfiles = (pubkeys: string[]) => {
         name: profile.full_name,
         display_name: profile.display_name,
         picture: getProxiedImageUrl(profile.picture),
+        about: profile.about,
       });
     });
     
