@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { RockCheck } from "@/components/rock/RockCheck";
+import { GrantRockDialog } from "@/components/rock/GrantRockDialog";
 import { Loader2 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 const familiarityLabels = {
   real_life: 'Real Life',
@@ -29,6 +30,7 @@ const relationLabels: Record<string, string> = {
 };
 
 export default function Grant() {
+  const [refreshKey, setRefreshKey] = useState(0);
   const { references, isLoading } = useNostrRockGiven();
   
   const targetPubkeys = useMemo(
@@ -46,17 +48,27 @@ export default function Grant() {
     );
   }
 
-  if (references.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <RockCheck size={64} showText={false} className="mx-auto mb-4 opacity-50" />
-        <p className="text-muted-foreground">You haven't given any endorsements yet</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-xl font-semibold">ROCK Endorsements Given</h2>
+          <p className="text-sm text-muted-foreground">People you've endorsed</p>
+        </div>
+        <GrantRockDialog onSuccess={() => setRefreshKey(prev => prev + 1)} />
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : references.length === 0 ? (
+        <div className="text-center py-12">
+          <RockCheck size={64} showText={false} className="mx-auto mb-4 opacity-50" />
+          <p className="text-muted-foreground">You haven't given any endorsements yet</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
       {references.map((reference) => {
         const profile = profiles.get(reference.targetPubkey);
         const displayName = profile?.display_name || profile?.name || `${reference.targetPubkey.slice(0, 8)}...`;
@@ -94,6 +106,8 @@ export default function Grant() {
           </Card>
         );
       })}
+        </div>
+      )}
     </div>
   );
 }
