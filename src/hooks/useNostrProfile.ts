@@ -25,6 +25,7 @@ export interface NostrProfile {
   lanaWalletID?: string;
   whoAreYou?: string;
   orgasmic_profile?: string;
+  statement_of_responsibility?: string;
   
   // Payment Methods (new)
   payment_methods?: Array<{
@@ -128,6 +129,18 @@ export const useNostrProfile = () => {
 
     if (!profileData.lang) {
       return { success: false, error: 'Language is required' };
+    }
+
+    if (!profileData.statement_of_responsibility) {
+      return { success: false, error: 'You must explicitly accept unconditional self-responsibility before saving your profile.' };
+    }
+
+    if (profileData.statement_of_responsibility.length < 10) {
+      return { success: false, error: 'Statement of responsibility must be at least 10 characters' };
+    }
+
+    if (!profileData.statement_of_responsibility.toLowerCase().includes('responsibility')) {
+      return { success: false, error: 'Statement must include the word "responsibility" or semantically confirm acceptance' };
     }
 
     if (relays.length === 0) {
