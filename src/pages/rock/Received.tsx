@@ -71,6 +71,12 @@ export default function Received() {
                 </Avatar>
                 <div className="flex-1">
                   <CardTitle className="text-lg">{displayName}</CardTitle>
+                  {profile?.name && profile.name !== displayName && (
+                    <p className="text-sm text-muted-foreground mt-1">{profile.name}</p>
+                  )}
+                  {profile?.about && (
+                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{profile.about}</p>
+                  )}
                   <div className="flex flex-wrap gap-2 mt-2">
                     <Badge variant="secondary" className="text-xs">
                       {familiarityLabels[reference.familiarity]}
