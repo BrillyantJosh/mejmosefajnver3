@@ -38,10 +38,7 @@ const profileSchema = z.object({
   interests: z.string().min(1, "At least one interest is required"),
   intimateInterests: z.string().min(1, "At least one intimate interest is required"),
   statement_of_responsibility: z.string()
-    .min(10, "Statement must be at least 10 characters")
-    .refine((val) => val.toLowerCase().includes('responsibility'), {
-      message: "Statement must include the word 'responsibility' or semantically confirm acceptance",
-    }),
+    .min(10, "Statement must be at least 10 characters"),
   
   // Optional fields
   picture: z.string().url().optional().or(z.literal("")),
@@ -949,7 +946,7 @@ export default function Profile() {
                           />
                         </FormControl>
                         <FormDescription>
-                          You must explicitly accept unconditional self-responsibility before saving your profile. Must include the word "responsibility" and be at least 10 characters.
+                          You must explicitly accept unconditional self-responsibility before saving your profile. Minimum 10 characters.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
