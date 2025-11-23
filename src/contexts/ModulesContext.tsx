@@ -219,6 +219,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-green-500 to-emerald-500',
     enabled: true,
     order: 17
+  },
+  {
+    id: 'unregisteredwallets',
+    title: 'Unregistered Wallets',
+    description: 'View self-declared lists of unregistered LanaCoin wallets',
+    icon: WalletIcon,
+    path: '/unregistered-wallets',
+    gradient: 'from-amber-500 to-orange-500',
+    enabled: false,
+    order: 18
   }
 ];
 
@@ -267,7 +277,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'lanamusic': 'Lana Music',
     'lanatransparency': 'Lana Transparency',
     'own': 'OWN',
-    'rock': 'ROCK'
+    'rock': 'ROCK',
+    'unregisteredwallets': 'Unregistered Wallets'
   };
   return mapping[id] || id;
 };
@@ -292,7 +303,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Lana Music': 'lanamusic',
     'Lana Transparency': 'lanatransparency',
     'OWN': 'own',
-    'ROCK': 'rock'
+    'ROCK': 'rock',
+    'Unregistered Wallets': 'unregisteredwallets'
   };
   return mapping[id] || null;
 };
