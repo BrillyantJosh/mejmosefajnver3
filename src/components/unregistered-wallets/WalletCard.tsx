@@ -9,6 +9,13 @@ interface WalletCardProps {
 export default function WalletCard({ address, note }: WalletCardProps) {
   const { balance, isLoading } = useWalletBalance(address);
 
+  const formatBalance = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
+
   return (
     <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border">
       <Wallet className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
@@ -29,7 +36,7 @@ export default function WalletCard({ address, note }: WalletCardProps) {
             </div>
           ) : balance !== null ? (
             <div className="text-xs font-medium">
-              Balance: <span className="text-primary">{balance.toFixed(2)} LANA</span>
+              Balance: <span className="text-primary">{formatBalance(balance)} LANA</span>
             </div>
           ) : null}
         </div>
