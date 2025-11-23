@@ -893,8 +893,9 @@ export default function Profile() {
                         <FormItem>
                           <FormLabel>Lana Wallet ID</FormLabel>
                           <FormControl>
-                            <Input placeholder="Your wallet ID" {...field} />
+                            <Input placeholder="Your wallet ID" {...field} readOnly className="bg-muted" />
                           </FormControl>
+                          <FormDescription>This field is read-only</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
