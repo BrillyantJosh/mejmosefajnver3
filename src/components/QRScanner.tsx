@@ -14,9 +14,13 @@ export function QRScanner({ isOpen, onClose, onScan }: QRScannerProps) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasScannedRef = useRef(false);
 
   useEffect(() => {
     if (isOpen && !isScanning) {
+      // Reset scan flag when opening
+      hasScannedRef.current = false;
+      
       // Add delay to ensure DOM is ready
       const timer = setTimeout(() => {
         startScanner();
@@ -64,6 +68,10 @@ export function QRScanner({ isOpen, onClose, onScan }: QRScannerProps) {
           qrbox: { width: 250, height: 250 }
         },
         (decodedText) => {
+          // Only process first successful scan
+          if (hasScannedRef.current) return;
+          hasScannedRef.current = true;
+          
           onScan(decodedText);
           stopScanner();
           onClose();
