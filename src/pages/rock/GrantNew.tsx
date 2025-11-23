@@ -299,7 +299,7 @@ export default function GrantNew() {
                     <SelectTrigger id="familiarity">
                       <SelectValue placeholder="Select familiarity level" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent side="bottom" align="start">
                       {familiarityOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
@@ -315,7 +315,7 @@ export default function GrantNew() {
                     <SelectTrigger id="relation">
                       <SelectValue placeholder="Select relationship type" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent side="bottom" align="start">
                       {relationOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
