@@ -1,6 +1,6 @@
 import { LucideIcon } from "lucide-react";
 
-export type ModuleType = 'social' | 'chat' | 'wallet' | 'unconditionalpayment' | 'selllana' | 'buylana' | 'marketplace' | 'lanapaper' | 'offlinelana' | 'relays' | 'lana8wonder' | 'lanapays' | 'lanapay' | 'lash' | 'lanamusic' | 'lanatransparency' | 'own';
+export type ModuleType = 'social' | 'chat' | 'wallet' | 'unconditionalpayment' | 'selllana' | 'buylana' | 'marketplace' | 'lanapaper' | 'offlinelana' | 'relays' | 'lana8wonder' | 'lanapays' | 'lanapay' | 'lash' | 'lanamusic' | 'lanatransparency' | 'own' | 'rock';
 
 export interface ModuleConfig {
   id: ModuleType;

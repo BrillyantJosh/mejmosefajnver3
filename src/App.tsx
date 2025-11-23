@@ -51,6 +51,9 @@ import Own from "./pages/own/Own";
 import OwnSearch from "./pages/own/Search";
 import OwnMyCases from "./pages/own/MyCases";
 import OwnTranscript from "./pages/own/Transcript";
+import RockLayout from "./pages/rock/RockLayout";
+import RockGrant from "./pages/rock/Grant";
+import RockReceived from "./pages/rock/Received";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -137,6 +140,10 @@ const App = () => (
                     <Route path="search" element={<OwnSearch />} />
                     <Route path="my-cases" element={<OwnMyCases />} />
                     <Route path="transcript/:caseId" element={<OwnTranscript />} />
+                  </Route>
+                  <Route path="/rock" element={<RockLayout />}>
+                    <Route index element={<RockGrant />} />
+                    <Route path="received" element={<RockReceived />} />
                   </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
