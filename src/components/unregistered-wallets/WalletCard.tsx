@@ -1,15 +1,32 @@
-import { Wallet, Loader2, Copy, ExternalLink, Send } from 'lucide-react';
+import { Wallet, Loader2, Copy, ExternalLink, Send, Trash2 } from 'lucide-react';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { SimplePool } from 'nostr-tools';
+import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { finalizeEvent, VerifiedEvent } from 'nostr-tools';
+import { useState } from 'react';
 
 interface WalletCardProps {
   address: string;
   note: string;
+  canDelete?: boolean;
+  userPubkey?: string;
+  privateKey?: string;
+  onDeleted?: () => void;
 }
 
-export default function WalletCard({ address, note }: WalletCardProps) {
+export default function WalletCard({ 
+  address, 
+  note, 
+  canDelete = false, 
+  userPubkey, 
+  privateKey,
+  onDeleted 
+}: WalletCardProps) {
   const { balance, isLoading } = useWalletBalance(address);
+  const { parameters } = useSystemParameters();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const formatBalance = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -28,6 +45,77 @@ export default function WalletCard({ address, note }: WalletCardProps) {
   };
 
   const transactionLink = `https://chainz.cryptoid.info/lana/address.dws?${address}.htm`;
+
+  const handleDelete = async () => {
+    if (!canDelete || !userPubkey || !privateKey || !parameters?.relays) {
+      toast.error('Unable to delete wallet');
+      return;
+    }
+
+    setIsDeleting(true);
+    const pool = new SimplePool();
+
+    try {
+      // Fetch existing wallets
+      const filter = {
+        kinds: [30289],
+        authors: [userPubkey],
+        '#d': [userPubkey],
+        limit: 1
+      };
+
+      const events = await pool.querySync(parameters.relays, filter);
+      const existingEvent = events[0];
+
+      if (!existingEvent) {
+        toast.error('Wallet list not found');
+        setIsDeleting(false);
+        return;
+      }
+
+      // Filter out the deleted wallet
+      const updatedWallets = existingEvent.tags
+        .filter(t => t[0] === 'w' && t.length >= 2)
+        .filter(t => t[1] !== address);
+
+      // Create new event
+      const hexToBytes = (hex: string): Uint8Array => {
+        const bytes = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < hex.length; i += 2) {
+          bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+        }
+        return bytes;
+      };
+
+      const privateKeyBytes = hexToBytes(privateKey);
+      
+      const event = finalizeEvent({
+        kind: 30289,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['d', userPubkey],
+          ['p', userPubkey],
+          ['status', 'active'],
+          ...updatedWallets
+        ],
+        content: ''
+      }, privateKeyBytes) as VerifiedEvent;
+
+      // Publish to relays
+      await Promise.all(
+        parameters.relays.map(relay => pool.publish([relay], event))
+      );
+
+      toast.success('Wallet deleted successfully');
+      onDeleted?.();
+    } catch (error) {
+      console.error('Error deleting wallet:', error);
+      toast.error('Failed to delete wallet');
+    } finally {
+      pool.close(parameters.relays);
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border">
@@ -56,6 +144,22 @@ export default function WalletCard({ address, note }: WalletCardProps) {
             >
               <ExternalLink className="h-3 w-3" />
             </Button>
+            {canDelete && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-destructive hover:text-destructive"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                title="Delete wallet"
+              >
+                {isDeleting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+              </Button>
+            )}
           </div>
         </div>
         
