@@ -101,13 +101,33 @@ export default function WalletCard({
         content: ''
       }, privateKeyBytes) as VerifiedEvent;
 
-      // Publish to relays
-      await Promise.all(
-        parameters.relays.map(relay => pool.publish([relay], event))
-      );
+      // Publish to relays and wait for confirmation
+      const publishPromises = parameters.relays.map(async (relay) => {
+        try {
+          const pub = pool.publish([relay], event);
+          await pub;
+          console.log(`✅ Published deletion to ${relay}`);
+          return true;
+        } catch (err) {
+          console.error(`❌ Failed to publish to ${relay}:`, err);
+          return false;
+        }
+      });
 
-      toast.success('Wallet deleted successfully');
-      onDeleted?.();
+      const results = await Promise.all(publishPromises);
+      const successCount = results.filter(r => r).length;
+
+      if (successCount > 0) {
+        console.log(`✅ Wallet deleted and published to ${successCount}/${parameters.relays.length} relays`);
+        toast.success('Wallet deleted successfully');
+        
+        // Wait a moment before refreshing to allow relays to process
+        setTimeout(() => {
+          onDeleted?.();
+        }, 500);
+      } else {
+        throw new Error('Failed to publish to any relay');
+      }
     } catch (error) {
       console.error('Error deleting wallet:', error);
       toast.error('Failed to delete wallet');
