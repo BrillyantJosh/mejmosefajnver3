@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,11 +46,26 @@ export default function AddWalletDialog({ onSuccess }: { onSuccess: () => void }
   const [showScanner, setShowScanner] = useState(false);
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
+  const scanProcessedRef = useRef(false);
 
   const handleScan = (result: string) => {
+    // Prevent multiple scans
+    if (scanProcessedRef.current) return;
+    
+    scanProcessedRef.current = true;
     setAddress(result);
     setShowScanner(false);
     toast.success('Wallet address scanned');
+    
+    // Reset flag after a delay
+    setTimeout(() => {
+      scanProcessedRef.current = false;
+    }, 1000);
+  };
+
+  const handleOpenScanner = () => {
+    scanProcessedRef.current = false;
+    setShowScanner(true);
   };
 
   const fetchExistingWallets = async (): Promise<ExistingWallet[]> => {
@@ -267,7 +282,7 @@ export default function AddWalletDialog({ onSuccess }: { onSuccess: () => void }
                     type="button"
                     variant="outline"
                     size="icon"
-                    onClick={() => setShowScanner(true)}
+                    onClick={handleOpenScanner}
                     disabled={isPublishing}
                   >
                     <QrCode className="h-4 w-4" />
