@@ -53,6 +53,7 @@ import OwnMyCases from "./pages/own/MyCases";
 import OwnTranscript from "./pages/own/Transcript";
 import RockLayout from "./pages/rock/RockLayout";
 import RockGrant from "./pages/rock/Grant";
+import RockGrantNew from "./pages/rock/GrantNew";
 import RockReceived from "./pages/rock/Received";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
@@ -141,10 +142,11 @@ const App = () => (
                     <Route path="my-cases" element={<OwnMyCases />} />
                     <Route path="transcript/:caseId" element={<OwnTranscript />} />
                   </Route>
-                  <Route path="/rock" element={<RockLayout />}>
-                    <Route index element={<RockGrant />} />
-                    <Route path="received" element={<RockReceived />} />
-                  </Route>
+          <Route path="/rock" element={<RockLayout />}>
+            <Route index element={<RockGrant />} />
+            <Route path="grant-new" element={<RockGrantNew />} />
+            <Route path="received" element={<RockReceived />} />
+          </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/wallet/register" element={<RegisterWallet />} />

@@ -1,21 +1,18 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, User, Plus, Loader2 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Search, User, Loader2, ArrowLeft } from "lucide-react";
 import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { SimplePool, Event as NostrEvent, finalizeEvent } from 'nostr-tools';
 import { toast } from "sonner";
-
-interface GrantRockDialogProps {
-  onSuccess?: () => void;
-}
 
 const familiarityOptions = [
   { value: 'real_life', label: 'Real Life - I know this person face-to-face' },
@@ -38,8 +35,8 @@ const relationOptions = [
   { value: 'other', label: 'Other' },
 ];
 
-export function GrantRockDialog({ onSuccess }: GrantRockDialogProps) {
-  const [open, setOpen] = useState(false);
+export default function GrantNew() {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [familiarity, setFamiliarity] = useState<string>("");
@@ -111,9 +108,7 @@ export function GrantRockDialog({ onSuccess }: GrantRockDialogProps) {
       
       if (successCount > 0) {
         toast.success(`ROCK endorsement published to ${successCount} relay(s)`);
-        setOpen(false);
-        resetForm();
-        onSuccess?.();
+        navigate('/rock');
       } else {
         toast.error("Failed to publish ROCK endorsement");
       }
@@ -125,53 +120,41 @@ export function GrantRockDialog({ onSuccess }: GrantRockDialogProps) {
     }
   };
 
-  const resetForm = () => {
-    setSearchTerm("");
-    setSelectedProfile(null);
-    setFamiliarity("");
-    setRelation("");
-    setContent("");
-  };
-
-  const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen);
-    if (!newOpen) {
-      resetForm();
-    }
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button className="bg-green-600 hover:bg-green-700">
-          <Plus className="mr-2 h-4 w-4" />
-          Grant ROCK
+    <div className="container mx-auto p-6 max-w-4xl pb-20">
+      <div className="mb-6">
+        <Button
+          variant="ghost"
+          onClick={() => navigate('/rock')}
+          className="mb-4"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to ROCK
         </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Grant ROCK Endorsement</DialogTitle>
-        </DialogHeader>
+        <h1 className="text-3xl font-bold">Grant ROCK Endorsement</h1>
+        <p className="text-muted-foreground">Provide a reference for someone you know</p>
+      </div>
 
-        <div className="space-y-6 mt-4">
-          {/* Search for user */}
-          {!selectedProfile && (
-            <div className="space-y-4">
-              <div>
-                <Label>Search for a person</Label>
-                <div className="relative mt-2">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by name, display name, or pubkey..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+      <div className="space-y-6">
+        {/* Search for user */}
+        {!selectedProfile && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Search for a person</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name, display name, or pubkey..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
               </div>
 
               {searchTerm && (
-                <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-2">
+                <div className="space-y-2 max-h-96 overflow-y-auto border rounded-lg p-2">
                   {profilesLoading ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
@@ -186,17 +169,20 @@ export function GrantRockDialog({ onSuccess }: GrantRockDialogProps) {
                         onClick={() => setSelectedProfile(profile)}
                         className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-muted transition-colors"
                       >
-                        <Avatar className="h-10 w-10">
+                        <Avatar className="h-12 w-12">
                           <AvatarImage src={profile.picture} alt={profile.name || profile.display_name} />
                           <AvatarFallback>
-                            <User className="h-5 w-5" />
+                            <User className="h-6 w-6" />
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium truncate">
                             {profile.display_name || profile.name || 'Anonymous'}
                           </p>
-                          <p className="text-sm text-muted-foreground truncate">
+                          {profile.name && profile.name !== profile.display_name && (
+                            <p className="text-sm text-muted-foreground truncate">{profile.name}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground truncate">
                             {profile.location && `${profile.location} • `}
                             {profile.pubkey.substring(0, 16)}...
                           </p>
@@ -206,43 +192,59 @@ export function GrantRockDialog({ onSuccess }: GrantRockDialogProps) {
                   )}
                 </div>
               )}
-            </div>
-          )}
+            </CardContent>
+          </Card>
+        )}
 
-          {/* Selected profile and form */}
-          {selectedProfile && (
-            <div className="space-y-6">
-              {/* Selected profile display */}
-              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
-                <Avatar className="h-12 w-12">
-                  <AvatarImage src={selectedProfile.picture} alt={selectedProfile.name} />
-                  <AvatarFallback>
-                    <User className="h-6 w-6" />
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <p className="font-medium">
-                    {selectedProfile.display_name || selectedProfile.name || 'Anonymous'}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedProfile.location}
-                  </p>
+        {/* Selected profile and form */}
+        {selectedProfile && (
+          <>
+            {/* Selected profile display */}
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-16 w-16">
+                    <AvatarImage src={selectedProfile.picture} alt={selectedProfile.name} />
+                    <AvatarFallback>
+                      <User className="h-8 w-8" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <h2 className="text-xl font-semibold">
+                      {selectedProfile.display_name || selectedProfile.name || 'Anonymous'}
+                    </h2>
+                    {selectedProfile.name && selectedProfile.name !== selectedProfile.display_name && (
+                      <p className="text-sm text-muted-foreground">{selectedProfile.name}</p>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      {selectedProfile.location}
+                    </p>
+                    {selectedProfile.about && (
+                      <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                        {selectedProfile.about}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedProfile(null)}
+                  >
+                    Change
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedProfile(null)}
-                >
-                  Change
-                </Button>
-              </div>
+              </CardContent>
+            </Card>
 
-              {/* Form fields */}
-              <div className="space-y-4">
-                <div>
+            {/* Form fields */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Endorsement Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
                   <Label htmlFor="familiarity">How well do you know them?</Label>
                   <Select value={familiarity} onValueChange={setFamiliarity}>
-                    <SelectTrigger id="familiarity" className="mt-2">
+                    <SelectTrigger id="familiarity">
                       <SelectValue placeholder="Select familiarity level" />
                     </SelectTrigger>
                     <SelectContent>
@@ -255,10 +257,10 @@ export function GrantRockDialog({ onSuccess }: GrantRockDialogProps) {
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="relation">What is your relationship?</Label>
                   <Select value={relation} onValueChange={setRelation}>
-                    <SelectTrigger id="relation" className="mt-2">
+                    <SelectTrigger id="relation">
                       <SelectValue placeholder="Select relationship type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -271,40 +273,40 @@ export function GrantRockDialog({ onSuccess }: GrantRockDialogProps) {
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="content">Your endorsement</Label>
                   <Textarea
                     id="content"
                     placeholder="Write your reference/endorsement here. Provide context about your relationship, their trustworthiness, skills, or character..."
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    className="mt-2 min-h-[120px]"
+                    className="min-h-[160px]"
                   />
                 </div>
-              </div>
+              </CardContent>
+            </Card>
 
-              {/* Submit button */}
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setSelectedProfile(null)}
-                  disabled={isSubmitting}
-                >
-                  Back
-                </Button>
-                <Button
-                  onClick={handleSubmit}
-                  disabled={isSubmitting || !familiarity || !relation || !content}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {isSubmitting ? 'Publishing...' : 'Grant ROCK'}
-                </Button>
-              </div>
+            {/* Submit buttons */}
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => navigate('/rock')}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={isSubmitting || !familiarity || !relation || !content}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSubmitting ? 'Publishing...' : 'Grant ROCK'}
+              </Button>
             </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
