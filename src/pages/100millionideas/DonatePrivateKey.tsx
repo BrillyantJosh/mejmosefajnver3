@@ -83,6 +83,16 @@ const DonatePrivateKey = () => {
   const handleContinue = async () => {
     if (!isValid || !project || !parameters) return;
 
+    // Check if user is logged in
+    if (!session?.nostrHexId || !session?.nostrPrivateKey) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to donate",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsValidating(true);
     
     try {
@@ -136,8 +146,8 @@ const DonatePrivateKey = () => {
         created_at: Math.floor(Date.now() / 1000),
         tags: [
           ["service", "lanacrowd"],
-          ["project", `project:${projectId}`],
-          ["p", keyDetails.nostrHexId, "supporter"],
+          ["project", projectId || ""],
+          ["p", session.nostrHexId, "supporter"],
           ["p", project.pubkey, "project_owner"],
           ["amount_lanoshis", lanaAmountLanoshis.toString()],
           ["amount_fiat", amount.toString()],
@@ -151,7 +161,7 @@ const DonatePrivateKey = () => {
       };
 
       // Sign the event
-      const signedEvent = finalizeEvent(eventTemplate, hexToBytes(keyDetails.nostrPrivateKey));
+      const signedEvent = finalizeEvent(eventTemplate, hexToBytes(session.nostrPrivateKey));
 
       toast({
         title: "Broadcasting Event",
