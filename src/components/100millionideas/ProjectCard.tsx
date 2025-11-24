@@ -21,8 +21,7 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
   const fundedPercentage = goalAmount > 0 ? Math.round((currentFunding / goalAmount) * 100) : 0;
 
   const handleSupportProject = () => {
-    // Navigate to support/donation page (to be implemented)
-    console.log('Support project:', project.id);
+    navigate(`/100millionideas/project/${project.id}`);
   };
 
   return (
