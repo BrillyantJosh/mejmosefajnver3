@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Heart, Users } from "lucide-react";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
@@ -22,6 +23,7 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
   const goalAmount = parseFloat(project.fiatGoal) || 0;
   const backers = donations.length;
   const fundedPercentage = goalAmount > 0 ? Math.min(Math.round((currentFunding / goalAmount) * 100), 100) : 0;
+  const isFullyFunded = currentFunding >= goalAmount && goalAmount > 0;
 
   const handleSupportProject = () => {
     navigate(`/100millionideas/project/${project.id}`);
@@ -42,9 +44,14 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
 
       <CardContent className="p-6 space-y-4">
         {/* Title */}
-        <h3 className="text-2xl font-bold text-green-600">
-          {project.title}
-        </h3>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="text-2xl font-bold text-green-600 flex-1">
+            {project.title}
+          </h3>
+          {isFullyFunded && (
+            <Badge className="bg-green-500 text-white">Funded ✓</Badge>
+          )}
+        </div>
 
         {/* Short Description */}
         <p className="text-muted-foreground">
@@ -92,11 +99,12 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
 
         {/* Support Button */}
         <Button 
-          className="w-full bg-green-600 hover:bg-green-700 text-white"
+          className="w-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleSupportProject}
+          disabled={isFullyFunded}
         >
           <Heart className="h-4 w-4 mr-2" />
-          Support Project
+          {isFullyFunded ? 'Fully Funded' : 'Support Project'}
         </Button>
       </CardContent>
     </Card>
