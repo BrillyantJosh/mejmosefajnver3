@@ -71,6 +71,10 @@ export const useNostrProjectDonations = (projectId: string) => {
 
   useEffect(() => {
     if (!parameters?.relays || !projectId) {
+      console.log('⚠️ useNostrProjectDonations: Missing relays or projectId', { 
+        hasRelays: !!parameters?.relays, 
+        projectId 
+      });
       setIsLoading(false);
       return;
     }
@@ -80,18 +84,36 @@ export const useNostrProjectDonations = (projectId: string) => {
       setIsLoading(true);
 
       try {
+        console.log('🔍 Fetching donations for project:', projectId);
+        console.log('📡 Using relays:', parameters.relays);
+        
         const donationEvents = await pool.querySync(parameters.relays, {
           kinds: [60200],
           '#project': [projectId],
           limit: 100
         });
 
-        console.log(`💰 Fetched ${donationEvents.length} donations for project ${projectId}`);
+        console.log(`💰 Fetched ${donationEvents.length} donation events for project ${projectId}`);
+        
+        if (donationEvents.length > 0) {
+          console.log('📝 Sample donation event:', donationEvents[0]);
+        }
 
         const parsedDonations = donationEvents
-          .map(parseDonationEvent)
+          .map((event) => {
+            const parsed = parseDonationEvent(event);
+            if (!parsed) {
+              console.warn('⚠️ Failed to parse donation event:', event);
+            }
+            return parsed;
+          })
           .filter((d): d is DonationData => d !== null)
           .sort((a, b) => b.timestampPaid - a.timestampPaid);
+
+        console.log(`✅ Parsed ${parsedDonations.length} valid donations`);
+        if (parsedDonations.length > 0) {
+          console.log('📊 Sample parsed donation:', parsedDonations[0]);
+        }
 
         setDonations(parsedDonations);
 
@@ -100,9 +122,11 @@ export const useNostrProjectDonations = (projectId: string) => {
           return sum + parseFloat(donation.amountFiat);
         }, 0);
         setTotalRaised(total);
+        
+        console.log(`💵 Total raised: ${total}`);
 
       } catch (error) {
-        console.error('Error fetching project donations:', error);
+        console.error('❌ Error fetching project donations:', error);
       } finally {
         setIsLoading(false);
         pool.close(parameters.relays);
