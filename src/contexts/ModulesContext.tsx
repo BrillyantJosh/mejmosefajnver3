@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -229,6 +229,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-amber-500 to-orange-500',
     enabled: false,
     order: 18
+  },
+  {
+    id: '100millionideas',
+    title: '100 Million Ideas',
+    description: 'Browse innovative projects and track your donations',
+    icon: Lightbulb,
+    path: '/100millionideas/projects',
+    gradient: 'from-yellow-500 to-orange-500',
+    enabled: true,
+    order: 19
   }
 ];
 
@@ -278,7 +288,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'lanatransparency': 'Lana Transparency',
     'own': 'OWN',
     'rock': 'ROCK',
-    'unregisteredwallets': 'Unregistered Wallets'
+    'unregisteredwallets': 'Unregistered Wallets',
+    '100millionideas': '100 Million Ideas'
   };
   return mapping[id] || id;
 };
@@ -304,7 +315,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Lana Transparency': 'lanatransparency',
     'OWN': 'own',
     'ROCK': 'rock',
-    'Unregistered Wallets': 'unregisteredwallets'
+    'Unregistered Wallets': 'unregisteredwallets',
+    '100 Million Ideas': '100millionideas'
   };
   return mapping[id] || null;
 };
