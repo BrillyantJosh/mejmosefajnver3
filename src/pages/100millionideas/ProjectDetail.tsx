@@ -10,6 +10,29 @@ import { ArrowLeft, Users, Target, Wallet, ExternalLink } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
+const getYoutubeEmbedUrl = (url: string): string => {
+  try {
+    // Extract video ID from various YouTube URL formats
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    
+    if (match && match[2].length === 11) {
+      return `https://www.youtube.com/embed/${match[2]}`;
+    }
+    
+    // If it's already an embed URL, return as is
+    if (url.includes('/embed/')) {
+      return url;
+    }
+    
+    // Fallback to original URL
+    return url;
+  } catch (error) {
+    console.error('Error parsing YouTube URL:', error);
+    return url;
+  }
+};
+
 const ProjectDetail = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -139,7 +162,7 @@ const ProjectDetail = () => {
             </h2>
             <div className="aspect-video bg-muted rounded-lg overflow-hidden">
               <iframe
-                src={project.videos[0].replace('watch?v=', 'embed/')}
+                src={getYoutubeEmbedUrl(project.videos[0])}
                 className="w-full h-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
