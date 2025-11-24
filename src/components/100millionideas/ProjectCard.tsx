@@ -1,8 +1,10 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Progress } from "@/components/ui/progress";
 import { Heart, Users } from "lucide-react";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
+import { useNostrProjectDonations } from "@/hooks/useNostrProjectDonations";
 import { ProjectData } from "@/hooks/useNostrProjects";
 import { useNavigate } from "react-router-dom";
 
@@ -12,13 +14,14 @@ interface ProjectCardProps {
 
 const ProjectCard = ({ project }: ProjectCardProps) => {
   const { profile } = useNostrProfileCache(project.ownerPubkey);
+  const { donations, totalRaised, isLoading } = useNostrProjectDonations(project.id);
   const navigate = useNavigate();
 
-  // Calculate funding stats (placeholder - will be updated when we implement donations)
-  const currentFunding = 0;
+  // Calculate funding stats from KIND 60200 donations
+  const currentFunding = totalRaised;
   const goalAmount = parseFloat(project.fiatGoal) || 0;
-  const backers = 0;
-  const fundedPercentage = goalAmount > 0 ? Math.round((currentFunding / goalAmount) * 100) : 0;
+  const backers = donations.length;
+  const fundedPercentage = goalAmount > 0 ? Math.min(Math.round((currentFunding / goalAmount) * 100), 100) : 0;
 
   const handleSupportProject = () => {
     navigate(`/100millionideas/project/${project.id}`);
@@ -75,11 +78,14 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
           </div>
         </div>
 
+        {/* Progress Bar */}
+        <Progress value={fundedPercentage} className="h-2" />
+
         {/* Backers and Funding Percentage */}
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-1">
             <Users className="h-4 w-4" />
-            <span>{backers} backers</span>
+            <span>{backers} {backers === 1 ? 'backer' : 'backers'}</span>
           </div>
           <span>{fundedPercentage}% funded</span>
         </div>
