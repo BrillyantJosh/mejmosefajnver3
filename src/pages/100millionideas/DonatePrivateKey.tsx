@@ -158,42 +158,96 @@ const DonatePrivateKey = () => {
         description: "Publishing to Nostr relays...",
       });
 
-      // Step 6: Broadcast to Nostr relays
+      // Step 6: Broadcast to Nostr relays with proper timeout handling
       const pool = new SimplePool();
       const relays = parameters.relays || [];
+      const publishResults: { relay: string; success: boolean; error?: string }[] = [];
       
-      let publishedCount = 0;
-      await Promise.allSettled(
-        relays.map(async (relay: string) => {
-          try {
-            await pool.publish([relay], signedEvent);
-            publishedCount++;
-          } catch (err) {
-            console.error(`Failed to publish to ${relay}:`, err);
-          }
-        })
-      );
+      try {
+        const publishPromises = relays.map(async (relay: string) => {
+          console.log(`🔄 Publishing to ${relay}...`);
+          
+          return new Promise<void>((resolve) => {
+            // Outer timeout: 10s - guards against relay never responding
+            const timeout = setTimeout(() => {
+              publishResults.push({ 
+                relay, 
+                success: false, 
+                error: 'Connection timeout (10s)' 
+              });
+              console.error(`❌ ${relay}: Timeout`);
+              resolve(); // IMPORTANT: resolve, not reject!
+            }, 10000);
 
-      pool.close(relays);
+            try {
+              // Publish to relay
+              const pubs = pool.publish([relay], signedEvent);
+              
+              // Inner timeout: 8s - guards against publish promise hanging
+              Promise.race([
+                Promise.all(pubs), // Wait for relay confirmation
+                new Promise((_, reject) => 
+                  setTimeout(() => reject(new Error('Publish timeout')), 8000)
+                )
+              ]).then(() => {
+                clearTimeout(timeout);
+                publishResults.push({ relay, success: true });
+                console.log(`✅ ${relay}: Successfully published`);
+                resolve();
+              }).catch((error) => {
+                clearTimeout(timeout);
+                const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+                publishResults.push({ relay, success: false, error: errorMsg });
+                console.error(`❌ ${relay}: ${errorMsg}`);
+                resolve(); // IMPORTANT: resolve, not reject!
+              });
+            } catch (error) {
+              clearTimeout(timeout);
+              const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+              publishResults.push({ relay, success: false, error: errorMsg });
+              console.error(`❌ ${relay}: ${errorMsg}`);
+              resolve(); // IMPORTANT: resolve, not reject!
+            }
+          });
+        });
+        
+        // Wait for ALL relays to complete or timeout
+        await Promise.all(publishPromises);
+        
+        // Summary
+        const successCount = publishResults.filter(r => r.success).length;
+        const failedCount = publishResults.filter(r => !r.success).length;
+        
+        console.log('📊 Publishing summary:', {
+          eventId: signedEvent.id,
+          total: publishResults.length,
+          successful: successCount,
+          failed: failedCount,
+          details: publishResults
+        });
 
-      // Step 7: Navigate to result page
-      const params = new URLSearchParams({
-        success: "true",
-        txHash,
-        projectId: projectId || "",
-        projectTitle: project.title,
-        amount: amount.toString(),
-        currency: project.currency,
-        lanaAmount: lanaAmount.toFixed(8),
-        fee: (txFee / 100000000).toFixed(8),
-        senderAddress: selectedWalletId,
-        recipientAddress: project.wallet,
-        relaysPublished: publishedCount.toString(),
-        totalRelays: relays.length.toString(),
-        eventId: signedEvent.id
-      });
+        // Navigate to result page even if some relays failed
+        const params = new URLSearchParams({
+          success: "true",
+          txHash,
+          projectId: projectId || "",
+          projectTitle: project.title,
+          amount: amount.toString(),
+          currency: project.currency,
+          lanaAmount: lanaAmount.toFixed(8),
+          fee: (txFee / 100000000).toFixed(8),
+          senderAddress: selectedWalletId,
+          recipientAddress: project.wallet,
+          relaysPublished: successCount.toString(),
+          totalRelays: relays.length.toString(),
+          eventId: signedEvent.id
+        });
 
-      navigate(`/100millionideas/donate-result?${params.toString()}`);
+        navigate(`/100millionideas/donate-result?${params.toString()}`);
+      } finally {
+        // CRITICAL: ALWAYS close pool
+        pool.close(relays);
+      }
 
     } catch (error) {
       console.error("Donation error:", error);
