@@ -9,6 +9,10 @@ import { ArrowLeft, Loader2, ScanLine, AlertCircle, CheckCircle } from "lucide-r
 import { convertWifToIds } from "@/lib/crypto";
 import { useToast } from "@/hooks/use-toast";
 import { QRScanner } from "@/components/QRScanner";
+import { supabase } from "@/integrations/supabase/client";
+import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { finalizeEvent, SimplePool } from "nostr-tools";
 
 const DonatePrivateKey = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -16,6 +20,8 @@ const DonatePrivateKey = () => {
   const location = useLocation();
   const { toast } = useToast();
   const { projects, isLoading: projectsLoading } = useNostrProjects();
+  const { parameters } = useSystemParameters();
+  const { session } = useAuth();
   
   const [privateKey, setPrivateKey] = useState<string>("");
   const [isValidating, setIsValidating] = useState(false);
@@ -74,22 +80,146 @@ const DonatePrivateKey = () => {
     return () => clearTimeout(timeoutId);
   }, [privateKey, selectedWalletId]);
 
-  const handleContinue = () => {
-    if (!isValid) return;
+  const handleContinue = async () => {
+    if (!isValid || !project || !parameters) return;
 
-    toast({
-      title: "Private Key Verified",
-      description: "Proceeding to complete donation...",
-    });
-
-    // TODO: Navigate to transaction confirmation/result page
-    setTimeout(() => {
+    setIsValidating(true);
+    
+    try {
       toast({
-        title: "Donation Processing",
-        description: "Transaction functionality will be implemented soon",
+        title: "Processing Donation",
+        description: "Creating transaction...",
       });
-      navigate(`/100millionideas/project/${projectId}`);
-    }, 1500);
+
+      // Step 1: Get service name from app_settings
+      const { data: appNameData } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'app_name')
+        .single();
+      
+      const serviceName = appNameData?.value || 'LanaCrowd';
+
+      // Step 2: Convert FIAT amount to lanoshis
+      const lanaAmountLanoshis = Math.floor(lanaAmount * 100000000);
+
+      // Step 3: Call send-lana-transaction edge function
+      const { data: txData, error: txError } = await supabase.functions.invoke('send-lana-transaction', {
+        body: {
+          senderAddress: selectedWalletId,
+          recipientAddress: project.wallet,
+          amount: lanaAmountLanoshis / 100000000, // Convert back to LANA
+          privateKey: privateKey.trim(),
+          emptyWallet: false,
+          electrumServers: parameters.electrumServers || []
+        }
+      });
+
+      if (txError || !txData?.success) {
+        throw new Error(txData?.error || 'Transaction failed');
+      }
+
+      const txHash = txData.txHash;
+      const txFee = txData.fee;
+
+      toast({
+        title: "Transaction Successful",
+        description: "Creating donation record...",
+      });
+
+      // Step 4: Get private key details for signing
+      const keyDetails = await convertWifToIds(privateKey.trim());
+
+      // Step 5: Create KIND 60200 event
+      const eventTemplate = {
+        kind: 60200,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ["service", "lanacrowd"],
+          ["project", `project:${projectId}`],
+          ["p", keyDetails.nostrHexId, "supporter"],
+          ["p", project.pubkey, "project_owner"],
+          ["amount_lanoshis", lanaAmountLanoshis.toString()],
+          ["amount_fiat", amount.toString()],
+          ["currency", project.currency],
+          ["from_wallet", selectedWalletId],
+          ["to_wallet", project.wallet],
+          ["tx", txHash],
+          ["timestamp_paid", Math.floor(Date.now() / 1000).toString()]
+        ],
+        content: message || `Supporting ${project.title} with ${amount} ${project.currency}`
+      };
+
+      // Sign the event
+      const signedEvent = finalizeEvent(eventTemplate, hexToBytes(keyDetails.nostrPrivateKey));
+
+      toast({
+        title: "Broadcasting Event",
+        description: "Publishing to Nostr relays...",
+      });
+
+      // Step 6: Broadcast to Nostr relays
+      const pool = new SimplePool();
+      const relays = parameters.relays || [];
+      
+      let publishedCount = 0;
+      await Promise.allSettled(
+        relays.map(async (relay: string) => {
+          try {
+            await pool.publish([relay], signedEvent);
+            publishedCount++;
+          } catch (err) {
+            console.error(`Failed to publish to ${relay}:`, err);
+          }
+        })
+      );
+
+      pool.close(relays);
+
+      // Step 7: Navigate to result page
+      const params = new URLSearchParams({
+        success: "true",
+        txHash,
+        projectId: projectId || "",
+        projectTitle: project.title,
+        amount: amount.toString(),
+        currency: project.currency,
+        lanaAmount: lanaAmount.toFixed(8),
+        fee: (txFee / 100000000).toFixed(8),
+        senderAddress: selectedWalletId,
+        recipientAddress: project.wallet,
+        relaysPublished: publishedCount.toString(),
+        totalRelays: relays.length.toString(),
+        eventId: signedEvent.id
+      });
+
+      navigate(`/100millionideas/donate-result?${params.toString()}`);
+
+    } catch (error) {
+      console.error("Donation error:", error);
+      
+      const params = new URLSearchParams({
+        success: "false",
+        error: error instanceof Error ? error.message : "Donation failed",
+        projectId: projectId || "",
+        projectTitle: project?.title || "",
+        amount: amount.toString(),
+        currency: project?.currency || "EUR"
+      });
+
+      navigate(`/100millionideas/donate-result?${params.toString()}`);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  // Helper function to convert hex string to Uint8Array
+  const hexToBytes = (hex: string): Uint8Array => {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < hex.length; i += 2) {
+      bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+    }
+    return bytes;
   };
 
   if (projectsLoading) {
