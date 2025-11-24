@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { FolderKanban, Heart } from "lucide-react";
+import { FolderKanban, Heart, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const MillionIdeasLayout = () => {
@@ -46,6 +46,16 @@ const MillionIdeasLayout = () => {
               </Button>
             );
           })}
+          
+          {/* Create Project Button */}
+          <Button
+            variant="ghost"
+            onClick={() => window.open('https://100million.fun/login', '_blank')}
+            className="flex flex-col items-center gap-1 h-auto py-2 px-4 text-muted-foreground hover:text-primary"
+          >
+            <PlusCircle className="h-5 w-5" />
+            <span className="text-xs">Create Project</span>
+          </Button>
         </div>
       </div>
     </div>
