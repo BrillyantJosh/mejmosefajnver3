@@ -121,11 +121,14 @@ const DonateToProject = () => {
       return;
     }
 
-    // TODO: Implement actual donation logic
-    // This will involve creating a KIND 60200 event and broadcasting it
-    toast({
-      title: "Coming soon",
-      description: "Donation functionality will be implemented soon",
+    // Navigate to private key entry page
+    navigate(`/100millionideas/donate-private-key/${projectId}`, {
+      state: {
+        selectedWalletId,
+        amount,
+        lanaAmount,
+        message
+      }
     });
   };
 
