@@ -241,7 +241,10 @@ const ProjectDetail = () => {
             </div>
           </div>
 
-          <Button className="w-full bg-green-500 hover:bg-green-600 text-white">
+          <Button 
+            className="w-full bg-green-500 hover:bg-green-600 text-white"
+            onClick={() => navigate(`/100millionideas/donate/${projectId}`)}
+          >
             Donate with LANA
           </Button>
         </Card>
