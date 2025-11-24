@@ -60,6 +60,7 @@ import MillionIdeasLayout from "./pages/100millionideas/MillionIdeasLayout";
 import Projects from "./pages/100millionideas/Projects";
 import ProjectDetail from "./pages/100millionideas/ProjectDetail";
 import DonateToProject from "./pages/100millionideas/DonateToProject";
+import DonatePrivateKey from "./pages/100millionideas/DonatePrivateKey";
 import MyDonations from "./pages/100millionideas/MyDonations";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
@@ -159,6 +160,7 @@ const App = () => (
           <Route path="projects" element={<Projects />} />
           <Route path="project/:projectId" element={<ProjectDetail />} />
           <Route path="donate/:projectId" element={<DonateToProject />} />
+          <Route path="donate-private-key/:projectId" element={<DonatePrivateKey />} />
           <Route path="my-donations" element={<MyDonations />} />
         </Route>
                   <Route path="/chat" element={<Chat />} />
