@@ -165,6 +165,19 @@ export default function MyEvents() {
     setCurrentPage(1);
   }, [kindFilter]);
 
+  // Auto-search with debounce when KIND filter is entered
+  useEffect(() => {
+    if (!kindFilter || !session?.nostrHexId || !parameters?.relays || selectedRelays.length === 0) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      searchAllHistory();
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [kindFilter, session?.nostrHexId, selectedRelays]);
+
   const handleSelectEvent = (eventId: string, isKind0: boolean) => {
     if (isKind0) return; // Cannot select KIND 0 events
     
@@ -405,24 +418,12 @@ export default function MyEvents() {
                 </div>
                 {kindFilter && (
                   <>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={searchAllHistory}
-                      disabled={isSearchingAllHistory}
-                    >
-                      {isSearchingAllHistory ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          Searching...
-                        </>
-                      ) : (
-                        <>
-                          <Search className="h-4 w-4 mr-2" />
-                          Search All
-                        </>
-                      )}
-                    </Button>
+                    {isSearchingAllHistory && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Searching all history...
+                      </div>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
