@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useNostrProjects } from "@/hooks/useNostrProjects";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ const DonateToProject = () => {
   const navigate = useNavigate();
   const { session } = useAuth();
   const { toast } = useToast();
+  const { parameters } = useSystemParameters();
   const { projects, isLoading: projectsLoading } = useNostrProjects();
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
   
@@ -44,16 +46,31 @@ const DonateToProject = () => {
   const fetchWalletBalances = async (walletIds: string[]) => {
     setLoadingBalances(true);
     try {
+      const electrumServers = parameters?.electrumServers || [];
+      
+      if (electrumServers.length === 0) {
+        console.error('No Electrum servers available');
+        toast({
+          title: "Error",
+          description: "No Electrum servers configured",
+          variant: "destructive"
+        });
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('get-wallet-balances', {
-        body: { walletIds }
+        body: { 
+          wallet_addresses: walletIds,
+          electrum_servers: electrumServers
+        }
       });
 
       if (error) throw error;
 
-      if (data?.balances) {
+      if (data?.wallets) {
         const balancesMap: Record<string, number> = {};
-        data.balances.forEach((b: WalletBalance) => {
-          balancesMap[b.wallet_id] = b.balance;
+        data.wallets.forEach((w: WalletBalance) => {
+          balancesMap[w.wallet_id] = w.balance;
         });
         setWalletBalances(balancesMap);
       }
@@ -69,8 +86,8 @@ const DonateToProject = () => {
     }
   };
 
-  const formatBalance = (lanoshis: number): string => {
-    return (lanoshis / 100000000).toFixed(8);
+  const formatBalance = (balance: number): string => {
+    return balance.toFixed(2);
   };
 
   const handleDonate = async () => {
