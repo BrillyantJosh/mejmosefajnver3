@@ -29,7 +29,7 @@ const DonateToProject = () => {
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
   
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
-  const [amount, setAmount] = useState<string>("100.00");
+  const [amount, setAmount] = useState<string>("0");
   const [message, setMessage] = useState<string>("");
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [loadingBalances, setLoadingBalances] = useState(false);
@@ -89,6 +89,27 @@ const DonateToProject = () => {
   const formatBalance = (balance: number): string => {
     return balance.toFixed(2);
   };
+
+  // Calculate LANA amount from EUR using exchange rate
+  const calculateLanaAmount = (): number => {
+    const eurAmount = parseFloat(amount) || 0;
+    if (eurAmount === 0 || !project) return 0;
+    
+    // Get exchange rate from system parameters
+    const exchangeRate = parameters?.exchangeRates?.EUR || 0;
+    if (exchangeRate === 0) return 0;
+    
+    // Formula: EUR / exchangeRate = LANA
+    return eurAmount / exchangeRate;
+  };
+
+  const lanaAmount = calculateLanaAmount();
+  const selectedWalletBalance = selectedWalletId && walletBalances[selectedWalletId] 
+    ? walletBalances[selectedWalletId] 
+    : 0;
+  
+  const hasSufficientBalance = lanaAmount > 0 && selectedWalletBalance >= lanaAmount;
+  const canDonate = selectedWalletId && amount && parseFloat(amount) > 0 && hasSufficientBalance && !loadingBalances;
 
   const handleDonate = async () => {
     if (!selectedWalletId || !amount || !project) {
@@ -251,15 +272,49 @@ const DonateToProject = () => {
             <CardHeader>
               <CardTitle className="text-lg">Donation Amount ({project.currency}) *</CardTitle>
             </CardHeader>
-            <CardContent>
-              <Input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="100.00"
-                step="0.01"
-                min="0"
-              />
+            <CardContent className="space-y-4">
+              <div>
+                <Input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+              
+              {/* LANA Amount Display */}
+              {parseFloat(amount) > 0 && (
+                <div className="bg-muted p-4 rounded-md space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Amount in LANA:</span>
+                    <span className="text-lg font-bold">
+                      {lanaAmount.toFixed(2)} LANA
+                    </span>
+                  </div>
+                  {parameters?.exchangeRates?.EUR && (
+                    <p className="text-xs text-muted-foreground">
+                      Exchange rate: 1 LANA = {parameters.exchangeRates.EUR.toFixed(6)} {project.currency}
+                    </p>
+                  )}
+                  
+                  {/* Balance Check */}
+                  {selectedWalletId && (
+                    <div className="pt-2 border-t">
+                      {hasSufficientBalance ? (
+                        <p className="text-sm text-green-500 flex items-center gap-2">
+                          ✓ Sufficient balance available
+                        </p>
+                      ) : (
+                        <p className="text-sm text-destructive flex items-center gap-2">
+                          ✗ Insufficient balance (Available: {selectedWalletBalance.toFixed(2)} LANA)
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -281,11 +336,31 @@ const DonateToProject = () => {
           {/* Donate Button */}
           <Button
             onClick={handleDonate}
-            disabled={!selectedWalletId || !amount || loadingBalances}
-            className="w-full bg-green-500 hover:bg-green-600 text-white h-12"
+            disabled={!canDonate}
+            className="w-full bg-green-500 hover:bg-green-600 text-white h-12 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={!hasSufficientBalance && selectedWalletId && parseFloat(amount) > 0 ? "Insufficient balance" : ""}
           >
-            Donate {amount} {project.currency}
+            {parseFloat(amount) > 0 
+              ? `Donate ${amount} ${project.currency} (${lanaAmount.toFixed(2)} LANA)`
+              : `Donate`
+            }
           </Button>
+          
+          {!selectedWalletId && (
+            <p className="text-sm text-center text-muted-foreground">
+              Please select a wallet to continue
+            </p>
+          )}
+          {selectedWalletId && parseFloat(amount) === 0 && (
+            <p className="text-sm text-center text-muted-foreground">
+              Please enter an amount to donate
+            </p>
+          )}
+          {!hasSufficientBalance && selectedWalletId && parseFloat(amount) > 0 && (
+            <p className="text-sm text-center text-destructive">
+              Insufficient balance in selected wallet
+            </p>
+          )}
         </div>
       </div>
     </div>
