@@ -59,6 +59,7 @@ const ProjectDetail = () => {
 
   const fundingGoal = parseFloat(project.fiatGoal);
   const percentageFunded = fundingGoal > 0 ? (totalRaised / fundingGoal) * 100 : 0;
+  const isFullyFunded = totalRaised >= fundingGoal;
 
   return (
     <div className="min-h-screen bg-background">
@@ -215,6 +216,15 @@ const ProjectDetail = () => {
             <Target className="h-5 w-5 mt-1 text-muted-foreground" />
             <div className="flex-1">
               <h2 className="text-2xl font-bold mb-4">Funding Goal</h2>
+              
+              {isFullyFunded && (
+                <div className="mb-4 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <p className="text-green-600 dark:text-green-400 font-semibold text-center">
+                    🎉 Project Successfully Funded!
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div>
                   <div className="flex items-baseline gap-2 mb-2">
@@ -242,10 +252,11 @@ const ProjectDetail = () => {
           </div>
 
           <Button 
-            className="w-full bg-green-500 hover:bg-green-600 text-white"
+            className="w-full bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => navigate(`/100millionideas/donate/${projectId}`)}
+            disabled={isFullyFunded}
           >
-            Donate with LANA
+            {isFullyFunded ? 'Project Fully Funded' : 'Donate with LANA'}
           </Button>
         </Card>
 
