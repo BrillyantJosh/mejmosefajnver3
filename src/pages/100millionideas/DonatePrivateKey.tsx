@@ -1,11 +1,11 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNostrProjects } from "@/hooks/useNostrProjects";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Loader2, ScanLine, AlertCircle } from "lucide-react";
+import { ArrowLeft, Loader2, ScanLine, AlertCircle, CheckCircle } from "lucide-react";
 import { convertWifToIds } from "@/lib/crypto";
 import { useToast } from "@/hooks/use-toast";
 import { QRScanner } from "@/components/QRScanner";
@@ -21,6 +21,7 @@ const DonatePrivateKey = () => {
   const [isValidating, setIsValidating] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [validationError, setValidationError] = useState<string>("");
+  const [isValid, setIsValid] = useState(false);
 
   const project = projects.find(p => p.id === projectId);
   
@@ -36,56 +37,59 @@ const DonatePrivateKey = () => {
   const handleQRScan = (data: string) => {
     setPrivateKey(data);
     setShowScanner(false);
-    setValidationError("");
   };
 
-  const validatePrivateKey = async () => {
-    setIsValidating(true);
-    setValidationError("");
-
-    try {
-      // Convert WIF to wallet ID
-      const result = await convertWifToIds(privateKey.trim());
-      
-      // Check if wallet ID matches
-      if (result.walletId !== selectedWalletId) {
-        setValidationError("Private key does not match the selected wallet");
-        toast({
-          title: "Invalid Private Key",
-          description: "The private key does not match the selected wallet address",
-          variant: "destructive"
-        });
+  // Real-time validation
+  useEffect(() => {
+    const validateKey = async () => {
+      if (!privateKey.trim()) {
+        setValidationError("");
+        setIsValid(false);
         setIsValidating(false);
         return;
       }
 
-      // Valid private key - proceed to transaction
-      toast({
-        title: "Private Key Verified",
-        description: "Proceeding to complete donation...",
-      });
+      setIsValidating(true);
+      setValidationError("");
 
-      // TODO: Navigate to transaction confirmation/result page
-      // For now, show success message
-      setTimeout(() => {
-        toast({
-          title: "Donation Processing",
-          description: "Transaction functionality will be implemented soon",
-        });
-        navigate(`/100millionideas/project/${projectId}`);
-      }, 1500);
+      try {
+        const result = await convertWifToIds(privateKey.trim());
+        
+        if (result.walletId !== selectedWalletId) {
+          setValidationError("Private key does not match the selected wallet");
+          setIsValid(false);
+        } else {
+          setValidationError("");
+          setIsValid(true);
+        }
+      } catch (error) {
+        setValidationError("Invalid private key format");
+        setIsValid(false);
+      } finally {
+        setIsValidating(false);
+      }
+    };
 
-    } catch (error) {
-      console.error("Error validating private key:", error);
-      setValidationError("Invalid private key format");
+    const timeoutId = setTimeout(validateKey, 500);
+    return () => clearTimeout(timeoutId);
+  }, [privateKey, selectedWalletId]);
+
+  const handleContinue = () => {
+    if (!isValid) return;
+
+    toast({
+      title: "Private Key Verified",
+      description: "Proceeding to complete donation...",
+    });
+
+    // TODO: Navigate to transaction confirmation/result page
+    setTimeout(() => {
       toast({
-        title: "Invalid Private Key",
-        description: "Please check your private key and try again",
-        variant: "destructive"
+        title: "Donation Processing",
+        description: "Transaction functionality will be implemented soon",
       });
-    } finally {
-      setIsValidating(false);
-    }
+      navigate(`/100millionideas/project/${projectId}`);
+    }, 1500);
   };
 
   if (projectsLoading) {
@@ -177,17 +181,25 @@ const DonatePrivateKey = () => {
               <div>
                 <Label htmlFor="private-key">Enter your wallet's private key</Label>
                 <div className="flex gap-2 mt-2">
-                  <Input
-                    id="private-key"
-                    type="password"
-                    value={privateKey}
-                    onChange={(e) => {
-                      setPrivateKey(e.target.value);
-                      setValidationError("");
-                    }}
-                    placeholder="6v7y8KLxbYtvcp1PRQXLQBX..."
-                    className="font-mono"
-                  />
+                  <div className="relative flex-1">
+                    <Input
+                      id="private-key"
+                      type="password"
+                      value={privateKey}
+                      onChange={(e) => setPrivateKey(e.target.value)}
+                      placeholder="6v7y8KLxbYtvcp1PRQXLQBX..."
+                      className="font-mono pr-10"
+                    />
+                    {isValidating && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                    {!isValidating && isValid && (
+                      <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500" />
+                    )}
+                    {!isValidating && validationError && (
+                      <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive" />
+                    )}
+                  </div>
                   <Button
                     variant="outline"
                     size="icon"
@@ -208,23 +220,23 @@ const DonatePrivateKey = () => {
                   <span>{validationError}</span>
                 </div>
               )}
+
+              {isValid && (
+                <div className="flex items-center gap-2 text-sm text-green-600 bg-green-500/10 p-3 rounded-md">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Private key verified successfully</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {/* Continue Button */}
           <Button
-            onClick={validatePrivateKey}
-            disabled={!privateKey.trim() || isValidating}
-            className="w-full bg-green-500 hover:bg-green-600 text-white h-12"
+            onClick={handleContinue}
+            disabled={!isValid || isValidating}
+            className="w-full bg-green-500 hover:bg-green-600 text-white h-12 disabled:opacity-50"
           >
-            {isValidating ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Verifying...
-              </>
-            ) : (
-              "Continue with Donation"
-            )}
+            Continue with Donation
           </Button>
 
           <p className="text-xs text-center text-muted-foreground">
