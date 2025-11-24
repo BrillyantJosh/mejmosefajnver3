@@ -84,38 +84,28 @@ export const useNostrProjectDonations = (projectId: string) => {
       setIsLoading(true);
 
       try {
-        const filter = {
-          kinds: [60200],
-          '#project': [projectId],
-          limit: 100
-        };
-        
         console.log('🔍 Fetching donations for project:', projectId);
         console.log('📡 Using relays:', parameters.relays);
-        console.log('🔎 Filter:', JSON.stringify(filter, null, 2));
         
-        const donationEvents = await pool.querySync(parameters.relays, filter);
+        // Fetch ALL KIND 60200 events and filter manually
+        // because tag filtering in querySync doesn't work reliably
+        const allDonationEvents = await pool.querySync(parameters.relays, {
+          kinds: [60200],
+          limit: 200
+        });
 
-        console.log(`💰 Fetched ${donationEvents.length} donation events for project ${projectId}`);
+        console.log(`💰 Fetched ${allDonationEvents.length} total KIND 60200 events`);
+        
+        // Filter for this specific project
+        const donationEvents = allDonationEvents.filter(event => {
+          const projectTag = event.tags.find(t => t[0] === 'project')?.[1];
+          return projectTag === projectId;
+        });
+
+        console.log(`🎯 Filtered to ${donationEvents.length} donations for project ${projectId}`);
         
         if (donationEvents.length > 0) {
           console.log('📝 First donation event:', JSON.stringify(donationEvents[0], null, 2));
-        } else {
-          console.warn('⚠️ No donation events found. Filter used:', filter);
-          console.warn('⚠️ Checking if events exist by querying ALL KIND 60200 events...');
-          
-          // Try to fetch ALL kind 60200 events to see if any exist
-          const allDonations = await pool.querySync(parameters.relays, {
-            kinds: [60200],
-            limit: 50
-          });
-          console.log(`📊 Total KIND 60200 events on relays: ${allDonations.length}`);
-          if (allDonations.length > 0) {
-            console.log('📝 Sample KIND 60200 event:', JSON.stringify(allDonations[0], null, 2));
-            console.log('📋 All project tags found:', 
-              allDonations.map(e => e.tags.find(t => t[0] === 'project')?.[1])
-            );
-          }
         }
 
         const parsedDonations = donationEvents
