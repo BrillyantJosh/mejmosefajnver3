@@ -59,6 +59,7 @@ import UnregisteredWallets from "./pages/unregistered-wallets/UnregisteredWallet
 import MillionIdeasLayout from "./pages/100millionideas/MillionIdeasLayout";
 import Projects from "./pages/100millionideas/Projects";
 import ProjectDetail from "./pages/100millionideas/ProjectDetail";
+import DonateToProject from "./pages/100millionideas/DonateToProject";
 import MyDonations from "./pages/100millionideas/MyDonations";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
@@ -157,6 +158,7 @@ const App = () => (
           <Route index element={<Navigate to="/100millionideas/projects" replace />} />
           <Route path="projects" element={<Projects />} />
           <Route path="project/:projectId" element={<ProjectDetail />} />
+          <Route path="donate/:projectId" element={<DonateToProject />} />
           <Route path="my-donations" element={<MyDonations />} />
         </Route>
                   <Route path="/chat" element={<Chat />} />
