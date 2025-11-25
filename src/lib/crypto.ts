@@ -118,8 +118,29 @@ async function wifToPrivateKey(wif: string): Promise<string> {
   }
 }
 
+// Generate random private key (32 bytes)
+export function generateRandomPrivateKey(): string {
+  const randomBytes = new Uint8Array(32);
+  crypto.getRandomValues(randomBytes);
+  return bytesToHex(randomBytes);
+}
+
+// Encode private key to WIF (Wallet Import Format)
+export async function privateKeyToWIF(privateKeyHex: string): Promise<string> {
+  // Add version byte (0xb0 for LanaCoin)
+  const extendedKey = 'b0' + privateKeyHex;
+  
+  // Calculate checksum (first 4 bytes of double SHA-256)
+  const checksumFull = await sha256d(hexToBytes(extendedKey));
+  const checksum = bytesToHex(checksumFull).substring(0, 8);
+  
+  // Combine and encode to Base58
+  const wifHex = extendedKey + checksum;
+  return base58Encode(hexToBytes(wifHex));
+}
+
 // Generate uncompressed public key from private key
-function generatePublicKey(privateKeyHex: string): string {
+export function generatePublicKey(privateKeyHex: string): string {
   const keyPair = ec.keyFromPrivate(privateKeyHex);
   const pubKeyPoint = keyPair.getPublic();
   
@@ -139,7 +160,7 @@ function deriveNostrPublicKey(privateKeyHex: string): string {
 }
 
 // Generate LanaCoin wallet address from public key
-async function generateLanaAddress(publicKeyHex: string): Promise<string> {
+export async function generateLanaAddress(publicKeyHex: string): Promise<string> {
   // Step 1: SHA-256 of public key
   const sha256Hash = await sha256(publicKeyHex);
   
