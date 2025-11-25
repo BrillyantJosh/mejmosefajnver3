@@ -55,9 +55,7 @@ import RockLayout from "./pages/rock/RockLayout";
 import RockGrant from "./pages/rock/Grant";
 import RockGrantNew from "./pages/rock/GrantNew";
 import RockReceived from "./pages/rock/Received";
-import UnregisteredWalletsLayout from "./pages/unregistered-wallets/UnregisteredWalletsLayout";
-import GenerateWallet from "./pages/unregistered-wallets/GenerateWallet";
-import OfflineWallets from "./pages/unregistered-wallets/OfflineWallets";
+import UnregisteredWallets from "./pages/unregistered-wallets/UnregisteredWallets";
 import MillionIdeasLayout from "./pages/100millionideas/MillionIdeasLayout";
 import Projects from "./pages/100millionideas/Projects";
 import ProjectDetail from "./pages/100millionideas/ProjectDetail";
@@ -157,11 +155,7 @@ const App = () => (
             <Route path="grant-new" element={<RockGrantNew />} />
             <Route path="received" element={<RockReceived />} />
           </Route>
-          <Route path="/unregistered-wallets" element={<UnregisteredWalletsLayout />}>
-            <Route index element={<Navigate to="/unregistered-wallets/generate" replace />} />
-            <Route path="generate" element={<GenerateWallet />} />
-            <Route path="offline" element={<OfflineWallets />} />
-          </Route>
+          <Route path="/unregistered-wallets" element={<UnregisteredWallets />} />
         <Route path="/100millionideas" element={<MillionIdeasLayout />}>
           <Route index element={<Navigate to="/100millionideas/projects" replace />} />
           <Route path="projects" element={<Projects />} />
