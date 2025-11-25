@@ -63,6 +63,9 @@ import DonateToProject from "./pages/100millionideas/DonateToProject";
 import DonatePrivateKey from "./pages/100millionideas/DonatePrivateKey";
 import DonateResult from "./pages/100millionideas/DonateResult";
 import MyDonations from "./pages/100millionideas/MyDonations";
+import OfflineLanaLayout from "./pages/offlinelana/OfflineLanaLayout";
+import GenerateWallet from "./pages/offlinelana/GenerateWallet";
+import OfflineWallets from "./pages/offlinelana/OfflineWallets";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -164,6 +167,11 @@ const App = () => (
           <Route path="donate-private-key/:projectId" element={<DonatePrivateKey />} />
           <Route path="donate-result" element={<DonateResult />} />
           <Route path="my-donations" element={<MyDonations />} />
+        </Route>
+        <Route path="/offline-lana" element={<OfflineLanaLayout />}>
+          <Route index element={<Navigate to="/offline-lana/generate" replace />} />
+          <Route path="generate" element={<GenerateWallet />} />
+          <Route path="offline-wallets" element={<OfflineWallets />} />
         </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
