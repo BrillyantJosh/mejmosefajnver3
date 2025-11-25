@@ -76,60 +76,62 @@ const GenerateWallet = () => {
         <head>
           <title>LanaCoin Paper Wallet</title>
           <style>
-            @page { margin: 2cm; }
+            @page { margin: 1cm; }
             body {
               font-family: Arial, sans-serif;
-              padding: 20px;
+              padding: 10px;
               max-width: 800px;
               margin: 0 auto;
             }
             h1 {
               text-align: center;
               color: #333;
-              margin-bottom: 30px;
+              margin-bottom: 15px;
+              font-size: 20px;
             }
             .wallet-section {
-              margin: 30px 0;
-              padding: 20px;
+              margin: 15px 0;
+              padding: 12px;
               border: 2px solid #333;
               border-radius: 8px;
               page-break-inside: avoid;
             }
             .label {
               font-weight: bold;
-              font-size: 14px;
+              font-size: 12px;
               color: #666;
-              margin-bottom: 8px;
+              margin-bottom: 5px;
             }
             .value {
               font-family: monospace;
-              font-size: 12px;
+              font-size: 10px;
               word-break: break-all;
-              margin-bottom: 15px;
-              padding: 10px;
+              margin-bottom: 10px;
+              padding: 8px;
               background: #f5f5f5;
               border-radius: 4px;
             }
             .qr-container {
               display: flex;
               justify-content: center;
-              margin: 20px 0;
-              padding: 15px;
+              margin: 10px 0;
+              padding: 8px;
               background: white;
             }
             .description {
-              margin-top: 20px;
-              padding: 15px;
+              margin-top: 10px;
+              padding: 10px;
               background: #fffbea;
               border-radius: 4px;
+              font-size: 12px;
             }
             .warning {
-              margin-top: 30px;
-              padding: 15px;
+              margin-top: 15px;
+              padding: 10px;
               background: #fee;
               border: 1px solid #fcc;
               border-radius: 4px;
-              font-size: 12px;
+              font-size: 10px;
             }
             @media print {
               body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -137,7 +139,7 @@ const GenerateWallet = () => {
           </style>
         </head>
         <body>
-          <h1>🪙 LanaCoin Paper Wallet</h1>
+          <h1>LanaCoin Paper Wallet</h1>
           
           ${description ? `<div class="description"><strong>Description:</strong> ${description}</div>` : ''}
           
