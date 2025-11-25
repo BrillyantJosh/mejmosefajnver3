@@ -130,7 +130,6 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     path: '/offline-lana',
     gradient: 'from-slate-500 to-zinc-500',
     image: offlinelanaImage,
-    externalUrl: 'https://offlinelana.org',
     enabled: false,
     order: 9
   },
