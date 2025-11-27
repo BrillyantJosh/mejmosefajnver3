@@ -22,6 +22,7 @@ import { useNostrLashCounts } from "@/hooks/useNostrLashCounts";
 import { useNostrUserLashes } from "@/hooks/useNostrUserLashes";
 import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
+import { useAdmin } from "@/contexts/AdminContext";
 
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
@@ -33,9 +34,10 @@ export default function Feed() {
   const { posts, loading, loadingMore, error, retryCount, hasMore, loadMore, retry } = useNostrFeed();
   const { parameters: systemParameters } = useSystemParameters();
   const { session } = useAuth();
+  const { appSettings } = useAdmin();
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
-  const [filterMode, setFilterMode] = useState<'all' | 'rooms' | 'friends'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'rooms' | 'friends'>('rooms');
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [localLashedEvents, setLocalLashedEvents] = useState<Set<string>>(new Set());
   const [localLashCounts, setLocalLashCounts] = useState<Map<string, number>>(new Map());
@@ -112,14 +114,20 @@ export default function Feed() {
         .filter(sub => sub.status === 'active')
         .map(sub => sub.slug);
 
-      console.log('🔍 Active room slugs:', activeRoomSlugs);
+      // If user has no subscribed rooms, use default_rooms from app_settings
+      const roomsToFilter = activeRoomSlugs.length > 0 
+        ? activeRoomSlugs 
+        : (appSettings?.default_rooms || []);
+
+      console.log('🔍 Using rooms for filter:', roomsToFilter, 
+        activeRoomSlugs.length > 0 ? '(user subscribed)' : '(default rooms)');
       console.log('📝 Total posts:', posts.length);
 
-      // Filter posts that have 'a' or 't' tag matching user's subscribed rooms
+      // Filter posts that have 'a' or 't' tag matching rooms
       const filtered = posts.filter(post => {
         const roomTags = post.tags?.filter(tag => tag[0] === 'a' || tag[0] === 't') || [];
         const matchesRoom = roomTags.some(tag => {
-          const matches = activeRoomSlugs.includes(tag[1]);
+          const matches = roomsToFilter.includes(tag[1]);
           console.log(`Post ${post.id.slice(0, 8)} - tag: ${tag[1]}, matches: ${matches}`);
           return matches;
         });
@@ -137,7 +145,7 @@ export default function Feed() {
     }
 
     return posts;
-  }, [posts, filterMode, subscriptions, session]);
+  }, [posts, filterMode, subscriptions, session, appSettings?.default_rooms]);
 
   const getDisplayName = (post: any) => {
     const profile = post.profile;
@@ -400,7 +408,9 @@ export default function Feed() {
         <Card>
           <CardContent className="pt-6 text-center text-muted-foreground">
             {filterMode === 'rooms' 
-              ? 'No posts in your subscribed rooms. Try selecting "All" to see all posts.' 
+              ? subscriptions.filter(sub => sub.status === 'active').length > 0
+                ? 'No posts in your subscribed rooms. Try selecting "All" to see all posts.'
+                : 'No posts in default rooms yet. Try selecting "All" to see all posts.'
               : filterMode === 'friends'
               ? 'Friends filter coming soon!'
               : 'No posts found. Be the first to post!'}
