@@ -179,6 +179,15 @@ export function useNostrDMs() {
         const isOwn = msg.sender_pubkey === session.nostrHexId;
         const isRead = isOwn ? true : (readStatuses.get(msg.event_id) ?? false);
         
+        // Parse reply tag from stored tags
+        let replyToId: string | undefined;
+        if (msg.tags && Array.isArray(msg.tags)) {
+          const replyTag = msg.tags.find(
+            (tag: any) => Array.isArray(tag) && tag[0] === 'e' && tag[3] === 'reply'
+          );
+          replyToId = replyTag ? replyTag[1] : undefined;
+        }
+        
         conversationsMap.get(contactPubkey)!.messages.push({
           id: msg.event_id,
           pubkey: msg.sender_pubkey,
@@ -186,7 +195,8 @@ export function useNostrDMs() {
           decryptedContent: msg.decrypted_content || undefined,
           created_at: new Date(msg.created_at).getTime() / 1000,
           isOwn,
-          isRead
+          isRead,
+          replyToId
         });
       }
       
