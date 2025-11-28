@@ -786,11 +786,9 @@ export default function Profile() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="USD">USD</SelectItem>
                               <SelectItem value="EUR">EUR</SelectItem>
+                              <SelectItem value="USD">USD</SelectItem>
                               <SelectItem value="GBP">GBP</SelectItem>
-                              <SelectItem value="JPY">JPY</SelectItem>
-                              <SelectItem value="CNY">CNY</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
