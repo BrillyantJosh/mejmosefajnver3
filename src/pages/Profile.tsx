@@ -74,16 +74,18 @@ export default function Profile() {
 
   // Helper function to ensure avatar URL is in correct format
   const formatAvatarUrl = (url: string | undefined, nostrHexId: string): string => {
-    if (!url) return `https://lanaknows.us/${nostrHexId}`;
+    // Return empty string if no URL is provided
+    if (!url) return '';
     
     // If it's already a lanaknows.us URL, return it as is
     if (url.includes('lanaknows.us')) return url;
     
-    // If it's a Supabase or other URL, convert to lanaknows.us format
-    if (url.includes('supabase.co') || url.includes('http')) {
+    // If it's a Supabase URL, convert to lanaknows.us format
+    if (url.includes('supabase.co')) {
       return `https://lanaknows.us/${nostrHexId}`;
     }
     
+    // Return the original URL for all other cases (including external URLs)
     return url;
   };
 
@@ -938,7 +940,7 @@ export default function Profile() {
                     name="statement_of_responsibility"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-destructive">Statement of Self-Responsibility *</FormLabel>
+                        <FormLabel>Statement of Self-Responsibility *</FormLabel>
                         <FormControl>
                           <Textarea 
                             placeholder="Write in your own words that you accept unconditional self-responsibility inside the Lana World..."
