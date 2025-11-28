@@ -33,6 +33,7 @@ export default function Chat() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
+  const [optimisticLashes, setOptimisticLashes] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
@@ -54,6 +55,9 @@ export default function Chat() {
   const messageIds = displayConversation?.messages.map(m => m.id) || [];
   const { lashCounts } = useNostrLashCounts(messageIds);
   const { messageLashers } = useNostrMessageLashers(messageIds);
+
+  // Merge optimistic lashes with actual lashed events
+  const allLashedEventIds = new Set([...lashedEventIds, ...optimisticLashes]);
 
   // Handle incoming pubkey from navigation (e.g., from Marketplace "Contact Seller")
   useEffect(() => {
@@ -131,6 +135,9 @@ export default function Chat() {
       return;
     }
 
+    // Optimistic update - immediately add to UI
+    setOptimisticLashes(prev => new Set([...prev, messageId]));
+
     const result = await giveLash({
       postId: messageId,
       recipientPubkey: recipientPubkey,
@@ -143,7 +150,14 @@ export default function Chat() {
         title: "Success",
         description: "LASH sent successfully! ❤️"
       });
+      // Keep optimistic update, it will be replaced by real data on next fetch
     } else {
+      // Remove optimistic update if failed
+      setOptimisticLashes(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(messageId);
+        return newSet;
+      });
       toast({
         title: "Error",
         description: result.error || "Failed to send LASH",
@@ -650,7 +664,7 @@ export default function Chat() {
                           </p>
                         </div>
                         {!msg.isOwn && (() => {
-                          const hasLashed = lashedEventIds.has(msg.id);
+                          const hasLashed = allLashedEventIds.has(msg.id);
                           const lashCount = lashCounts.get(msg.id) || 0;
                           const lashers = messageLashers.get(msg.id) || [];
 
