@@ -19,6 +19,10 @@ import { AudioPlayer } from "@/components/AudioPlayer";
 import { DMImageUploader } from "@/components/DMImageUploader";
 import { ImageGallery } from "@/components/ImageGallery";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
+import { useNostrUserLashes } from "@/hooks/useNostrUserLashes";
+import { useNostrLashCounts } from "@/hooks/useNostrLashCounts";
+import { useNostrMessageLashers } from "@/hooks/useNostrMessageLashers";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export default function Chat() {
   const { session } = useAuth();
@@ -44,6 +48,12 @@ export default function Chat() {
     lastMessage: null,
     unreadCount: 0
   } : null);
+
+  // LASH tracking hooks
+  const { lashedEventIds } = useNostrUserLashes();
+  const messageIds = displayConversation?.messages.map(m => m.id) || [];
+  const { lashCounts } = useNostrLashCounts(messageIds);
+  const { messageLashers } = useNostrMessageLashers(messageIds);
 
   // Handle incoming pubkey from navigation (e.g., from Marketplace "Contact Seller")
   useEffect(() => {
@@ -215,6 +225,19 @@ export default function Chat() {
       return `${profile.display_name} (@${profile.full_name})`;
     }
     return profile?.display_name || profile?.full_name || pubkey.slice(0, 16) + '...';
+  };
+
+  const truncatePubkey = (pubkey: string) => {
+    return `${pubkey.slice(0, 8)}...${pubkey.slice(-8)}`;
+  };
+
+  const formatLanoshis = (amount: string) => {
+    try {
+      const lanoshis = parseInt(amount);
+      return (lanoshis / 100000000).toFixed(8);
+    } catch {
+      return '0.00000000';
+    }
   };
 
   const getLastMessageDisplay = (content: string | undefined) => {
@@ -626,28 +649,75 @@ export default function Chat() {
                             {formatTime(msg.created_at)}
                           </p>
                         </div>
-                        {!msg.isOwn && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 h-7 w-7 md:h-8 md:w-8"
-                              onClick={() => setReplyingTo(msg)}
-                              title="Reply to message"
-                            >
-                              <Reply className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 h-7 w-7 md:h-8 md:w-8"
-                              onClick={() => handleGiveLash(msg.id, msg.pubkey)}
-                              disabled={isSendingLash}
-                            >
-                              <Heart className="h-4 w-4 text-primary hover:fill-primary" />
-                            </Button>
-                          </>
-                        )}
+                        {!msg.isOwn && (() => {
+                          const hasLashed = lashedEventIds.has(msg.id);
+                          const lashCount = lashCounts.get(msg.id) || 0;
+                          const lashers = messageLashers.get(msg.id) || [];
+
+                          return (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 h-7 w-7 md:h-8 md:w-8"
+                                onClick={() => setReplyingTo(msg)}
+                                title="Reply to message"
+                              >
+                                <Reply className="h-4 w-4" />
+                              </Button>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className={`opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 h-7 w-7 md:h-8 md:w-8 ${hasLashed ? 'opacity-100' : ''}`}
+                                    onClick={(e) => {
+                                      if (!hasLashed) {
+                                        e.preventDefault();
+                                        handleGiveLash(msg.id, msg.pubkey);
+                                      }
+                                    }}
+                                    disabled={isSendingLash}
+                                  >
+                                    <Heart className={`h-4 w-4 ${hasLashed ? 'fill-red-500 text-red-500' : 'text-primary hover:fill-primary'}`} />
+                                    {lashCount > 0 && (
+                                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center font-bold">
+                                        {lashCount}
+                                      </span>
+                                    )}
+                                  </Button>
+                                </PopoverTrigger>
+                                {hasLashed && lashers.length > 0 && (
+                                  <PopoverContent className="w-80">
+                                    <div className="space-y-3">
+                                      <p className="font-semibold text-sm">LASHed by:</p>
+                                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                                        {lashers.map((lasher) => (
+                                          <div key={lasher.lashId} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                                            <Avatar className="h-8 w-8">
+                                              <AvatarImage src={lasher.picture ? getProxiedImageUrl(lasher.picture) : undefined} />
+                                              <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white text-xs">
+                                                {lasher.name?.slice(0, 2).toUpperCase() || lasher.pubkey.slice(0, 2).toUpperCase()}
+                                              </AvatarFallback>
+                                            </Avatar>
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-sm font-medium truncate">
+                                                {lasher.name || truncatePubkey(lasher.pubkey)}
+                                              </p>
+                                              <p className="text-xs text-muted-foreground">
+                                                {formatLanoshis(lasher.amount)} LANA
+                                              </p>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </PopoverContent>
+                                )}
+                              </Popover>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   ))}
