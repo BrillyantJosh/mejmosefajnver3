@@ -3,6 +3,7 @@ import { SimplePool, finalizeEvent } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { calculateExpiration } from '@/lib/lashExpiration';
+import { supabase } from '@/integrations/supabase/client';
 
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
@@ -136,6 +137,21 @@ export const useNostrLash = () => {
       const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
       
       console.log(`📊 LASH Publish Results: ${successful}/${relays.length} successful`);
+      
+      // Save to Supabase for caching (fire and forget - don't block on errors)
+      try {
+        await supabase.from('dm_lashes').insert({
+          message_event_id: postId,
+          lash_event_id: signedEvent.id,
+          sender_pubkey: session.nostrHexId,
+          recipient_pubkey: recipientPubkey,
+          amount: lashAmount,
+          expires_at: new Date(expiresAt * 1000).toISOString()
+        });
+        console.log('💾 LASH saved to Supabase cache');
+      } catch (supabaseError) {
+        console.warn('⚠️ Failed to save LASH to Supabase (non-critical):', supabaseError);
+      }
       
       console.log('✅ LASH sent successfully');
       return { success: true };

@@ -104,6 +104,39 @@ export type Database = {
         }
         Relationships: []
       }
+      dm_lashes: {
+        Row: {
+          amount: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          lash_event_id: string
+          message_event_id: string
+          recipient_pubkey: string
+          sender_pubkey: string
+        }
+        Insert: {
+          amount: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          lash_event_id: string
+          message_event_id: string
+          recipient_pubkey: string
+          sender_pubkey: string
+        }
+        Update: {
+          amount?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          lash_event_id?: string
+          message_event_id?: string
+          recipient_pubkey?: string
+          sender_pubkey?: string
+        }
+        Relationships: []
+      }
       dm_read_status: {
         Row: {
           conversation_pubkey: string
