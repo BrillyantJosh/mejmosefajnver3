@@ -36,6 +36,7 @@ interface DirectMessage {
   decryptedContent?: string;
   isOwn: boolean;
   isRead?: boolean;
+  replyToId?: string;
 }
 
 interface Conversation {
@@ -354,6 +355,16 @@ export function useNostrDMs() {
       otherPubkey: otherPubkey.slice(0, 8)
     });
 
+    // Check for reply tag
+    const replyTag = event.tags.find(
+      tag => tag[0] === 'e' && tag[3] === 'reply'
+    );
+    const replyToId = replyTag ? replyTag[1] : undefined;
+    
+    if (replyToId) {
+      console.log('↩️  Message is a reply to:', replyToId.slice(0, 8));
+    }
+
     const decryptedContent = await decryptMessage(event, otherPubkey);
 
     // Save to DB for instant loading next time
@@ -380,7 +391,8 @@ export function useNostrDMs() {
       created_at: event.created_at,
       decryptedContent,
       isOwn,
-      isRead
+      isRead,
+      replyToId
     };
 
     setConversations(prev => {
@@ -707,7 +719,7 @@ export function useNostrDMs() {
     };
   }, [session?.nostrHexId, readStatuses]);
 
-  const sendMessage = useCallback(async (recipientPubkey: string, message: string) => {
+  const sendMessage = useCallback(async (recipientPubkey: string, message: string, replyToId?: string) => {
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
       toast({
         title: 'Error',
@@ -736,10 +748,19 @@ export function useNostrDMs() {
         ? hexToBytes(session.nostrPrivateKey)
         : session.nostrPrivateKey;
       
+      // Build tags
+      const tags: string[][] = [['p', recipientPubkey]];
+      
+      // Add reply tag if replying to a message
+      if (replyToId) {
+        tags.push(['e', replyToId, '', 'reply']);
+        console.log('📧 Adding reply tag to message:', replyToId.slice(0, 8));
+      }
+      
       const event = finalizeEvent({
         kind: 4,
         content: encrypted,
-        tags: [['p', recipientPubkey]],
+        tags,
         created_at: Math.floor(Date.now() / 1000)
       }, privKeyBytes);
 
