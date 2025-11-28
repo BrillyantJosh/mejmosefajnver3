@@ -80,21 +80,13 @@ export const useBatchLashSender = () => {
 
       if (error) {
         console.error('❌ Batch send error:', error);
-        toast({
-          title: "Batch send failed",
-          description: error.message || 'Failed to send batch payment',
-          variant: "destructive",
-        });
+        // Don't show error toast - transaction will retry in next block
         return { success: false, error: error.message };
       }
 
       if (!data?.success) {
         console.error('❌ Batch send failed:', data?.error);
-        toast({
-          title: "Batch send failed",
-          description: data?.error || 'Unknown error occurred',
-          variant: "destructive",
-        });
+        // Don't show error toast - transaction will retry in next block
         return { success: false, error: data?.error };
       }
 
@@ -170,11 +162,7 @@ export const useBatchLashSender = () => {
       console.error('❌ Exception during batch send:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
-      toast({
-        title: "Batch send failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      // Don't show error toast - transaction will retry in next block
 
       return { success: false, error: errorMessage };
     } finally {
