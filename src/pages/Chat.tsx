@@ -19,9 +19,7 @@ import { AudioPlayer } from "@/components/AudioPlayer";
 import { DMImageUploader } from "@/components/DMImageUploader";
 import { ImageGallery } from "@/components/ImageGallery";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
-import { useNostrUserLashes } from "@/hooks/useNostrUserLashes";
-import { useNostrLashCounts } from "@/hooks/useNostrLashCounts";
-import { useNostrMessageLashers } from "@/hooks/useNostrMessageLashers";
+import { useNostrDMLashes } from "@/hooks/useNostrDMLashes";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export default function Chat() {
@@ -51,13 +49,18 @@ export default function Chat() {
   } : null);
 
   // LASH tracking hooks
-  const { lashedEventIds } = useNostrUserLashes();
   const messageIds = displayConversation?.messages.map(m => m.id) || [];
-  const { lashCounts } = useNostrLashCounts(messageIds);
-  const { messageLashers } = useNostrMessageLashers(messageIds);
+  
+  // Unified LASH hook - reads from Supabase cache + syncs with relays
+  const { 
+    lashCounts, 
+    userLashedIds, 
+    lashers: messageLashers,
+    refetch: refetchLashes 
+  } = useNostrDMLashes(messageIds, session?.nostrHexId);
 
   // Merge optimistic lashes with actual lashed events
-  const allLashedEventIds = new Set([...lashedEventIds, ...optimisticLashes]);
+  const allLashedEventIds = new Set([...userLashedIds, ...optimisticLashes]);
 
   // Handle incoming pubkey from navigation (e.g., from Marketplace "Contact Seller")
   useEffect(() => {
@@ -706,8 +709,8 @@ export default function Chat() {
                                     <div className="space-y-3">
                                       <p className="font-semibold text-sm">LASHed by:</p>
                                       <div className="space-y-2 max-h-60 overflow-y-auto">
-                                        {lashers.map((lasher) => (
-                                          <div key={lasher.lashId} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                                         {lashers.map((lasher) => (
+                                           <div key={lasher.pubkey} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                                             <Avatar className="h-8 w-8">
                                               <AvatarImage src={lasher.picture ? getProxiedImageUrl(lasher.picture) : undefined} />
                                               <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white text-xs">
