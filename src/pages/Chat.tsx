@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageSquare, Search, AlertCircle, Trash2, ArrowLeft, Heart, Mic, ImagePlus, Send, Loader2 } from "lucide-react";
+import { MessageSquare, Search, AlertCircle, Trash2, ArrowLeft, Heart, Mic, ImagePlus, Send, Loader2, Reply, X } from "lucide-react";
 import { useNostrDMs } from "@/hooks/useNostrDMs";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -28,6 +28,7 @@ export default function Chat() {
   const [messageInput, setMessageInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<any | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
@@ -72,8 +73,9 @@ export default function Chat() {
 
     setIsSending(true);
     try {
-      await sendMessage(selectedPubkey, messageInput);
+      await sendMessage(selectedPubkey, messageInput, replyingTo?.id);
       setMessageInput("");
+      setReplyingTo(null);
       
       // Auto-focus input field for immediate continued typing
       setTimeout(() => {
@@ -142,6 +144,20 @@ export default function Chat() {
 
   const handleBackToList = () => {
     setSelectedPubkey(null);
+    setReplyingTo(null);
+  };
+
+  const findMessageById = (messageId: string) => {
+    return displayConversation?.messages.find(m => m.id === messageId);
+  };
+
+  const scrollToMessage = (messageId: string) => {
+    const element = document.getElementById(`message-${messageId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.classList.add('animate-pulse');
+      setTimeout(() => element.classList.remove('animate-pulse'), 2000);
+    }
   };
 
   const filteredConversations = conversations.filter(conv => {
@@ -538,6 +554,7 @@ export default function Chat() {
                   {displayConversation.messages.map((msg) => (
                     <div 
                       key={msg.id}
+                      id={`message-${msg.id}`}
                       className={`flex gap-2 items-start ${msg.isOwn ? 'justify-end' : 'justify-start'} group w-full`}
                     >
                       {!msg.isOwn && (
@@ -550,20 +567,56 @@ export default function Chat() {
                       )}
                       <div className="flex items-start gap-1 max-w-[85%] md:max-w-[70%] min-w-0">
                         {msg.isOwn && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 h-7 w-7 md:h-8 md:w-8"
-                            onClick={() => handleDeleteMessage(msg.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 h-7 w-7 md:h-8 md:w-8"
+                              onClick={() => setReplyingTo(msg)}
+                              title="Reply to message"
+                            >
+                              <Reply className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 h-7 w-7 md:h-8 md:w-8"
+                              onClick={() => handleDeleteMessage(msg.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </>
                         )}
                         <div className={`rounded-lg p-3 overflow-hidden break-words max-w-full ${
                           msg.isOwn 
                             ? 'bg-primary text-primary-foreground' 
                             : 'bg-muted text-foreground'
                         }`}>
+                          {msg.replyToId && (() => {
+                            const originalMsg = findMessageById(msg.replyToId);
+                            return originalMsg ? (
+                              <div 
+                                className={`mb-2 pb-2 border-b cursor-pointer hover:opacity-80 transition-opacity ${
+                                  msg.isOwn ? 'border-primary-foreground/20' : 'border-border'
+                                }`}
+                                onClick={() => scrollToMessage(msg.replyToId!)}
+                              >
+                                <div className="flex items-center gap-1 mb-1">
+                                  <Reply className="h-3 w-3" />
+                                  <span className={`text-xs font-medium ${
+                                    msg.isOwn ? 'text-primary-foreground/80' : 'text-muted-foreground'
+                                  }`}>
+                                    Reply to {originalMsg.isOwn ? 'You' : getDisplayName(originalMsg.pubkey)}
+                                  </span>
+                                </div>
+                                <p className={`text-xs truncate ${
+                                  msg.isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                                }`}>
+                                  {originalMsg.decryptedContent?.slice(0, 50) || 'Message'}...
+                                </p>
+                              </div>
+                            ) : null;
+                          })()}
                           {renderMessageContent(msg.decryptedContent || msg.content, msg.isOwn)}
                           <p className={`text-xs mt-1 ${
                             msg.isOwn 
@@ -574,15 +627,26 @@ export default function Chat() {
                           </p>
                         </div>
                         {!msg.isOwn && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 h-7 w-7 md:h-8 md:w-8"
-                            onClick={() => handleGiveLash(msg.id, msg.pubkey)}
-                            disabled={isSendingLash}
-                          >
-                            <Heart className="h-4 w-4 text-primary hover:fill-primary" />
-                          </Button>
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 h-7 w-7 md:h-8 md:w-8"
+                              onClick={() => setReplyingTo(msg)}
+                              title="Reply to message"
+                            >
+                              <Reply className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 h-7 w-7 md:h-8 md:w-8"
+                              onClick={() => handleGiveLash(msg.id, msg.pubkey)}
+                              disabled={isSendingLash}
+                            >
+                              <Heart className="h-4 w-4 text-primary hover:fill-primary" />
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -592,17 +656,42 @@ export default function Chat() {
 
                 {/* Input */}
                 <form onSubmit={handleSendMessage} className="flex flex-col gap-2 pt-2 border-t pb-safe sticky bottom-0 bg-card px-4 md:static md:bg-transparent md:pb-0 md:px-0">
+                  {/* Reply Preview */}
+                  {replyingTo && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg">
+                      <Reply className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground">
+                          Replying to {replyingTo.isOwn ? 'yourself' : getDisplayName(replyingTo.pubkey)}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {replyingTo.decryptedContent?.slice(0, 50) || 'Message'}...
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 flex-shrink-0"
+                        onClick={() => setReplyingTo(null)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                   <DMImageUploader
                     recipientPubkey={displayConversation.pubkey}
                     onSendMessage={async (imageUrls) => {
                       const message = imageUrls.join('\n');
-                      await sendMessage(displayConversation.pubkey, message);
+                      await sendMessage(displayConversation.pubkey, message, replyingTo?.id);
+                      setReplyingTo(null);
                     }}
                   />
                   <DMAudioRecorder
                     recipientPubkey={displayConversation.pubkey}
                     onSendMessage={async (audioUrl) => {
-                      await sendMessage(displayConversation.pubkey, audioUrl);
+                      await sendMessage(displayConversation.pubkey, audioUrl, replyingTo?.id);
+                      setReplyingTo(null);
                     }}
                   />
                   <div className="flex gap-2 items-center">
