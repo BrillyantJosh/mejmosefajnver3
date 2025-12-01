@@ -63,14 +63,17 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
             const topic = event.tags.find(t => t[0] === 'topic')?.[1];
             
             // Find process event reference (root event)
-            const processEventId = event.tags.find(t => t[0] === 'e' && (t[3] === 'root' || t[2] === 'process'))?.[1] || event.id;
+            // Priority: 1) e-tag with 'process'/'root' marker, 2) d-tag (should equal KIND 87044 ID), 3) event.id
+            const eTagProcessId = event.tags.find(t => t[0] === 'e' && (t[3] === 'root' || t[2] === 'process'))?.[1];
+            const processEventId = eTagProcessId || dTag;
             
             console.log('📋 Process event:', {
               eventId: event.id.slice(0, 16),
-              processEventId: processEventId.slice(0, 16),
+              dTag: dTag.slice(0, 16),
+              eTagProcessId: eTagProcessId ? eTagProcessId.slice(0, 16) : 'NONE',
+              finalProcessEventId: processEventId.slice(0, 16),
               title: title || 'Untitled',
-              status,
-              usedFallback: processEventId === event.id
+              status
             });
 
             // Extract roles
