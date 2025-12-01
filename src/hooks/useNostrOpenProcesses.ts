@@ -55,8 +55,8 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
             const language = event.tags.find(t => t[0] === 'lang')?.[1] || 'en';
             const topic = event.tags.find(t => t[0] === 'topic')?.[1];
             
-            // Find process event reference
-            const processEventId = event.tags.find(t => t[0] === 'e' && t[2] === 'process')?.[1] || '';
+            // Find process event reference (root event)
+            const processEventId = event.tags.find(t => t[0] === 'e' && (t[3] === 'root' || t[2] === 'process'))?.[1] || event.id;
 
             // Extract roles
             const initiator = event.tags.find(t => t[0] === 'p' && t[2] === 'initiator')?.[1] || '';

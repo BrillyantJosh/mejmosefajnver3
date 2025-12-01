@@ -3,7 +3,6 @@ import ConversationList from "@/components/own/ConversationList";
 import ChatView from "@/components/own/ChatView";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
-import { useNostrGroupKey } from "@/hooks/useNostrGroupKey";
 import { useNostrGroupMessages } from "@/hooks/useNostrGroupMessages";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 
@@ -17,17 +16,11 @@ export default function Own() {
   // Get selected process
   const selectedProcess = processes.find(p => p.id === selectedProcessId);
 
-  // Fetch group key for selected process
-  const { groupKey, isLoading: keyLoading } = useNostrGroupKey(
+  // Fetch messages for selected process (no group key needed - direct NIP-44 encryption)
+  const { messages, isLoading: messagesLoading } = useNostrGroupMessages(
     selectedProcess?.processEventId || null,
     session?.nostrHexId || null,
     session?.nostrPrivateKey || null
-  );
-
-  // Fetch messages for selected process
-  const { messages, isLoading: messagesLoading } = useNostrGroupMessages(
-    selectedProcess?.processEventId || null,
-    groupKey
   );
 
   // Collect all unique pubkeys for profile fetching
@@ -97,7 +90,7 @@ export default function Own() {
             conversationStatus={selectedProcess?.phase}
             messages={formattedMessages}
             onBack={() => setSelectedProcessId(undefined)}
-            isLoading={keyLoading || messagesLoading}
+            isLoading={messagesLoading}
           />
         </div>
       )}
