@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft, Mic, Send, MessageCircle } from "lucide-react";
 import ChatMessage from "./ChatMessage";
 
@@ -19,9 +20,16 @@ interface ChatViewProps {
   conversationStatus?: string;
   messages?: Message[];
   onBack: () => void;
+  isLoading?: boolean;
 }
 
-export default function ChatView({ conversationTitle, conversationStatus, messages = [], onBack }: ChatViewProps) {
+export default function ChatView({ 
+  conversationTitle, 
+  conversationStatus, 
+  messages = [], 
+  onBack,
+  isLoading = false
+}: ChatViewProps) {
   const [messageText, setMessageText] = useState("");
 
   if (!conversationTitle) {
@@ -56,18 +64,30 @@ export default function ChatView({ conversationTitle, conversationStatus, messag
       </Card>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
-        {messages.map((msg) => (
-          <ChatMessage
-            key={msg.id}
-            sender={msg.sender}
-            timestamp={msg.timestamp}
-            type={msg.type}
-            content={msg.content}
-            audioDuration={msg.audioDuration}
-          />
-        ))}
-      </div>
+      <ScrollArea className="flex-1 px-4">
+        <div className="space-y-2 pb-4">
+          {isLoading ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Loading messages...
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No messages yet
+            </div>
+          ) : (
+            messages.map((msg) => (
+              <ChatMessage
+                key={msg.id}
+                sender={msg.sender}
+                timestamp={msg.timestamp}
+                type={msg.type}
+                content={msg.content}
+                audioDuration={msg.audioDuration}
+              />
+            ))
+          )}
+        </div>
+      </ScrollArea>
 
       {/* Input */}
       <Card className="p-4 sticky bottom-0">
