@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, ImagePlus, X } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, ImagePlus, X, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserRoomSubscriptions } from "@/hooks/useNostrUserRoomSubscriptions";
@@ -36,6 +38,7 @@ export function CreatePost() {
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [rulesAccepted, setRulesAccepted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const relays = systemParameters?.relays && systemParameters.relays.length > 0 
@@ -73,6 +76,11 @@ export function CreatePost() {
   const availableRooms = allAvailableRooms.filter(room => 
     canPublish(session?.nostrHexId || '', room.slug)
   );
+
+  // Reset rules acceptance when room changes
+  useEffect(() => {
+    setRulesAccepted(false);
+  }, [selectedRoom]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -228,6 +236,17 @@ export function CreatePost() {
       return;
     }
 
+    // Check if rules need to be accepted
+    const currentRoom = rooms.find(r => r.slug === selectedRoom);
+    if (currentRoom?.rules && currentRoom.rules.length > 0 && !rulesAccepted) {
+      toast({
+        title: "Rules not accepted",
+        description: "Please accept the room rules before posting",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       setPublishing(true);
 
@@ -298,6 +317,7 @@ export function CreatePost() {
       });
 
       setContent("");
+      setRulesAccepted(false);
       
       // Clear images and previews
       imagePreviews.forEach(url => URL.revokeObjectURL(url));
@@ -350,6 +370,33 @@ export function CreatePost() {
               </div>
             ))}
           </div>
+        )}
+
+        {selectedRoom && rooms.find(r => r.slug === selectedRoom)?.rules && rooms.find(r => r.slug === selectedRoom)!.rules!.length > 0 && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="ml-2">
+              <p className="font-medium mb-2">Room Rules:</p>
+              <ul className="text-sm space-y-1 list-disc list-inside mb-3">
+                {rooms.find(r => r.slug === selectedRoom)!.rules!.map((rule, idx) => (
+                  <li key={idx}>{rule}</li>
+                ))}
+              </ul>
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="rules-accept" 
+                  checked={rulesAccepted}
+                  onCheckedChange={(checked) => setRulesAccepted(checked === true)}
+                />
+                <label
+                  htmlFor="rules-accept"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  I accept and will follow these rules
+                </label>
+              </div>
+            </AlertDescription>
+          </Alert>
         )}
 
         <div className="flex items-center gap-3">
