@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ConversationList from "@/components/own/ConversationList";
 import ChatView from "@/components/own/ChatView";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,6 +10,17 @@ import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 export default function Own() {
   const { session } = useAuth();
   const [selectedProcessId, setSelectedProcessId] = useState<string>();
+
+  // TEMP: Clear all group key caches for debugging
+  useEffect(() => {
+    const keysToRemove = Object.keys(localStorage).filter(k => 
+      k.startsWith('group_key_own:')
+    );
+    if (keysToRemove.length > 0) {
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      console.log('🧹 Cleared', keysToRemove.length, 'cached group keys for debugging');
+    }
+  }, []);
 
   // Fetch open processes
   const { processes, isLoading: processesLoading } = useNostrOpenProcesses(session?.nostrHexId || null);
