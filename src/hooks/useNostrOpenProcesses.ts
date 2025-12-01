@@ -33,7 +33,10 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
       const pool = new SimplePool();
       
       try {
-        console.log('Fetching KIND 37044 (open processes)...');
+        console.log('🔍 Fetching KIND 37044 (open processes)...', {
+          userPubkey: userPubkey.slice(0, 16) + '...',
+          relays: parameters.relays
+        });
         
         const filter: Filter = {
           kinds: [37044],
@@ -42,7 +45,11 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
 
         const events = await pool.querySync(parameters.relays, filter);
         
-        console.log(`Found ${events.length} KIND 37044 events`);
+        console.log(`📦 Found ${events.length} KIND 37044 events`);
+        
+        if (events.length === 0) {
+          console.warn('⚠️ No KIND 37044 events found on any relay. User may not have any open processes.');
+        }
 
         // Process and filter events
         const processedEvents: OpenProcess[] = events
@@ -101,7 +108,19 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
           )
           .sort((a, b) => b.openedAt - a.openedAt);
 
-        console.log(`Filtered to ${processedEvents.length} open processes where user is involved`);
+        console.log(`✅ Filtered to ${processedEvents.length} open processes where user is involved`);
+        
+        if (processedEvents.length === 0 && events.length > 0) {
+          console.warn('⚠️ Found KIND 37044 events but none where user has a role:', {
+            totalEvents: events.length,
+            userPubkey: userPubkey.slice(0, 16),
+            sampleEvent: events[0] ? {
+              id: events[0].id.slice(0, 16),
+              tags: events[0].tags.filter(t => t[0] === 'p')
+            } : null
+          });
+        }
+        
         setProcesses(processedEvents);
         
       } catch (error) {
