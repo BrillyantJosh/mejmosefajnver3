@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ConversationList from "@/components/own/ConversationList";
 import ChatView from "@/components/own/ChatView";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,6 +10,7 @@ import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 export default function Own() {
   const { session } = useAuth();
   const [selectedProcessId, setSelectedProcessId] = useState<string>();
+  const [forceRefresh, setForceRefresh] = useState(false);
 
   // Fetch open processes
   const { processes, isLoading: processesLoading } = useNostrOpenProcesses(session?.nostrHexId || null);
@@ -18,17 +19,29 @@ export default function Own() {
   const selectedProcess = processes.find(p => p.id === selectedProcessId);
 
   // Step 1: Fetch group key for selected process
-  const { groupKey, isLoading: keyLoading } = useNostrGroupKey(
+  const { groupKey, isLoading: keyLoading, clearCache } = useNostrGroupKey(
     selectedProcess?.processEventId || null,
     session?.nostrHexId || null,
-    session?.nostrPrivateKey || null
+    session?.nostrPrivateKey || null,
+    forceRefresh
   );
 
   // Step 2: Fetch messages using the group key
-  const { messages, isLoading: messagesLoading } = useNostrGroupMessages(
+  const { messages, isLoading: messagesLoading, decryptionFailed } = useNostrGroupMessages(
     selectedProcess?.processEventId || null,
     groupKey
   );
+
+  // Auto-retry with fresh group key if all messages failed to decrypt
+  useEffect(() => {
+    if (decryptionFailed && !forceRefresh) {
+      console.log('🔄 Decryption failed - clearing cache and retrying...');
+      clearCache();
+      setForceRefresh(true);
+      // Reset after a moment to allow re-fetch
+      setTimeout(() => setForceRefresh(false), 100);
+    }
+  }, [decryptionFailed, forceRefresh, clearCache]);
 
   // Collect all unique pubkeys for profile fetching
   const allPubkeys = processes.length > 0 
