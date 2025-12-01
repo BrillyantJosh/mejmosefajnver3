@@ -444,18 +444,17 @@ export default function Feed() {
                     {post.profile?.full_name && post.profile?.display_name && (
                       <p className="text-xs text-muted-foreground">@{post.profile.full_name}</p>
                     )}
-                    <div className="flex items-center gap-2 mt-1">
-                      <p className="text-sm text-muted-foreground">{formatTime(post.created_at)}</p>
-                      {post.tags && post.tags.some(tag => tag[0] === 'a' || tag[0] === 't') && (
-                        <Badge variant="secondary" className="text-xs">
-                          Room: {post.tags.find(tag => tag[0] === 'a' || tag[0] === 't')?.[1]}
-                        </Badge>
-                      )}
-                    </div>
+                    <p className="text-sm text-muted-foreground">{formatTime(post.created_at)}</p>
                   </div>
                   
-                  {/* Three-dot menu - visible to everyone */}
-                  <DropdownMenu>
+                  {/* Top right corner: Room badge + Three-dot menu */}
+                  <div className="flex items-center gap-2">
+                    {post.tags && post.tags.some(tag => tag[0] === 'a' || tag[0] === 't') && (
+                      <Badge variant="secondary" className="text-xs">
+                        Room: {post.tags.find(tag => tag[0] === 'a' || tag[0] === 't')?.[1]}
+                      </Badge>
+                    )}
+                    <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8">
                         <MoreVertical className="h-4 w-4" />
@@ -481,6 +480,7 @@ export default function Feed() {
                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
