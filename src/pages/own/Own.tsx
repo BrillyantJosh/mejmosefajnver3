@@ -66,13 +66,41 @@ export default function Own() {
   }));
 
   // Format messages for display
-  const formattedMessages = messages.map(msg => ({
-    id: msg.id,
-    sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
-    timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
-    type: 'text' as const,
-    content: msg.text
-  }));
+  const formattedMessages = messages.map(msg => {
+    // Check if message is an audio message
+    const isAudio = msg.text.startsWith('audio:');
+    
+    if (isAudio) {
+      // Extract audio path after "audio:" prefix
+      const audioPath = msg.text.substring(6); // Remove "audio:" prefix
+      
+      // Construct Supabase storage URL
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'emimbfrxykvrbrovbrsf';
+      const audioUrl = `https://${projectId}.supabase.co/storage/v1/object/public/dm-audio/${audioPath}`;
+      
+      console.log('🎵 Audio message detected:', {
+        originalText: msg.text.substring(0, 50) + '...',
+        audioPath: audioPath.substring(0, 50) + '...',
+        audioUrl: audioUrl.substring(0, 80) + '...'
+      });
+      
+      return {
+        id: msg.id,
+        sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
+        timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
+        type: 'audio' as const,
+        audioUrl
+      };
+    }
+    
+    return {
+      id: msg.id,
+      sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
+      timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
+      type: 'text' as const,
+      content: msg.text
+    };
+  });
 
   if (processesLoading) {
     return (
