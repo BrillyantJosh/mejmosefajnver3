@@ -3,8 +3,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, Mic, Send, MessageCircle } from "lucide-react";
+import { ArrowLeft, Send, MessageCircle } from "lucide-react";
 import ChatMessage from "./ChatMessage";
+import OwnAudioRecorder from "./OwnAudioRecorder";
 
 interface Message {
   id: string;
@@ -18,16 +19,22 @@ interface Message {
 interface ChatViewProps {
   conversationTitle?: string;
   conversationStatus?: string;
+  processEventId?: string;
+  senderPubkey?: string;
   messages?: Message[];
   onBack: () => void;
+  onSendAudio?: (audioPath: string) => Promise<void>;
   isLoading?: boolean;
 }
 
 export default function ChatView({ 
   conversationTitle, 
-  conversationStatus, 
+  conversationStatus,
+  processEventId,
+  senderPubkey,
   messages = [], 
   onBack,
+  onSendAudio,
   isLoading = false
 }: ChatViewProps) {
   const [messageText, setMessageText] = useState("");
@@ -99,9 +106,14 @@ export default function ChatView({
             onChange={(e) => setMessageText(e.target.value)}
             className="flex-1 px-4 py-2 rounded-lg border bg-background"
           />
-          <Button variant="ghost" size="icon">
-            <Mic className="w-5 h-5" />
-          </Button>
+          {processEventId && senderPubkey && onSendAudio && (
+            <OwnAudioRecorder 
+              processEventId={processEventId}
+              senderPubkey={senderPubkey}
+              onSendAudio={onSendAudio}
+              compact
+            />
+          )}
           <Button size="icon" className="bg-cyan-500 hover:bg-cyan-600">
             <Send className="w-5 h-5" />
           </Button>
