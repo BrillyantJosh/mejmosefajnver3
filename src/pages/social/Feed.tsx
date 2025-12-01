@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Heart, MessageCircle, Share, Loader2, MoreVertical, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -443,7 +444,14 @@ export default function Feed() {
                     {post.profile?.full_name && post.profile?.display_name && (
                       <p className="text-xs text-muted-foreground">@{post.profile.full_name}</p>
                     )}
-                    <p className="text-sm text-muted-foreground">{formatTime(post.created_at)}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-sm text-muted-foreground">{formatTime(post.created_at)}</p>
+                      {post.tags && post.tags.some(tag => tag[0] === 'a' || tag[0] === 't') && (
+                        <Badge variant="secondary" className="text-xs">
+                          Room: {post.tags.find(tag => tag[0] === 'a' || tag[0] === 't')?.[1]}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   
                   {/* Three-dot menu - visible to everyone */}
