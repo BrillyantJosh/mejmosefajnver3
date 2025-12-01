@@ -78,11 +78,9 @@ export const useNostrGroupMessages = (
               encryptedContentPreview: event.content.substring(0, 50) + '...'
             });
 
-            // CRITICAL: Decrypt using GROUP KEY + event.pubkey (hex strings, type assertion for library compatibility)
-            const conversationKey = nip44.v2.utils.getConversationKey(
-              groupKeyHex as any,  // hex string (TypeScript expects Uint8Array but accepts hex string)
-              event.pubkey         // Use event.pubkey for decryption
-            );
+            // CRITICAL: Group key IS the conversation key directly for KIND 87046
+            // No getConversationKey needed - it's already a symmetric key
+            const conversationKey = hexToBytes(groupKeyHex);
             
             const decryptedContent = nip44.v2.decrypt(event.content, conversationKey);
             const messageData = JSON.parse(decryptedContent);
