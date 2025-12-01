@@ -73,10 +73,10 @@ export const useNostrGroupMessages = (
               }
               
               // Decrypt using NIP-44 between sender and receiver
-              const conversationKey = nip44.v2.utils.getConversationKey(
-                hexToBytes(userPrivateKeyHex),
-                event.pubkey
-              );
+               const conversationKey = nip44.v2.utils.getConversationKey(
+                 userPrivateKeyHex as unknown as Uint8Array,
+                 event.pubkey
+               );
               
               messageText = nip44.v2.decrypt(event.content, conversationKey);
             }
