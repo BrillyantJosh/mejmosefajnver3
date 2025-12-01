@@ -1,0 +1,92 @@
+import { useState } from "react";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Mic, Send, MessageCircle } from "lucide-react";
+import ChatMessage from "./ChatMessage";
+
+interface Message {
+  id: string;
+  sender: string;
+  timestamp: string;
+  type: 'text' | 'audio';
+  content?: string;
+  audioDuration?: string;
+}
+
+interface ChatViewProps {
+  conversationTitle?: string;
+  conversationStatus?: string;
+  messages?: Message[];
+  onBack: () => void;
+}
+
+export default function ChatView({ conversationTitle, conversationStatus, messages = [], onBack }: ChatViewProps) {
+  const [messageText, setMessageText] = useState("");
+
+  if (!conversationTitle) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-center p-8">
+        <MessageCircle className="w-20 h-20 text-muted-foreground/30 mb-4" />
+        <h3 className="text-xl font-semibold mb-2">Select a conversation</h3>
+        <p className="text-muted-foreground">Choose a process from the list to view messages</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <Card className="p-4 mb-4 sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold">{conversationTitle}</h2>
+              {conversationStatus && (
+                <Badge variant="secondary" className="text-xs">
+                  {conversationStatus}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+        {messages.map((msg) => (
+          <ChatMessage
+            key={msg.id}
+            sender={msg.sender}
+            timestamp={msg.timestamp}
+            type={msg.type}
+            content={msg.content}
+            audioDuration={msg.audioDuration}
+          />
+        ))}
+      </div>
+
+      {/* Input */}
+      <Card className="p-4 sticky bottom-0">
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Type a message..."
+            value={messageText}
+            onChange={(e) => setMessageText(e.target.value)}
+            className="flex-1 px-4 py-2 rounded-lg border bg-background"
+          />
+          <Button variant="ghost" size="icon">
+            <Mic className="w-5 h-5" />
+          </Button>
+          <Button size="icon" className="bg-cyan-500 hover:bg-cyan-600">
+            <Send className="w-5 h-5" />
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
