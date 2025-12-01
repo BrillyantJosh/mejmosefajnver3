@@ -71,17 +71,27 @@ export const useNostrGroupMessages = (
         
         for (const event of events) {
           try {
+            // Extract sender pubkey from tags FIRST
+            const senderTag = event.tags.find(
+              (tag) => tag[0] === 'p' && tag[2] === 'sender'
+            );
+            const senderPubkey = senderTag ? senderTag[1] : event.pubkey;
+            
             console.log('🔐 Decrypting message:', {
               eventId: event.id.slice(0, 16),
               eventPubkey: event.pubkey.slice(0, 16),
-              groupKeyUsed: groupKeyHex.slice(0, 16) + '...'
+              senderFromTag: senderPubkey.slice(0, 16),
+              usingSenderFromTag: !!senderTag,
+              groupKeyUsed: groupKeyHex.slice(0, 16) + '...',
+              encryptedContentPreview: event.content.substring(0, 50) + '...',
+              tags: event.tags
             });
 
-            // Decrypt using GROUP KEY + message sender's pubkey
+            // Decrypt using GROUP KEY + SENDER's pubkey FROM TAGS
             const groupKeyBytes = hexToBytes(groupKeyHex);
             const conversationKey = nip44.v2.utils.getConversationKey(
               groupKeyBytes,
-              event.pubkey
+              senderPubkey  // Use sender from tags, not event.pubkey
             );
             
             const decryptedContent = nip44.v2.decrypt(event.content, conversationKey);
@@ -90,12 +100,6 @@ export const useNostrGroupMessages = (
             // Extract phase from tags
             const phaseTag = event.tags.find((tag) => tag[0] === 'phase');
             const phase = phaseTag ? phaseTag[1] : 'unknown';
-            
-            // Extract sender pubkey from tags
-            const senderTag = event.tags.find(
-              (tag) => tag[0] === 'p' && tag[2] === 'sender'
-            );
-            const senderPubkey = senderTag ? senderTag[1] : event.pubkey;
             
             decryptedMessages.push({
               id: event.id,
