@@ -55,7 +55,8 @@ export function CreatePost() {
   );
 
   // Always include default rooms PLUS all subscribed rooms (remove duplicates)
-  const availableRooms = appSettings?.default_rooms 
+  // Filter to only show rooms where user can publish
+  const allAvailableRooms = appSettings?.default_rooms 
     ? [
         ...appSettings.default_rooms.map(slug => ({
           slug,
@@ -68,6 +69,10 @@ export function CreatePost() {
         ...subscribedRooms.filter(room => !appSettings.default_rooms.includes(room.slug))
       ]
     : subscribedRooms;
+
+  const availableRooms = allAvailableRooms.filter(room => 
+    canPublish(session?.nostrHexId || '', room.slug)
+  );
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
