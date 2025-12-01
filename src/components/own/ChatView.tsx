@@ -12,7 +12,7 @@ interface Message {
   timestamp: string;
   type: 'text' | 'audio';
   content?: string;
-  audioDuration?: string;
+  audioUrl?: string;
 }
 
 interface ChatViewProps {
@@ -82,7 +82,7 @@ export default function ChatView({
                 timestamp={msg.timestamp}
                 type={msg.type}
                 content={msg.content}
-                audioDuration={msg.audioDuration}
+                audioUrl={msg.audioUrl}
               />
             ))
           )}
