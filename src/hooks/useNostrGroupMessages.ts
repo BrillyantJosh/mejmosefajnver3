@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Filter, nip44 } from 'nostr-tools';
+import { SimplePool, Filter, Event, nip44 } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 const hexToBytes = (hex: string): Uint8Array => {
@@ -16,20 +16,20 @@ export interface GroupMessage {
   text: string;
   timestamp: number;
   createdAt: number;
-  phase: string;
+  isPublic: boolean;
 }
 
 export const useNostrGroupMessages = (
   processEventId: string | null,
-  groupKeyHex: string | null
+  userPubkey: string | null,
+  userPrivateKeyHex: string | null
 ) => {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [decryptionFailed, setDecryptionFailed] = useState(false);
   const { parameters } = useSystemParameters();
 
   useEffect(() => {
-    if (!processEventId || !groupKeyHex || !parameters?.relays) {
+    if (!processEventId || !userPubkey || !userPrivateKeyHex || !parameters?.relays) {
       setIsLoading(false);
       return;
     }
@@ -38,59 +38,58 @@ export const useNostrGroupMessages = (
       const pool = new SimplePool();
       
       try {
-        console.log('Fetching KIND 87046 (messages) for process:', processEventId);
+        console.log('Fetching KIND 87045 & 87046 (messages) for process:', processEventId);
         
-        // Fetch messages (KIND 87046)
+        // Fetch both private (87045) and public (87046) messages
         const filter: Filter = {
-          kinds: [87046],
+          kinds: [87045, 87046],
           '#e': [processEventId],
           limit: 500
         };
 
         const events = await pool.querySync(parameters.relays, filter);
         
-        console.log(`Found ${events.length} message events (KIND 87046)`);
+        console.log(`Found ${events.length} message events (87045 + 87046)`);
 
         // Decrypt and process messages
         const decryptedMessages: GroupMessage[] = [];
-        let successCount = 0;
-        let failedCount = 0;
         
         for (const event of events) {
           try {
-            // DECRYPT MESSAGE using GROUP KEY + message author's pubkey
-            const groupKeyBytes = hexToBytes(groupKeyHex);
-            const conversationKey = nip44.v2.utils.getConversationKey(
-              groupKeyBytes,  // Group key (acts as private key)
-              event.pubkey    // Message author's public key
-            );
+            const isPublic = event.kind === 87046;
+            let messageText: string;
             
-            const decryptedContent = nip44.v2.decrypt(event.content, conversationKey);
-            const messageData = JSON.parse(decryptedContent);
-            
-            // Get phase from tags
-            const phaseTag = event.tags.find((tag) => tag[0] === 'phase');
-            const phase = phaseTag ? phaseTag[1] : 'unknown';
-            
-            // Get sender pubkey from tags
-            const senderTag = event.tags.find(
-              (tag) => tag[0] === 'p' && tag[2] === 'sender'
-            );
-            const senderPubkey = senderTag ? senderTag[1] : event.pubkey;
+            if (isPublic) {
+              // Public message - content is plain text
+              messageText = event.content;
+            } else {
+              // Private message - decrypt with NIP-44
+              // Check if user is a recipient
+              const isRecipient = event.tags.some(t => t[0] === 'p' && t[1] === userPubkey);
+              
+              if (!isRecipient) {
+                console.log('User is not a recipient of message:', event.id);
+                continue;
+              }
+              
+              // Decrypt using NIP-44 between sender and receiver
+              const conversationKey = nip44.v2.utils.getConversationKey(
+                hexToBytes(userPrivateKeyHex),
+                event.pubkey
+              );
+              
+              messageText = nip44.v2.decrypt(event.content, conversationKey);
+            }
             
             decryptedMessages.push({
               id: event.id,
-              senderPubkey: senderPubkey,
-              text: messageData.text,
-              timestamp: messageData.timestamp,
+              senderPubkey: event.pubkey,
+              text: messageText,
+              timestamp: event.created_at,
               createdAt: event.created_at,
-              phase: phase
+              isPublic
             });
-            
-            successCount++;
-            console.log('✅ Message decrypted:', messageData.text.substring(0, 30) + '...');
           } catch (decryptError) {
-            failedCount++;
             console.warn('Failed to decrypt/parse message:', event.id, decryptError);
           }
         }
@@ -98,16 +97,7 @@ export const useNostrGroupMessages = (
         // Sort by timestamp
         decryptedMessages.sort((a, b) => a.timestamp - b.timestamp);
         
-        console.log(`📊 Decryption results: ${successCount} success, ${failedCount} failed out of ${events.length} total`);
-        
-        // If all messages failed to decrypt, the group key is likely invalid
-        if (events.length > 0 && successCount === 0) {
-          console.error('❌ ALL messages failed to decrypt - group key is likely invalid or cached incorrectly');
-          setDecryptionFailed(true);
-        } else {
-          setDecryptionFailed(false);
-        }
-        
+        console.log(`Successfully processed ${decryptedMessages.length} messages`);
         setMessages(decryptedMessages);
         
       } catch (error) {
@@ -119,7 +109,7 @@ export const useNostrGroupMessages = (
     };
 
     fetchMessages();
-  }, [processEventId, groupKeyHex, parameters?.relays]);
+  }, [processEventId, userPubkey, userPrivateKeyHex, parameters?.relays]);
 
-  return { messages, isLoading, decryptionFailed };
+  return { messages, isLoading };
 };
