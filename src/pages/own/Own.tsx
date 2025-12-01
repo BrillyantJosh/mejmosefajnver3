@@ -56,26 +56,28 @@ export default function Own() {
   );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[400px_1fr] gap-4 h-[calc(100vh-200px)]">
-      {/* Conversation List */}
-      <div className={`overflow-y-auto ${selectedConversationId ? 'hidden md:block' : ''}`}>
-        <h2 className="text-xl font-semibold mb-4">Messages</h2>
-        <ConversationList
-          conversations={mockConversations}
-          selectedId={selectedConversationId}
-          onSelect={setSelectedConversationId}
-        />
-      </div>
-
-      {/* Chat View */}
-      <div className={`${!selectedConversationId ? 'hidden md:block' : ''}`}>
-        <ChatView
-          conversationTitle={selectedConversation?.title}
-          conversationStatus={selectedConversation?.status}
-          messages={selectedConversationId ? mockMessages : []}
-          onBack={() => setSelectedConversationId(undefined)}
-        />
-      </div>
+    <div className="h-[calc(100vh-200px)]">
+      {!selectedConversationId ? (
+        // Conversation List - full width when no chat selected
+        <div className="overflow-y-auto h-full max-w-2xl mx-auto">
+          <h2 className="text-xl font-semibold mb-4">Messages</h2>
+          <ConversationList
+            conversations={mockConversations}
+            selectedId={selectedConversationId}
+            onSelect={setSelectedConversationId}
+          />
+        </div>
+      ) : (
+        // Chat View - full width when chat selected
+        <div className="h-full">
+          <ChatView
+            conversationTitle={selectedConversation?.title}
+            conversationStatus={selectedConversation?.status}
+            messages={mockMessages}
+            onBack={() => setSelectedConversationId(undefined)}
+          />
+        </div>
+      )}
     </div>
   );
 }

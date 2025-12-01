@@ -39,7 +39,7 @@ export default function ChatView({ conversationTitle, conversationStatus, messag
       {/* Header */}
       <Card className="p-4 mb-4 sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden">
+          <Button variant="ghost" size="icon" onClick={onBack}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="flex-1">
