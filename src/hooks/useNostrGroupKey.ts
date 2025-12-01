@@ -2,14 +2,6 @@ import { useState, useEffect } from 'react';
 import { SimplePool, Filter, Event, nip44 } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
-const hexToBytes = (hex: string): Uint8Array => {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
-  }
-  return bytes;
-};
-
 export const useNostrGroupKey = (
   processEventId: string | null,
   userPubkey: string | null,
@@ -112,10 +104,9 @@ export const useNostrGroupKey = (
             
             console.log('🔓 Attempting to decrypt group key from sender:', senderPubkey.slice(0, 16));
 
-            // Decrypt group key using NIP-44
-            const privateKeyBytes = hexToBytes(userPrivateKeyHex);
+            // Decrypt group key using NIP-44 (hex strings, type assertion for library compatibility)
             const conversationKey = nip44.v2.utils.getConversationKey(
-              privateKeyBytes,
+              userPrivateKeyHex as any,  // hex string (TypeScript expects Uint8Array but accepts hex string)
               senderPubkey
             );
             
