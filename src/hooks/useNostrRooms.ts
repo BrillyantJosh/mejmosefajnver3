@@ -14,6 +14,7 @@ interface NostrRoom {
   order: number;
   description?: string;
   owners?: string[];
+  publishers?: string[];
   rules?: string[];
   members?: number;
 }
@@ -22,6 +23,7 @@ export const useNostrRooms = () => {
   const { parameters } = useSystemParameters();
   const [rooms, setRooms] = useState<NostrRoom[]>([]);
   const [loading, setLoading] = useState(true);
+  const [roomsManifest, setRoomsManifest] = useState<Event | null>(null);
 
   const RELAYS = useMemo(() => {
     return parameters?.relays || [
@@ -71,12 +73,16 @@ export const useNostrRooms = () => {
           return;
         }
 
+        // Store manifest for permission checks
+        setRoomsManifest(manifest);
+
         // Parse rooms from tags
         const roomTags = manifest.tags.filter(t => t[0] === "room");
         const iconTags = manifest.tags.filter(t => t[0] === "icon");
         const orderTags = manifest.tags.filter(t => t[0] === "order");
         const descTags = manifest.tags.filter(t => t[0] === "desc");
         const ownerTags = manifest.tags.filter(t => t[0] === "owner");
+        const publisherTags = manifest.tags.filter(t => t[0] === "publisher");
         const ruleTags = manifest.tags.filter(t => t[0] === "rule");
 
         const parsedRooms: NostrRoom[] = roomTags.map(tag => {
@@ -91,6 +97,7 @@ export const useNostrRooms = () => {
           const order = orderStr ? parseInt(orderStr, 10) : 9999;
           const description = descTags.find(t => t[1] === slug)?.[2];
           const owners = ownerTags.filter(t => t[1] === slug).map(t => t[2]);
+          const publishers = publisherTags.filter(t => t[1] === slug).map(t => t[2]);
           const rules = ruleTags.filter(t => t[1] === slug).map(t => t[2]);
 
           return {
@@ -103,6 +110,7 @@ export const useNostrRooms = () => {
             order,
             description,
             owners,
+            publishers,
             rules,
             // For now, we don't have member count - could be fetched separately
             members: Math.floor(Math.random() * 1000) + 50 // Placeholder
@@ -133,5 +141,22 @@ export const useNostrRooms = () => {
     };
   }, [RELAYS]);
 
-  return { rooms, loading };
+  // Check if a user can publish to a specific room
+  const canPublish = (authorPubkey: string, roomSlug: string): boolean => {
+    const room = rooms.find(r => r.slug === roomSlug);
+    if (!room) return false;
+
+    // If no publishers defined → open room (everyone can publish)
+    if (!room.publishers || room.publishers.length === 0) {
+      return true;
+    }
+
+    // Restricted room: check if author is publisher OR owner
+    const isPublisher = room.publishers.includes(authorPubkey);
+    const isOwner = room.owners?.includes(authorPubkey) || false;
+    
+    return isPublisher || isOwner;
+  };
+
+  return { rooms, loading, canPublish };
 };
