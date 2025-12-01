@@ -25,6 +25,7 @@ export const useNostrGroupMessages = (
 ) => {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [decryptionFailed, setDecryptionFailed] = useState(false);
   const { parameters } = useSystemParameters();
 
   useEffect(() => {
@@ -52,6 +53,8 @@ export const useNostrGroupMessages = (
 
         // Decrypt and process messages
         const decryptedMessages: GroupMessage[] = [];
+        let successCount = 0;
+        let failedCount = 0;
         
         for (const event of events) {
           try {
@@ -84,8 +87,10 @@ export const useNostrGroupMessages = (
               phase: phase
             });
             
+            successCount++;
             console.log('✅ Message decrypted:', messageData.text.substring(0, 30) + '...');
           } catch (decryptError) {
+            failedCount++;
             console.warn('Failed to decrypt/parse message:', event.id, decryptError);
           }
         }
@@ -93,7 +98,16 @@ export const useNostrGroupMessages = (
         // Sort by timestamp
         decryptedMessages.sort((a, b) => a.timestamp - b.timestamp);
         
-        console.log(`Successfully processed ${decryptedMessages.length} messages`);
+        console.log(`📊 Decryption results: ${successCount} success, ${failedCount} failed out of ${events.length} total`);
+        
+        // If all messages failed to decrypt, the group key is likely invalid
+        if (events.length > 0 && successCount === 0) {
+          console.error('❌ ALL messages failed to decrypt - group key is likely invalid or cached incorrectly');
+          setDecryptionFailed(true);
+        } else {
+          setDecryptionFailed(false);
+        }
+        
         setMessages(decryptedMessages);
         
       } catch (error) {
@@ -107,5 +121,5 @@ export const useNostrGroupMessages = (
     fetchMessages();
   }, [processEventId, groupKeyHex, parameters?.relays]);
 
-  return { messages, isLoading };
+  return { messages, isLoading, decryptionFailed };
 };
