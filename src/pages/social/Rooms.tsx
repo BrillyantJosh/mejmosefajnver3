@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Users, Loader2, Check, MessageSquare, Lock } from "lucide-react";
+import { Users, Loader2, Check, MessageSquare, Lock, FileText } from "lucide-react";
 import { useNostrRooms } from "@/hooks/useNostrRooms";
 import { useNostrUserRoomSubscriptions } from "@/hooks/useNostrUserRoomSubscriptions";
 import { useNostrRoomPostCounts } from "@/hooks/useNostrRoomPostCounts";
@@ -103,6 +103,21 @@ export default function Rooms() {
                         );
                       })}
                     </div>
+                  </div>
+                )}
+
+                {/* Show room rules */}
+                {room.rules && room.rules.length > 0 && (
+                  <div className="mb-4 p-3 bg-muted/50 rounded-md">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Room Rules</span>
+                    </div>
+                    <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                      {room.rules.map((rule, idx) => (
+                        <li key={idx}>{rule}</li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 
