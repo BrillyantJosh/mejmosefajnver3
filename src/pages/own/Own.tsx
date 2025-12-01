@@ -74,9 +74,8 @@ export default function Own() {
       // Extract audio path after "audio:" prefix
       const audioPath = msg.text.substring(6); // Remove "audio:" prefix
       
-      // Construct Supabase storage URL
-      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'emimbfrxykvrbrovbrsf';
-      const audioUrl = `https://${projectId}.supabase.co/storage/v1/object/public/dm-audio/${audioPath}`;
+      // Construct Supabase storage URL for OWN audio (separate Supabase project)
+      const audioUrl = `https://saaodlxrptrtgasajxlx.supabase.co/storage/v1/object/public/dm-audio/${audioPath}`;
       
       console.log('🎵 Audio message detected:', {
         originalText: msg.text.substring(0, 50) + '...',
@@ -134,8 +133,14 @@ export default function Own() {
           <ChatView
             conversationTitle={selectedProcess?.title}
             conversationStatus={selectedProcess?.phase}
+            processEventId={selectedProcess?.processEventId}
+            senderPubkey={session?.nostrHexId}
             messages={formattedMessages}
             onBack={() => setSelectedProcessId(undefined)}
+            onSendAudio={async (audioPath: string) => {
+              // TODO: Send encrypted audio message to Nostr
+              console.log('🎵 Sending OWN audio:', audioPath);
+            }}
             isLoading={keyLoading || messagesLoading}
           />
         </div>
