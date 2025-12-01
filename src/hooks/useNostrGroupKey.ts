@@ -2,6 +2,13 @@ import { useState, useEffect } from 'react';
 import { SimplePool, Filter, Event, nip44 } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
+const hexToBytes = (hex: string): Uint8Array => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+  }
+  return bytes;
+};
 export const useNostrGroupKey = (
   processEventId: string | null,
   userPubkey: string | null,
@@ -104,14 +111,29 @@ export const useNostrGroupKey = (
             
             console.log('🔓 Attempting to decrypt group key from sender:', senderPubkey.slice(0, 16));
 
-            // Decrypt group key using NIP-44 (hex strings, type assertion for library compatibility)
+            // Decrypt group key using NIP-44 exactly as per OWN ▲ spec
+            const privateKeyBytes = hexToBytes(userPrivateKeyHex);
+            console.log('🔬 Group key decryption key lengths:', {
+              privateKeyHexLength: userPrivateKeyHex.length,
+              privateKeyBytesLength: privateKeyBytes.length,
+              senderPubkeyLength: senderPubkey.length,
+            });
+
             const conversationKey = nip44.v2.utils.getConversationKey(
-              userPrivateKeyHex as any,  // hex string (TypeScript expects Uint8Array but accepts hex string)
+              privateKeyBytes,
               senderPubkey
             );
-            
+
             const decryptedGroupKey = nip44.v2.decrypt(event.content, conversationKey);
-            
+
+            if (!isValidGroupKey(decryptedGroupKey)) {
+              console.warn('❌ Decrypted group key has invalid format:', {
+                length: decryptedGroupKey.length,
+                preview: decryptedGroupKey.substring(0, 16) + '...',
+              });
+              continue;
+            }
+
             console.log('✅ Group key decrypted successfully:', decryptedGroupKey.substring(0, 16) + '...');
             
             // Cache in localStorage
