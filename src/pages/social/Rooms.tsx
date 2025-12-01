@@ -34,7 +34,7 @@ export default function Rooms() {
   );
 
   // Fetch profiles for all publishers
-  const { profiles: publisherProfiles } = useNostrProfilesCacheBulk(allPublisherPubkeys);
+  const { profiles } = useNostrProfilesCacheBulk(allPublisherPubkeys);
 
   const handleSubscriptionToggle = async (roomSlug: string) => {
     if (!session) {
@@ -94,7 +94,7 @@ export default function Rooms() {
                     <p className="text-xs text-muted-foreground mb-2">Only authorized publishers can post:</p>
                     <div className="flex flex-wrap gap-1">
                       {room.publishers.map(pubkey => {
-                        const profile = publisherProfiles[pubkey];
+                        const profile = profiles.get(pubkey);
                         const displayName = profile?.display_name || profile?.full_name || `${pubkey.slice(0, 8)}...`;
                         return (
                           <Badge key={pubkey} variant="secondary" className="text-xs">
