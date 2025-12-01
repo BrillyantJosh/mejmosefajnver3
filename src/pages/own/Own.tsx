@@ -1,80 +1,103 @@
 import { useState } from "react";
 import ConversationList from "@/components/own/ConversationList";
 import ChatView from "@/components/own/ChatView";
-
-// Mock data
-const mockConversations = [
-  {
-    id: "1",
-    title: "Test 2",
-    initiator: "IggyLes",
-    facilitator: "Brilly(ant) Josh",
-    participants: ["FoxyMo", "GasZorro", "IggyLes", "Rokson"],
-    status: "opening",
-    lastActivity: "5 days ago"
-  },
-  {
-    id: "2",
-    title: "Project Alpha",
-    initiator: "JohnDoe",
-    facilitator: "JaneSmith",
-    participants: ["Alice", "Bob", "Charlie"],
-    status: "active",
-    lastActivity: "2 hours ago"
-  }
-];
-
-const mockMessages = [
-  {
-    id: "1",
-    sender: "Brilly(ant) Josh",
-    timestamp: "5 days ago",
-    type: "audio" as const,
-    audioDuration: "0:00:00"
-  },
-  {
-    id: "2",
-    sender: "Brilly(ant) Josh",
-    timestamp: "5 days ago",
-    type: "audio" as const,
-    audioDuration: "0:00:00"
-  },
-  {
-    id: "3",
-    sender: "Brilly(ant) Josh",
-    timestamp: "1 day ago",
-    type: "audio" as const,
-    audioDuration: "0:00:00"
-  }
-];
+import { useAuth } from "@/contexts/AuthContext";
+import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
+import { useNostrGroupKey } from "@/hooks/useNostrGroupKey";
+import { useNostrGroupMessages } from "@/hooks/useNostrGroupMessages";
+import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 
 export default function Own() {
-  const [selectedConversationId, setSelectedConversationId] = useState<string>();
+  const { session } = useAuth();
+  const [selectedProcessId, setSelectedProcessId] = useState<string>();
 
-  const selectedConversation = mockConversations.find(
-    (c) => c.id === selectedConversationId
+  // Fetch open processes
+  const { processes, isLoading: processesLoading } = useNostrOpenProcesses(session?.nostrHexId || null);
+
+  // Get selected process
+  const selectedProcess = processes.find(p => p.id === selectedProcessId);
+
+  // Fetch group key for selected process
+  const { groupKey, isLoading: keyLoading } = useNostrGroupKey(
+    selectedProcess?.processEventId || null,
+    session?.nostrHexId || null,
+    session?.nostrPrivateKey || null
   );
+
+  // Fetch messages for selected process
+  const { messages, isLoading: messagesLoading } = useNostrGroupMessages(
+    selectedProcess?.processEventId || null,
+    groupKey
+  );
+
+  // Collect all unique pubkeys for profile fetching
+  const allPubkeys = processes.length > 0 
+    ? Array.from(new Set([
+        ...processes.flatMap(p => [p.initiator, p.facilitator, ...p.participants, ...p.guests]),
+        ...messages.map(m => m.senderPubkey)
+      ]))
+    : [];
+
+  // Fetch profiles
+  const { profiles } = useNostrProfilesCacheBulk(allPubkeys);
+
+  // Format conversations for display
+  const conversations = processes.map(process => ({
+    id: process.id,
+    title: process.title,
+    initiator: profiles.get(process.initiator)?.full_name || process.initiator.slice(0, 8),
+    facilitator: profiles.get(process.facilitator)?.full_name || process.facilitator.slice(0, 8),
+    participants: process.participants.map(p => 
+      profiles.get(p)?.full_name || p.slice(0, 8)
+    ),
+    status: process.phase,
+    lastActivity: new Date(process.openedAt * 1000).toLocaleDateString()
+  }));
+
+  // Format messages for display
+  const formattedMessages = messages.map(msg => ({
+    id: msg.id,
+    sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
+    timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
+    type: 'text' as const,
+    content: msg.text
+  }));
+
+  if (processesLoading) {
+    return (
+      <div className="h-[calc(100vh-200px)] flex items-center justify-center">
+        <p className="text-muted-foreground">Loading processes...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-200px)]">
-      {!selectedConversationId ? (
+      {!selectedProcessId ? (
         // Conversation List - full width when no chat selected
         <div className="overflow-y-auto h-full max-w-2xl mx-auto">
           <h2 className="text-xl font-semibold mb-4">Messages</h2>
-          <ConversationList
-            conversations={mockConversations}
-            selectedId={selectedConversationId}
-            onSelect={setSelectedConversationId}
-          />
+          {conversations.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">
+              No open processes found
+            </p>
+          ) : (
+            <ConversationList
+              conversations={conversations}
+              selectedId={selectedProcessId}
+              onSelect={setSelectedProcessId}
+            />
+          )}
         </div>
       ) : (
         // Chat View - full width when chat selected
         <div className="h-full">
           <ChatView
-            conversationTitle={selectedConversation?.title}
-            conversationStatus={selectedConversation?.status}
-            messages={mockMessages}
-            onBack={() => setSelectedConversationId(undefined)}
+            conversationTitle={selectedProcess?.title}
+            conversationStatus={selectedProcess?.phase}
+            messages={formattedMessages}
+            onBack={() => setSelectedProcessId(undefined)}
+            isLoading={keyLoading || messagesLoading}
           />
         </div>
       )}
