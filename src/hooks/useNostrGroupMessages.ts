@@ -78,11 +78,10 @@ export const useNostrGroupMessages = (
               encryptedContentPreview: event.content.substring(0, 50) + '...'
             });
 
-            // CRITICAL: Decrypt using GROUP KEY + event.pubkey (NOT sender from tags!)
-            const groupKeyBytes = hexToBytes(groupKeyHex);
+            // CRITICAL: Decrypt using GROUP KEY + event.pubkey (hex strings, type assertion for library compatibility)
             const conversationKey = nip44.v2.utils.getConversationKey(
-              groupKeyBytes,
-              event.pubkey  // Use event.pubkey for decryption
+              groupKeyHex as any,  // hex string (TypeScript expects Uint8Array but accepts hex string)
+              event.pubkey         // Use event.pubkey for decryption
             );
             
             const decryptedContent = nip44.v2.decrypt(event.content, conversationKey);
