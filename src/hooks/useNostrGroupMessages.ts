@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { SimplePool, Filter, Event, nip44 } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
-
+ 
 const hexToBytes = (hex: string): Uint8Array => {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) {
