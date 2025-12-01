@@ -28,7 +28,16 @@ export const useNostrGroupMessages = (
   const { parameters } = useSystemParameters();
 
   useEffect(() => {
+    console.log('💬 useNostrGroupMessages called with:', {
+      processEventId: processEventId?.slice(0, 16) + '...',
+      groupKeyHex: groupKeyHex?.slice(0, 16) + '...',
+      hasGroupKey: !!groupKeyHex,
+      groupKeyLength: groupKeyHex?.length,
+      hasRelays: !!parameters?.relays
+    });
+
     if (!processEventId || !groupKeyHex || !parameters?.relays) {
+      console.warn('⚠️ useNostrGroupMessages: Missing required parameters');
       setIsLoading(false);
       return;
     }
@@ -37,7 +46,10 @@ export const useNostrGroupMessages = (
       const pool = new SimplePool();
       
       try {
-        console.log('Fetching KIND 87046 (messages) for process:', processEventId);
+        console.log('🔍 Fetching KIND 87046 (messages) for:', {
+          processEventId: processEventId.slice(0, 16) + '...',
+          groupKeyHex: groupKeyHex.slice(0, 16) + '...'
+        });
         
         // Fetch only KIND 87046 messages
         const filter: Filter = {
@@ -48,13 +60,23 @@ export const useNostrGroupMessages = (
 
         const events = await pool.querySync(parameters.relays, filter);
         
-        console.log(`Found ${events.length} message events (KIND 87046)`);
+        console.log(`📦 Found ${events.length} message events (KIND 87046)`);
+        
+        if (events.length === 0) {
+          console.warn('⚠️ No KIND 87046 messages found for this process');
+        }
 
         // Decrypt and process messages
         const decryptedMessages: GroupMessage[] = [];
         
         for (const event of events) {
           try {
+            console.log('🔐 Decrypting message:', {
+              eventId: event.id.slice(0, 16),
+              eventPubkey: event.pubkey.slice(0, 16),
+              groupKeyUsed: groupKeyHex.slice(0, 16) + '...'
+            });
+
             // Decrypt using GROUP KEY + message sender's pubkey
             const groupKeyBytes = hexToBytes(groupKeyHex);
             const conversationKey = nip44.v2.utils.getConversationKey(
@@ -84,9 +106,19 @@ export const useNostrGroupMessages = (
               phase: phase
             });
             
-            console.log('✅ Message decrypted:', messageData.text.substring(0, 30) + '...');
+            console.log('✅ Message decrypted:', {
+              text: messageData.text.substring(0, 30) + '...',
+              timestamp: messageData.timestamp,
+              senderPubkey: senderPubkey.slice(0, 16)
+            });
           } catch (decryptError) {
-            console.warn('Failed to decrypt/parse message:', event.id, decryptError);
+            console.error('❌ Failed to decrypt/parse message:', {
+              eventId: event.id.slice(0, 16),
+              eventPubkey: event.pubkey.slice(0, 16),
+              groupKeyUsed: groupKeyHex.slice(0, 16) + '...',
+              error: decryptError instanceof Error ? decryptError.message : 'Unknown error',
+              tags: event.tags
+            });
           }
         }
 
