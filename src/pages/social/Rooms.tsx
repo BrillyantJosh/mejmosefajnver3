@@ -106,12 +106,12 @@ export default function Rooms() {
                   </div>
                 )}
 
-                {/* Show room rules */}
+                {/* Show room agreement */}
                 {room.rules && room.rules.length > 0 && (
                   <div className="mb-4 p-3 bg-muted/50 rounded-md">
                     <div className="flex items-center gap-2 mb-2">
                       <FileText className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Room Rules</span>
+                      <span className="text-sm font-medium">Room Agreement</span>
                     </div>
                     <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
                       {room.rules.map((rule, idx) => (
