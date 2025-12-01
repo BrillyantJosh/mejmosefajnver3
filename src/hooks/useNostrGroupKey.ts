@@ -13,7 +13,8 @@ const hexToBytes = (hex: string): Uint8Array => {
 export const useNostrGroupKey = (
   processId: string | null,
   userPubkey: string | null,
-  userPrivateKeyHex: string | null
+  userPrivateKeyHex: string | null,
+  forceRefresh: boolean = false
 ) => {
   const [groupKey, setGroupKey] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -21,20 +22,36 @@ export const useNostrGroupKey = (
 
   useEffect(() => {
     if (!processId || !userPubkey || !userPrivateKeyHex || !parameters?.relays) {
+      console.log('🔍 useNostrGroupKey: Missing required params', {
+        hasProcessId: !!processId,
+        hasUserPubkey: !!userPubkey,
+        hasPrivateKey: !!userPrivateKeyHex,
+        hasRelays: !!parameters?.relays
+      });
       setIsLoading(false);
       return;
     }
 
     const fetchGroupKey = async () => {
+      console.log('🔍 Looking for group key:', {
+        processId,
+        userPubkey: userPubkey.substring(0, 16) + '...',
+        forceRefresh
+      });
+
       // Check localStorage cache first
       const cacheKey = `group_key_own:${processId}`;
       const cached = localStorage.getItem(cacheKey);
       
-      if (cached) {
-        console.log('✅ Group key loaded from cache');
+      if (cached && !forceRefresh) {
+        console.log('✅ Group key loaded from cache:', cached.substring(0, 20) + '...');
         setGroupKey(cached);
         setIsLoading(false);
         return;
+      }
+
+      if (forceRefresh && cached) {
+        console.log('⚠️ Force refresh - ignoring cached key');
       }
 
       const pool = new SimplePool();
@@ -106,7 +123,15 @@ export const useNostrGroupKey = (
     };
 
     fetchGroupKey();
-  }, [processId, userPubkey, userPrivateKeyHex, parameters?.relays]);
+  }, [processId, userPubkey, userPrivateKeyHex, parameters?.relays, forceRefresh]);
 
-  return { groupKey, isLoading };
+  const clearCache = () => {
+    if (processId) {
+      const cacheKey = `group_key_own:${processId}`;
+      localStorage.removeItem(cacheKey);
+      console.log('🗑️ Group key cache cleared for process:', processId);
+    }
+  };
+
+  return { groupKey, isLoading, clearCache };
 };
