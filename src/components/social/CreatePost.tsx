@@ -376,7 +376,7 @@ export function CreatePost() {
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="ml-2">
-              <p className="font-medium mb-2">Room Rules:</p>
+              <p className="font-medium mb-2">Room Agreement:</p>
               <ul className="text-sm space-y-1 list-disc list-inside mb-3">
                 {rooms.find(r => r.slug === selectedRoom)!.rules!.map((rule, idx) => (
                   <li key={idx}>{rule}</li>
@@ -392,7 +392,7 @@ export function CreatePost() {
                   htmlFor="rules-accept"
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                 >
-                  I accept and will follow these rules
+                  I accept and will follow this agreement
                 </label>
               </div>
             </AlertDescription>
@@ -436,7 +436,13 @@ export function CreatePost() {
 
           <Button 
             onClick={handlePost} 
-            disabled={publishing || uploading || !content.trim() || !selectedRoom}
+            disabled={
+              publishing || 
+              uploading || 
+              !content.trim() || 
+              !selectedRoom || 
+              (rooms.find(r => r.slug === selectedRoom)?.rules && rooms.find(r => r.slug === selectedRoom)!.rules!.length > 0 && !rulesAccepted)
+            }
             className="ml-auto"
           >
             {(publishing || uploading) ? <Loader2 className="h-4 w-4 animate-spin" /> : "Publish"}
