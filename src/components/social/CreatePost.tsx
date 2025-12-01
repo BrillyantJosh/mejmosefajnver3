@@ -24,7 +24,7 @@ export function CreatePost() {
   const { session } = useAuth();
   const { appSettings } = useAdmin();
   const { parameters: systemParameters } = useSystemParameters();
-  const { rooms } = useNostrRooms();
+  const { rooms, canPublish } = useNostrRooms();
   const { subscriptions } = useNostrUserRoomSubscriptions({
     userPubkey: session?.nostrHexId || '',
     userPrivateKey: session?.nostrPrivateKey || ''
@@ -208,6 +208,16 @@ export function CreatePost() {
       toast({
         title: "Error",
         description: "Please enter content and select a room",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Check publishing permissions
+    if (!canPublish(session.nostrHexId, selectedRoom)) {
+      toast({
+        title: "Permission denied",
+        description: `You don't have permission to publish in room "${selectedRoom}". This is a restricted room.`,
         variant: "destructive"
       });
       return;
