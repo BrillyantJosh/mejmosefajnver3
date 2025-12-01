@@ -1,9 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, Loader2, Check, MessageSquare } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Users, Loader2, Check, MessageSquare, Lock } from "lucide-react";
 import { useNostrRooms } from "@/hooks/useNostrRooms";
 import { useNostrUserRoomSubscriptions } from "@/hooks/useNostrUserRoomSubscriptions";
 import { useNostrRoomPostCounts } from "@/hooks/useNostrRoomPostCounts";
+import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -23,6 +25,16 @@ export default function Rooms() {
 
   const roomSlugs = rooms.map(r => r.slug);
   const { postCounts, loading: loadingCounts } = useNostrRoomPostCounts(roomSlugs);
+
+  // Get all unique publisher pubkeys from all rooms
+  const allPublisherPubkeys = Array.from(
+    new Set(
+      rooms.flatMap(room => room.publishers || [])
+    )
+  );
+
+  // Fetch profiles for all publishers
+  const { profiles: publisherProfiles } = useNostrProfilesCacheBulk(allPublisherPubkeys);
 
   const handleSubscriptionToggle = async (roomSlug: string) => {
     if (!session) {
@@ -71,6 +83,29 @@ export default function Rooms() {
                 <p className="text-sm text-muted-foreground mb-4">
                   {room.description || `Join the ${room.title} community`}
                 </p>
+                
+                {/* Show if room is restricted */}
+                {room.publishers && room.publishers.length > 0 && (
+                  <div className="mb-4 p-3 bg-muted/50 rounded-md">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Lock className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Restricted Room</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2">Only authorized publishers can post:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {room.publishers.map(pubkey => {
+                        const profile = publisherProfiles[pubkey];
+                        const displayName = profile?.display_name || profile?.full_name || `${pubkey.slice(0, 8)}...`;
+                        return (
+                          <Badge key={pubkey} variant="secondary" className="text-xs">
+                            {displayName}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground flex items-center gap-1">
                     <MessageSquare className="h-4 w-4" />
