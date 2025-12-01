@@ -20,7 +20,15 @@ export const useNostrGroupKey = (
   const { parameters } = useSystemParameters();
 
   useEffect(() => {
+    console.log('🔑 useNostrGroupKey called with:', {
+      processEventId: processEventId?.slice(0, 16) + '...',
+      userPubkey: userPubkey?.slice(0, 16) + '...',
+      hasPrivateKey: !!userPrivateKeyHex,
+      hasRelays: !!parameters?.relays
+    });
+
     if (!processEventId || !userPubkey || !userPrivateKeyHex || !parameters?.relays) {
+      console.warn('⚠️ useNostrGroupKey: Missing required parameters');
       setIsLoading(false);
       return;
     }
@@ -28,18 +36,33 @@ export const useNostrGroupKey = (
     // Check localStorage cache first
     const cacheKey = `group_key_own:${processEventId}`;
     const cachedKey = localStorage.getItem(cacheKey);
+    
+    // Validate cached key format (must be 64 hex chars)
+    const isValidGroupKey = (key: string): boolean => {
+      return /^[0-9a-fA-F]{64}$/.test(key);
+    };
+    
     if (cachedKey) {
-      console.log('✅ Using cached group key for process:', processEventId);
-      setGroupKey(cachedKey);
-      setIsLoading(false);
-      return;
+      if (isValidGroupKey(cachedKey)) {
+        console.log('✅ Using valid cached group key for process:', processEventId.slice(0, 16));
+        setGroupKey(cachedKey);
+        setIsLoading(false);
+        return;
+      } else {
+        console.warn('⚠️ Invalid cached group key format, removing and fetching fresh');
+        localStorage.removeItem(cacheKey);
+      }
     }
 
     const fetchGroupKey = async () => {
       const pool = new SimplePool();
       
       try {
-        console.log('Fetching KIND 87045 (group key) for process:', processEventId);
+        console.log('🔍 Fetching KIND 87045 (group key) for:', {
+          processEventId: processEventId.slice(0, 16) + '...',
+          userPubkey: userPubkey.slice(0, 16) + '...',
+          relays: parameters.relays
+        });
         
         const filter: Filter = {
           kinds: [87045],
@@ -50,9 +73,18 @@ export const useNostrGroupKey = (
 
         const events = await pool.querySync(parameters.relays, filter);
         
-        console.log(`Found ${events.length} group key events (KIND 87045)`);
+        console.log(`📦 Found ${events.length} group key events (KIND 87045)`);
+
+        if (events.length === 0) {
+          console.warn('⚠️ No KIND 87045 events found - user may not have access to this process');
+        }
 
         for (const event of events) {
+          console.log('🔐 Processing group key event:', {
+            eventId: event.id.slice(0, 16),
+            eventPubkey: event.pubkey.slice(0, 16),
+            tags: event.tags
+          });
           try {
             // Check if user is a receiver
             const receiverTag = event.tags.find(
@@ -60,9 +92,11 @@ export const useNostrGroupKey = (
             );
             
             if (!receiverTag) {
-              console.log('User is not receiver in event:', event.id);
+              console.log('❌ User is not receiver in event:', event.id.slice(0, 16));
               continue;
             }
+            
+            console.log('✓ User is valid receiver');
 
             // Find sender pubkey
             const senderTag = event.tags.find(
@@ -70,13 +104,13 @@ export const useNostrGroupKey = (
             );
             
             if (!senderTag) {
-              console.warn('No sender tag found in event:', event.id);
+              console.warn('❌ No sender tag found in event:', event.id.slice(0, 16));
               continue;
             }
 
             const senderPubkey = senderTag[1];
             
-            console.log('Decrypting group key from sender:', senderPubkey.slice(0, 8));
+            console.log('🔓 Attempting to decrypt group key from sender:', senderPubkey.slice(0, 16));
 
             // Decrypt group key using NIP-44
             const privateKeyBytes = hexToBytes(userPrivateKeyHex);

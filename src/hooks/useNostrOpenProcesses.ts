@@ -57,6 +57,14 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
             
             // Find process event reference (root event)
             const processEventId = event.tags.find(t => t[0] === 'e' && (t[3] === 'root' || t[2] === 'process'))?.[1] || event.id;
+            
+            console.log('📋 Process event:', {
+              eventId: event.id.slice(0, 16),
+              processEventId: processEventId.slice(0, 16),
+              title: title || 'Untitled',
+              status,
+              usedFallback: processEventId === event.id
+            });
 
             // Extract roles
             const initiator = event.tags.find(t => t[0] === 'p' && t[2] === 'initiator')?.[1] || '';
