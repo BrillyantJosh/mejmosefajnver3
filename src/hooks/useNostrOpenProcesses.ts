@@ -76,11 +76,12 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
               status
             });
 
-            // Extract roles
-            const initiator = event.tags.find(t => t[0] === 'p' && t[3] === 'initiator')?.[1] || '';
-            const facilitator = event.tags.find(t => t[0] === 'p' && t[3] === 'facilitator')?.[1] || '';
-            const participants = event.tags.filter(t => t[0] === 'p' && t[3] === 'participant').map(t => t[1]);
-            const guests = event.tags.filter(t => t[0] === 'p' && t[3] === 'guest').map(t => t[1]);
+            // Extract roles - check both index 2 and 3 for compatibility
+            const getRole = (tag: string[]) => tag[3] || tag[2];
+            const initiator = event.tags.find(t => t[0] === 'p' && (t[2] === 'initiator' || t[3] === 'initiator'))?.[1] || '';
+            const facilitator = event.tags.find(t => t[0] === 'p' && (t[2] === 'facilitator' || t[3] === 'facilitator'))?.[1] || '';
+            const participants = event.tags.filter(t => t[0] === 'p' && (t[2] === 'participant' || t[3] === 'participant')).map(t => t[1]);
+            const guests = event.tags.filter(t => t[0] === 'p' && (t[2] === 'guest' || t[3] === 'guest')).map(t => t[1]);
 
             // Check if user is in any role
             let userRole: string | undefined;
