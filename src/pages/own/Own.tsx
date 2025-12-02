@@ -9,8 +9,10 @@ import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { SimplePool, finalizeEvent, nip44 } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "sonner";
+import { OWN_PROJECT_ID } from "@/lib/ownSupabaseClient";
 
-const SUPABASE_PUBLIC_URL = import.meta.env.VITE_SUPABASE_URL as string;
+// External Supabase project for OWN audio storage
+const OWN_SUPABASE_URL = `https://${OWN_PROJECT_ID}.supabase.co`;
 const DM_AUDIO_BUCKET = "dm-audio";
 
 // Helper to convert hex string to Uint8Array
@@ -184,7 +186,7 @@ export default function Own() {
 
       const audioUrl = path.startsWith("http")
         ? path
-        : `${SUPABASE_PUBLIC_URL}/storage/v1/object/public/${DM_AUDIO_BUCKET}/${path}`;
+        : `${OWN_SUPABASE_URL}/storage/v1/object/public/${DM_AUDIO_BUCKET}/${path}`;
 
       console.log("🎵 Audio message detected:", {
         originalText: text.length > 50 ? text.substring(0, 50) + "..." : text,

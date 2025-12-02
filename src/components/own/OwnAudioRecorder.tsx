@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Mic, Square, Send, X, Play, Pause } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { ownSupabase } from "@/lib/ownSupabaseClient";
 
 interface OwnAudioRecorderProps {
   processEventId: string;
@@ -142,7 +142,7 @@ export default function OwnAudioRecorder({
         type: mimeType,
       });
 
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await ownSupabase.storage
         .from("dm-audio")
         .upload(filePath, audioBlobRef.current, {
           contentType: mimeType,
