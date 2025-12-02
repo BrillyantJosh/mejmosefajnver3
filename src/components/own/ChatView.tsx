@@ -23,6 +23,7 @@ interface ChatViewProps {
   processEventId?: string;
   senderPubkey?: string;
   messages?: Message[];
+  phase?: string;
   onBack: () => void;
   onSendAudio?: (audioPath: string) => Promise<boolean>;
   onSendMessage?: (text: string) => Promise<boolean>;
@@ -35,6 +36,7 @@ export default function ChatView({
   processEventId,
   senderPubkey,
   messages = [], 
+  phase,
   onBack,
   onSendAudio,
   onSendMessage,
@@ -71,8 +73,14 @@ export default function ChatView({
     );
   }
 
+  const getPhaseBackground = () => {
+    if (phase === 'reflection') return 'bg-red-500/5';
+    if (phase === 'alignment') return 'bg-green-500/5';
+    return '';
+  };
+
   return (
-    <div className="flex flex-col h-full">
+    <div className={`flex flex-col h-full ${getPhaseBackground()}`}>
       {/* Header */}
       <Card className="p-3 md:p-4 mb-4 sticky top-0 z-10">
         <div className="flex items-center gap-2 md:gap-3">

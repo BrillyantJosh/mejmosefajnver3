@@ -79,7 +79,8 @@ export default function Own() {
     participants: process.participants.map(p => 
       profiles.get(p)?.full_name || p.slice(0, 8)
     ),
-    status: process.phase,
+    status: process.status,
+    phase: process.phase,
     lastActivity: new Date(process.openedAt * 1000).toLocaleDateString()
   }));
 
@@ -265,10 +266,11 @@ export default function Own() {
         <div className="h-full">
           <ChatView
             conversationTitle={selectedProcess?.title}
-            conversationStatus={selectedProcess?.phase}
+            conversationStatus={selectedProcess?.status}
             processEventId={selectedProcess?.processEventId}
             senderPubkey={session?.nostrHexId}
             messages={formattedMessages}
+            phase={selectedProcess?.phase}
             onBack={() => setSelectedProcessId(undefined)}
             onSendAudio={async (audioPath: string) => {
               return await sendOwnMessage(audioPath);
