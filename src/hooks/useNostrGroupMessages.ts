@@ -75,6 +75,7 @@ export const useNostrGroupMessages = (
       return;
     }
 
+    console.log('🏗️ Creating SimplePool instance...');
     const pool = new SimplePool();
     const groupKeyBytes = hexToBytes(groupKeyHex);
 
@@ -123,46 +124,57 @@ export const useNostrGroupMessages = (
       }
     };
 
-    console.log('🔔 Setting up real-time subscription for KIND 87046 messages on relays:', relays);
+    let sub: any = null;
 
-    const sub = pool.subscribeMany(
-      relays,
-      [
+    try {
+      console.log('🔔 Setting up real-time subscription for KIND 87046 messages on relays:', relays);
+      console.log('🔍 Filter:', { kinds: [87046], '#e': [processEventId] });
+
+      sub = pool.subscribeMany(
+        relays,
         {
           kinds: [87046],
           '#e': [processEventId],
         },
-      ] as any,
-      {
-        onevent(event: Event) {
-          console.log('📬 New message received in real-time:', {
-            eventId: event.id.slice(0, 16),
-            created_at: event.created_at,
-          });
-          const msg = decryptMessage(event);
-          if (msg) {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === msg.id)) {
-                console.log('⚠️ Message already exists, skipping');
-                return prev;
-              }
-              console.log('✅ Adding new message to state:', msg.text.substring(0, 30));
-              const updated = [...prev, msg];
-              updated.sort((a, b) => a.timestamp - b.timestamp);
-              return updated;
+        {
+          onevent(event: Event) {
+            console.log('📬 New message received in real-time:', {
+              eventId: event.id.slice(0, 16),
+              created_at: event.created_at,
+              kind: event.kind,
             });
-          }
-        },
-        oneose() {
-          console.log('✅ Real-time subscription established (EOSE received)');
-          setIsLoading(false);
-        },
-      }
-    );
+            const msg = decryptMessage(event);
+            if (msg) {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === msg.id)) {
+                  console.log('⚠️ Message already exists, skipping');
+                  return prev;
+                }
+                console.log('✅ Adding new message to state:', msg.text.substring(0, 30));
+                const updated = [...prev, msg];
+                updated.sort((a, b) => a.timestamp - b.timestamp);
+                return updated;
+              });
+            }
+          },
+          oneose() {
+            console.log('✅ Real-time subscription established (EOSE received)');
+            setIsLoading(false);
+          },
+        }
+      );
+
+      console.log('✅ Subscription created successfully');
+    } catch (error) {
+      console.error('❌ Failed to create subscription:', error);
+      setIsLoading(false);
+    }
 
     return () => {
       console.log('🔌 Closing subscription and pool...');
-      sub.close();
+      if (sub) {
+        sub.close();
+      }
       pool.close(relays);
     };
   }, [processEventId, groupKeyHex]);
