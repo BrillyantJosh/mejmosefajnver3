@@ -180,9 +180,20 @@ export default function Own() {
     }
   };
 
+  // Helper to determine user role in process
+  const getUserRole = (pubkey: string): string => {
+    if (!selectedProcess) return '';
+    if (pubkey === selectedProcess.initiator) return 'Initiator';
+    if (pubkey === selectedProcess.facilitator) return 'Facilitator';
+    if (selectedProcess.participants.includes(pubkey)) return 'Participant';
+    if (selectedProcess.guests.includes(pubkey)) return 'Guest';
+    return '';
+  };
+
   // Format messages for display
   const formattedMessages = messages.map(msg => {
     const text = msg.text.trim();
+    const userRole = getUserRole(msg.senderPubkey);
 
     // 1) New structure: "audio:<relative-path>"
     if (text.startsWith("audio:")) {
@@ -201,6 +212,7 @@ export default function Own() {
       return {
         id: msg.id,
         sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
+        role: userRole,
         timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
         type: "audio" as const,
         audioUrl,
@@ -221,6 +233,7 @@ export default function Own() {
       return {
         id: msg.id,
         sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
+        role: userRole,
         timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
         type: "audio" as const,
         audioUrl,
@@ -231,6 +244,7 @@ export default function Own() {
     return {
       id: msg.id,
       sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
+      role: userRole,
       timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
       type: 'text' as const,
       content: msg.text,
