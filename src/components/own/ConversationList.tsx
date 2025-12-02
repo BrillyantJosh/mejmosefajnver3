@@ -1,6 +1,5 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Settings } from "lucide-react";
 
 interface Conversation {
   id: string;
@@ -47,7 +46,6 @@ export default function ConversationList({ conversations, selectedId, onSelect }
           <div className="flex flex-col gap-2 mb-2">
             <div className="flex items-start justify-between gap-2">
               <h3 className="font-semibold text-sm md:text-base leading-snug flex-1">{conv.title}</h3>
-              <Settings className="w-4 h-4 text-muted-foreground shrink-0" />
             </div>
             <span className="text-xs text-muted-foreground">{conv.lastActivity}</span>
           </div>
