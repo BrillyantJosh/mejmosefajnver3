@@ -16,6 +16,7 @@ import Settings from "./pages/Settings";
 import SocialLayout from "./pages/social/SocialLayout";
 import Feed from "./pages/social/Feed";
 import Rooms from "./pages/social/Rooms";
+import TinyRooms from "./pages/social/TinyRooms";
 import Comments from "./pages/social/Comments";
 import LanaMusicLayout from "./pages/music/LanaMusicLayout";
 import Radio from "./pages/music/Radio";
@@ -107,6 +108,7 @@ const App = () => (
                   <Route path="/social" element={<SocialLayout />}>
                     <Route index element={<Feed />} />
                     <Route path="rooms" element={<Rooms />} />
+                    <Route path="tiny-rooms" element={<TinyRooms />} />
                     <Route path="notifications" element={<Comments />} />
                   </Route>
                   <Route path="/lash" element={<LashLayout />}>
