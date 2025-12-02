@@ -58,15 +58,15 @@ export default function MyCases() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-4 md:space-y-6 px-4 md:px-0">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
         <div>
-          <h2 className="text-2xl font-bold">My Cases</h2>
-          <p className="text-muted-foreground">{cases.length} active case{cases.length !== 1 ? 's' : ''}</p>
+          <h2 className="text-xl md:text-2xl font-bold">My Cases</h2>
+          <p className="text-sm text-muted-foreground">{cases.length} active case{cases.length !== 1 ? 's' : ''}</p>
         </div>
         <CreateCaseDialog />
       </div>
-      <div className="space-y-4">
+      <div className="space-y-3 md:space-y-4">
       {cases.map((ownCase) => {
         const caseParticipants = ownCase.participants
           .map(pubkey => {
@@ -80,54 +80,56 @@ export default function MyCases() {
 
         return (
           <Card key={ownCase.id} className="hover:shadow-md transition-shadow">
-            <CardHeader>
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <CardTitle className="text-lg">{ownCase.content}</CardTitle>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant={ownCase.userRole === 'initiated' ? 'default' : 'secondary'} className="text-xs">
+                    {ownCase.userRole === 'initiated' ? 'Initiated' : 'Participant'}
+                  </Badge>
+                  <Badge variant={ownCase.status === 'opened' ? 'default' : 'outline'} className="text-xs">
+                    {ownCase.status}
+                  </Badge>
+                </div>
+                <div>
+                  <CardTitle className="text-base md:text-lg leading-snug">{ownCase.content}</CardTitle>
                   {ownCase.topic && (
-                    <CardDescription className="mt-1">
+                    <CardDescription className="mt-1 text-sm">
                       {ownCase.topic}
                     </CardDescription>
                   )}
                 </div>
-                <div className="flex gap-2">
-                  <Badge variant={ownCase.userRole === 'initiated' ? 'default' : 'secondary'}>
-                    {ownCase.userRole === 'initiated' ? 'Initiated' : 'Participant'}
-                  </Badge>
-                  <Badge variant={ownCase.status === 'opened' ? 'default' : 'outline'}>
-                    {ownCase.status}
-                  </Badge>
-                </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 md:space-y-4">
               {/* Participants */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Participants:</span>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <Users className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+                  <span className="text-xs md:text-sm text-muted-foreground">Participants:</span>
+                </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {caseParticipants.map((participant) => (
                     <div key={participant.pubkey} className="flex items-center gap-1.5">
-                      <Avatar className="h-6 w-6">
+                      <Avatar className="h-5 w-5 md:h-6 md:w-6">
                         <AvatarImage src={getProxiedImageUrl(participant.picture)} />
                         <AvatarFallback className="text-xs">
                           {participant.name.slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="text-sm">{participant.name}</span>
+                      <span className="text-xs md:text-sm">{participant.name}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Metadata */}
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  <Calendar className="h-4 w-4" />
+              <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-xs md:text-sm text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 md:h-4 md:w-4" />
                   {new Date(ownCase.createdAt * 1000).toLocaleDateString()}
                 </div>
-                <div className="flex items-center gap-1">
-                  <Globe className="h-4 w-4" />
+                <div className="flex items-center gap-1.5">
+                  <Globe className="h-3.5 w-3.5 md:h-4 md:w-4" />
                   {ownCase.lang.toUpperCase()}
                 </div>
               </div>

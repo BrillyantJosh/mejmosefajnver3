@@ -115,11 +115,11 @@ export default function Search() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 px-4 md:px-0">
       <Card>
-        <CardHeader>
-          <CardTitle>Search Cases</CardTitle>
-          <CardDescription>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg md:text-xl">Search Cases</CardTitle>
+          <CardDescription className="text-sm">
             Browse closed OWN ▲ process cases and access transcripts
           </CardDescription>
         </CardHeader>
@@ -128,7 +128,7 @@ export default function Search() {
             <SearchIcon className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input 
               placeholder="Search by title or description..." 
-              className="pl-10"
+              className="pl-10 text-base"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -166,37 +166,39 @@ export default function Search() {
             
             return (
               <Card key={ownCase.id} className="hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <CardTitle className="text-lg">{ownCase.title || ownCase.topic || 'Untitled Case'}</CardTitle>
-                        <Badge variant="secondary">Closed</Badge>
-                        {!paymentsLoading && isPaid && (
-                          <Badge className="bg-green-500/10 text-green-700 hover:bg-green-500/20">
-                            Paid
-                          </Badge>
-                        )}
-                        {ownCase.lang && (
-                          <Badge variant="outline" className="text-xs uppercase">
-                            {ownCase.lang}
-                          </Badge>
-                        )}
-                      </div>
-                      <CardDescription className="line-clamp-2">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary" className="text-xs">Closed</Badge>
+                      {!paymentsLoading && isPaid && (
+                        <Badge className="bg-green-500/10 text-green-700 hover:bg-green-500/20 text-xs">
+                          Paid
+                        </Badge>
+                      )}
+                      {ownCase.lang && (
+                        <Badge variant="outline" className="text-xs uppercase">
+                          {ownCase.lang}
+                        </Badge>
+                      )}
+                    </div>
+                    <div>
+                      <CardTitle className="text-base md:text-lg leading-snug">
+                        {ownCase.title || ownCase.topic || 'Untitled Case'}
+                      </CardTitle>
+                      <CardDescription className="line-clamp-2 text-sm mt-1">
                         {ownCase.initialContent}
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
+                <CardContent className="space-y-3 md:space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-xs md:text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 md:h-4 md:w-4" />
                       <span>Started: {format(new Date(ownCase.startedAt * 1000), 'dd/MM/yyyy')}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 md:h-4 md:w-4" />
                       <span>Closed: {format(new Date(ownCase.closedAt * 1000), 'dd/MM/yyyy')}</span>
                     </div>
                   </div>
@@ -250,20 +252,20 @@ export default function Search() {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between pt-4 border-t">
-                    <div className="flex gap-3 flex-wrap">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-3 border-t">
+                    <div className="flex gap-2 flex-wrap">
                       {lanAmount > 0 ? (
                         <>
-                          <Badge className="bg-cyan-500/10 text-cyan-700 hover:bg-cyan-500/20">
+                          <Badge className="bg-cyan-500/10 text-cyan-700 hover:bg-cyan-500/20 text-xs">
                             {Math.round(lanAmount)} LANA
                           </Badge>
                           {userCurrency === sourceCurrency ? (
-                            <Badge className="bg-cyan-500/10 text-cyan-700 hover:bg-cyan-500/20">
+                            <Badge className="bg-cyan-500/10 text-cyan-700 hover:bg-cyan-500/20 text-xs">
                               {formatCurrency(sourceFiatAmount, sourceCurrency)}
                             </Badge>
                           ) : (
                             <>
-                              <Badge className="bg-cyan-500/10 text-cyan-700 hover:bg-cyan-500/20">
+                              <Badge className="bg-cyan-500/10 text-cyan-700 hover:bg-cyan-500/20 text-xs">
                                 {formatCurrency(userFiatAmount, userCurrency)}
                               </Badge>
                               <Badge variant="outline" className="text-xs">
@@ -273,19 +275,19 @@ export default function Search() {
                           )}
                         </>
                       ) : (
-                        <span className="text-sm text-muted-foreground">Pricing not available</span>
+                        <span className="text-xs md:text-sm text-muted-foreground">Pricing not available</span>
                       )}
                     </div>
                     {visibility === 'public' && lanAmount > 0 && (
                       <Button 
-                        className="bg-cyan-600 hover:bg-cyan-700"
+                        className="bg-cyan-600 hover:bg-cyan-700 w-full md:w-auto text-sm"
                         onClick={() => handleGetTranscript(ownCase.id, ownCase.recordId, ownCase.title || ownCase.topic || ownCase.initialContent)}
                         disabled={revenueLoading || paymentsLoading}
                       >
                         {paymentsLoading && (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         )}
-                        {paymentsLoading ? 'Checking payments...' : isPaid ? 'View Transcript' : 'Get Transcript'}
+                        {paymentsLoading ? 'Checking...' : isPaid ? 'View Transcript' : 'Get Transcript'}
                       </Button>
                     )}
                   </div>
