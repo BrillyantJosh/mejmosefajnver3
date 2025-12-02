@@ -56,10 +56,15 @@ export default function Comments() {
       return;
     }
 
+    if (relays.length === 0) {
+      toast.error("No relays available");
+      return;
+    }
+
     setIsSubmitting(true);
+    const pool = new SimplePool();
+    
     try {
-      const pool = new SimplePool();
-      
       const privKeyBytes = new Uint8Array(nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
       
       const event = finalizeEvent({
@@ -72,25 +77,31 @@ export default function Comments() {
         content: replyContent,
       }, privKeyBytes);
 
+      // Use Promise.allSettled to handle partial failures gracefully
       const publishPromises = pool.publish(relays, event);
       
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Publish timeout')), 10000)
-      );
-
-      await Promise.race([
-        ...publishPromises,
-        timeoutPromise
+      const results = await Promise.race([
+        Promise.allSettled(publishPromises),
+        new Promise<PromiseSettledResult<string>[]>((_, reject) => 
+          setTimeout(() => reject(new Error('Publish timeout')), 15000)
+        )
       ]);
 
-      toast.success("Reply posted successfully");
-      setReplyContent("");
-      setReplyingTo(null);
-      pool.close(relays);
+      // Check if at least one relay succeeded
+      const successCount = results.filter(r => r.status === 'fulfilled').length;
+      
+      if (successCount > 0) {
+        toast.success(`Reply posted to ${successCount}/${relays.length} relays`);
+        setReplyContent("");
+        setReplyingTo(null);
+      } else {
+        toast.error("Failed to post reply to any relay");
+      }
     } catch (error) {
       console.error("Error posting reply:", error);
       toast.error("Failed to post reply");
     } finally {
+      pool.close(relays);
       setIsSubmitting(false);
     }
   };
