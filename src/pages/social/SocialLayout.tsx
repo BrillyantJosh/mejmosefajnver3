@@ -1,10 +1,11 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Home, Users, MessageSquare } from "lucide-react";
+import { Home, Users, MessageSquare, DoorOpen } from "lucide-react";
 
 const socialNavItems = [
   { title: "Feed", path: "/social", icon: Home },
   { title: "Rooms", path: "/social/rooms", icon: Users },
+  { title: "Tiny Rooms", path: "/social/tiny-rooms", icon: DoorOpen },
   { title: "Comments", path: "/social/notifications", icon: MessageSquare },
 ];
 
