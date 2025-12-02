@@ -14,6 +14,7 @@ interface Message {
   type: 'text' | 'audio';
   content?: string;
   audioUrl?: string;
+  isCurrentUser?: boolean;
 }
 
 interface ChatViewProps {
@@ -111,6 +112,7 @@ export default function ChatView({
                 type={msg.type}
                 content={msg.content}
                 audioUrl={msg.audioUrl}
+                isCurrentUser={msg.isCurrentUser}
               />
             ))
           )}
