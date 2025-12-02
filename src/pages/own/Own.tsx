@@ -79,6 +79,9 @@ export default function Own() {
     participants: process.participants.map(p => 
       profiles.get(p)?.full_name || p.slice(0, 8)
     ),
+    guests: process.guests.map(g =>
+      profiles.get(g)?.full_name || g.slice(0, 8)
+    ),
     status: process.phase,
     phase: process.phase,
     lastActivity: new Date(process.openedAt * 1000).toLocaleDateString()
