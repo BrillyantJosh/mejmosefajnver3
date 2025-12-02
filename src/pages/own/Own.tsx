@@ -7,6 +7,9 @@ import { useNostrGroupKey } from "@/hooks/useNostrGroupKey";
 import { useNostrGroupMessages } from "@/hooks/useNostrGroupMessages";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 
+const SUPABASE_PUBLIC_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const DM_AUDIO_BUCKET = "dm-audio";
+
 export default function Own() {
   const { session } = useAuth();
   const [selectedProcessId, setSelectedProcessId] = useState<string>();
@@ -67,28 +70,47 @@ export default function Own() {
 
   // Format messages for display
   const formattedMessages = messages.map(msg => {
-    // Check if message is an audio message
-    const isAudio = msg.text.startsWith('audio:');
-    
-    if (isAudio) {
-      // Extract audio path after "audio:" prefix
-      const audioPath = msg.text.substring(6); // Remove "audio:" prefix
-      
-      // Construct Supabase storage URL for OWN audio (separate Supabase project)
-      const audioUrl = `https://saaodlxrptrtgasajxlx.supabase.co/storage/v1/object/public/dm-audio/${audioPath}`;
-      
-      console.log('🎵 Audio message detected:', {
-        originalText: msg.text.substring(0, 50) + '...',
-        audioPath: audioPath.substring(0, 50) + '...',
-        audioUrl: audioUrl.substring(0, 80) + '...'
+    const text = msg.text.trim();
+
+    // 1) New structure: "audio:<relative-path>"
+    if (text.startsWith("audio:")) {
+      const path = text.slice("audio:".length).trim();
+
+      const audioUrl = path.startsWith("http")
+        ? path
+        : `${SUPABASE_PUBLIC_URL}/storage/v1/object/public/${DM_AUDIO_BUCKET}/${path}`;
+
+      console.log("🎵 Audio message detected:", {
+        originalText: text.length > 50 ? text.substring(0, 50) + "..." : text,
+        audioPath: path,
+        audioUrl,
       });
-      
+
       return {
         id: msg.id,
         sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
         timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
-        type: 'audio' as const,
-        audioUrl
+        type: "audio" as const,
+        audioUrl,
+      };
+    }
+
+    // 2) Old structure: full URL inside message content
+    if (text.includes("supabase.co/storage/v1/object/public/dm-audio")) {
+      const urlMatch = text.match(/https:\/\/[^\s]+/);
+      const audioUrl = urlMatch ? urlMatch[0] : text;
+
+      console.log("🎵 Legacy audio message detected:", {
+        originalText: text.length > 50 ? text.substring(0, 50) + "..." : text,
+        audioUrl,
+      });
+
+      return {
+        id: msg.id,
+        sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
+        timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
+        type: "audio" as const,
+        audioUrl,
       };
     }
     

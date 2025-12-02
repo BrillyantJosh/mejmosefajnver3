@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Mic, Square, Send, X, Play, Pause } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
-import { ownSupabase } from "@/lib/ownSupabaseClient";
+import { supabase } from "@/integrations/supabase/client";
 
 interface OwnAudioRecorderProps {
   processEventId: string;
@@ -60,7 +60,13 @@ export default function OwnAudioRecorder({
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
       
       const mimeType = getSupportedMimeType();
@@ -116,30 +122,42 @@ export default function OwnAudioRecorder({
     setIsUploading(true);
     try {
       const timestamp = Date.now();
-      const fileName = `${timestamp}.webm`;
+      const randomStr = Math.random().toString(36).substring(7);
+      const mimeType = audioBlobRef.current.type || 'audio/webm';
+      const extension = mimeType.includes('webm')
+        ? 'webm'
+        : mimeType.includes('mp4')
+          ? 'mp4'
+          : mimeType.includes('aac')
+            ? 'aac'
+            : mimeType.includes('mpeg')
+              ? 'mp3'
+              : 'webm';
+      const fileName = `${timestamp}_${randomStr}.${extension}`;
       const filePath = `${senderPubkey}-${processEventId}/${fileName}`;
 
       console.log('🎵 Uploading OWN audio:', {
         filePath,
         size: audioBlobRef.current.size,
-        type: audioBlobRef.current.type
+        type: mimeType,
       });
 
-      const { error: uploadError } = await ownSupabase.storage
-        .from('dm-audio')
+      const { error: uploadError } = await supabase.storage
+        .from("dm-audio")
         .upload(filePath, audioBlobRef.current, {
-          contentType: audioBlobRef.current.type,
-          upsert: false
+          contentType: mimeType,
+          cacheControl: "3600",
+          upsert: false,
         });
 
       if (uploadError) {
-        console.error('Upload error:', uploadError);
+        console.error("Upload error:", uploadError);
         toast.error(`Napaka pri nalaganju: ${uploadError.message}`);
         return;
       }
 
-      // Send the audio path to the chat
-      await onSendAudio(filePath);
+      // Send the audio path to the chat (Nostr content uses "audio:" prefix)
+      await onSendAudio(`audio:${filePath}`);
       
       // Cleanup
       handleDiscardPreview();
