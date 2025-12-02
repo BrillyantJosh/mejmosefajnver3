@@ -169,18 +169,41 @@ export function CreateTinyRoomDialog() {
       const privKeyBytes = new Uint8Array(session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
       const signedEvent = finalizeEvent(eventTemplate, privKeyBytes);
 
-      // Publish to relays
-      const pool = new SimplePool();
-      const publishPromises = RELAYS.map(relay =>
-        pool.publish([relay], signedEvent)
-      );
+      console.log('Publishing KIND 30150 to relays:', RELAYS);
+      console.log('Event:', signedEvent);
 
-      await Promise.race([
-        Promise.all(publishPromises),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout")), 10000)
-        ),
-      ]);
+      // Publish to relays - same approach as CreatePost
+      const pool = new SimplePool();
+      const publishPromises = pool.publish(RELAYS, signedEvent);
+      
+      // Create array from promises for tracking
+      const publishArray = Array.from(publishPromises);
+      let successCount = 0;
+      
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          if (successCount === 0) {
+            reject(new Error('Publish timeout - no relays responded'));
+          } else {
+            resolve();
+          }
+        }, 10000);
+
+        publishArray.forEach((promise) => {
+          promise
+            .then(() => {
+              successCount++;
+              console.log(`✅ Published to relay (${successCount})`);
+              if (successCount === 1) {
+                clearTimeout(timeout);
+                resolve();
+              }
+            })
+            .catch(err => {
+              console.error('❌ Failed to publish to relay:', err);
+            });
+        });
+      });
 
       pool.close(RELAYS);
 
@@ -332,9 +355,9 @@ export function CreateTinyRoomDialog() {
                           <span className="text-xs font-medium">{displayName.charAt(0).toUpperCase()}</span>
                         </div>
                       )}
-                      <div className="flex-1 text-left">
-                        <p className="text-sm font-medium">{displayName}</p>
-                        <p className="text-xs text-muted-foreground truncate">{profile.nostr_hex_id.slice(0, 16)}...</p>
+                  <div className="flex-1 text-left">
+                        <p className="text-sm font-medium">{profile.display_name || `${profile.nostr_hex_id.slice(0, 8)}...`}</p>
+                        {profile.full_name && <p className="text-xs text-muted-foreground">{profile.full_name}</p>}
                       </div>
                       {isAdded ? (
                         <Badge variant="secondary" className="text-xs">Added</Badge>
