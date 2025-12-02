@@ -14,6 +14,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserRoomSubscriptions } from "@/hooks/useNostrUserRoomSubscriptions";
+import { useNostrTinyRooms } from "@/hooks/useNostrTinyRooms";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { SimplePool, finalizeEvent, getPublicKey } from 'nostr-tools';
@@ -59,6 +60,16 @@ export default function Feed() {
     userPubkey: session?.nostrHexId || '',
     userPrivateKey: session?.nostrPrivateKey || ''
   });
+
+  // Get user's Tiny Rooms
+  const { rooms: tinyRooms } = useNostrTinyRooms(session?.nostrHexId);
+
+  // Create list of valid Tiny Room 'a' tag values
+  const tinyRoomATags = useMemo(() => {
+    return tinyRooms
+      .filter(room => room.status === 'active')
+      .map(room => `30150:${room.admin}:${room.slug}`);
+  }, [tinyRooms]);
 
   const relays = systemParameters?.relays && systemParameters.relays.length > 0 
     ? systemParameters.relays 
@@ -124,13 +135,26 @@ export default function Feed() {
         activeRoomSlugs.length > 0 ? '(user subscribed)' : '(default rooms)');
       console.log('📝 Total posts:', posts.length);
 
-      // Filter posts that have 'a' or 't' tag matching rooms
+      // Filter posts that have 'a' or 't' tag matching rooms or Tiny Rooms
       const filtered = posts.filter(post => {
         const roomTags = post.tags?.filter(tag => tag[0] === 'a' || tag[0] === 't') || [];
         const matchesRoom = roomTags.some(tag => {
-          const matches = roomsToFilter.includes(tag[1]);
-          console.log(`Post ${post.id.slice(0, 8)} - tag: ${tag[1]}, matches: ${matches}`);
-          return matches;
+          const tagValue = tag[1];
+          
+          // Check regular rooms
+          if (roomsToFilter.includes(tagValue)) {
+            console.log(`Post ${post.id.slice(0, 8)} - Regular room tag: ${tagValue}, matches: true`);
+            return true;
+          }
+          
+          // Check Tiny Rooms - if tag starts with '30150:'
+          if (tagValue.startsWith('30150:')) {
+            const isMemberOfTinyRoom = tinyRoomATags.includes(tagValue);
+            console.log(`Post ${post.id.slice(0, 8)} - Tiny Room tag: ${tagValue}, member: ${isMemberOfTinyRoom}`);
+            return isMemberOfTinyRoom;
+          }
+          
+          return false;
         });
         return matchesRoom;
       });
@@ -451,7 +475,15 @@ export default function Feed() {
                   <div className="flex items-center gap-2">
                     {post.tags && post.tags.some(tag => tag[0] === 'a' || tag[0] === 't') && (
                       <Badge variant="secondary" className="text-xs">
-                        Room: {post.tags.find(tag => tag[0] === 'a' || tag[0] === 't')?.[1]}
+                        {(() => {
+                          const roomTag = post.tags.find(tag => tag[0] === 'a' || tag[0] === 't')?.[1];
+                          if (roomTag?.startsWith('30150:')) {
+                            // Find Tiny Room name
+                            const tinyRoom = tinyRooms.find(r => `30150:${r.admin}:${r.slug}` === roomTag);
+                            return tinyRoom ? `🚪 ${tinyRoom.name}` : roomTag;
+                          }
+                          return `Room: ${roomTag}`;
+                        })()}
                       </Badge>
                     )}
                     <DropdownMenu>
