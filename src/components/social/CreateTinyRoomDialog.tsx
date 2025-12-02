@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Plus, Loader2, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Loader2, X, Search, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { finalizeEvent, SimplePool } from "nostr-tools";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { supabase } from "@/integrations/supabase/client";
 
 export function CreateTinyRoomDialog() {
   const [open, setOpen] = useState(false);
@@ -24,17 +26,81 @@ export function CreateTinyRoomDialog() {
     rules: "",
     image: "",
     members: [] as string[],
-    memberInput: "",
   });
 
-  const handleAddMember = () => {
-    const trimmed = formData.memberInput.trim();
-    if (trimmed && !formData.members.includes(trimmed)) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{
+    nostr_hex_id: string;
+    display_name: string | null;
+    full_name: string | null;
+    picture: string | null;
+  }>>([]);
+  const [searching, setSearching] = useState(false);
+  const [memberProfiles, setMemberProfiles] = useState<Map<string, {
+    display_name: string | null;
+    full_name: string | null;
+    picture: string | null;
+  }>>(new Map());
+
+  // Auto-generate room ID on mount
+  useEffect(() => {
+    const generateRoomId = () => {
+      const timestamp = Date.now().toString(36);
+      const randomStr = Math.random().toString(36).substring(2, 7);
+      return `${timestamp}-${randomStr}`;
+    };
+    
+    setFormData(prev => ({ ...prev, roomId: generateRoomId() }));
+  }, []);
+
+  // Search for profiles
+  useEffect(() => {
+    const searchProfiles = async () => {
+      if (!searchQuery.trim() || searchQuery.length < 2) {
+        setSearchResults([]);
+        return;
+      }
+
+      setSearching(true);
+      try {
+        const { data, error } = await supabase
+          .from('nostr_profiles')
+          .select('nostr_hex_id, display_name, full_name, picture')
+          .or(`display_name.ilike.%${searchQuery}%,full_name.ilike.%${searchQuery}%`)
+          .limit(10);
+
+        if (error) throw error;
+        setSearchResults(data || []);
+      } catch (error) {
+        console.error('Error searching profiles:', error);
+      } finally {
+        setSearching(false);
+      }
+    };
+
+    const debounce = setTimeout(searchProfiles, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
+  const handleAddMember = (pubkey: string) => {
+    if (!formData.members.includes(pubkey)) {
       setFormData(prev => ({
         ...prev,
-        members: [...prev.members, trimmed],
-        memberInput: "",
+        members: [...prev.members, pubkey],
       }));
+      
+      // Cache profile data for added member
+      const profile = searchResults.find(p => p.nostr_hex_id === pubkey);
+      if (profile) {
+        setMemberProfiles(prev => new Map(prev).set(pubkey, {
+          display_name: profile.display_name,
+          full_name: profile.full_name,
+          picture: profile.picture,
+        }));
+      }
+      
+      setSearchQuery("");
+      setSearchResults([]);
     }
   };
 
@@ -122,16 +188,24 @@ export function CreateTinyRoomDialog() {
       setOpen(false);
       
       // Reset form
+      const newRoomId = (() => {
+        const timestamp = Date.now().toString(36);
+        const randomStr = Math.random().toString(36).substring(2, 7);
+        return `${timestamp}-${randomStr}`;
+      })();
+      
       setFormData({
-        roomId: "",
+        roomId: newRoomId,
         name: "",
         description: "",
         topic: "",
         rules: "",
         image: "",
         members: [],
-        memberInput: "",
       });
+      setSearchQuery("");
+      setSearchResults([]);
+      setMemberProfiles(new Map());
 
       // Refresh page after a short delay
       setTimeout(() => {
@@ -159,20 +233,6 @@ export function CreateTinyRoomDialog() {
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
-          <div>
-            <Label htmlFor="roomId">Room ID *</Label>
-            <Input
-              id="roomId"
-              value={formData.roomId}
-              onChange={e => setFormData(prev => ({ ...prev, roomId: e.target.value }))}
-              placeholder="magic-lounge"
-              disabled={creating}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Unique identifier for this room
-            </p>
-          </div>
-
           <div>
             <Label htmlFor="name">Room Name *</Label>
             <Input
@@ -231,40 +291,94 @@ export function CreateTinyRoomDialog() {
           </div>
 
           <div>
-            <Label htmlFor="members">Add Members (Pubkeys)</Label>
-            <div className="flex gap-2">
+            <Label htmlFor="searchMembers">Search & Add Members</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                id="members"
-                value={formData.memberInput}
-                onChange={e => setFormData(prev => ({ ...prev, memberInput: e.target.value }))}
-                onKeyPress={e => e.key === "Enter" && handleAddMember()}
-                placeholder="Paste member pubkey and press Enter"
+                id="searchMembers"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search by name..."
                 disabled={creating}
+                className="pl-9"
               />
-              <Button type="button" onClick={handleAddMember} disabled={creating} variant="outline">
-                Add
-              </Button>
             </div>
-            {formData.members.length > 0 && (
-              <div className="mt-2 space-y-1">
-                {formData.members.map(member => (
-                  <div key={member} className="flex items-center gap-2 text-sm bg-muted p-2 rounded">
-                    <span className="flex-1 truncate">{member}</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveMember(member)}
-                      disabled={creating}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+            
+            {searching && (
+              <div className="mt-2 text-sm text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Searching...
               </div>
             )}
-            <p className="text-xs text-muted-foreground mt-1">
-              You will be automatically added as a member
+
+            {searchResults.length > 0 && (
+              <div className="mt-2 max-h-48 overflow-y-auto border rounded-md">
+                {searchResults.map(profile => {
+                  const displayName = profile.display_name || profile.full_name || `${profile.nostr_hex_id.slice(0, 8)}...`;
+                  const isAdded = formData.members.includes(profile.nostr_hex_id);
+                  
+                  return (
+                    <button
+                      key={profile.nostr_hex_id}
+                      type="button"
+                      onClick={() => !isAdded && handleAddMember(profile.nostr_hex_id)}
+                      disabled={creating || isAdded}
+                      className="w-full flex items-center gap-3 p-3 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {profile.picture ? (
+                        <img src={profile.picture} alt="" className="w-8 h-8 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-xs font-medium">{displayName.charAt(0).toUpperCase()}</span>
+                        </div>
+                      )}
+                      <div className="flex-1 text-left">
+                        <p className="text-sm font-medium">{displayName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{profile.nostr_hex_id.slice(0, 16)}...</p>
+                      </div>
+                      {isAdded ? (
+                        <Badge variant="secondary" className="text-xs">Added</Badge>
+                      ) : (
+                        <UserPlus className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {formData.members.length > 0 && (
+              <div className="mt-3">
+                <p className="text-sm font-medium mb-2">Selected Members ({formData.members.length})</p>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {formData.members.map(member => {
+                    const cachedProfile = memberProfiles.get(member);
+                    const displayName = cachedProfile?.display_name || cachedProfile?.full_name || `${member.slice(0, 8)}...`;
+                    
+                    return (
+                      <div key={member} className="flex items-center gap-2 text-sm bg-muted p-2 rounded">
+                        {cachedProfile?.picture && (
+                          <img src={cachedProfile.picture} alt="" className="w-6 h-6 rounded-full object-cover" />
+                        )}
+                        <span className="flex-1 truncate">{displayName}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveMember(member)}
+                          disabled={creating}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            
+            <p className="text-xs text-muted-foreground mt-2">
+              You will be automatically added as a member and owner
             </p>
           </div>
         </div>
