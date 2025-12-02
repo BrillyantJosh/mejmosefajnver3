@@ -77,10 +77,10 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
             });
 
             // Extract roles
-            const initiator = event.tags.find(t => t[0] === 'p' && t[2] === 'initiator')?.[1] || '';
-            const facilitator = event.tags.find(t => t[0] === 'p' && t[2] === 'facilitator')?.[1] || '';
-            const participants = event.tags.filter(t => t[0] === 'p' && t[2] === 'participant').map(t => t[1]);
-            const guests = event.tags.filter(t => t[0] === 'p' && t[2] === 'guest').map(t => t[1]);
+            const initiator = event.tags.find(t => t[0] === 'p' && t[3] === 'initiator')?.[1] || '';
+            const facilitator = event.tags.find(t => t[0] === 'p' && t[3] === 'facilitator')?.[1] || '';
+            const participants = event.tags.filter(t => t[0] === 'p' && t[3] === 'participant').map(t => t[1]);
+            const guests = event.tags.filter(t => t[0] === 'p' && t[3] === 'guest').map(t => t[1]);
 
             // Check if user is in any role
             let userRole: string | undefined;
