@@ -95,6 +95,10 @@ export const useNostrGroupMessages = (
 
     const setupMessagesAndSubscription = async () => {
       try {
+        // Capture timestamp at the START to avoid missing messages during fetch
+        const subscriptionSince = Math.floor(Date.now() / 1000) - 5; // 5 seconds buffer
+        console.log('🕐 Subscription will start from timestamp:', subscriptionSince);
+
         // Step 1: Fetch existing messages
         console.log('🔍 Fetching existing KIND 87046 messages...');
         
@@ -120,18 +124,22 @@ export const useNostrGroupMessages = (
         setIsLoading(false);
 
         // Step 2: Subscribe to new messages in real-time
-        console.log('🔔 Setting up real-time subscription...');
+        console.log('🔔 Setting up real-time subscription from timestamp:', subscriptionSince);
         
         const sub = pool.subscribeMany(
           parameters.relays,
           [{
             kinds: [87046],
             '#e': [processEventId],
-            since: Math.floor(Date.now() / 1000)
+            since: subscriptionSince
           }] as any,
           {
             onevent(event: Event) {
-              console.log('📬 New message received in real-time:', event.id.slice(0, 16));
+              console.log('📬 New message received in real-time:', {
+                eventId: event.id.slice(0, 16),
+                created_at: event.created_at,
+                relay: 'unknown'
+              });
               const msg = decryptMessage(event);
               if (msg) {
                 setMessages(prev => {
@@ -141,7 +149,7 @@ export const useNostrGroupMessages = (
                     return prev;
                   }
                   // Add new message and sort
-                  console.log('✅ Adding new message to state');
+                  console.log('✅ Adding new message to state:', msg.text.substring(0, 30));
                   const updated = [...prev, msg];
                   updated.sort((a, b) => a.timestamp - b.timestamp);
                   return updated;
@@ -149,7 +157,7 @@ export const useNostrGroupMessages = (
               }
             },
             oneose() {
-              console.log('✅ Real-time subscription established');
+              console.log('✅ Real-time subscription established (EOSE received)');
             }
           }
         );
