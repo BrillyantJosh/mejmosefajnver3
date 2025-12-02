@@ -200,6 +200,7 @@ export default function Own() {
         timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
         type: "audio" as const,
         audioUrl,
+        isCurrentUser: msg.senderPubkey === session?.nostrHexId,
       };
     }
 
@@ -219,6 +220,7 @@ export default function Own() {
         timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
         type: "audio" as const,
         audioUrl,
+        isCurrentUser: msg.senderPubkey === session?.nostrHexId,
       };
     }
     
@@ -227,7 +229,8 @@ export default function Own() {
       sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
       timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
       type: 'text' as const,
-      content: msg.text
+      content: msg.text,
+      isCurrentUser: msg.senderPubkey === session?.nostrHexId,
     };
   });
 
