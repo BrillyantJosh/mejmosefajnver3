@@ -3,6 +3,7 @@ import { AudioPlayer } from "@/components/AudioPlayer";
 
 interface ChatMessageProps {
   sender: string;
+  role?: string;
   timestamp: string;
   type: 'text' | 'audio';
   content?: string;
@@ -10,12 +11,12 @@ interface ChatMessageProps {
   isCurrentUser?: boolean;
 }
 
-export default function ChatMessage({ sender, timestamp, type, content, audioUrl, isCurrentUser = false }: ChatMessageProps) {
+export default function ChatMessage({ sender, role, timestamp, type, content, audioUrl, isCurrentUser = false }: ChatMessageProps) {
   if (type === 'audio' && audioUrl) {
     return (
       <div className={`flex flex-col mb-4 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
         <div className="text-xs text-muted-foreground mb-1">
-          {sender} • {timestamp}
+          {sender}{role && ` (${role})`} • {timestamp}
         </div>
         <Card className={`p-3 max-w-md w-full ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
           <AudioPlayer audioUrl={audioUrl} />
@@ -27,7 +28,7 @@ export default function ChatMessage({ sender, timestamp, type, content, audioUrl
   return (
     <div className={`flex flex-col mb-4 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
       <div className="text-xs text-muted-foreground mb-1">
-        {sender} • {timestamp}
+        {sender}{role && ` (${role})`} • {timestamp}
       </div>
       <Card className={`p-3 max-w-md ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
         <p className="text-sm">{content}</p>
