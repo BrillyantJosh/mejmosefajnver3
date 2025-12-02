@@ -110,6 +110,10 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
             process.status === 'open' && 
             process.userRole !== undefined
           )
+          // Deduplicate by id - keep only the first (newest) occurrence
+          .filter((process, index, self) => 
+            self.findIndex(p => p.id === process.id) === index
+          )
           .sort((a, b) => b.openedAt - a.openedAt);
 
         console.log(`✅ Filtered to ${processedEvents.length} open processes where user is involved`);
