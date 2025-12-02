@@ -6,12 +6,25 @@ import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
 import { useNostrGroupKey } from "@/hooks/useNostrGroupKey";
 import { useNostrGroupMessages } from "@/hooks/useNostrGroupMessages";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
+import { SimplePool, finalizeEvent, nip44 } from "nostr-tools";
+import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { toast } from "sonner";
 
 const SUPABASE_PUBLIC_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const DM_AUDIO_BUCKET = "dm-audio";
 
+// Helper to convert hex string to Uint8Array
+const hexToBytes = (hex: string): Uint8Array => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+  }
+  return bytes;
+};
+
 export default function Own() {
   const { session } = useAuth();
+  const { parameters } = useSystemParameters();
   const [selectedProcessId, setSelectedProcessId] = useState<string>();
 
   // TEMP: Clear all group key caches for debugging
@@ -67,6 +80,99 @@ export default function Own() {
     status: process.phase,
     lastActivity: new Date(process.openedAt * 1000).toLocaleDateString()
   }));
+
+  // Send OWN message (text or audio)
+  const sendOwnMessage = async (content: string): Promise<boolean> => {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId || !groupKey || !selectedProcess) {
+      toast.error("Missing authentication or group key");
+      return false;
+    }
+
+    if (!parameters?.relays || parameters.relays.length === 0) {
+      toast.error("No relays configured");
+      return false;
+    }
+
+    try {
+      console.log('📤 Sending OWN message:', {
+        processId: selectedProcess.processEventId.slice(0, 16) + '...',
+        contentPreview: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+        groupKeyHex: groupKey.slice(0, 16) + '...'
+      });
+
+      // 1. Prepare message payload
+      const messagePayload = {
+        text: content.trim(),
+        timestamp: Math.floor(Date.now() / 1000)
+      };
+
+      const plaintextJson = JSON.stringify(messagePayload);
+      console.log('📝 Plaintext payload:', plaintextJson);
+
+      // 2. Encrypt with NIP-44 v2
+      // For KIND 87046: groupKey acts as private key, sender pubkey as public key
+      const groupKeyBytes = hexToBytes(groupKey);
+      const conversationKey = nip44.v2.utils.getConversationKey(
+        groupKeyBytes,
+        session.nostrHexId
+      );
+
+      const encryptedContent = nip44.v2.encrypt(plaintextJson, conversationKey);
+      console.log('🔐 Encrypted content length:', encryptedContent.length);
+
+      // 3. Create KIND 87046 event
+      const privateKeyBytes = hexToBytes(session.nostrPrivateKey);
+      
+      const signedEvent = finalizeEvent({
+        kind: 87046,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['e', selectedProcess.processEventId, '', 'process'],
+          ['group', `own:${selectedProcess.processEventId}`],
+          ['p', session.nostrHexId, '', 'sender'],
+          ['encryption', 'nip44'],
+          ['phase', selectedProcess.phase || 'unknown']
+        ],
+        content: encryptedContent
+      }, privateKeyBytes);
+
+      console.log('✍️ Event signed:', {
+        id: signedEvent.id.slice(0, 16) + '...',
+        kind: signedEvent.kind,
+        pubkey: signedEvent.pubkey.slice(0, 16) + '...'
+      });
+
+      // 4. Publish to relays
+      const pool = new SimplePool();
+      const publishPromises = pool.publish(parameters.relays, signedEvent);
+
+      const publishResults = await Promise.allSettled(
+        Array.from(publishPromises).map((promise, index) => 
+          Promise.race([
+            promise.then(() => ({ relay: parameters.relays[index], success: true })),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Timeout')), 8000)
+            )
+          ])
+        )
+      );
+
+      const successCount = publishResults.filter(r => r.status === 'fulfilled').length;
+      console.log(`✅ Published to ${successCount}/${parameters.relays.length} relays`);
+
+      if (successCount > 0) {
+        toast.success("Message sent");
+        return true;
+      } else {
+        toast.error("Failed to publish to any relay");
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error sending OWN message:', error);
+      toast.error("Failed to send message");
+      return false;
+    }
+  };
 
   // Format messages for display
   const formattedMessages = messages.map(msg => {
@@ -160,8 +266,7 @@ export default function Own() {
             messages={formattedMessages}
             onBack={() => setSelectedProcessId(undefined)}
             onSendAudio={async (audioPath: string) => {
-              // TODO: Send encrypted audio message to Nostr
-              console.log('🎵 Sending OWN audio:', audioPath);
+              return await sendOwnMessage(audioPath);
             }}
             isLoading={keyLoading || messagesLoading}
           />

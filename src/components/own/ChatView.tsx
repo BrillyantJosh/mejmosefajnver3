@@ -23,7 +23,7 @@ interface ChatViewProps {
   senderPubkey?: string;
   messages?: Message[];
   onBack: () => void;
-  onSendAudio?: (audioPath: string) => Promise<void>;
+  onSendAudio?: (audioPath: string) => Promise<boolean>;
   isLoading?: boolean;
 }
 
