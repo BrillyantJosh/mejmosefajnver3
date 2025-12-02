@@ -24,6 +24,7 @@ interface ChatViewProps {
   messages?: Message[];
   onBack: () => void;
   onSendAudio?: (audioPath: string) => Promise<boolean>;
+  onSendMessage?: (text: string) => Promise<boolean>;
   isLoading?: boolean;
 }
 
@@ -35,9 +36,29 @@ export default function ChatView({
   messages = [], 
   onBack,
   onSendAudio,
+  onSendMessage,
   isLoading = false
 }: ChatViewProps) {
   const [messageText, setMessageText] = useState("");
+  const [isSending, setIsSending] = useState(false);
+
+  const handleSendText = async () => {
+    if (!messageText.trim() || !onSendMessage) return;
+    
+    setIsSending(true);
+    const success = await onSendMessage(messageText.trim());
+    if (success) {
+      setMessageText("");
+    }
+    setIsSending(false);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendText();
+    }
+  };
 
   if (!conversationTitle) {
     return (
@@ -104,6 +125,8 @@ export default function ChatView({
             placeholder="Type a message..."
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={isSending}
             className="flex-1 px-4 py-2 rounded-lg border bg-background"
           />
           {processEventId && senderPubkey && onSendAudio && (
@@ -114,7 +137,12 @@ export default function ChatView({
               compact
             />
           )}
-          <Button size="icon" className="bg-cyan-500 hover:bg-cyan-600">
+          <Button 
+            size="icon" 
+            className="bg-cyan-500 hover:bg-cyan-600"
+            onClick={handleSendText}
+            disabled={!messageText.trim() || isSending}
+          >
             <Send className="w-5 h-5" />
           </Button>
         </div>

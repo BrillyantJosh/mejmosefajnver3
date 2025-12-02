@@ -268,6 +268,9 @@ export default function Own() {
             onSendAudio={async (audioPath: string) => {
               return await sendOwnMessage(audioPath);
             }}
+            onSendMessage={async (text: string) => {
+              return await sendOwnMessage(text);
+            }}
             isLoading={keyLoading || messagesLoading}
           />
         </div>
