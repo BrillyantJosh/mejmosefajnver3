@@ -9,6 +9,7 @@ interface Conversation {
   facilitator: string;
   participants: string[];
   status: string;
+  phase?: string;
   lastActivity: string;
 }
 
@@ -19,6 +20,12 @@ interface ConversationListProps {
 }
 
 export default function ConversationList({ conversations, selectedId, onSelect }: ConversationListProps) {
+  const getPhaseBackground = (phase?: string) => {
+    if (phase === 'reflection') return 'bg-red-500/5';
+    if (phase === 'alignment') return 'bg-green-500/5';
+    return '';
+  };
+
   return (
     <div className="space-y-3">
       <div className="mb-4">
@@ -34,7 +41,7 @@ export default function ConversationList({ conversations, selectedId, onSelect }
           key={conv.id}
           className={`p-3 md:p-4 cursor-pointer transition-colors hover:bg-accent/50 active:scale-[0.98] ${
             selectedId === conv.id ? 'border-primary bg-accent/30' : ''
-          }`}
+          } ${getPhaseBackground(conv.phase)}`}
           onClick={() => onSelect(conv.id)}
         >
           <div className="flex flex-col gap-2 mb-2">
