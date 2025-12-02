@@ -74,16 +74,16 @@ export default function ChatView({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <Card className="p-4 mb-4 sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onBack}>
-            <ArrowLeft className="w-5 h-5" />
+      <Card className="p-3 md:p-4 mb-4 sticky top-0 z-10">
+        <div className="flex items-center gap-2 md:gap-3">
+          <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
+            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
           </Button>
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold">{conversationTitle}</h2>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+              <h2 className="text-base md:text-lg font-semibold truncate">{conversationTitle}</h2>
               {conversationStatus && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-xs shrink-0">
                   {conversationStatus}
                 </Badge>
               )}
@@ -93,14 +93,14 @@ export default function ChatView({
       </Card>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 px-4">
+      <ScrollArea className="flex-1 px-2 md:px-4">
         <div className="space-y-2 pb-4">
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-sm text-muted-foreground">
               Loading messages...
             </div>
           ) : messages.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-sm text-muted-foreground">
               No messages yet
             </div>
           ) : (
@@ -120,7 +120,7 @@ export default function ChatView({
       </ScrollArea>
 
       {/* Input */}
-      <Card className="p-4 sticky bottom-0">
+      <Card className="p-3 md:p-4 sticky bottom-0">
         <div className="flex items-center gap-2">
           <input
             type="text"
@@ -129,7 +129,7 @@ export default function ChatView({
             onChange={(e) => setMessageText(e.target.value)}
             onKeyPress={handleKeyPress}
             disabled={isSending}
-            className="flex-1 px-4 py-2 rounded-lg border bg-background"
+            className="flex-1 px-3 md:px-4 py-2 md:py-2.5 rounded-lg border bg-background text-base"
           />
           {processEventId && senderPubkey && onSendAudio && (
             <OwnAudioRecorder 
@@ -141,11 +141,11 @@ export default function ChatView({
           )}
           <Button 
             size="icon" 
-            className="bg-cyan-500 hover:bg-cyan-600"
+            className="bg-cyan-500 hover:bg-cyan-600 shrink-0 h-10 w-10"
             onClick={handleSendText}
             disabled={!messageText.trim() || isSending}
           >
-            <Send className="w-5 h-5" />
+            <Send className="w-4 h-4 md:w-5 md:h-5" />
           </Button>
         </div>
       </Card>
