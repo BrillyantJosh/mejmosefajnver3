@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 interface OwnAudioRecorderProps {
   processEventId: string;
   senderPubkey: string;
-  onSendAudio: (audioPath: string) => Promise<void>;
+  onSendAudio: (audioPath: string) => Promise<boolean>;
   compact?: boolean;
 }
 
