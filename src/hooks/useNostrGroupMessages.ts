@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SimplePool, Filter, Event, nip44 } from 'nostr-tools';
-import { useSystemParameters } from '@/contexts/SystemParametersContext';
+
  
 const hexToBytes = (hex: string): Uint8Array => {
   const bytes = new Uint8Array(hex.length / 2);
@@ -25,19 +25,52 @@ export const useNostrGroupMessages = (
 ) => {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { parameters } = useSystemParameters();
+
+  const LANA_RELAYS = [
+    'wss://relay.lanavault.space',
+    'wss://relay.lanacoin-eternity.com',
+    'wss://relay.lanaheartvoice.com',
+    'wss://relay.lovelana.org'
+  ];
+
+  const getRelays = (): string[] => {
+    try {
+      const storedParams = sessionStorage.getItem('lana_system_params');
+      if (storedParams) {
+        const params = JSON.parse(storedParams);
+        if (params.relays && Array.isArray(params.relays) && params.relays.length > 0) {
+          console.log('📡 Using relays from session:', params.relays);
+          return params.relays;
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error parsing stored system params:', error);
+    }
+
+    console.log('📡 Using fallback LANA relays:', LANA_RELAYS);
+    return LANA_RELAYS;
+  };
 
   useEffect(() => {
-    console.log('💬 useNostrGroupMessages called with:', {
+    console.log('💬 useNostrGroupMessages mounted with:', {
       processEventId: processEventId?.slice(0, 16) + '...',
       groupKeyHex: groupKeyHex?.slice(0, 16) + '...',
       hasGroupKey: !!groupKeyHex,
-      groupKeyLength: groupKeyHex?.length,
-      hasRelays: !!parameters?.relays
     });
 
-    if (!processEventId || !groupKeyHex || !parameters?.relays) {
-      console.warn('⚠️ useNostrGroupMessages: Missing required parameters');
+    if (!processEventId || !groupKeyHex) {
+      console.warn('⚠️ useNostrGroupMessages: Missing processEventId or groupKeyHex');
+      setIsLoading(false);
+      setMessages([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setMessages([]);
+
+    const relays = getRelays();
+    if (!relays || relays.length === 0) {
+      console.error('❌ useNostrGroupMessages: No relays configured');
       setIsLoading(false);
       return;
     }
@@ -49,10 +82,9 @@ export const useNostrGroupMessages = (
       try {
         console.log('🔐 Decrypting message:', {
           eventId: event.id.slice(0, 16),
-          eventPubkey: event.pubkey.slice(0, 16)
+          eventPubkey: event.pubkey.slice(0, 16),
         });
 
-        // Derive NIP-44 conversation key from GROUP KEY + message pubkey
         const conversationKey = nip44.v2.utils.getConversationKey(
           groupKeyBytes,
           event.pubkey
@@ -60,128 +92,80 @@ export const useNostrGroupMessages = (
 
         const decryptedContent = nip44.v2.decrypt(event.content, conversationKey);
         const messageData = JSON.parse(decryptedContent);
-        
-        // Extract phase from tags
+
         const phaseTag = event.tags.find((tag) => tag[0] === 'phase');
         const phase = phaseTag ? phaseTag[1] : 'unknown';
-        
-        // Extract sender pubkey from tags
+
         const senderTag = event.tags.find(
           (tag) => tag[0] === 'p' && tag[2] === 'sender'
         );
         const senderPubkey = senderTag ? senderTag[1] : event.pubkey;
-        
+
         console.log('✅ Message decrypted:', {
-          text: messageData.text.substring(0, 30) + '...',
-          timestamp: messageData.timestamp
+          text: messageData.text?.substring(0, 30) + '...',
+          timestamp: messageData.timestamp,
         });
 
         return {
           id: event.id,
-          senderPubkey: senderPubkey,
+          senderPubkey,
           text: messageData.text,
           timestamp: messageData.timestamp,
           createdAt: event.created_at,
-          phase: phase
+          phase,
         };
       } catch (decryptError) {
         console.error('❌ Failed to decrypt/parse message:', {
           eventId: event.id.slice(0, 16),
-          error: decryptError instanceof Error ? decryptError.message : 'Unknown error'
+          error: decryptError instanceof Error ? decryptError.message : 'Unknown error',
         });
         return null;
       }
     };
 
-    const setupMessagesAndSubscription = async () => {
-      try {
-        // Capture timestamp at the START to avoid missing messages during fetch
-        const subscriptionSince = Math.floor(Date.now() / 1000) - 5; // 5 seconds buffer
-        console.log('🕐 Subscription will start from timestamp:', subscriptionSince);
+    console.log('🔔 Setting up real-time subscription for KIND 87046 messages on relays:', relays);
 
-        // Step 1: Fetch existing messages
-        console.log('🔍 Fetching existing KIND 87046 messages...');
-        
-        const filter: Filter = {
+    const sub = pool.subscribeMany(
+      relays,
+      [
+        {
           kinds: [87046],
           '#e': [processEventId],
-          limit: 500
-        };
-
-        const events = await pool.querySync(parameters.relays, filter);
-        console.log(`📦 Found ${events.length} existing message events`);
-
-        // Decrypt existing messages
-        const decryptedMessages: GroupMessage[] = [];
-        for (const event of events) {
+        },
+      ] as any,
+      {
+        onevent(event: Event) {
+          console.log('📬 New message received in real-time:', {
+            eventId: event.id.slice(0, 16),
+            created_at: event.created_at,
+          });
           const msg = decryptMessage(event);
-          if (msg) decryptedMessages.push(msg);
-        }
-
-        // Sort by timestamp
-        decryptedMessages.sort((a, b) => a.timestamp - b.timestamp);
-        setMessages(decryptedMessages);
-        setIsLoading(false);
-
-        // Step 2: Subscribe to new messages in real-time
-        console.log('🔔 Setting up real-time subscription from timestamp:', subscriptionSince);
-        
-        const sub = pool.subscribeMany(
-          parameters.relays,
-          [{
-            kinds: [87046],
-            '#e': [processEventId],
-            since: subscriptionSince
-          }] as any,
-          {
-            onevent(event: Event) {
-              console.log('📬 New message received in real-time:', {
-                eventId: event.id.slice(0, 16),
-                created_at: event.created_at,
-                relay: 'unknown'
-              });
-              const msg = decryptMessage(event);
-              if (msg) {
-                setMessages(prev => {
-                  // Check if message already exists
-                  if (prev.some(m => m.id === msg.id)) {
-                    console.log('⚠️ Message already exists, skipping');
-                    return prev;
-                  }
-                  // Add new message and sort
-                  console.log('✅ Adding new message to state:', msg.text.substring(0, 30));
-                  const updated = [...prev, msg];
-                  updated.sort((a, b) => a.timestamp - b.timestamp);
-                  return updated;
-                });
+          if (msg) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === msg.id)) {
+                console.log('⚠️ Message already exists, skipping');
+                return prev;
               }
-            },
-            oneose() {
-              console.log('✅ Real-time subscription established (EOSE received)');
-            }
+              console.log('✅ Adding new message to state:', msg.text.substring(0, 30));
+              const updated = [...prev, msg];
+              updated.sort((a, b) => a.timestamp - b.timestamp);
+              return updated;
+            });
           }
-        );
-
-        // Cleanup function
-        return () => {
-          console.log('🔌 Closing subscription and pool...');
-          sub.close();
-          pool.close(parameters.relays);
-        };
-      } catch (error) {
-        console.error('❌ Error in setupMessagesAndSubscription:', error);
-        setIsLoading(false);
+        },
+        oneose() {
+          console.log('✅ Real-time subscription established (EOSE received)');
+          setIsLoading(false);
+        },
       }
-    };
-
-    const cleanup = setupMessagesAndSubscription();
+    );
 
     return () => {
-      cleanup.then(cleanupFn => {
-        if (cleanupFn) cleanupFn();
-      });
+      console.log('🔌 Closing subscription and pool...');
+      sub.close();
+      pool.close(relays);
     };
-  }, [processEventId, groupKeyHex, parameters?.relays]);
+  }, [processEventId, groupKeyHex]);
 
   return { messages, isLoading };
 };
