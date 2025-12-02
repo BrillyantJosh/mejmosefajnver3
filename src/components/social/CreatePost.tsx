@@ -6,11 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, ImagePlus, X, AlertCircle } from "lucide-react";
+import { Loader2, ImagePlus, X, AlertCircle, DoorOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserRoomSubscriptions } from "@/hooks/useNostrUserRoomSubscriptions";
 import { useNostrRooms } from "@/hooks/useNostrRooms";
+import { useNostrTinyRooms } from "@/hooks/useNostrTinyRooms";
 import { useAdmin } from "@/contexts/AdminContext";
 import { SimplePool, finalizeEvent } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
@@ -27,6 +28,7 @@ export function CreatePost() {
   const { appSettings } = useAdmin();
   const { parameters: systemParameters } = useSystemParameters();
   const { rooms, canPublish } = useNostrRooms();
+  const { rooms: tinyRooms, loading: tinyRoomsLoading } = useNostrTinyRooms(session?.nostrHexId);
   const { subscriptions } = useNostrUserRoomSubscriptions({
     userPubkey: session?.nostrHexId || '',
     userPrivateKey: session?.nostrPrivateKey || ''
@@ -67,15 +69,33 @@ export function CreatePost() {
           icon: undefined,
           visibility: 'public' as const,
           status: 'active' as const,
-          order: 0
+          order: 0,
+          type: 'regular' as const
         })),
-        ...subscribedRooms.filter(room => !appSettings.default_rooms.includes(room.slug))
+        ...subscribedRooms.filter(room => !appSettings.default_rooms.includes(room.slug)).map(room => ({
+          ...room,
+          type: 'regular' as const
+        }))
       ]
-    : subscribedRooms;
+    : subscribedRooms.map(room => ({ ...room, type: 'regular' as const }));
 
   const availableRooms = allAvailableRooms.filter(room => 
     canPublish(session?.nostrHexId || '', room.slug)
   );
+
+  // Add active Tiny Rooms to the available rooms
+  const activeTinyRooms = tinyRooms.filter(room => room.status === 'active').map(room => ({
+    slug: `tiny:${room.admin}:${room.slug}`,
+    title: room.name,
+    icon: undefined,
+    visibility: 'private' as const,
+    status: 'active' as const,
+    order: 999,
+    type: 'tiny' as const,
+    tinyRoomData: room
+  }));
+
+  const allRooms = [...availableRooms, ...activeTinyRooms];
 
   // Reset rules acceptance when room changes
   useEffect(() => {
@@ -226,25 +246,52 @@ export function CreatePost() {
       return;
     }
 
-    // Check publishing permissions
-    if (!canPublish(session.nostrHexId, selectedRoom)) {
-      toast({
-        title: "Permission denied",
-        description: `You don't have permission to publish in room "${selectedRoom}". This is a restricted room.`,
-        variant: "destructive"
-      });
-      return;
-    }
+    // Check if this is a Tiny Room
+    const isTinyRoom = selectedRoom.startsWith('tiny:');
+    
+    if (!isTinyRoom) {
+      // Check publishing permissions for regular rooms
+      if (!canPublish(session.nostrHexId, selectedRoom)) {
+        toast({
+          title: "Permission denied",
+          description: `You don't have permission to publish in room "${selectedRoom}". This is a restricted room.`,
+          variant: "destructive"
+        });
+        return;
+      }
 
-    // Check if rules need to be accepted
-    const currentRoom = rooms.find(r => r.slug === selectedRoom);
-    if (currentRoom?.rules && currentRoom.rules.length > 0 && !rulesAccepted) {
-      toast({
-        title: "Rules not accepted",
-        description: "Please accept the room rules before posting",
-        variant: "destructive"
-      });
-      return;
+      // Check if rules need to be accepted
+      const currentRoom = rooms.find(r => r.slug === selectedRoom);
+      if (currentRoom?.rules && currentRoom.rules.length > 0 && !rulesAccepted) {
+        toast({
+          title: "Rules not accepted",
+          description: "Please accept the room rules before posting",
+          variant: "destructive"
+        });
+        return;
+      }
+    } else {
+      // For Tiny Rooms, check membership
+      const tinyRoomSlug = selectedRoom.replace('tiny:', '').split(':').slice(1).join(':');
+      const tinyRoom = tinyRooms.find(r => `${r.admin}:${r.slug}` === selectedRoom.replace('tiny:', ''));
+      
+      if (!tinyRoom || !tinyRoom.members.includes(session.nostrHexId)) {
+        toast({
+          title: "Permission denied",
+          description: "You are not a member of this Tiny Room",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (tinyRoom.status === 'archived') {
+        toast({
+          title: "Room archived",
+          description: "This room is archived and no new messages can be posted",
+          variant: "destructive"
+        });
+        return;
+      }
     }
 
     try {
@@ -258,7 +305,17 @@ export function CreatePost() {
       // Create event with room tag and image tags
       const privKeyBytes = new Uint8Array(session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
       
-      const tags: string[][] = [['a', selectedRoom]];
+      const tags: string[][] = [];
+      
+      // Add appropriate tag based on room type
+      if (selectedRoom.startsWith('tiny:')) {
+        // Tiny Room: use NIP-33 'a' tag format: 30150:<admin_pubkey>:<d_tag>
+        const [_, admin, dTag] = selectedRoom.split(':');
+        tags.push(['a', `30150:${admin}:${dTag}`]);
+      } else {
+        // Regular room: use simple 'a' tag
+        tags.push(['a', selectedRoom]);
+      }
       
       // Add image URLs as imurl tags
       imageUrls.forEach(url => {
@@ -405,10 +462,14 @@ export function CreatePost() {
               <SelectValue placeholder="Select a room" />
             </SelectTrigger>
             <SelectContent>
-              {availableRooms.map((room) => (
+              {allRooms.map((room) => (
                 <SelectItem key={room.slug} value={room.slug}>
-                  {room.icon && <span className="mr-2">{room.icon}</span>}
-                  {room.title}
+                  <div className="flex items-center gap-2">
+                    {room.type === 'tiny' && <DoorOpen className="h-3 w-3" />}
+                    {room.icon && <span>{room.icon}</span>}
+                    <span>{room.title}</span>
+                    {room.type === 'tiny' && <span className="text-xs text-muted-foreground">(Tiny Room)</span>}
+                  </div>
                 </SelectItem>
               ))}
             </SelectContent>
