@@ -10,6 +10,7 @@ export interface TinyRoom {
   description: string;
   admin: string;
   members: string[];
+  status?: string; // "active" or "archived"
   topic?: string;
   rules?: string;
   image?: string;
@@ -50,6 +51,7 @@ export function useNostrTinyRooms(userPubkey?: string) {
           const name = event.tags.find(t => t[0] === "name")?.[1] || "Unnamed Room";
           const admin = event.tags.find(t => t[0] === "admin")?.[1] || event.pubkey;
           const members = event.tags.filter(t => t[0] === "p").map(t => t[1]);
+          const status = event.tags.find(t => t[0] === "status")?.[1] || "active";
           const topic = event.tags.find(t => t[0] === "topic")?.[1];
           const rules = event.tags.find(t => t[0] === "rules")?.[1];
           const image = event.tags.find(t => t[0] === "image")?.[1];
@@ -62,6 +64,7 @@ export function useNostrTinyRooms(userPubkey?: string) {
             description: event.content || "",
             admin,
             members,
+            status,
             topic,
             rules,
             image,
