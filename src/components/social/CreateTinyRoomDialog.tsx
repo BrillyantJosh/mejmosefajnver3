@@ -125,11 +125,13 @@ export function CreateTinyRoomDialog() {
     setCreating(true);
 
     try {
-      const RELAYS = parameters?.relays || [
-        "wss://relay.damus.io",
-        "wss://relay.primal.net",
-        "wss://nos.lol",
-      ];
+      if (!parameters?.relays || parameters.relays.length === 0) {
+        toast.error("Relays not loaded. Please refresh the page.");
+        return;
+      }
+
+      const RELAYS = parameters.relays;
+      console.log('Using relays from parameters:', RELAYS);
 
       // Build tags
       const tags: string[][] = [
