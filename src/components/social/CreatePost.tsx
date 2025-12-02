@@ -310,11 +310,12 @@ export function CreatePost() {
       // Add appropriate tag based on room type
       if (selectedRoom.startsWith('tiny:')) {
         // Tiny Room: use NIP-33 'a' tag format: 30150:<admin_pubkey>:<d_tag>
-        const [_, admin, dTag] = selectedRoom.split(':');
-        tags.push(['a', `30150:${admin}:${dTag}`]);
+        const [, admin, ...dTagParts] = selectedRoom.split(':');
+        const dTag = dTagParts.join(':');
+        tags.push(["a", `30150:${admin}:${dTag}`]);
       } else {
         // Regular room: use simple 'a' tag
-        tags.push(['a', selectedRoom]);
+        tags.push(["a", selectedRoom]);
       }
       
       // Add image URLs as imurl tags
