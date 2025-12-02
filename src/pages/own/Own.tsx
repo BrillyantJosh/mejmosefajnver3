@@ -236,17 +236,17 @@ export default function Own() {
 
   if (processesLoading) {
     return (
-      <div className="h-[calc(100vh-200px)] flex items-center justify-center">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <p className="text-muted-foreground">Loading processes...</p>
       </div>
     );
   }
 
   return (
-    <div className="h-[calc(100vh-200px)]">
+    <div className="min-h-[60vh] md:h-[calc(100vh-200px)]">
       {!selectedProcessId ? (
         // Conversation List - full width when no chat selected
-        <div className="overflow-y-auto h-full max-w-2xl mx-auto">
+        <div className="overflow-y-auto h-full max-w-2xl mx-auto px-4 md:px-0">
           <h2 className="text-xl font-semibold mb-4">Messages</h2>
           {conversations.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">
