@@ -10,6 +10,67 @@ interface PostContentProps {
   tags?: string[][];
 }
 
+// Helper component to render formatted text (bold and bullets)
+function FormattedText({ text }: { text: string }) {
+  if (!text) return null;
+  
+  // Split by lines to handle bullet points
+  const lines = text.split('\n');
+  
+  return (
+    <>
+      {lines.map((line, lineIndex) => {
+        const isBullet = line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ');
+        const lineContent = isBullet ? line.substring(2) : line;
+        
+        // Parse bold text (**text** or __text__)
+        const boldRegex = /\*\*(.+?)\*\*|__(.+?)__/g;
+        const parts: React.ReactNode[] = [];
+        let lastIndex = 0;
+        let match;
+        
+        while ((match = boldRegex.exec(lineContent)) !== null) {
+          // Add text before the match
+          if (match.index > lastIndex) {
+            parts.push(lineContent.substring(lastIndex, match.index));
+          }
+          // Add bold text
+          parts.push(
+            <strong key={`bold-${lineIndex}-${match.index}`} className="font-bold">
+              {match[1] || match[2]}
+            </strong>
+          );
+          lastIndex = match.index + match[0].length;
+        }
+        
+        // Add remaining text
+        if (lastIndex < lineContent.length) {
+          parts.push(lineContent.substring(lastIndex));
+        }
+        
+        // If no bold found, just use the line content
+        const content = parts.length > 0 ? parts : lineContent;
+        
+        if (isBullet) {
+          return (
+            <div key={`line-${lineIndex}`} className="flex items-start gap-2">
+              <span className="text-muted-foreground">•</span>
+              <span>{content}</span>
+            </div>
+          );
+        }
+        
+        return (
+          <span key={`line-${lineIndex}`}>
+            {content}
+            {lineIndex < lines.length - 1 && '\n'}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 export function PostContent({ content, tags }: PostContentProps) {
   const [translatedContent, setTranslatedContent] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
@@ -135,17 +196,18 @@ export function PostContent({ content, tags }: PostContentProps) {
           )}
         </div>
 
-        {/* Render text content */}
-        <p className="mb-4 whitespace-pre-wrap break-words">
+        {/* Render text content with formatting */}
+        <div className="mb-4 whitespace-pre-wrap break-words">
           {parts.map((part, index) => {
             // Check if this part is a URL
             if (urls.includes(part)) {
               // Don't render the URL text, we'll show preview below
               return null;
             }
-            return <span key={`text-${index}`}>{part}</span>;
+            // Parse bold text and bullet points
+            return <FormattedText key={`text-${index}`} text={part} />;
           })}
-        </p>
+        </div>
         
         {/* Render images from imurl tags */}
         {imageUrls.length > 0 && (

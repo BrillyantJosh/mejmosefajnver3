@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, ImagePlus, X, AlertCircle, DoorOpen } from "lucide-react";
+import { Loader2, ImagePlus, X, AlertCircle, DoorOpen, Bold, List } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserRoomSubscriptions } from "@/hooks/useNostrUserRoomSubscriptions";
@@ -42,6 +42,7 @@ export function CreatePost() {
   const [uploading, setUploading] = useState(false);
   const [rulesAccepted, setRulesAccepted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const relays = systemParameters?.relays && systemParameters.relays.length > 0 
     ? systemParameters.relays 
@@ -101,6 +102,55 @@ export function CreatePost() {
   useEffect(() => {
     setRulesAccepted(false);
   }, [selectedRoom]);
+
+  const insertFormatting = (type: 'bold' | 'bullet') => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = content.substring(start, end);
+
+    let newContent = '';
+    let cursorOffset = 0;
+
+    if (type === 'bold') {
+      if (selectedText) {
+        newContent = content.substring(0, start) + `**${selectedText}**` + content.substring(end);
+        cursorOffset = end + 4;
+      } else {
+        newContent = content.substring(0, start) + '****' + content.substring(end);
+        cursorOffset = start + 2;
+      }
+    } else if (type === 'bullet') {
+      // Find the start of the current line
+      const beforeCursor = content.substring(0, start);
+      const lineStart = beforeCursor.lastIndexOf('\n') + 1;
+      const currentLine = content.substring(lineStart, start);
+      
+      if (currentLine.startsWith('• ')) {
+        // Already a bullet, do nothing special
+        newContent = content.substring(0, start) + '\n• ' + content.substring(end);
+        cursorOffset = start + 3;
+      } else if (lineStart === start || !currentLine.trim()) {
+        // At start of line or empty line - add bullet
+        newContent = content.substring(0, start) + '• ' + content.substring(end);
+        cursorOffset = start + 2;
+      } else {
+        // In middle of line - add new bullet line
+        newContent = content.substring(0, start) + '\n• ' + content.substring(end);
+        cursorOffset = start + 3;
+      }
+    }
+
+    setContent(newContent);
+    
+    // Restore focus and cursor position
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(cursorOffset, cursorOffset);
+    }, 0);
+  };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -401,12 +451,37 @@ export function CreatePost() {
   return (
     <Card>
       <CardContent className="pt-6 space-y-3">
-        <Textarea
-          placeholder="What's on your mind?"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          className="min-h-[100px] resize-none"
-        />
+        <div className="space-y-2">
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => insertFormatting('bold')}
+              title="Bold (označi tekst in klikni)"
+              className="h-8 px-2"
+            >
+              <Bold className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => insertFormatting('bullet')}
+              title="Bullet point"
+              className="h-8 px-2"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
+          <Textarea
+            ref={textareaRef}
+            placeholder="What's on your mind?"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className="min-h-[100px] resize-none"
+          />
+        </div>
         
         {imagePreviews.length > 0 && (
           <div className="flex gap-2 flex-wrap">
