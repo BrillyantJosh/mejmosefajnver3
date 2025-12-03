@@ -44,8 +44,6 @@ export default function ChatView({
 }: ChatViewProps) {
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [hasPreview, setHasPreview] = useState(false);
 
   const handleSendText = async () => {
     if (!messageText.trim() || !onSendMessage) return;
@@ -132,21 +130,16 @@ export default function ChatView({
       {/* Input */}
       <Card className="p-2 md:p-4 sticky bottom-0">
         <div className="flex flex-col gap-2">
-          {/* Audio recorder UI - shows above input only when recording/preview active */}
+          {/* Audio recorder - full width on mobile when active */}
           {processEventId && senderPubkey && onSendAudio && (
             <OwnAudioRecorder 
               processEventId={processEventId}
               senderPubkey={senderPubkey}
               onSendAudio={onSendAudio}
               compact
-              mode="recording-ui"
-              isRecordingExternal={isRecording}
-              onRecordingChange={setIsRecording}
-              hasPreview={hasPreview}
-              onPreviewChange={setHasPreview}
             />
           )}
-          {/* Text input row with mic button */}
+          {/* Text input row */}
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -157,20 +150,6 @@ export default function ChatView({
               disabled={isSending}
               className="flex-1 min-w-0 px-3 py-2 rounded-lg border bg-background text-base"
             />
-            {/* Inline mic button */}
-            {processEventId && senderPubkey && onSendAudio && (
-              <OwnAudioRecorder 
-                processEventId={processEventId}
-                senderPubkey={senderPubkey}
-                onSendAudio={onSendAudio}
-                compact
-                mode="mic-button"
-                isRecordingExternal={isRecording}
-                onRecordingChange={setIsRecording}
-                hasPreview={hasPreview}
-                onPreviewChange={setHasPreview}
-              />
-            )}
             <Button 
               size="icon" 
               className="bg-cyan-500 hover:bg-cyan-600 shrink-0 h-10 w-10"
