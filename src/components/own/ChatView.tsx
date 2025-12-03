@@ -130,16 +130,17 @@ export default function ChatView({
       {/* Input */}
       <Card className="p-2 md:p-4 sticky bottom-0">
         <div className="flex flex-col gap-2">
-          {/* Audio recorder - full width on mobile when active */}
+          {/* Audio recorder - shows above input only when recording/preview active */}
           {processEventId && senderPubkey && onSendAudio && (
             <OwnAudioRecorder 
               processEventId={processEventId}
               senderPubkey={senderPubkey}
               onSendAudio={onSendAudio}
               compact
+              showMicButtonInline={false}
             />
           )}
-          {/* Text input row */}
+          {/* Text input row with mic button */}
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -150,6 +151,16 @@ export default function ChatView({
               disabled={isSending}
               className="flex-1 min-w-0 px-3 py-2 rounded-lg border bg-background text-base"
             />
+            {/* Inline mic button */}
+            {processEventId && senderPubkey && onSendAudio && (
+              <OwnAudioRecorder 
+                processEventId={processEventId}
+                senderPubkey={senderPubkey}
+                onSendAudio={onSendAudio}
+                compact
+                showMicButtonInline={true}
+              />
+            )}
             <Button 
               size="icon" 
               className="bg-cyan-500 hover:bg-cyan-600 shrink-0 h-10 w-10"
