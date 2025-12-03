@@ -20,6 +20,16 @@ function FormattedText({ text }: { text: string }) {
   return (
     <>
       {lines.map((line, lineIndex) => {
+        // Skip empty lines or lines with only whitespace/bullet characters
+        const trimmedLine = line.trim();
+        if (!trimmedLine || trimmedLine === '•' || trimmedLine === '-' || trimmedLine === '*') {
+          // Only render a line break if it's between content
+          if (lineIndex > 0 && lineIndex < lines.length - 1) {
+            return <br key={`br-${lineIndex}`} />;
+          }
+          return null;
+        }
+        
         const isBullet = line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ');
         const lineContent = isBullet ? line.substring(2) : line;
         
