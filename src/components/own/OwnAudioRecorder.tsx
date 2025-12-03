@@ -10,7 +10,12 @@ interface OwnAudioRecorderProps {
   senderPubkey: string;
   onSendAudio: (audioPath: string) => Promise<boolean>;
   compact?: boolean;
-  showMicButtonInline?: boolean; // true = show only mic button, false = show recording/preview UI
+  // External state control for sharing between instances
+  isRecordingExternal?: boolean;
+  onRecordingChange?: (recording: boolean) => void;
+  hasPreview?: boolean;
+  onPreviewChange?: (hasPreview: boolean) => void;
+  mode?: 'mic-button' | 'recording-ui';
 }
 
 export default function OwnAudioRecorder({ 
@@ -18,9 +23,18 @@ export default function OwnAudioRecorder({
   senderPubkey, 
   onSendAudio,
   compact = false,
-  showMicButtonInline
+  isRecordingExternal,
+  onRecordingChange,
+  hasPreview,
+  onPreviewChange,
+  mode
 }: OwnAudioRecorderProps) {
-  const [isRecording, setIsRecording] = useState(false);
+  const [isRecordingInternal, setIsRecordingInternal] = useState(false);
+  const isRecording = isRecordingExternal ?? isRecordingInternal;
+  const setIsRecording = (val: boolean) => {
+    setIsRecordingInternal(val);
+    onRecordingChange?.(val);
+  };
   const [isUploading, setIsUploading] = useState(false);
   const [audioPreview, setAudioPreview] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -87,6 +101,7 @@ export default function OwnAudioRecorder({
         audioBlobRef.current = audioBlob;
         const audioUrl = URL.createObjectURL(audioBlob);
         setAudioPreview(audioUrl);
+        onPreviewChange?.(true);
         
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
@@ -182,6 +197,7 @@ export default function OwnAudioRecorder({
       URL.revokeObjectURL(audioPreview);
     }
     setAudioPreview(null);
+    onPreviewChange?.(false);
     audioBlobRef.current = null;
     setIsPlaying(false);
     setCurrentTime(0);
@@ -246,8 +262,8 @@ export default function OwnAudioRecorder({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Audio preview UI - mobile optimized (only show when showMicButtonInline is false)
-  if (audioPreview && showMicButtonInline === false) {
+  // Audio preview UI - mobile optimized (only show in recording-ui mode)
+  if (audioPreview && mode === 'recording-ui') {
     return (
       <div className="flex flex-col gap-2 p-2 bg-accent/50 rounded-lg w-full min-w-0">
         <audio ref={audioElementRef} src={audioPreview} />
@@ -299,8 +315,8 @@ export default function OwnAudioRecorder({
     );
   }
 
-  // Recording UI (only show when showMicButtonInline is false)
-  if (isRecording && showMicButtonInline === false) {
+  // Recording UI (only show in recording-ui mode)
+  if (isRecording && mode === 'recording-ui') {
     return (
       <div className="flex items-center gap-2">
         <Button
@@ -323,10 +339,9 @@ export default function OwnAudioRecorder({
     );
   }
 
-  // Inline mic button mode - only show when not recording/previewing and showMicButtonInline is true
-  if (showMicButtonInline === true) {
-    // Don't show anything if recording or previewing (that UI is shown in the other instance)
-    if (isRecording || audioPreview) return null;
+  // Mic button mode - only show when not recording/previewing
+  if (mode === 'mic-button') {
+    if (isRecording || hasPreview) return null;
     
     return (
       <Button
@@ -341,12 +356,12 @@ export default function OwnAudioRecorder({
     );
   }
 
-  // Default state for non-inline mode - don't render if not recording/previewing
-  if (showMicButtonInline === false) {
+  // recording-ui mode - don't render if not recording/previewing
+  if (mode === 'recording-ui') {
     return null;
   }
 
-  // Legacy behavior when showMicButtonInline is undefined
+  // Legacy behavior when mode is undefined
   return (
     <Button
       size="icon"
