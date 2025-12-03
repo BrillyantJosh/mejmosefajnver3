@@ -244,46 +244,55 @@ export default function OwnAudioRecorder({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Audio preview UI
+  // Audio preview UI - mobile optimized
   if (audioPreview) {
     return (
-      <div className="flex items-center gap-2 p-3 bg-accent/50 rounded-lg">
+      <div className="flex flex-col gap-2 p-2 bg-accent/50 rounded-lg w-full min-w-0">
         <audio ref={audioElementRef} src={audioPreview} />
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={togglePreviewPlay}
-          disabled={isUploading}
-        >
-          {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        </Button>
-        <div className="flex-1">
-          <Slider
-            value={[currentTime]}
-            max={duration || 100}
-            step={0.1}
-            onValueChange={handleSeek}
+        <div className="flex items-center gap-2 min-w-0">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={togglePreviewPlay}
             disabled={isUploading}
-          />
-          <div className="text-xs text-muted-foreground mt-1">
-            {formatTime(currentTime)} / {formatTime(duration)}
+            className="shrink-0 h-8 w-8"
+          >
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          </Button>
+          <div className="flex-1 min-w-0">
+            <Slider
+              value={[currentTime]}
+              max={duration || 100}
+              step={0.1}
+              onValueChange={handleSeek}
+              disabled={isUploading}
+            />
           </div>
+          <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </span>
         </div>
-        <Button
-          size="icon"
-          onClick={handleSendAudio}
-          disabled={isUploading}
-        >
-          <Send className="h-4 w-4" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={handleDiscardPreview}
-          disabled={isUploading}
-        >
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleDiscardPreview}
+            disabled={isUploading}
+            className="h-8"
+          >
+            <X className="h-4 w-4 mr-1" />
+            Zavrzi
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSendAudio}
+            disabled={isUploading}
+            className="h-8"
+          >
+            <Send className="h-4 w-4 mr-1" />
+            Pošlji
+          </Button>
+        </div>
       </div>
     );
   }
