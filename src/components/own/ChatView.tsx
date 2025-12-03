@@ -44,6 +44,8 @@ export default function ChatView({
 }: ChatViewProps) {
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [hasPreview, setHasPreview] = useState(false);
 
   const handleSendText = async () => {
     if (!messageText.trim() || !onSendMessage) return;
@@ -130,14 +132,18 @@ export default function ChatView({
       {/* Input */}
       <Card className="p-2 md:p-4 sticky bottom-0">
         <div className="flex flex-col gap-2">
-          {/* Audio recorder - shows above input only when recording/preview active */}
+          {/* Audio recorder UI - shows above input only when recording/preview active */}
           {processEventId && senderPubkey && onSendAudio && (
             <OwnAudioRecorder 
               processEventId={processEventId}
               senderPubkey={senderPubkey}
               onSendAudio={onSendAudio}
               compact
-              showMicButtonInline={false}
+              mode="recording-ui"
+              isRecordingExternal={isRecording}
+              onRecordingChange={setIsRecording}
+              hasPreview={hasPreview}
+              onPreviewChange={setHasPreview}
             />
           )}
           {/* Text input row with mic button */}
@@ -158,7 +164,11 @@ export default function ChatView({
                 senderPubkey={senderPubkey}
                 onSendAudio={onSendAudio}
                 compact
-                showMicButtonInline={true}
+                mode="mic-button"
+                isRecordingExternal={isRecording}
+                onRecordingChange={setIsRecording}
+                hasPreview={hasPreview}
+                onPreviewChange={setHasPreview}
               />
             )}
             <Button 
