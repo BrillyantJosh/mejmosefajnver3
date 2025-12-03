@@ -128,17 +128,9 @@ export default function ChatView({
       </ScrollArea>
 
       {/* Input */}
-      <Card className="p-3 md:p-4 sticky bottom-0">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Type a message..."
-            value={messageText}
-            onChange={(e) => setMessageText(e.target.value)}
-            onKeyPress={handleKeyPress}
-            disabled={isSending}
-            className="flex-1 px-3 md:px-4 py-2 md:py-2.5 rounded-lg border bg-background text-base"
-          />
+      <Card className="p-2 md:p-4 sticky bottom-0">
+        <div className="flex flex-col gap-2">
+          {/* Audio recorder - full width on mobile when active */}
           {processEventId && senderPubkey && onSendAudio && (
             <OwnAudioRecorder 
               processEventId={processEventId}
@@ -147,14 +139,26 @@ export default function ChatView({
               compact
             />
           )}
-          <Button 
-            size="icon" 
-            className="bg-cyan-500 hover:bg-cyan-600 shrink-0 h-10 w-10"
-            onClick={handleSendText}
-            disabled={!messageText.trim() || isSending}
-          >
-            <Send className="w-4 h-4 md:w-5 md:h-5" />
-          </Button>
+          {/* Text input row */}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Type a message..."
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              onKeyPress={handleKeyPress}
+              disabled={isSending}
+              className="flex-1 min-w-0 px-3 py-2 rounded-lg border bg-background text-base"
+            />
+            <Button 
+              size="icon" 
+              className="bg-cyan-500 hover:bg-cyan-600 shrink-0 h-10 w-10"
+              onClick={handleSendText}
+              disabled={!messageText.trim() || isSending}
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </Card>
     </div>
