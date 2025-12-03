@@ -113,9 +113,9 @@ export default function OwnAudioRecorder({
       return;
     }
 
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 50 * 1024 * 1024; // 50MB - supports ~15+ min recordings
     if (audioBlobRef.current.size > maxSize) {
-      toast.error("Posnetek je prevelik (max 10MB)");
+      toast.error("Posnetek je prevelik (max 50MB / ~15 min)");
       return;
     }
 
