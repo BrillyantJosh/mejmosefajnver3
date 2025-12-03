@@ -10,13 +10,15 @@ interface OwnAudioRecorderProps {
   senderPubkey: string;
   onSendAudio: (audioPath: string) => Promise<boolean>;
   compact?: boolean;
+  showMicButtonInline?: boolean; // true = show only mic button, false = show recording/preview UI
 }
 
 export default function OwnAudioRecorder({ 
   processEventId, 
   senderPubkey, 
   onSendAudio,
-  compact = false 
+  compact = false,
+  showMicButtonInline
 }: OwnAudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -244,8 +246,8 @@ export default function OwnAudioRecorder({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Audio preview UI - mobile optimized
-  if (audioPreview) {
+  // Audio preview UI - mobile optimized (only show when showMicButtonInline is false)
+  if (audioPreview && showMicButtonInline === false) {
     return (
       <div className="flex flex-col gap-2 p-2 bg-accent/50 rounded-lg w-full min-w-0">
         <audio ref={audioElementRef} src={audioPreview} />
@@ -297,8 +299,8 @@ export default function OwnAudioRecorder({
     );
   }
 
-  // Recording UI
-  if (isRecording) {
+  // Recording UI (only show when showMicButtonInline is false)
+  if (isRecording && showMicButtonInline === false) {
     return (
       <div className="flex items-center gap-2">
         <Button
@@ -321,7 +323,30 @@ export default function OwnAudioRecorder({
     );
   }
 
-  // Default recording button
+  // Inline mic button mode - only show when not recording/previewing and showMicButtonInline is true
+  if (showMicButtonInline === true) {
+    // Don't show anything if recording or previewing (that UI is shown in the other instance)
+    if (isRecording || audioPreview) return null;
+    
+    return (
+      <Button
+        size="icon"
+        variant="ghost"
+        onClick={startRecording}
+        disabled={isUploading}
+        className="shrink-0 h-10 w-10"
+      >
+        <Mic className="h-4 w-4" />
+      </Button>
+    );
+  }
+
+  // Default state for non-inline mode - don't render if not recording/previewing
+  if (showMicButtonInline === false) {
+    return null;
+  }
+
+  // Legacy behavior when showMicButtonInline is undefined
   return (
     <Button
       size="icon"
