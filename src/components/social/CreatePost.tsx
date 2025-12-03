@@ -103,6 +103,76 @@ export function CreatePost() {
     setRulesAccepted(false);
   }, [selectedRoom]);
 
+  // Handle paste with HTML formatting conversion
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const clipboardData = e.clipboardData;
+    const html = clipboardData.getData('text/html');
+    
+    if (!html) return; // Let default paste handle plain text
+    
+    e.preventDefault();
+    
+    // Create a temporary element to parse HTML
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    
+    // Convert HTML to our markdown format
+    const convertNode = (node: Node): string => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.textContent || '';
+      }
+      
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        return '';
+      }
+      
+      const element = node as Element;
+      const tagName = element.tagName.toLowerCase();
+      const childContent = Array.from(element.childNodes).map(convertNode).join('');
+      
+      switch (tagName) {
+        case 'b':
+        case 'strong':
+          return `**${childContent}**`;
+        case 'i':
+        case 'em':
+          return `_${childContent}_`;
+        case 'li':
+          return `• ${childContent}\n`;
+        case 'ul':
+        case 'ol':
+          return childContent;
+        case 'p':
+        case 'div':
+          return childContent + '\n';
+        case 'br':
+          return '\n';
+        default:
+          return childContent;
+      }
+    };
+    
+    let convertedText = convertNode(tempDiv).trim();
+    
+    // Clean up multiple newlines
+    convertedText = convertedText.replace(/\n{3,}/g, '\n\n');
+    
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    
+    const newContent = content.substring(0, start) + convertedText + content.substring(end);
+    setContent(newContent);
+    
+    // Set cursor position after pasted content
+    setTimeout(() => {
+      const newPos = start + convertedText.length;
+      textarea.setSelectionRange(newPos, newPos);
+    }, 0);
+  };
+
   const insertFormatting = (type: 'bold' | 'bullet') => {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -479,6 +549,7 @@ export function CreatePost() {
             placeholder="What's on your mind?"
             value={content}
             onChange={(e) => setContent(e.target.value)}
+            onPaste={handlePaste}
             className="min-h-[100px] resize-none"
           />
         </div>
