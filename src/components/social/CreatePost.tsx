@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, ImagePlus, X, AlertCircle, DoorOpen, Bold, List } from "lucide-react";
+import { Loader2, ImagePlus, X, AlertCircle, DoorOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserRoomSubscriptions } from "@/hooks/useNostrUserRoomSubscriptions";
@@ -42,7 +41,7 @@ export function CreatePost() {
   const [uploading, setUploading] = useState(false);
   const [rulesAccepted, setRulesAccepted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   const relays = systemParameters?.relays && systemParameters.relays.length > 0 
     ? systemParameters.relays 
@@ -103,20 +102,75 @@ export function CreatePost() {
     setRulesAccepted(false);
   }, [selectedRoom]);
 
-  // Handle paste with HTML formatting conversion
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  // Handle paste to allow only specific HTML tags (bold, etc.)
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
     const clipboardData = e.clipboardData;
     const html = clipboardData.getData('text/html');
+    const text = clipboardData.getData('text/plain');
     
-    if (!html) return; // Let default paste handle plain text
+    if (html) {
+      // Create a temporary element to parse and sanitize HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = html;
+      
+      // Only keep allowed tags (b, strong, br, div, p for structure)
+      const sanitizeNode = (node: Node): string => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          return node.textContent || '';
+        }
+        
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          return '';
+        }
+        
+        const element = node as Element;
+        const tagName = element.tagName.toLowerCase();
+        const childContent = Array.from(element.childNodes).map(sanitizeNode).join('');
+        
+        switch (tagName) {
+          case 'b':
+          case 'strong':
+            return `<b>${childContent}</b>`;
+          case 'br':
+            return '<br>';
+          case 'p':
+          case 'div':
+            return childContent + '<br>';
+          case 'li':
+            return `• ${childContent}<br>`;
+          case 'ul':
+          case 'ol':
+            return childContent;
+          default:
+            return childContent;
+        }
+      };
+      
+      let sanitizedHtml = sanitizeNode(tempDiv);
+      // Clean up multiple <br> tags
+      sanitizedHtml = sanitizedHtml.replace(/(<br>){3,}/g, '<br><br>');
+      
+      document.execCommand('insertHTML', false, sanitizedHtml);
+    } else if (text) {
+      // Plain text - insert as text
+      document.execCommand('insertText', false, text);
+    }
     
-    e.preventDefault();
+    // Update content state
+    if (editorRef.current) {
+      setContent(editorRef.current.innerHTML);
+    }
+  };
+
+  // Convert HTML to markdown for storage
+  const getMarkdownContent = (): string => {
+    if (!editorRef.current) return '';
     
-    // Create a temporary element to parse HTML
+    const html = editorRef.current.innerHTML;
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
     
-    // Convert HTML to our markdown format
     const convertNode = (node: Node): string => {
       if (node.nodeType === Node.TEXT_NODE) {
         return node.textContent || '';
@@ -134,92 +188,30 @@ export function CreatePost() {
         case 'b':
         case 'strong':
           return `**${childContent}**`;
-        case 'i':
-        case 'em':
-          return `_${childContent}_`;
-        case 'li':
-          return `• ${childContent}\n`;
-        case 'ul':
-        case 'ol':
-          return childContent;
-        case 'p':
-        case 'div':
-          return childContent + '\n';
         case 'br':
           return '\n';
+        case 'div':
+          // Don't add extra newline if content already ends with newline
+          if (childContent.endsWith('\n')) {
+            return childContent;
+          }
+          return childContent + '\n';
         default:
           return childContent;
       }
     };
     
-    let convertedText = convertNode(tempDiv).trim();
-    
+    let markdown = convertNode(tempDiv).trim();
     // Clean up multiple newlines
-    convertedText = convertedText.replace(/\n{3,}/g, '\n\n');
-    
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    
-    const newContent = content.substring(0, start) + convertedText + content.substring(end);
-    setContent(newContent);
-    
-    // Set cursor position after pasted content
-    setTimeout(() => {
-      const newPos = start + convertedText.length;
-      textarea.setSelectionRange(newPos, newPos);
-    }, 0);
+    markdown = markdown.replace(/\n{3,}/g, '\n\n');
+    return markdown;
   };
 
-  const insertFormatting = (type: 'bold' | 'bullet') => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = content.substring(start, end);
-
-    let newContent = '';
-    let cursorOffset = 0;
-
-    if (type === 'bold') {
-      if (selectedText) {
-        newContent = content.substring(0, start) + `**${selectedText}**` + content.substring(end);
-        cursorOffset = end + 4;
-      } else {
-        newContent = content.substring(0, start) + '****' + content.substring(end);
-        cursorOffset = start + 2;
-      }
-    } else if (type === 'bullet') {
-      // Find the start of the current line
-      const beforeCursor = content.substring(0, start);
-      const lineStart = beforeCursor.lastIndexOf('\n') + 1;
-      const currentLine = content.substring(lineStart, start);
-      
-      if (currentLine.startsWith('• ')) {
-        // Already a bullet, do nothing special
-        newContent = content.substring(0, start) + '\n• ' + content.substring(end);
-        cursorOffset = start + 3;
-      } else if (lineStart === start || !currentLine.trim()) {
-        // At start of line or empty line - add bullet
-        newContent = content.substring(0, start) + '• ' + content.substring(end);
-        cursorOffset = start + 2;
-      } else {
-        // In middle of line - add new bullet line
-        newContent = content.substring(0, start) + '\n• ' + content.substring(end);
-        cursorOffset = start + 3;
-      }
+  // Handle input changes
+  const handleInput = () => {
+    if (editorRef.current) {
+      setContent(editorRef.current.innerHTML);
     }
-
-    setContent(newContent);
-    
-    // Restore focus and cursor position
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(cursorOffset, cursorOffset);
-    }, 0);
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -357,7 +349,8 @@ export function CreatePost() {
   };
 
   const handlePost = async () => {
-    if (!content.trim() || !session?.nostrPrivateKey || !selectedRoom) {
+    const markdownContent = getMarkdownContent();
+    if (!markdownContent || !session?.nostrPrivateKey || !selectedRoom) {
       toast({
         title: "Error",
         description: "Please enter content and select a room",
@@ -447,7 +440,7 @@ export function CreatePost() {
         kind: 1,
         created_at: Math.floor(Date.now() / 1000),
         tags,
-        content: content.trim(),
+        content: markdownContent,
       }, privKeyBytes);
 
       console.log('Publishing to relays:', relays);
@@ -495,6 +488,9 @@ export function CreatePost() {
       });
 
       setContent("");
+      if (editorRef.current) {
+        editorRef.current.innerHTML = "";
+      }
       setRulesAccepted(false);
       
       // Clear images and previews
@@ -521,38 +517,14 @@ export function CreatePost() {
   return (
     <Card>
       <CardContent className="pt-6 space-y-3">
-        <div className="space-y-2">
-          <div className="flex gap-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => insertFormatting('bold')}
-              title="Bold (označi tekst in klikni)"
-              className="h-8 px-2"
-            >
-              <Bold className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => insertFormatting('bullet')}
-              title="Bullet point"
-              className="h-8 px-2"
-            >
-              <List className="h-4 w-4" />
-            </Button>
-          </div>
-          <Textarea
-            ref={textareaRef}
-            placeholder="What's on your mind?"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            onPaste={handlePaste}
-            className="min-h-[100px] resize-none"
-          />
-        </div>
+        <div
+          ref={editorRef}
+          contentEditable
+          onInput={handleInput}
+          onPaste={handlePaste}
+          data-placeholder="What's on your mind?"
+          className="min-h-[100px] p-3 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground"
+        />
         
         {imagePreviews.length > 0 && (
           <div className="flex gap-2 flex-wrap">
@@ -647,7 +619,7 @@ export function CreatePost() {
             disabled={
               publishing || 
               uploading || 
-              !content.trim() || 
+              !content || 
               !selectedRoom || 
               (rooms.find(r => r.slug === selectedRoom)?.rules && rooms.find(r => r.slug === selectedRoom)!.rules!.length > 0 && !rulesAccepted)
             }
