@@ -98,13 +98,19 @@ export default function UserProfile() {
           new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 15000))
         ]);
 
-        const userPosts: UserPost[] = userPostsEvents.map((event: any) => ({
-          id: event.id,
-          content: event.content,
-          created_at: event.created_at,
-          tags: event.tags,
-          pubkey: event.pubkey
-        }));
+        // Filter out replies (posts with 'e' tag are comments)
+        const userPosts: UserPost[] = userPostsEvents
+          .filter((event: any) => {
+            const hasReplyTag = event.tags?.some((tag: string[]) => tag[0] === 'e');
+            return !hasReplyTag; // Only keep original posts, not replies
+          })
+          .map((event: any) => ({
+            id: event.id,
+            content: event.content,
+            created_at: event.created_at,
+            tags: event.tags,
+            pubkey: event.pubkey
+          }));
 
         // Sort by created_at descending
         userPosts.sort((a, b) => b.created_at - a.created_at);
