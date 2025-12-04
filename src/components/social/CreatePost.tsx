@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, ImagePlus, X, AlertCircle, DoorOpen } from "lucide-react";
+import { Loader2, ImagePlus, X, AlertCircle, DoorOpen, Bold, Italic } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserRoomSubscriptions } from "@/hooks/useNostrUserRoomSubscriptions";
@@ -118,7 +118,7 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = html;
       
-      // Only keep allowed tags (b, strong, br, div, p for structure)
+      // Only keep allowed tags (b, strong, i, em, br, div, p for structure)
       const sanitizeNode = (node: Node): string => {
         if (node.nodeType === Node.TEXT_NODE) {
           return node.textContent || '';
@@ -136,6 +136,9 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
           case 'b':
           case 'strong':
             return `<b>${childContent}</b>`;
+          case 'i':
+          case 'em':
+            return `<i>${childContent}</i>`;
           case 'br':
             return '<br>';
           case 'p':
@@ -192,6 +195,9 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
         case 'b':
         case 'strong':
           return `**${childContent}**`;
+        case 'i':
+        case 'em':
+          return `*${childContent}*`;
         case 'br':
           return '\n';
         case 'div':
@@ -211,6 +217,15 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
 
   // Handle input changes
   const handleInput = () => {
+    if (editorRef.current) {
+      setContent(editorRef.current.innerHTML);
+    }
+  };
+
+  // Format commands for rich text
+  const applyFormat = (command: 'bold' | 'italic') => {
+    document.execCommand(command, false);
+    editorRef.current?.focus();
     if (editorRef.current) {
       setContent(editorRef.current.innerHTML);
     }
@@ -522,13 +537,37 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
   return (
     <Card>
       <CardContent className="pt-6 space-y-3">
+        {/* Formatting toolbar */}
+        <div className="flex gap-1 border border-input rounded-md p-1 bg-muted/30">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => applyFormat('bold')}
+            className="h-8 w-8 p-0"
+            title="Bold (Ctrl+B)"
+          >
+            <Bold className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => applyFormat('italic')}
+            className="h-8 w-8 p-0"
+            title="Italic (Ctrl+I)"
+          >
+            <Italic className="h-4 w-4" />
+          </Button>
+        </div>
+
         <div
           ref={editorRef}
           contentEditable
           onInput={handleInput}
           onPaste={handlePaste}
           data-placeholder="What's on your mind?"
-          className="min-h-[100px] p-3 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground"
+          className="min-h-[100px] p-3 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic"
         />
         
         {imagePreviews.length > 0 && (
