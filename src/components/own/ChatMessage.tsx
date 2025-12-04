@@ -15,6 +15,7 @@ interface ChatMessageProps {
   isLashed?: boolean;
   onLash?: () => void;
   isLashing?: boolean;
+  lashCount?: number;
 }
 
 export default function ChatMessage({ 
@@ -28,7 +29,8 @@ export default function ChatMessage({
   messageId,
   isLashed = false,
   onLash,
-  isLashing = false
+  isLashing = false,
+  lashCount = 0
 }: ChatMessageProps) {
   const showLashButton = !isCurrentUser && messageId && onLash;
 
@@ -37,7 +39,7 @@ export default function ChatMessage({
       onClick={onLash}
       disabled={isLashing || isLashed}
       className={cn(
-        "p-1.5 rounded-full transition-all",
+        "p-1.5 rounded-full transition-all flex items-center gap-1",
         isLashed 
           ? "text-green-500" 
           : "text-muted-foreground hover:text-green-500",
@@ -51,6 +53,9 @@ export default function ChatMessage({
           isLashed && "fill-green-500"
         )} 
       />
+      {lashCount > 0 && (
+        <span className="text-xs">{lashCount}</span>
+      )}
     </button>
   );
 
