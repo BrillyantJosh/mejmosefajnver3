@@ -17,12 +17,11 @@ import { useNostrUserRoomSubscriptions } from "@/hooks/useNostrUserRoomSubscript
 import { useNostrTinyRooms } from "@/hooks/useNostrTinyRooms";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { SimplePool, finalizeEvent, getPublicKey } from 'nostr-tools';
+import { SimplePool, finalizeEvent } from 'nostr-tools';
 import { useToast } from "@/hooks/use-toast";
 import { useNostrLash } from "@/hooks/useNostrLash";
-import { useNostrLashCounts } from "@/hooks/useNostrLashCounts";
-import { useNostrUserLashes } from "@/hooks/useNostrUserLashes";
 import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
+import { useLashHistory } from "@/hooks/useLashHistory";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { useAdmin } from "@/contexts/AdminContext";
 
@@ -41,19 +40,11 @@ export default function Feed() {
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<'all' | 'rooms' | 'friends'>('rooms');
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
-  const [localLashedEvents, setLocalLashedEvents] = useState<Set<string>>(new Set());
-  const [localLashCounts, setLocalLashCounts] = useState<Map<string, number>>(new Map());
+  const [lashedEvents, setLashedEvents] = useState<Set<string>>(new Set());
   const { toast } = useToast();
-  const { giveLash, isSending: isSendingLash } = useNostrLash();
+  const { giveLash } = useNostrLash();
   const { incrementUnpaidCount } = useNostrUnpaidLashes();
-  
-  // Get user's LASHed events from relay
-  const { lashedEventIds } = useNostrUserLashes();
-  
-  // Combine relay data with local optimistic updates
-  const allLashedEvents = useMemo(() => {
-    return new Set([...lashedEventIds, ...localLashedEvents]);
-  }, [lashedEventIds, localLashedEvents]);
+  const { fetchUserLashes, addLash } = useLashHistory();
 
   // Get user's room subscriptions
   const { subscriptions } = useNostrUserRoomSubscriptions({
@@ -75,44 +66,17 @@ export default function Feed() {
     ? systemParameters.relays 
     : DEFAULT_RELAYS;
 
-  // Get LASH counts for all posts
-  const postIds = useMemo(() => {
-    const ids = posts.map(p => p.id);
-    console.log('📊 Feed: Computed postIds =', ids.length, 'IDs');
-    return ids;
-  }, [posts]);
-  
-  const { lashCounts, loading: lashCountsLoading } = useNostrLashCounts(postIds);
-  
-  // Log LASH counts when they change
+  // Fetch user's lashed events from Supabase when posts change
   useEffect(() => {
-    console.log('📊 Feed: lashCounts updated, size =', lashCounts.size);
-    console.log('📊 Feed: lashCounts entries =', Array.from(lashCounts.entries()));
-    console.log('📊 Feed: lashCountsLoading =', lashCountsLoading);
-  }, [lashCounts, lashCountsLoading]);
-  
-  // Combine relay LASH counts with local optimistic updates
-  const displayLashCounts = useMemo(() => {
-    const combined = new Map<string, number>();
-    // Start with relay counts
-    lashCounts.forEach((count, postId) => {
-      combined.set(postId, count);
-    });
-    // Add local optimistic updates
-    localLashCounts.forEach((increment, postId) => {
-      const current = combined.get(postId) || 0;
-      combined.set(postId, current + increment);
-    });
-    
-    console.log('📊 Feed: displayLashCounts =', Array.from(combined.entries()));
-    return combined;
-  }, [lashCounts, localLashCounts]);
-  
-  // Log posts when they change
-  useEffect(() => {
-    console.log('📊 Feed: posts.length =', posts.length);
-    console.log('📊 Feed: First 3 post IDs:', posts.slice(0, 3).map(p => p.id));
-  }, [posts]);
+    const loadLashedEvents = async () => {
+      if (posts.length > 0 && session?.nostrHexId) {
+        const postIds = posts.map(p => p.id);
+        const lashed = await fetchUserLashes(postIds);
+        setLashedEvents(lashed);
+      }
+    };
+    loadLashedEvents();
+  }, [posts, session?.nostrHexId, fetchUserLashes]);
 
   // Filter posts based on selected filter mode
   const filteredPosts = useMemo(() => {
@@ -131,10 +95,6 @@ export default function Feed() {
         ? activeRoomSlugs 
         : (appSettings?.default_rooms || []);
 
-      console.log('🔍 Using rooms for filter:', roomsToFilter, 
-        activeRoomSlugs.length > 0 ? '(user subscribed)' : '(default rooms)');
-      console.log('📝 Total posts:', posts.length);
-
       // Filter posts that have 'a' or 't' tag matching rooms or Tiny Rooms
       const filtered = posts.filter(post => {
         const roomTags = post.tags?.filter(tag => tag[0] === 'a' || tag[0] === 't') || [];
@@ -143,15 +103,12 @@ export default function Feed() {
           
           // Check regular rooms
           if (roomsToFilter.includes(tagValue)) {
-            console.log(`Post ${post.id.slice(0, 8)} - Regular room tag: ${tagValue}, matches: true`);
             return true;
           }
           
           // Check Tiny Rooms - if tag starts with '30150:'
           if (tagValue.startsWith('30150:')) {
-            const isMemberOfTinyRoom = tinyRoomATags.includes(tagValue);
-            console.log(`Post ${post.id.slice(0, 8)} - Tiny Room tag: ${tagValue}, member: ${isMemberOfTinyRoom}`);
-            return isMemberOfTinyRoom;
+            return tinyRoomATags.includes(tagValue);
           }
           
           return false;
@@ -159,18 +116,15 @@ export default function Feed() {
         return matchesRoom;
       });
 
-      console.log('✅ Filtered posts:', filtered.length);
       return filtered;
     }
 
     if (filterMode === 'friends') {
-      // TODO: Implement friends filter
-      console.log('👥 Friends filter - not implemented yet');
       return [];
     }
 
     return posts;
-  }, [posts, filterMode, subscriptions, session, appSettings?.default_rooms]);
+  }, [posts, filterMode, subscriptions, session, appSettings?.default_rooms, tinyRoomATags]);
 
   const getDisplayName = (post: any) => {
     const profile = post.profile;
@@ -210,7 +164,7 @@ export default function Feed() {
     }
   };
 
-  // Give LASH function - sends KIND 89800 payment intent
+  // Give LASH function - saves to Supabase and publishes to Nostr
   const handleGiveLash = async (postId: string, authorPubkey: string, authorWallet?: string) => {
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
       toast({
@@ -230,16 +184,14 @@ export default function Feed() {
       return;
     }
 
-    // OPTIMISTIC UPDATE - immediately show green before sending
-    setLocalLashedEvents(prev => new Set(prev).add(postId));
-    setLocalLashCounts(prev => {
-      const newCounts = new Map(prev);
-      newCounts.set(postId, (newCounts.get(postId) || 0) + 1);
-      return newCounts;
-    });
+    // OPTIMISTIC UPDATE - immediately show green
+    setLashedEvents(prev => new Set(prev).add(postId));
     incrementUnpaidCount();
 
-    // Send LASH in background
+    // Save to Supabase (for display)
+    const savedToDb = await addLash(postId);
+    
+    // Publish to Nostr (for protocol)
     const result = await giveLash({
       postId,
       recipientPubkey: authorPubkey,
@@ -247,22 +199,12 @@ export default function Feed() {
       memo: "LASH"
     });
 
-    if (!result.success) {
+    if (!result.success || !savedToDb) {
       // Rollback on error
-      setLocalLashedEvents(prev => {
+      setLashedEvents(prev => {
         const newSet = new Set(prev);
         newSet.delete(postId);
         return newSet;
-      });
-      setLocalLashCounts(prev => {
-        const newCounts = new Map(prev);
-        const current = newCounts.get(postId) || 0;
-        if (current <= 1) {
-          newCounts.delete(postId);
-        } else {
-          newCounts.set(postId, current - 1);
-        }
-        return newCounts;
       });
       toast({
         title: "Error",
@@ -320,10 +262,10 @@ export default function Feed() {
 
       console.log('🗑️ Sending deletion event:', signedEvent);
 
-      // Publish to ALL relays at once (correct method)
+      // Publish to ALL relays at once
       const publishPromises = pool.publish(relays, signedEvent);
 
-      // Track each relay individually for detailed logging
+      // Track each relay individually
       const trackedPromises = publishPromises.map((promise, idx) => {
         const relay = relays[idx];
         return promise
@@ -337,7 +279,7 @@ export default function Feed() {
           });
       });
 
-      // Wait with timeout - graceful handling
+      // Wait with timeout
       try {
         await Promise.race([
           Promise.all(trackedPromises),
@@ -353,9 +295,6 @@ export default function Feed() {
         title: "Success",
         description: "Post deleted successfully"
       });
-
-      // Optionally refresh the feed or remove post from UI
-      // The post will be filtered out by compliant Nostr clients
       
     } catch (error) {
       console.error('❌ Error deleting post:', error);
@@ -374,7 +313,6 @@ export default function Feed() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loading) {
-          console.log('📥 Loading more posts...');
           loadMore();
         }
       },
@@ -432,8 +370,6 @@ export default function Feed() {
           </CardContent>
         </Card>
       )}
-
-      {/* Loading happens silently in background */}
 
       {/* Posts Feed */}
       {!loading && !error && filteredPosts.length === 0 && (
@@ -527,23 +463,20 @@ export default function Feed() {
                 <div className="flex items-center gap-6 text-muted-foreground">
                   <button 
                     className={`flex items-center gap-1.5 transition-all duration-200 ${
-                      allLashedEvents.has(post.id) 
+                      lashedEvents.has(post.id) 
                         ? 'text-green-500' 
                         : 'hover:text-green-500 hover:scale-110'
                     }`}
-                    onClick={() => !allLashedEvents.has(post.id) && handleGiveLash(post.id, post.pubkey, post.profile?.lana_wallet_id)}
-                    disabled={allLashedEvents.has(post.id)}
+                    onClick={() => !lashedEvents.has(post.id) && handleGiveLash(post.id, post.pubkey, post.profile?.lana_wallet_id)}
+                    disabled={lashedEvents.has(post.id)}
                   >
                     <Heart
                       className={`h-5 w-5 transition-transform ${
-                        allLashedEvents.has(post.id) 
+                        lashedEvents.has(post.id) 
                           ? 'fill-green-500 scale-110' 
                           : ''
                       }`} 
                     />
-                    <span className={`text-sm font-medium ${allLashedEvents.has(post.id) ? 'text-green-500' : ''}`}>
-                      {displayLashCounts.get(post.id) || 0}
-                    </span>
                   </button>
                   <button
                     className="flex items-center gap-2 hover:text-primary transition-colors"
@@ -561,8 +494,8 @@ export default function Feed() {
                       postId={post.id} 
                       relays={relays}
                       onLashComment={handleGiveLash}
-                      isSendingLash={isSendingLash}
-                      lashedEventIds={allLashedEvents}
+                      isSendingLash={false}
+                      lashedEventIds={lashedEvents}
                     />
                   </div>
                 )}

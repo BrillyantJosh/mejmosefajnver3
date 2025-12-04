@@ -221,6 +221,27 @@ export type Database = {
         }
         Relationships: []
       }
+      lash_users_history: {
+        Row: {
+          created_at: string | null
+          event_id: string
+          id: string
+          nostr_hex_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          event_id: string
+          id?: string
+          nostr_hex_id: string
+        }
+        Update: {
+          created_at?: string | null
+          event_id?: string
+          id?: string
+          nostr_hex_id?: string
+        }
+        Relationships: []
+      }
       nostr_profiles: {
         Row: {
           about: string | null
