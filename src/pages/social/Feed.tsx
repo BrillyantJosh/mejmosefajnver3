@@ -230,6 +230,16 @@ export default function Feed() {
       return;
     }
 
+    // OPTIMISTIC UPDATE - immediately show green before sending
+    setLocalLashedEvents(prev => new Set(prev).add(postId));
+    setLocalLashCounts(prev => {
+      const newCounts = new Map(prev);
+      newCounts.set(postId, (newCounts.get(postId) || 0) + 1);
+      return newCounts;
+    });
+    incrementUnpaidCount();
+
+    // Send LASH in background
     const result = await giveLash({
       postId,
       recipientPubkey: authorPubkey,
@@ -237,26 +247,23 @@ export default function Feed() {
       memo: "LASH"
     });
 
-    if (result.success) {
-      // Mark post as lashed locally for immediate UI feedback
-      setLocalLashedEvents(prev => new Set(prev).add(postId));
-      
-      // Optimistically increment LASH count for immediate feedback
+    if (!result.success) {
+      // Rollback on error
+      setLocalLashedEvents(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(postId);
+        return newSet;
+      });
       setLocalLashCounts(prev => {
         const newCounts = new Map(prev);
-        newCounts.set(postId, (newCounts.get(postId) || 0) + 1);
+        const current = newCounts.get(postId) || 0;
+        if (current <= 1) {
+          newCounts.delete(postId);
+        } else {
+          newCounts.set(postId, current - 1);
+        }
         return newCounts;
       });
-
-      // Show success feedback to user
-      toast({
-        title: "LASH sent! 💜",
-        description: "Your LASH has been sent successfully"
-      });
-
-      // Increment unpaid LASH count in header badge
-      incrementUnpaidCount();
-    } else {
       toast({
         title: "Error",
         description: result.error || "Failed to send LASH",
@@ -523,11 +530,11 @@ export default function Feed() {
                       allLashedEvents.has(post.id) 
                         ? 'text-green-500' 
                         : 'hover:text-green-500 hover:scale-110'
-                    } ${isSendingLash ? 'animate-pulse' : ''}`}
+                    }`}
                     onClick={() => !allLashedEvents.has(post.id) && handleGiveLash(post.id, post.pubkey, post.profile?.lana_wallet_id)}
-                    disabled={isSendingLash || allLashedEvents.has(post.id)}
+                    disabled={allLashedEvents.has(post.id)}
                   >
-                    <Heart 
+                    <Heart
                       className={`h-5 w-5 transition-transform ${
                         allLashedEvents.has(post.id) 
                           ? 'fill-green-500 scale-110' 
