@@ -357,16 +357,15 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
             {/* LASH button for comment */}
             {onLashComment && (
               <button
-                className={`flex items-center gap-1 mt-2 transition-colors ${
+                className={`flex items-center gap-1 mt-2 transition-all duration-200 ${
                   lashedEventIds?.has(reply.id)
-                    ? 'text-primary'
-                    : 'text-muted-foreground hover:text-primary'
-                }`}
-                onClick={() => onLashComment(reply.id, reply.pubkey, profiles.get(reply.pubkey)?.lanaWalletID)}
-                disabled={isSendingLash}
+                    ? 'text-green-500'
+                    : 'text-muted-foreground hover:text-green-500 hover:scale-110'
+                } ${isSendingLash ? 'animate-pulse' : ''}`}
+                onClick={() => !lashedEventIds?.has(reply.id) && onLashComment(reply.id, reply.pubkey, profiles.get(reply.pubkey)?.lanaWalletID)}
+                disabled={isSendingLash || lashedEventIds?.has(reply.id)}
               >
-                <Heart className={`h-3 w-3 ${lashedEventIds?.has(reply.id) ? 'fill-primary' : ''}`} />
-                <span className="text-xs">LASH</span>
+                <Heart className={`h-3.5 w-3.5 transition-transform ${lashedEventIds?.has(reply.id) ? 'fill-green-500 scale-110' : ''}`} />
               </button>
             )}
           </div>
