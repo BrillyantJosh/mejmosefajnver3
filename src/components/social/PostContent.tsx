@@ -17,9 +17,32 @@ function FormattedText({ text }: { text: string }) {
   // Split by lines to handle bullet points
   const lines = text.split('\n');
   
+  // Helper to check if a line is a bullet
+  const isBulletLine = (line: string) => {
+    const trimmed = line.trim();
+    return trimmed.startsWith('• ') || trimmed.startsWith('- ') || trimmed.startsWith('* ');
+  };
+  
+  // Filter out empty lines that are between bullet points
+  const filteredLines = lines.filter((line, index) => {
+    const trimmed = line.trim();
+    if (trimmed) return true; // Keep non-empty lines
+    
+    // Check if this empty line is between bullets
+    const prevLine = lines[index - 1];
+    const nextLine = lines[index + 1];
+    const prevIsBullet = prevLine && isBulletLine(prevLine);
+    const nextIsBullet = nextLine && isBulletLine(nextLine);
+    
+    // Skip empty lines between bullets
+    if (prevIsBullet && nextIsBullet) return false;
+    
+    return true;
+  });
+  
   return (
     <>
-      {lines.map((line, lineIndex) => {
+      {filteredLines.map((line, lineIndex) => {
         const trimmedLine = line.trim();
         
         // Empty line - render just a line break
@@ -27,7 +50,7 @@ function FormattedText({ text }: { text: string }) {
           return <br key={`br-${lineIndex}`} />;
         }
         
-        const isBullet = trimmedLine.startsWith('• ') || trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ');
+        const isBullet = isBulletLine(line);
         const lineContent = isBullet ? trimmedLine.substring(2) : line;
         
         // Parse bold text (**text** or __text__)
@@ -63,7 +86,7 @@ function FormattedText({ text }: { text: string }) {
             <React.Fragment key={`line-${lineIndex}`}>
               <span className="text-muted-foreground">• </span>
               <span>{content}</span>
-              {lineIndex < lines.length - 1 && <br />}
+              {lineIndex < filteredLines.length - 1 && <br />}
             </React.Fragment>
           );
         }
@@ -71,7 +94,7 @@ function FormattedText({ text }: { text: string }) {
         return (
           <React.Fragment key={`line-${lineIndex}`}>
             {content}
-            {lineIndex < lines.length - 1 && <br />}
+            {lineIndex < filteredLines.length - 1 && <br />}
           </React.Fragment>
         );
       })}
