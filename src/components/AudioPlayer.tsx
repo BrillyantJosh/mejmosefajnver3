@@ -82,39 +82,39 @@ export function AudioPlayer({ audioUrl }: AudioPlayerProps) {
   };
 
   return (
-    <div className="flex items-center gap-1 p-1.5 bg-muted/50 rounded-lg my-1 w-full max-w-full">
+    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg my-1 w-full max-w-full min-w-[280px]">
       {/* Play/Pause Button */}
       <Button 
         size="sm" 
         variant="ghost"
         onClick={togglePlay}
         disabled={isLoading}
-        className="flex-shrink-0 h-7 w-7 p-0"
+        className="flex-shrink-0 h-9 w-9 p-0"
       >
         {isPlaying ? (
-          <Pause className="h-4 w-4" />
+          <Pause className="h-5 w-5" />
         ) : (
-          <Play className="h-4 w-4" />
+          <Play className="h-5 w-5" />
         )}
       </Button>
 
       {/* Waveform Icon */}
-      <Volume2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      <Volume2 className="h-5 w-5 text-muted-foreground flex-shrink-0" />
 
       {/* Seek Bar */}
-      <div className="flex-1 min-w-0 px-1">
+      <div className="flex-1 min-w-[100px] px-2">
         <Slider
           value={[currentTime]}
           max={duration || 100}
           step={0.1}
           onValueChange={handleSeek}
           disabled={isLoading}
-          className="w-full"
+          className="w-full [&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
         />
       </div>
 
       {/* Time Display */}
-      <span className="text-xs text-muted-foreground flex-shrink-0 font-mono whitespace-nowrap">
+      <span className="text-sm text-muted-foreground flex-shrink-0 font-mono whitespace-nowrap min-w-[85px] text-right">
         {formatTime(currentTime)} / {formatTime(duration)}
       </span>
 
