@@ -13,7 +13,7 @@ import { OWN_PROJECT_ID } from "@/lib/ownSupabaseClient";
 import { useLashHistory } from "@/hooks/useLashHistory";
 import { useNostrLash } from "@/hooks/useNostrLash";
 import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
-import { useNostrLashCounts } from "@/hooks/useNostrLashCounts";
+import { useSupabaseLashCounts } from "@/hooks/useSupabaseLashCounts";
 
 // External Supabase project for OWN audio storage
 const OWN_SUPABASE_URL = `https://${OWN_PROJECT_ID}.supabase.co`;
@@ -70,9 +70,9 @@ export default function Own() {
     groupKey
   );
 
-  // Get message IDs for LASH counts
+  // Get message IDs for LASH counts from Supabase
   const messageIds = messages.map(m => m.id);
-  const { lashCounts } = useNostrLashCounts(messageIds);
+  const { lashCounts } = useSupabaseLashCounts(messageIds);
 
   // Collect all unique pubkeys for profile fetching
   const allPubkeys = processes.length > 0 
