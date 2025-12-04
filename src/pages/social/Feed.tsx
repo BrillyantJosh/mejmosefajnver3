@@ -24,6 +24,7 @@ import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { useLashHistory } from "@/hooks/useLashHistory";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { useAdmin } from "@/contexts/AdminContext";
+import { useNavigate } from "react-router-dom";
 
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
@@ -32,6 +33,7 @@ const DEFAULT_RELAYS = [
 ];
 
 export default function Feed() {
+  const navigate = useNavigate();
   const { posts, loading, loadingMore, error, retryCount, hasMore, loadMore, retry } = useNostrFeed();
   const { parameters: systemParameters } = useSystemParameters();
   const { session } = useAuth();
@@ -392,26 +394,31 @@ export default function Feed() {
             <Card key={post.id}>
               <CardHeader>
                 <div className="flex items-center gap-3">
-                  <Avatar>
-                    {post.profile?.picture && (
-                      <AvatarImage 
-                        src={getProxiedImageUrl(
-                          post.profile.picture, 
-                          post.profile.last_fetched_at ? new Date(post.profile.last_fetched_at).getTime() : post.created_at
-                        )} 
-                        alt={getDisplayName(post)} 
-                      />
-                    )}
-                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white font-bold">
-                      {getAvatarFallback(post)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <p className="font-semibold">{getDisplayName(post)}</p>
-                    {post.profile?.full_name && post.profile?.display_name && (
-                      <p className="text-xs text-muted-foreground">@{post.profile.full_name}</p>
-                    )}
-                    <p className="text-sm text-muted-foreground">{formatTime(post.created_at)}</p>
+                  <div 
+                    className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => navigate(`/social/user/${post.pubkey}`)}
+                  >
+                    <Avatar>
+                      {post.profile?.picture && (
+                        <AvatarImage 
+                          src={getProxiedImageUrl(
+                            post.profile.picture, 
+                            post.profile.last_fetched_at ? new Date(post.profile.last_fetched_at).getTime() : post.created_at
+                          )} 
+                          alt={getDisplayName(post)} 
+                        />
+                      )}
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white font-bold">
+                        {getAvatarFallback(post)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <p className="font-semibold hover:text-primary transition-colors">{getDisplayName(post)}</p>
+                      {post.profile?.full_name && post.profile?.display_name && (
+                        <p className="text-xs text-muted-foreground">@{post.profile.full_name}</p>
+                      )}
+                      <p className="text-sm text-muted-foreground">{formatTime(post.created_at)}</p>
+                    </div>
                   </div>
                   
                   {/* Top right corner: Room badge + Three-dot menu */}
