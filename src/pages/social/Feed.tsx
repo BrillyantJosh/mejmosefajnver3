@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Heart, MessageCircle, Share, Loader2, MoreVertical, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,6 @@ import { useNostrFeed } from "@/hooks/useNostrFeed";
 import { formatDistanceToNow } from "date-fns";
 import { PostContent } from "@/components/social/PostContent";
 import { PostReplies } from "@/components/social/PostReplies";
-import { CreatePostDialog } from "@/components/social/CreatePostDialog";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -330,7 +328,6 @@ export default function Feed() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      <CreatePostDialog />
 
       {/* Filter Mode Selection */}
       <Card>
@@ -388,8 +385,7 @@ export default function Feed() {
         </Card>
       )}
 
-      <ScrollArea className="h-[calc(100vh-350px)]">
-        <div className="space-y-4">
+      <div className="space-y-4 pb-8">
           {filteredPosts.map((post) => (
             <Card key={post.id}>
               <CardHeader>
@@ -517,7 +513,6 @@ export default function Feed() {
             </div>
           )}
         </div>
-      </ScrollArea>
     </div>
   );
 }
