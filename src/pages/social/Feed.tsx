@@ -9,7 +9,7 @@ import { useNostrFeed } from "@/hooks/useNostrFeed";
 import { formatDistanceToNow } from "date-fns";
 import { PostContent } from "@/components/social/PostContent";
 import { PostReplies } from "@/components/social/PostReplies";
-import { CreatePost } from "@/components/social/CreatePost";
+import { CreatePostDialog } from "@/components/social/CreatePostDialog";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -383,7 +383,7 @@ export default function Feed() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      <CreatePost />
+      <CreatePostDialog />
 
       {/* Filter Mode Selection */}
       <Card>
