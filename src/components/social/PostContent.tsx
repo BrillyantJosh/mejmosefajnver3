@@ -14,15 +14,13 @@ interface PostContentProps {
 function FormattedText({ text }: { text: string }) {
   if (!text) return null;
   
-  // Clean up orphaned ** markers (standalone ** without content between them)
-  const cleanedText = text
-    .replace(/^\*\*$/gm, '') // Remove lines with just **
-    .replace(/\*\*\s*\*\*/g, '') // Remove empty bold markers **  **
-    .replace(/\*\*(?!\S)/g, '') // Remove ** not followed by content
-    .replace(/(?<!\S)\*\*/g, ''); // Remove ** not preceded by content
+  // Helper to clean orphaned ** from plain text (after bold processing)
+  const cleanOrphanedMarkers = (str: string) => {
+    return str.replace(/\*\*/g, '');
+  };
   
   // Split by lines to handle bullet points
-  const lines = cleanedText.split('\n');
+  const lines = text.split('\n');
   
   // Helper to check if a line is a bullet
   const isBulletLine = (line: string) => {
@@ -67,9 +65,10 @@ function FormattedText({ text }: { text: string }) {
         let match;
         
         while ((match = boldRegex.exec(lineContent)) !== null) {
-          // Add text before the match
+          // Add text before the match (clean any orphaned **)
           if (match.index > lastIndex) {
-            parts.push(lineContent.substring(lastIndex, match.index));
+            const plainText = cleanOrphanedMarkers(lineContent.substring(lastIndex, match.index));
+            if (plainText) parts.push(plainText);
           }
           // Add bold text
           parts.push(
@@ -80,9 +79,10 @@ function FormattedText({ text }: { text: string }) {
           lastIndex = match.index + match[0].length;
         }
         
-        // Add remaining text
+        // Add remaining text (clean any orphaned **)
         if (lastIndex < lineContent.length) {
-          parts.push(lineContent.substring(lastIndex));
+          const remainingText = cleanOrphanedMarkers(lineContent.substring(lastIndex));
+          if (remainingText) parts.push(remainingText);
         }
         
         // If no bold found, just use the line content
