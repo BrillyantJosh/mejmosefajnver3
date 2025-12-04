@@ -202,8 +202,8 @@ export function CreatePost() {
     };
     
     let markdown = convertNode(tempDiv).trim();
-    // Clean up multiple newlines
-    markdown = markdown.replace(/\n{3,}/g, '\n\n');
+    // Clean up multiple newlines - collapse to single newline
+    markdown = markdown.replace(/\n{2,}/g, '\n');
     return markdown;
   };
 
