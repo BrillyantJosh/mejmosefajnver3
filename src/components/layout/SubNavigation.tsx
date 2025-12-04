@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LucideIcon } from "lucide-react";
+import { LucideIcon, Plus } from "lucide-react";
 
 interface SubNavItem {
   title: string;
@@ -10,32 +10,50 @@ interface SubNavItem {
 interface SubNavigationProps {
   items: SubNavItem[];
   variant?: "top" | "bottom";
+  onActionClick?: () => void;
+  actionLabel?: string;
 }
 
-export default function SubNavigation({ items, variant = "top" }: SubNavigationProps) {
+export default function SubNavigation({ items, variant = "top", onActionClick, actionLabel }: SubNavigationProps) {
   const location = useLocation();
 
   if (variant === "bottom") {
     return (
       <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 pb-safe">
         <div className="flex justify-around items-center h-16 max-w-7xl mx-auto">
-          {items.map((item) => {
+          {items.map((item, index) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
 
+            // Insert action button in the middle
+            const middleIndex = Math.floor(items.length / 2);
+            const showActionBefore = onActionClick && index === middleIndex;
+
             return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex flex-col items-center justify-center gap-1 px-3 py-2 flex-1 transition-colors ${
-                  isActive
-                    ? "text-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {Icon && <Icon className="h-5 w-5" />}
-                <span className="text-xs font-medium">{item.title}</span>
-              </Link>
+              <div key={item.path} className="contents">
+                {showActionBefore && (
+                  <button
+                    onClick={onActionClick}
+                    className="flex flex-col items-center justify-center gap-1 px-3 py-2 flex-1 transition-colors text-primary"
+                    aria-label={actionLabel || "Create"}
+                  >
+                    <div className="bg-primary rounded-full p-2">
+                      <Plus className="h-5 w-5 text-primary-foreground" />
+                    </div>
+                  </button>
+                )}
+                <Link
+                  to={item.path}
+                  className={`flex flex-col items-center justify-center gap-1 px-3 py-2 flex-1 transition-colors ${
+                    isActive
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {Icon && <Icon className="h-5 w-5" />}
+                  <span className="text-xs font-medium">{item.title}</span>
+                </Link>
+              </div>
             );
           })}
         </div>
