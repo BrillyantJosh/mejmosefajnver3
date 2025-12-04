@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Heart, MessageCircle, ArrowLeft, MapPin, Globe, Wallet, User, Sparkles, Loader2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -385,41 +384,39 @@ export default function UserProfile() {
           </CardContent>
         </Card>
       ) : (
-        <ScrollArea className="h-[calc(100vh-600px)]">
-          <div className="space-y-4">
-            {posts.map((post) => (
-              <Card key={post.id}>
-                <CardContent className="pt-6">
-                  <PostContent content={post.content} tags={post.tags} />
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="flex items-center gap-4 text-muted-foreground">
-                      <button 
-                        className={`flex items-center gap-1.5 transition-all duration-200 ${
+        <div className="space-y-4 pb-8">
+          {posts.map((post) => (
+            <Card key={post.id}>
+              <CardContent className="pt-6">
+                <PostContent content={post.content} tags={post.tags} />
+                <div className="flex items-center justify-between mt-4">
+                  <div className="flex items-center gap-4 text-muted-foreground">
+                    <button 
+                      className={`flex items-center gap-1.5 transition-all duration-200 ${
+                        lashedEvents.has(post.id) 
+                          ? 'text-green-500' 
+                          : 'hover:text-green-500 hover:scale-110'
+                      }`}
+                      onClick={() => !lashedEvents.has(post.id) && handleGiveLash(post.id)}
+                      disabled={lashedEvents.has(post.id)}
+                    >
+                      <Heart
+                        className={`h-5 w-5 transition-transform ${
                           lashedEvents.has(post.id) 
-                            ? 'text-green-500' 
-                            : 'hover:text-green-500 hover:scale-110'
-                        }`}
-                        onClick={() => !lashedEvents.has(post.id) && handleGiveLash(post.id)}
-                        disabled={lashedEvents.has(post.id)}
-                      >
-                        <Heart
-                          className={`h-5 w-5 transition-transform ${
-                            lashedEvents.has(post.id) 
-                              ? 'fill-green-500 scale-110' 
-                              : ''
-                          }`} 
-                        />
-                      </button>
-                    </div>
-                    <span className="text-sm text-muted-foreground">
-                      {formatTime(post.created_at)}
-                    </span>
+                            ? 'fill-green-500 scale-110' 
+                            : ''
+                        }`} 
+                      />
+                    </button>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </ScrollArea>
+                  <span className="text-sm text-muted-foreground">
+                    {formatTime(post.created_at)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   );
