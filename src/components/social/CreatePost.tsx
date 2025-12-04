@@ -22,7 +22,11 @@ const DEFAULT_RELAYS = [
   'wss://relay.lanaheartvoice.com'
 ];
 
-export function CreatePost() {
+interface CreatePostProps {
+  onPostCreated?: () => void;
+}
+
+export function CreatePost({ onPostCreated }: CreatePostProps) {
   const { session } = useAuth();
   const { appSettings } = useAdmin();
   const { parameters: systemParameters } = useSystemParameters();
@@ -497,6 +501,9 @@ export function CreatePost() {
       imagePreviews.forEach(url => URL.revokeObjectURL(url));
       setSelectedImages([]);
       setImagePreviews([]);
+      
+      // Call callback if provided
+      onPostCreated?.();
       
       // Close connections after a delay
       setTimeout(() => pool.close(relays), 1000);
