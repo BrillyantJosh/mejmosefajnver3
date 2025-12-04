@@ -14,8 +14,15 @@ interface PostContentProps {
 function FormattedText({ text }: { text: string }) {
   if (!text) return null;
   
+  // Clean up orphaned ** markers (standalone ** without content between them)
+  const cleanedText = text
+    .replace(/^\*\*$/gm, '') // Remove lines with just **
+    .replace(/\*\*\s*\*\*/g, '') // Remove empty bold markers **  **
+    .replace(/\*\*(?!\S)/g, '') // Remove ** not followed by content
+    .replace(/(?<!\S)\*\*/g, ''); // Remove ** not preceded by content
+  
   // Split by lines to handle bullet points
-  const lines = text.split('\n');
+  const lines = cleanedText.split('\n');
   
   // Helper to check if a line is a bullet
   const isBulletLine = (line: string) => {
