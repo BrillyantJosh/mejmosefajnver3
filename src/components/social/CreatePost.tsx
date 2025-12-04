@@ -206,8 +206,6 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
     };
     
     let markdown = convertNode(tempDiv).trim();
-    // Clean up multiple newlines - collapse to single newline
-    markdown = markdown.replace(/\n{2,}/g, '\n');
     return markdown;
   };
 
