@@ -519,18 +519,24 @@ export default function Feed() {
                 <PostContent content={post.content} tags={post.tags} />
                 <div className="flex items-center gap-6 text-muted-foreground">
                   <button 
-                    className={`flex items-center gap-2 transition-colors ${
+                    className={`flex items-center gap-1.5 transition-all duration-200 ${
                       allLashedEvents.has(post.id) 
-                        ? 'text-primary' 
-                        : 'hover:text-primary'
-                    }`}
-                    onClick={() => handleGiveLash(post.id, post.pubkey, post.profile?.lana_wallet_id)}
-                    disabled={isSendingLash}
+                        ? 'text-green-500' 
+                        : 'hover:text-green-500 hover:scale-110'
+                    } ${isSendingLash ? 'animate-pulse' : ''}`}
+                    onClick={() => !allLashedEvents.has(post.id) && handleGiveLash(post.id, post.pubkey, post.profile?.lana_wallet_id)}
+                    disabled={isSendingLash || allLashedEvents.has(post.id)}
                   >
                     <Heart 
-                      className={`h-4 w-4 ${allLashedEvents.has(post.id) ? 'fill-primary' : ''}`} 
+                      className={`h-5 w-5 transition-transform ${
+                        allLashedEvents.has(post.id) 
+                          ? 'fill-green-500 scale-110' 
+                          : ''
+                      }`} 
                     />
-                    <span className="text-sm">{displayLashCounts.get(post.id) || 0} LASH</span>
+                    <span className={`text-sm font-medium ${allLashedEvents.has(post.id) ? 'text-green-500' : ''}`}>
+                      {displayLashCounts.get(post.id) || 0}
+                    </span>
                   </button>
                   <button
                     className="flex items-center gap-2 hover:text-primary transition-colors"
