@@ -95,17 +95,17 @@ export default function StartOwnProcess() {
 
   const handleStartProcess = async () => {
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
-      toast.error('Morate biti prijavljeni');
+      toast.error('You must be logged in');
       return;
     }
 
     if (!reason.trim()) {
-      toast.error('Vnesite razlog za začetek procesa');
+      toast.error('Please enter a reason to start the process');
       return;
     }
 
     if (!postAuthor) {
-      toast.error('Avtor objave ni bil najden');
+      toast.error('Post author not found');
       return;
     }
 
@@ -122,7 +122,7 @@ export default function StartOwnProcess() {
       // Build tags array
       const tags: string[][] = [
         ['status', 'opened'],
-        ['lang', 'sl'],
+        ['lang', 'en'],
         ['p', session.nostrHexId], // Initiator
         ['p', postAuthor.pubkey], // Post author as participant
       ];
@@ -176,12 +176,12 @@ export default function StartOwnProcess() {
 
       pool.close(relays);
 
-      toast.success('OWN proces je bil uspešno začet!');
+      toast.success('OWN process started successfully!');
       navigate('/own');
 
     } catch (error) {
       console.error('Error starting OWN process:', error);
-      toast.error('Napaka pri začetku procesa');
+      toast.error('Error starting process');
     } finally {
       setIsSubmitting(false);
     }
@@ -200,7 +200,7 @@ export default function StartOwnProcess() {
         </Button>
         <div className="flex items-center gap-2">
           <Triangle className="h-6 w-6 text-primary fill-primary" />
-          <h1 className="text-2xl font-bold">Začni OWN proces</h1>
+          <h1 className="text-2xl font-bold">Start OWN Process</h1>
         </div>
       </div>
 
@@ -208,8 +208,8 @@ export default function StartOwnProcess() {
       <Card>
         <CardContent className="pt-6">
           <p className="text-muted-foreground text-sm">
-            OWN (▲) proces ustvarja transparenten, strukturiran prostor, 
-            kjer ljudje prevzemajo odgovornost za dejanja, besede, dogovore in nesporazume.
+            The OWN (▲) process creates a transparent, structured space 
+            where people take responsibility for actions, words, agreements, and misunderstandings.
           </p>
         </CardContent>
       </Card>
@@ -219,14 +219,14 @@ export default function StartOwnProcess() {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <User className="h-5 w-5" />
-            Udeleženec
+            Participant
           </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoadingAuthor ? (
             <div className="flex items-center gap-3">
               <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
-              <span className="text-muted-foreground">Nalaganje...</span>
+              <span className="text-muted-foreground">Loading...</span>
             </div>
           ) : postAuthor ? (
             <div className="flex items-center gap-3">
@@ -244,12 +244,12 @@ export default function StartOwnProcess() {
               <div>
                 <p className="font-semibold">{postAuthor.displayName}</p>
                 <Badge variant="secondary" className="text-xs mt-1">
-                  Avtor objave
+                  Post Author
                 </Badge>
               </div>
             </div>
           ) : (
-            <p className="text-muted-foreground">Avtor ni bil najden</p>
+            <p className="text-muted-foreground">Author not found</p>
           )}
         </CardContent>
       </Card>
@@ -257,18 +257,18 @@ export default function StartOwnProcess() {
       {/* Reason input */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Razlog za začetek procesa</CardTitle>
+          <CardTitle className="text-lg">Reason for starting the process</CardTitle>
         </CardHeader>
         <CardContent>
           <Textarea
-            placeholder="Opišite razlog za začetek OWN procesa..."
+            placeholder="Describe the reason for starting the OWN process..."
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={5}
             className="resize-none"
           />
           <p className="text-xs text-muted-foreground mt-2">
-            Primer: "Razjasnitev odgovornosti okoli skupne naloge."
+            Example: "Clarifying responsibility around a shared task."
           </p>
         </CardContent>
       </Card>
@@ -283,12 +283,12 @@ export default function StartOwnProcess() {
         {isSubmitting ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Pošiljanje...
+            Sending...
           </>
         ) : (
           <>
             <Triangle className="h-4 w-4 mr-2 fill-current" />
-            Začni OWN proces
+            Start OWN Process
           </>
         )}
       </Button>
