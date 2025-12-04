@@ -10,6 +10,7 @@ import OwnAudioRecorder from "./OwnAudioRecorder";
 interface Message {
   id: string;
   sender: string;
+  senderPubkey?: string;
   timestamp: string;
   type: 'text' | 'audio';
   content?: string;
@@ -28,6 +29,10 @@ interface ChatViewProps {
   onSendAudio?: (audioPath: string) => Promise<boolean>;
   onSendMessage?: (text: string) => Promise<boolean>;
   isLoading?: boolean;
+  // LASH props
+  lashedEventIds?: Set<string>;
+  onGiveLash?: (messageId: string, recipientPubkey: string) => Promise<void>;
+  lashingMessageId?: string;
 }
 
 export default function ChatView({ 
@@ -40,7 +45,10 @@ export default function ChatView({
   onBack,
   onSendAudio,
   onSendMessage,
-  isLoading = false
+  isLoading = false,
+  lashedEventIds = new Set(),
+  onGiveLash,
+  lashingMessageId
 }: ChatViewProps) {
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -121,6 +129,14 @@ export default function ChatView({
                 content={msg.content}
                 audioUrl={msg.audioUrl}
                 isCurrentUser={msg.isCurrentUser}
+                messageId={msg.id}
+                isLashed={lashedEventIds.has(msg.id)}
+                onLash={
+                  !msg.isCurrentUser && msg.senderPubkey && onGiveLash
+                    ? () => onGiveLash(msg.id, msg.senderPubkey!)
+                    : undefined
+                }
+                isLashing={lashingMessageId === msg.id}
               />
             ))
           )}
