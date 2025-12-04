@@ -20,7 +20,6 @@ import Rooms from "./pages/social/Rooms";
 import TinyRooms from "./pages/social/TinyRooms";
 import Comments from "./pages/social/Comments";
 import LanaMusicLayout from "./pages/music/LanaMusicLayout";
-import Radio from "./pages/music/Radio";
 import Songs from "./pages/music/Songs";
 import Popular from "./pages/music/Popular";
 import LashLayout from "./pages/lash/LashLayout";
@@ -191,8 +190,7 @@ const App = () => (
                   <Route path="/buy-lana" element={<BuyLana />} />
                   <Route path="/lana8wonder" element={<Lana8Wonder />} />
                   <Route path="/music" element={<LanaMusicLayout />}>
-                    <Route index element={<Radio />} />
-                    <Route path="songs" element={<Songs />} />
+                    <Route index element={<Songs />} />
                     <Route path="popular" element={<Popular />} />
                   </Route>
                   <Route 
