@@ -33,6 +33,7 @@ interface ChatViewProps {
   lashedEventIds?: Set<string>;
   onGiveLash?: (messageId: string, recipientPubkey: string) => Promise<void>;
   lashingMessageId?: string;
+  lashCounts?: Map<string, number>;
 }
 
 export default function ChatView({ 
@@ -48,7 +49,8 @@ export default function ChatView({
   isLoading = false,
   lashedEventIds = new Set(),
   onGiveLash,
-  lashingMessageId
+  lashingMessageId,
+  lashCounts = new Map()
 }: ChatViewProps) {
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -137,6 +139,7 @@ export default function ChatView({
                     : undefined
                 }
                 isLashing={lashingMessageId === msg.id}
+                lashCount={lashCounts.get(msg.id) || 0}
               />
             ))
           )}
