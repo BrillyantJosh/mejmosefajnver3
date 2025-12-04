@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import ConversationList from "@/components/own/ConversationList";
 import ChatView from "@/components/own/ChatView";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,6 +10,9 @@ import { SimplePool, finalizeEvent, nip44 } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "sonner";
 import { OWN_PROJECT_ID } from "@/lib/ownSupabaseClient";
+import { useLashHistory } from "@/hooks/useLashHistory";
+import { useNostrLash } from "@/hooks/useNostrLash";
+import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 
 // External Supabase project for OWN audio storage
 const OWN_SUPABASE_URL = `https://${OWN_PROJECT_ID}.supabase.co`;
@@ -28,6 +31,13 @@ export default function Own() {
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
   const [selectedProcessId, setSelectedProcessId] = useState<string>();
+  
+  // LASH state
+  const [lashedEvents, setLashedEvents] = useState<Set<string>>(new Set());
+  const [lashingMessageId, setLashingMessageId] = useState<string>();
+  const { fetchUserLashes, addLash } = useLashHistory();
+  const { giveLash } = useNostrLash();
+  const { incrementUnpaidCount } = useNostrUnpaidLashes();
 
   // TEMP: Clear all group key caches for debugging
   useEffect(() => {
@@ -69,6 +79,92 @@ export default function Own() {
 
   // Fetch profiles
   const { profiles } = useNostrProfilesCacheBulk(allPubkeys);
+
+  // Fetch user's lash history when messages change
+  useEffect(() => {
+    if (messages.length > 0 && session?.nostrHexId) {
+      const messageIds = messages.map(m => m.id);
+      fetchUserLashes(messageIds).then(lashedSet => {
+        setLashedEvents(lashedSet);
+      });
+    }
+  }, [messages, session?.nostrHexId, fetchUserLashes]);
+
+  // Handle LASH on a message
+  const handleGiveLash = useCallback(async (messageId: string, recipientPubkey: string) => {
+    if (!session?.nostrHexId || !session?.lanaWalletID) {
+      toast.error("Please configure your wallet first");
+      return;
+    }
+
+    // Check if already lashed
+    if (lashedEvents.has(messageId)) {
+      toast.info("You already LASHed this message");
+      return;
+    }
+
+    // Get recipient wallet from profile
+    const recipientProfile = profiles.get(recipientPubkey);
+    const recipientWallet = recipientProfile?.lana_wallet_id;
+    
+    if (!recipientWallet) {
+      toast.error("Recipient has no wallet configured");
+      return;
+    }
+
+    setLashingMessageId(messageId);
+
+    // Optimistic update
+    setLashedEvents(prev => new Set([...prev, messageId]));
+
+    try {
+      // Save to Supabase first
+      const saved = await addLash(messageId);
+      if (!saved) {
+        // Rollback
+        setLashedEvents(prev => {
+          const next = new Set(prev);
+          next.delete(messageId);
+          return next;
+        });
+        toast.error("Failed to save LASH");
+        return;
+      }
+
+      // Send LASH to Nostr
+      const result = await giveLash({
+        postId: messageId,
+        recipientPubkey,
+        recipientWallet,
+        amount: "1",
+        memo: "LASH for OWN message"
+      });
+
+      if (result.success) {
+        incrementUnpaidCount();
+        toast.success("LASH sent!");
+      } else {
+        // Rollback on Nostr failure
+        setLashedEvents(prev => {
+          const next = new Set(prev);
+          next.delete(messageId);
+          return next;
+        });
+        toast.error(result.error || "Failed to send LASH");
+      }
+    } catch (error) {
+      console.error("LASH error:", error);
+      // Rollback
+      setLashedEvents(prev => {
+        const next = new Set(prev);
+        next.delete(messageId);
+        return next;
+      });
+      toast.error("Failed to send LASH");
+    } finally {
+      setLashingMessageId(undefined);
+    }
+  }, [session, profiles, lashedEvents, addLash, giveLash, incrementUnpaidCount]);
 
   // Format conversations for display
   const conversations = processes.map(process => ({
@@ -212,6 +308,7 @@ export default function Own() {
       return {
         id: msg.id,
         sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
+        senderPubkey: msg.senderPubkey,
         role: userRole,
         timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
         type: "audio" as const,
@@ -233,6 +330,7 @@ export default function Own() {
       return {
         id: msg.id,
         sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
+        senderPubkey: msg.senderPubkey,
         role: userRole,
         timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
         type: "audio" as const,
@@ -244,6 +342,7 @@ export default function Own() {
     return {
       id: msg.id,
       sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
+      senderPubkey: msg.senderPubkey,
       role: userRole,
       timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
       type: 'text' as const,
@@ -296,6 +395,9 @@ export default function Own() {
               return await sendOwnMessage(text);
             }}
             isLoading={keyLoading || messagesLoading}
+            lashedEventIds={lashedEvents}
+            onGiveLash={handleGiveLash}
+            lashingMessageId={lashingMessageId}
           />
         </div>
       )}
