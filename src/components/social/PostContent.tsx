@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { LinkPreview } from './LinkPreview';
 import { Button } from '@/components/ui/button';
 import { Languages, Loader2 } from 'lucide-react';
@@ -20,18 +20,15 @@ function FormattedText({ text }: { text: string }) {
   return (
     <>
       {lines.map((line, lineIndex) => {
-        // Skip empty lines or lines with only whitespace/bullet characters
         const trimmedLine = line.trim();
-        if (!trimmedLine || trimmedLine === '•' || trimmedLine === '-' || trimmedLine === '*') {
-          // Only render a line break if it's between content
-          if (lineIndex > 0 && lineIndex < lines.length - 1) {
-            return <br key={`br-${lineIndex}`} />;
-          }
-          return null;
+        
+        // Empty line - render just a line break
+        if (!trimmedLine) {
+          return <br key={`br-${lineIndex}`} />;
         }
         
-        const isBullet = line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ');
-        const lineContent = isBullet ? line.substring(2) : line;
+        const isBullet = trimmedLine.startsWith('• ') || trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ');
+        const lineContent = isBullet ? trimmedLine.substring(2) : line;
         
         // Parse bold text (**text** or __text__)
         const boldRegex = /\*\*(.+?)\*\*|__(.+?)__/g;
@@ -63,18 +60,19 @@ function FormattedText({ text }: { text: string }) {
         
         if (isBullet) {
           return (
-            <div key={`line-${lineIndex}`} className="flex items-start gap-2">
-              <span className="text-muted-foreground">•</span>
+            <React.Fragment key={`line-${lineIndex}`}>
+              <span className="text-muted-foreground">• </span>
               <span>{content}</span>
-            </div>
+              {lineIndex < lines.length - 1 && <br />}
+            </React.Fragment>
           );
         }
         
         return (
-          <span key={`line-${lineIndex}`}>
+          <React.Fragment key={`line-${lineIndex}`}>
             {content}
-            {lineIndex < lines.length - 1 && '\n'}
-          </span>
+            {lineIndex < lines.length - 1 && <br />}
+          </React.Fragment>
         );
       })}
     </>
