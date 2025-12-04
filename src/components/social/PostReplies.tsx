@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Loader2, Heart, Send } from "lucide-react";
+import { Loader2, Heart, Send, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { NostrProfile } from "@/types/nostr";
 import { Textarea } from "@/components/ui/textarea";
@@ -113,6 +113,52 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
       pool.close(relays);
     };
   }, [postId]); // ✅ Only postId dependency to prevent unnecessary refetches
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId) {
+      toast.error("You must be logged in to delete comments");
+      return;
+    }
+
+    try {
+      const privateKeyBytes = new Uint8Array(
+        session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
+      );
+
+      // Create KIND 5 deletion event
+      const deleteEvent = {
+        kind: 5,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['e', commentId],
+        ],
+        content: 'Deleted by author',
+        pubkey: session.nostrHexId
+      };
+
+      const signedEvent = finalizeEvent(deleteEvent, privateKeyBytes);
+
+      // Optimistic UI update
+      setReplies(prev => prev.filter(r => r.id !== commentId));
+
+      // Publish deletion to relays
+      const publishPromises = pool.publish(relays, signedEvent);
+      
+      await Promise.race([
+        Promise.all(publishPromises),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Delete timeout')), PUBLISH_TIMEOUT)
+        )
+      ]).catch(() => console.warn('⚠️ Some relays timed out during delete'));
+
+      toast.success("Comment deleted");
+    } catch (error) {
+      console.error('❌ Error deleting comment:', error);
+      toast.error("Failed to delete comment");
+      // Refresh to restore state
+      fetchReplies(true);
+    }
+  };
 
   const handleSubmitComment = async () => {
     if (!commentText.trim() || !session?.nostrPrivateKey) {
@@ -354,20 +400,34 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
             </div>
             <p className="text-sm mt-1 whitespace-pre-wrap break-words">{reply.content}</p>
             
-            {/* LASH button for comment */}
-            {onLashComment && (
-              <button
-                className={`flex items-center gap-1 mt-2 transition-all duration-200 ${
-                  lashedEventIds?.has(reply.id)
-                    ? 'text-green-500'
-                    : 'text-muted-foreground hover:text-green-500 hover:scale-110'
-                } ${isSendingLash ? 'animate-pulse' : ''}`}
-                onClick={() => !lashedEventIds?.has(reply.id) && onLashComment(reply.id, reply.pubkey, profiles.get(reply.pubkey)?.lanaWalletID)}
-                disabled={isSendingLash || lashedEventIds?.has(reply.id)}
-              >
-                <Heart className={`h-3.5 w-3.5 transition-transform ${lashedEventIds?.has(reply.id) ? 'fill-green-500 scale-110' : ''}`} />
-              </button>
-            )}
+            {/* Action buttons */}
+            <div className="flex items-center gap-3 mt-2">
+              {/* LASH button for comment */}
+              {onLashComment && (
+                <button
+                  className={`flex items-center gap-1 transition-all duration-200 ${
+                    lashedEventIds?.has(reply.id)
+                      ? 'text-green-500'
+                      : 'text-muted-foreground hover:text-green-500 hover:scale-110'
+                  } ${isSendingLash ? 'animate-pulse' : ''}`}
+                  onClick={() => !lashedEventIds?.has(reply.id) && onLashComment(reply.id, reply.pubkey, profiles.get(reply.pubkey)?.lanaWalletID)}
+                  disabled={isSendingLash || lashedEventIds?.has(reply.id)}
+                >
+                  <Heart className={`h-3.5 w-3.5 transition-transform ${lashedEventIds?.has(reply.id) ? 'fill-green-500 scale-110' : ''}`} />
+                </button>
+              )}
+              
+              {/* Delete button - only for own comments */}
+              {session?.nostrHexId === reply.pubkey && (
+                <button
+                  className="flex items-center gap-1 text-muted-foreground hover:text-destructive transition-colors"
+                  onClick={() => handleDeleteComment(reply.id)}
+                  title="Delete comment"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ))}
