@@ -126,7 +126,6 @@ export default function ChatView({
               <ChatMessage
                 key={msg.id}
                 sender={msg.sender}
-                senderPubkey={msg.senderPubkey}
                 timestamp={msg.timestamp}
                 type={msg.type}
                 content={msg.content}
