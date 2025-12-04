@@ -1,10 +1,9 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Radio, Music, TrendingUp } from "lucide-react";
+import { Music, TrendingUp } from "lucide-react";
 
 const musicNavItems = [
-  { title: "Radio", path: "/music", icon: Radio },
-  { title: "Songs", path: "/music/songs", icon: Music },
+  { title: "Songs", path: "/music", icon: Music },
   { title: "Popular", path: "/music/popular", icon: TrendingUp },
 ];
 
