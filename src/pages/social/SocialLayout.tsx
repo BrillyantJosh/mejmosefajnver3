@@ -11,6 +11,11 @@ const socialNavItems = [
     icon: Home
   },
   {
+    title: "Comments",
+    path: "/social/notifications",
+    icon: MessageSquare
+  },
+  {
     title: "Rooms",
     path: "/social/rooms",
     icon: Users
@@ -19,11 +24,6 @@ const socialNavItems = [
     title: "Tiny Rooms",
     path: "/social/tiny-rooms",
     icon: DoorOpen
-  },
-  {
-    title: "Comments",
-    path: "/social/notifications",
-    icon: MessageSquare
   }
 ];
 
