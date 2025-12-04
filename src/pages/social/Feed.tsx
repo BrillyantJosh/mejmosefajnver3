@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Heart, MessageCircle, Share, Loader2, MoreVertical, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, Share, Loader2, MoreVertical, Trash2, Triangle } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useNostrFeed } from "@/hooks/useNostrFeed";
@@ -487,6 +487,14 @@ export default function Feed() {
                   >
                     <MessageCircle className="h-4 w-4" />
                     <span className="text-sm">{post.replyCount || 0}</span>
+                  </button>
+                  <button
+                    className="flex items-center gap-2 hover:text-primary transition-colors"
+                    onClick={() => navigate(`/own/start/${post.id}`)}
+                    title="Začni OWN proces"
+                  >
+                    <Triangle className="h-4 w-4" />
+                    <span className="text-sm">OWN</span>
                   </button>
                 </div>
                 
