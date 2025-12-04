@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,6 +47,18 @@ export default function GrantNew() {
   const { profiles, isLoading: profilesLoading } = useNostrKind0Profiles();
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
+  const [searchParams] = useSearchParams();
+  const preselectedPubkey = searchParams.get('pubkey');
+
+  // Auto-select profile from URL parameter
+  useEffect(() => {
+    if (preselectedPubkey && profiles.length > 0 && !selectedProfile) {
+      const profile = profiles.find(p => p.pubkey === preselectedPubkey);
+      if (profile) {
+        setSelectedProfile(profile);
+      }
+    }
+  }, [preselectedPubkey, profiles, selectedProfile]);
 
   const filteredProfiles = profiles.filter(
     (profile) =>
