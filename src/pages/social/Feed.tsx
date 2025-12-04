@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Heart, MessageCircle, Share, Loader2, MoreVertical, Trash2, Triangle } from "lucide-react";
+import { Heart, MessageCircle, Share, Loader2, MoreVertical, Trash2, Triangle, CheckCircle } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useNostrFeed } from "@/hooks/useNostrFeed";
@@ -491,10 +491,18 @@ export default function Feed() {
                   <button
                     className="flex items-center gap-2 hover:text-primary transition-colors"
                     onClick={() => navigate(`/own/start/${post.id}`)}
-                    title="Začni OWN proces"
+                    title="Start OWN process"
                   >
                     <Triangle className="h-4 w-4" />
                     <span className="text-sm">OWN</span>
+                  </button>
+                  <button
+                    className="flex items-center gap-2 hover:text-green-600 transition-colors"
+                    onClick={() => navigate(`/rock/grant-new?pubkey=${post.pubkey}`)}
+                    title="Grant ROCK endorsement"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    <span className="text-sm">ROCK</span>
                   </button>
                 </div>
                 
