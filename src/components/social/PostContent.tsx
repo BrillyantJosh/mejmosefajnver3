@@ -60,33 +60,84 @@ function FormattedText({ text }: { text: string }) {
         const isBullet = isBulletLine(line);
         const lineContent = isBullet ? trimmedLine.substring(2) : line;
         
-        // Parse bold text (**text** or __text__)
-        const boldRegex = /\*\*(.+?)\*\*|__(.+?)__/g;
-        const parts: React.ReactNode[] = [];
-        let lastIndex = 0;
-        let match;
-        
-        while ((match = boldRegex.exec(lineContent)) !== null) {
-          // Add text before the match
-          if (match.index > lastIndex) {
-            parts.push(lineContent.substring(lastIndex, match.index));
+        // Parse bold and italic text
+        // Bold: **text** or __text__
+        // Italic: *text* (single asterisk, not double)
+        const parseFormatting = (text: string, keyPrefix: string): React.ReactNode[] => {
+          const parts: React.ReactNode[] = [];
+          // First parse bold (**text**), then italic (*text*)
+          const boldRegex = /\*\*(.+?)\*\*|__(.+?)__/g;
+          let lastIndex = 0;
+          let match;
+          
+          const segments: { type: 'text' | 'bold', content: string, start: number, end: number }[] = [];
+          
+          while ((match = boldRegex.exec(text)) !== null) {
+            if (match.index > lastIndex) {
+              segments.push({ type: 'text', content: text.substring(lastIndex, match.index), start: lastIndex, end: match.index });
+            }
+            segments.push({ type: 'bold', content: match[1] || match[2], start: match.index, end: match.index + match[0].length });
+            lastIndex = match.index + match[0].length;
           }
-          // Add bold text
-          parts.push(
-            <strong key={`bold-${lineIndex}-${match.index}`} className="font-bold">
-              {match[1] || match[2]}
-            </strong>
-          );
-          lastIndex = match.index + match[0].length;
-        }
+          
+          if (lastIndex < text.length) {
+            segments.push({ type: 'text', content: text.substring(lastIndex), start: lastIndex, end: text.length });
+          }
+          
+          if (segments.length === 0) {
+            segments.push({ type: 'text', content: text, start: 0, end: text.length });
+          }
+          
+          // Now parse italic within text segments
+          segments.forEach((segment, segIdx) => {
+            if (segment.type === 'bold') {
+              parts.push(
+                <strong key={`${keyPrefix}-bold-${segIdx}`} className="font-bold">
+                  {segment.content}
+                </strong>
+              );
+            } else {
+              // Parse italic in text segments: *text* but not **text**
+              const italicRegex = /(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g;
+              let italicLastIndex = 0;
+              let italicMatch;
+              
+              while ((italicMatch = italicRegex.exec(segment.content)) !== null) {
+                if (italicMatch.index > italicLastIndex) {
+                  parts.push(segment.content.substring(italicLastIndex, italicMatch.index));
+                }
+                parts.push(
+                  <em key={`${keyPrefix}-italic-${segIdx}-${italicMatch.index}`} className="italic">
+                    {italicMatch[1]}
+                  </em>
+                );
+                italicLastIndex = italicMatch.index + italicMatch[0].length;
+              }
+              
+              if (italicLastIndex < segment.content.length) {
+                parts.push(segment.content.substring(italicLastIndex));
+              }
+              
+              if (italicLastIndex === 0 && segment.content) {
+                // No italic found, check if we already pushed content
+                const lastPart = parts[parts.length - 1];
+                if (typeof lastPart !== 'string' || lastPart !== segment.content) {
+                  // Remove duplicate if added
+                  if (parts.length > 0 && parts[parts.length - 1] === segment.content) {
+                    // already added
+                  } else if (italicLastIndex === 0) {
+                    parts.pop(); // remove empty string if any
+                    parts.push(segment.content);
+                  }
+                }
+              }
+            }
+          });
+          
+          return parts.length > 0 ? parts : [text];
+        };
         
-        // Add remaining text
-        if (lastIndex < lineContent.length) {
-          parts.push(lineContent.substring(lastIndex));
-        }
-        
-        // If no bold found, just use the line content
-        const content = parts.length > 0 ? parts : lineContent;
+        const content = parseFormatting(lineContent, `line-${lineIndex}`);
         
         if (isBullet) {
           return (
