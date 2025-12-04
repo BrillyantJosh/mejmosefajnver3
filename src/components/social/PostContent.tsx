@@ -205,7 +205,7 @@ export function PostContent({ content, tags }: PostContentProps) {
         </div>
 
         {/* Render text content with formatting */}
-        <div className="mb-4 whitespace-pre-wrap break-words">
+        <div className="mb-4 break-words">
           {parts.map((part, index) => {
             // Check if this part is a URL
             if (urls.includes(part)) {
