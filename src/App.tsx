@@ -53,6 +53,7 @@ import Own from "./pages/own/Own";
 import OwnSearch from "./pages/own/Search";
 import OwnMyCases from "./pages/own/MyCases";
 import OwnTranscript from "./pages/own/Transcript";
+import StartOwnProcess from "./pages/own/StartOwnProcess";
 import RockLayout from "./pages/rock/RockLayout";
 import RockGrant from "./pages/rock/Grant";
 import RockGrantNew from "./pages/rock/GrantNew";
@@ -156,6 +157,7 @@ const App = () => (
                     <Route path="search" element={<OwnSearch />} />
                     <Route path="my-cases" element={<OwnMyCases />} />
                     <Route path="transcript/:caseId" element={<OwnTranscript />} />
+                    <Route path="start/:postId" element={<StartOwnProcess />} />
                   </Route>
           <Route path="/rock" element={<RockLayout />}>
             <Route index element={<RockGrant />} />
