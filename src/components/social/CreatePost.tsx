@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, ImagePlus, X, AlertCircle, DoorOpen, Bold, Italic } from "lucide-react";
+import { Loader2, ImagePlus, X, AlertCircle, DoorOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserRoomSubscriptions } from "@/hooks/useNostrUserRoomSubscriptions";
@@ -217,15 +217,6 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
 
   // Handle input changes
   const handleInput = () => {
-    if (editorRef.current) {
-      setContent(editorRef.current.innerHTML);
-    }
-  };
-
-  // Format commands for rich text
-  const applyFormat = (command: 'bold' | 'italic') => {
-    document.execCommand(command, false);
-    editorRef.current?.focus();
     if (editorRef.current) {
       setContent(editorRef.current.innerHTML);
     }
@@ -537,30 +528,6 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
   return (
     <Card>
       <CardContent className="pt-6 space-y-3">
-        {/* Formatting toolbar */}
-        <div className="flex gap-1 border border-input rounded-md p-1 bg-muted/30">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => applyFormat('bold')}
-            className="h-8 w-8 p-0"
-            title="Bold (Ctrl+B)"
-          >
-            <Bold className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => applyFormat('italic')}
-            className="h-8 w-8 p-0"
-            title="Italic (Ctrl+I)"
-          >
-            <Italic className="h-4 w-4" />
-          </Button>
-        </div>
-
         <div
           ref={editorRef}
           contentEditable
