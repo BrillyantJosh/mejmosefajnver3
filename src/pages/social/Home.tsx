@@ -44,7 +44,13 @@ function FeaturedCard({
     ? latestPost.content.replace(/https?:\/\/[^\s]+/g, '').slice(0, isLargeSize ? 150 : 80).trim()
     : room.description?.slice(0, isLargeSize ? 150 : 80);
 
-  const heightClass = size === 'hero' ? 'h-full min-h-[500px]' : size === 'large' ? 'h-[400px]' : size === 'medium' ? 'h-[240px]' : 'h-[180px]';
+  const heightClass = size === 'hero' 
+    ? 'h-full min-h-[300px]' 
+    : size === 'large' 
+    ? 'h-[400px]' 
+    : size === 'medium' 
+    ? 'h-full min-h-[150px]' 
+    : 'h-full min-h-[120px]';
 
   return (
     <div 
@@ -211,10 +217,10 @@ export default function Home() {
       {/* Featured Section - Grid Layout like siol.net */}
       {featuredRooms.length > 0 && (
         <section>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-2 gap-4 lg:h-[500px]">
             {/* Left: Main featured (large, spans full height) */}
             {featuredRooms[0] && (
-              <div className="lg:row-span-2">
+              <div className="lg:row-span-2 h-full">
                 <FeaturedCard
                   room={featuredRooms[0]}
                   latestPost={latestPosts.get(featuredRooms[0].slug)}
@@ -227,17 +233,19 @@ export default function Home() {
             
             {/* Right top: Medium card */}
             {featuredRooms[1] && (
-              <FeaturedCard
-                room={featuredRooms[1]}
-                latestPost={latestPosts.get(featuredRooms[1].slug)}
-                postCount={postCounts[featuredRooms[1].slug] || 0}
-                onClick={() => handleRoomClick(featuredRooms[1].slug)}
-                size="medium"
-              />
+              <div className="h-full">
+                <FeaturedCard
+                  room={featuredRooms[1]}
+                  latestPost={latestPosts.get(featuredRooms[1].slug)}
+                  postCount={postCounts[featuredRooms[1].slug] || 0}
+                  onClick={() => handleRoomClick(featuredRooms[1].slug)}
+                  size="medium"
+                />
+              </div>
             )}
             
             {/* Right bottom: Two small cards side by side */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 h-full">
               {featuredRooms.slice(2, 4).map(room => (
                 <FeaturedCard
                   key={room.slug}
