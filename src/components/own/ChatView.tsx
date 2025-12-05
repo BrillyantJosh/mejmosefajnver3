@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, Send, MessageCircle } from "lucide-react";
+import { ArrowLeft, Send, MessageCircle, History } from "lucide-react";
 import ChatMessage from "./ChatMessage";
 import OwnAudioRecorder from "./OwnAudioRecorder";
+
+const MESSAGES_PER_PAGE = 30;
 
 interface Message {
   id: string;
@@ -54,6 +56,19 @@ export default function ChatView({
 }: ChatViewProps) {
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(MESSAGES_PER_PAGE);
+
+  // Show only the last N messages (most recent)
+  const visibleMessages = useMemo(() => {
+    if (messages.length <= visibleCount) return messages;
+    return messages.slice(-visibleCount);
+  }, [messages, visibleCount]);
+
+  const hasMoreMessages = messages.length > visibleCount;
+
+  const handleLoadMore = () => {
+    setVisibleCount(prev => prev + MESSAGES_PER_PAGE);
+  };
 
   const handleSendText = async () => {
     if (!messageText.trim() || !onSendMessage) return;
@@ -122,26 +137,42 @@ export default function ChatView({
               No messages yet
             </div>
           ) : (
-            messages.map((msg) => (
-              <ChatMessage
-                key={msg.id}
-                sender={msg.sender}
-                timestamp={msg.timestamp}
-                type={msg.type}
-                content={msg.content}
-                audioUrl={msg.audioUrl}
-                isCurrentUser={msg.isCurrentUser}
-                messageId={msg.id}
-                isLashed={lashedEventIds.has(msg.id)}
-                onLash={
-                  !msg.isCurrentUser && msg.senderPubkey && onGiveLash
-                    ? () => onGiveLash(msg.id, msg.senderPubkey!)
-                    : undefined
-                }
-                isLashing={lashingMessageId === msg.id}
-                lashCount={lashCounts.get(msg.id) || 0}
-              />
-            ))
+            <>
+              {/* Load History Button */}
+              {hasMoreMessages && (
+                <div className="flex justify-center py-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleLoadMore}
+                    className="gap-2"
+                  >
+                    <History className="w-4 h-4" />
+                    Load History ({messages.length - visibleCount} older)
+                  </Button>
+                </div>
+              )}
+              {visibleMessages.map((msg) => (
+                <ChatMessage
+                  key={msg.id}
+                  sender={msg.sender}
+                  timestamp={msg.timestamp}
+                  type={msg.type}
+                  content={msg.content}
+                  audioUrl={msg.audioUrl}
+                  isCurrentUser={msg.isCurrentUser}
+                  messageId={msg.id}
+                  isLashed={lashedEventIds.has(msg.id)}
+                  onLash={
+                    !msg.isCurrentUser && msg.senderPubkey && onGiveLash
+                      ? () => onGiveLash(msg.id, msg.senderPubkey!)
+                      : undefined
+                  }
+                  isLashing={lashingMessageId === msg.id}
+                  lashCount={lashCounts.get(msg.id) || 0}
+                />
+              ))}
+            </>
           )}
         </div>
       </ScrollArea>
