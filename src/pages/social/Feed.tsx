@@ -30,7 +30,11 @@ const DEFAULT_RELAYS = [
   'wss://relay.lanaheartvoice.com'
 ];
 
-export default function Feed() {
+interface FeedProps {
+  roomFilter?: string;
+}
+
+export default function Feed({ roomFilter }: FeedProps = {}) {
   const navigate = useNavigate();
   const { posts, loading, loadingMore, error, retryCount, hasMore, loadMore, retry } = useNostrFeed();
   const { parameters: systemParameters } = useSystemParameters();
@@ -38,7 +42,7 @@ export default function Feed() {
   const { appSettings } = useAdmin();
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
-  const [filterMode, setFilterMode] = useState<'all' | 'rooms' | 'friends'>('rooms');
+  const [filterMode, setFilterMode] = useState<'all' | 'rooms' | 'friends'>(roomFilter ? 'all' : 'rooms');
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [lashedEvents, setLashedEvents] = useState<Set<string>>(new Set());
   const { toast } = useToast();
@@ -78,8 +82,16 @@ export default function Feed() {
     loadLashedEvents();
   }, [posts, session?.nostrHexId, fetchUserLashes]);
 
-  // Filter posts based on selected filter mode
+  // Filter posts based on selected filter mode or roomFilter prop
   const filteredPosts = useMemo(() => {
+    // If roomFilter is provided, filter by that specific room
+    if (roomFilter) {
+      return posts.filter(post => {
+        const roomTags = post.tags?.filter(tag => tag[0] === 'a' || tag[0] === 't') || [];
+        return roomTags.some(tag => tag[1] === roomFilter);
+      });
+    }
+
     if (filterMode === 'all') {
       return posts;
     }
@@ -124,7 +136,7 @@ export default function Feed() {
     }
 
     return posts;
-  }, [posts, filterMode, subscriptions, session, appSettings?.default_rooms, tinyRoomATags]);
+  }, [posts, filterMode, subscriptions, session, appSettings?.default_rooms, tinyRoomATags, roomFilter]);
 
   const getDisplayName = (post: any) => {
     const profile = post.profile;

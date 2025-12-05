@@ -15,6 +15,8 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import SocialLayout from "./pages/social/SocialLayout";
 import Feed from "./pages/social/Feed";
+import SocialHome from "./pages/social/Home";
+import RoomFeed from "./pages/social/RoomFeed";
 import UserProfile from "./pages/social/UserProfile";
 import Rooms from "./pages/social/Rooms";
 import TinyRooms from "./pages/social/TinyRooms";
@@ -108,6 +110,8 @@ const App = () => (
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/social" element={<SocialLayout />}>
                     <Route index element={<Feed />} />
+                    <Route path="home" element={<SocialHome />} />
+                    <Route path="feed/:roomSlug" element={<RoomFeed />} />
                     <Route path="user/:pubkey" element={<UserProfile />} />
                     <Route path="rooms" element={<Rooms />} />
                     <Route path="tiny-rooms" element={<TinyRooms />} />
