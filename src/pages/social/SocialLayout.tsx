@@ -12,7 +12,7 @@ const socialNavItems = [
   },
   {
     title: "Feed",
-    path: "/social",
+    path: "/social/feed",
     icon: Home
   },
   {

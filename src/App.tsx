@@ -109,7 +109,8 @@ const App = () => (
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/social" element={<SocialLayout />}>
-                    <Route index element={<Feed />} />
+                    <Route index element={<Navigate to="/social/home" replace />} />
+                    <Route path="feed" element={<Feed />} />
                     <Route path="home" element={<SocialHome />} />
                     <Route path="feed/:roomSlug" element={<RoomFeed />} />
                     <Route path="user/:pubkey" element={<UserProfile />} />
