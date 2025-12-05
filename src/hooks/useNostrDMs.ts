@@ -54,6 +54,7 @@ export function useNostrDMs() {
   const [connected, setConnected] = useState(false);
   const [totalEvents, setTotalEvents] = useState(0);
   const [readStatuses, setReadStatuses] = useState<Map<string, boolean>>(new Map());
+  const [supabaseAvailable, setSupabaseAvailable] = useState(true);
   const pool = useMemo(() => new SimplePool(), []);
   
   // Get relays from system parameters or use default
@@ -114,6 +115,12 @@ export function useNostrDMs() {
 
   // Save message to DB for instant loading
   const saveMessageToDB = useCallback(async (event: Event, theirPubkey: string, decryptedContent: string) => {
+    // Skip if Supabase is unavailable
+    if (!supabaseAvailable) {
+      console.log('⏭️ Skipping DB save - Supabase unavailable');
+      return;
+    }
+    
     try {
       const { error } = await supabase
         .from('direct_messages')
@@ -138,27 +145,43 @@ export function useNostrDMs() {
     } catch (error) {
       console.error('❌ Exception in saveMessageToDB:', error);
     }
-  }, []);
+  }, [supabaseAvailable]);
 
-  // Load messages from DB for instant display
-  const loadMessagesFromDB = useCallback(async () => {
-    if (!session?.nostrHexId) return;
+  // Load messages from DB for instant display - returns true if successful
+  const loadMessagesFromDB = useCallback(async (): Promise<boolean> => {
+    if (!session?.nostrHexId) return false;
     
     console.log('⚡ Loading messages from DB for instant display...');
     
     try {
-      const { data: messages, error } = await supabase
+      // Add timeout for Supabase call (4 seconds)
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Supabase timeout')), 4000)
+      );
+      
+      const queryPromise = supabase
         .from('direct_messages')
         .select('*')
         .or(`sender_pubkey.eq.${session.nostrHexId},recipient_pubkey.eq.${session.nostrHexId}`)
         .order('created_at', { ascending: true });
       
+      const { data: messages, error } = await Promise.race([
+        queryPromise,
+        timeoutPromise
+      ]);
+      
       if (error) {
-        console.error('❌ Error loading from DB:', error);
-        return;
+        console.warn('⚠️ Supabase error, falling back to relays:', error);
+        setSupabaseAvailable(false);
+        return false;
       }
       
-      console.log('✅ Loaded', messages.length, 'messages from DB');
+      console.log('✅ Loaded', messages?.length || 0, 'messages from DB');
+      setSupabaseAvailable(true);
+      
+      if (!messages || messages.length === 0) {
+        return true; // Supabase works, but no messages yet
+      }
       
       // Group messages into conversations
       const conversationsMap = new Map<string, Conversation>();
@@ -210,9 +233,11 @@ export function useNostrDMs() {
       setConversations(conversationsMap);
       setLoading(false);
       console.log('✅ Instant load complete -', conversationsMap.size, 'conversations ready');
+      return true;
     } catch (error) {
-      console.error('❌ Exception in loadMessagesFromDB:', error);
-      setLoading(false);
+      console.warn('⚠️ Supabase unavailable, falling back to Nostr relays:', error);
+      setSupabaseAvailable(false);
+      return false;
     }
   }, [session?.nostrHexId, readStatuses]);
 
@@ -226,6 +251,10 @@ export function useNostrDMs() {
     isOwn: boolean
   ) => {
     if (isOwn) return; // Don't track own messages
+    if (!supabaseAvailable) {
+      console.log('⏭️ Skipping read status save - Supabase unavailable');
+      return;
+    }
     
     try {
       const { error } = await supabase
@@ -249,12 +278,17 @@ export function useNostrDMs() {
     } catch (error) {
       console.error('❌ Exception in saveMessageReadStatus:', error);
     }
-  }, []);
+  }, [supabaseAvailable]);
 
   const markMessagesAsReadInDB = useCallback(async (
     userNostrId: string,
     conversationPubkey: string
   ) => {
+    if (!supabaseAvailable) {
+      console.log('⏭️ Skipping mark as read - Supabase unavailable');
+      return;
+    }
+    
     try {
       const { error } = await supabase
         .from('dm_read_status')
@@ -275,7 +309,7 @@ export function useNostrDMs() {
     } catch (error) {
       console.error('❌ Exception in markMessagesAsReadInDB:', error);
     }
-  }, []);
+  }, [supabaseAvailable]);
 
   const loadReadStatuses = useCallback(async (userNostrId: string) => {
     try {
@@ -446,11 +480,17 @@ export function useNostrDMs() {
     let cleanupFn: (() => void) | undefined;
 
     const loadMessages = async () => {
-      // Step 1: INSTANT LOAD from DB
-      await loadMessagesFromDB();
+      // Step 1: Try to INSTANT LOAD from DB (with timeout)
+      const dbLoadSuccess = await loadMessagesFromDB();
       
-      // Step 2: BACKGROUND SYNC from Nostr relays
-      console.log('🔌 Connecting to Nostr relays for background sync...');
+      if (!dbLoadSuccess) {
+        // Supabase unavailable - show loading state while fetching from relays
+        console.log('⚠️ Supabase unavailable, loading directly from Nostr relays...');
+        setLoading(true);
+      }
+      
+      // Step 2: SYNC from Nostr relays (background if DB worked, primary if not)
+      console.log('🔌 Connecting to Nostr relays for', dbLoadSuccess ? 'background sync' : 'primary load', '...');
       console.log('📍 Your Nostr ID:', session.nostrHexId);
       console.log('📡 Relays:', RELAYS);
       setConnected(true);
@@ -518,6 +558,8 @@ export function useNostrDMs() {
           }
         }
 
+        // Set loading to false after processing relay messages
+        setLoading(false);
         console.log('✅ Historical messages synced from Nostr');
 
         // Step 2: Subscribe to new messages (real-time)
