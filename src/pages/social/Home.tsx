@@ -33,17 +33,18 @@ function FeaturedCard({
   latestPost?: { content: string; imageUrl?: string; created_at: number };
   postCount: number;
   onClick: () => void;
-  size?: 'large' | 'medium' | 'small';
+  size?: 'hero' | 'large' | 'medium' | 'small';
 }) {
   const imageUrl = latestPost?.imageUrl 
     ? getProxiedImageUrl(latestPost.imageUrl, latestPost.created_at) 
     : undefined;
   
+  const isLargeSize = size === 'hero' || size === 'large';
   const previewText = latestPost?.content
-    ? latestPost.content.replace(/https?:\/\/[^\s]+/g, '').slice(0, size === 'large' ? 150 : 80).trim()
-    : room.description?.slice(0, size === 'large' ? 150 : 80);
+    ? latestPost.content.replace(/https?:\/\/[^\s]+/g, '').slice(0, isLargeSize ? 150 : 80).trim()
+    : room.description?.slice(0, isLargeSize ? 150 : 80);
 
-  const heightClass = size === 'large' ? 'h-[400px]' : size === 'medium' ? 'h-[280px]' : 'h-[220px]';
+  const heightClass = size === 'hero' ? 'h-full min-h-[500px]' : size === 'large' ? 'h-[400px]' : size === 'medium' ? 'h-[240px]' : 'h-[180px]';
 
   return (
     <div 
@@ -79,15 +80,15 @@ function FeaturedCard({
       
       {/* Content */}
       <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-        <h3 className={`font-bold leading-tight mb-2 ${size === 'large' ? 'text-2xl' : 'text-lg'}`}>
+        <h3 className={`font-bold leading-tight mb-2 ${isLargeSize ? 'text-2xl' : 'text-lg'}`}>
           {room.title}
         </h3>
         {previewText && (
-          <p className={`text-white/80 line-clamp-2 ${size === 'large' ? 'text-sm' : 'text-xs'}`}>
+          <p className={`text-white/80 line-clamp-2 ${isLargeSize ? 'text-sm' : 'text-xs'}`}>
             {previewText}...
           </p>
         )}
-        {room.description && size === 'large' && (
+        {room.description && isLargeSize && (
           <p className="text-white/60 text-xs mt-2 line-clamp-1">
             {room.description}
           </p>
@@ -207,26 +208,37 @@ export default function Home() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 space-y-8">
-      {/* Featured Section - Grid Layout */}
+      {/* Featured Section - Grid Layout like siol.net */}
       {featuredRooms.length > 0 && (
         <section>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Main featured (large) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Left: Main featured (large, spans full height) */}
             {featuredRooms[0] && (
-              <div className="lg:col-span-2">
+              <div className="lg:row-span-2">
                 <FeaturedCard
                   room={featuredRooms[0]}
                   latestPost={latestPosts.get(featuredRooms[0].slug)}
                   postCount={postCounts[featuredRooms[0].slug] || 0}
                   onClick={() => handleRoomClick(featuredRooms[0].slug)}
-                  size="large"
+                  size="hero"
                 />
               </div>
             )}
             
-            {/* Side featured (medium) */}
-            <div className="flex flex-col gap-4">
-              {featuredRooms.slice(1, 3).map(room => (
+            {/* Right top: Medium card */}
+            {featuredRooms[1] && (
+              <FeaturedCard
+                room={featuredRooms[1]}
+                latestPost={latestPosts.get(featuredRooms[1].slug)}
+                postCount={postCounts[featuredRooms[1].slug] || 0}
+                onClick={() => handleRoomClick(featuredRooms[1].slug)}
+                size="medium"
+              />
+            )}
+            
+            {/* Right bottom: Two small cards side by side */}
+            <div className="grid grid-cols-2 gap-4">
+              {featuredRooms.slice(2, 4).map(room => (
                 <FeaturedCard
                   key={room.slug}
                   room={room}
@@ -238,19 +250,6 @@ export default function Home() {
               ))}
             </div>
           </div>
-          
-          {/* Fourth featured below */}
-          {featuredRooms[3] && (
-            <div className="mt-4">
-              <FeaturedCard
-                room={featuredRooms[3]}
-                latestPost={latestPosts.get(featuredRooms[3].slug)}
-                postCount={postCounts[featuredRooms[3].slug] || 0}
-                onClick={() => handleRoomClick(featuredRooms[3].slug)}
-                size="medium"
-              />
-            </div>
-          )}
         </section>
       )}
 
