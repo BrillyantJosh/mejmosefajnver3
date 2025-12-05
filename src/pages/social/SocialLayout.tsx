@@ -1,10 +1,15 @@
 import { Outlet, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Home, Users, MessageSquare, DoorOpen } from "lucide-react";
+import { Home, Newspaper, Users, MessageSquare, DoorOpen } from "lucide-react";
 import { CreatePostDialog } from "@/components/social/CreatePostDialog";
 
 const socialNavItems = [
+  {
+    title: "Home",
+    path: "/social/home",
+    icon: Newspaper
+  },
   {
     title: "Feed",
     path: "/social",
