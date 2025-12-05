@@ -11,6 +11,78 @@ export interface RoomLatestPost {
   authorPubkey: string;
 }
 
+// Extract YouTube video ID from URL
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+    /music\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+// Get YouTube thumbnail URL
+function getYouTubeThumbnail(videoId: string): string {
+  return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+}
+
+// Extract best image from post content and tags
+function extractImageFromPost(event: Event): string | undefined {
+  const content = event.content;
+  
+  // 1. Check for direct image URLs in content
+  const imageMatch = content.match(/https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp)(\?[^\s]*)?/i);
+  if (imageMatch) {
+    return imageMatch[0];
+  }
+  
+  // 2. Check for YouTube URLs and get thumbnail
+  const youtubeUrls = content.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|music\.youtube\.com\/watch\?v=)[^\s]+/gi);
+  if (youtubeUrls) {
+    for (const url of youtubeUrls) {
+      const videoId = extractYouTubeId(url);
+      if (videoId) {
+        return getYouTubeThumbnail(videoId);
+      }
+    }
+  }
+  
+  // 3. Check imeta tags for images
+  const imetaTag = event.tags.find(t => t[0] === 'imeta');
+  if (imetaTag) {
+    const urlMatch = imetaTag.find(v => v.startsWith('url '));
+    if (urlMatch) {
+      return urlMatch.replace('url ', '');
+    }
+  }
+  
+  // 4. Check image tag
+  const imageTag = event.tags.find(t => t[0] === 'image');
+  if (imageTag && imageTag[1]) {
+    return imageTag[1];
+  }
+  
+  // 5. Check r tag for media URLs
+  const rTags = event.tags.filter(t => t[0] === 'r');
+  for (const rTag of rTags) {
+    const url = rTag[1];
+    if (url && /\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url)) {
+      return url;
+    }
+    // Check if r tag is YouTube
+    const ytId = extractYouTubeId(url);
+    if (ytId) {
+      return getYouTubeThumbnail(ytId);
+    }
+  }
+  
+  return undefined;
+}
+
 export function useNostrRoomLatestPosts(roomSlugs: string[]) {
   const [latestPosts, setLatestPosts] = useState<Map<string, RoomLatestPost>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -37,57 +109,57 @@ export function useNostrRoomLatestPosts(roomSlugs: string[]) {
       try {
         setLoading(true);
 
-        // Create filters for each room - we use 't' or 'a' tags
         const postsMap = new Map<string, RoomLatestPost>();
 
         // Fetch posts for each room slug
         for (const slug of roomSlugs) {
           try {
+            // Query with 't' tag
             const events = await pool.querySync(RELAYS, {
               kinds: [1],
               '#t': [slug],
-              limit: 5
+              limit: 10
             });
 
-            // Also try with 'a' tag
+            // Also query with 'a' tag
             const eventsA = await pool.querySync(RELAYS, {
               kinds: [1],
               '#a': [slug],
-              limit: 5
+              limit: 10
             });
 
             const allEvents = [...events, ...eventsA];
 
             if (allEvents.length > 0) {
-              // Get the latest event
-              const latestEvent = allEvents.reduce((latest, event) => {
-                return !latest || event.created_at > latest.created_at ? event : latest;
-              }, null as Event | null);
-
-              if (latestEvent) {
-                // Extract image URL from content if present
-                const imageMatch = latestEvent.content.match(/https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp)/i);
-                
-                // Also check imeta tags for images
-                const imetaTag = latestEvent.tags.find(t => t[0] === 'imeta');
-                let imageUrl = imageMatch?.[0];
-                
-                if (imetaTag) {
-                  const urlMatch = imetaTag.find(v => v.startsWith('url '));
-                  if (urlMatch) {
-                    imageUrl = urlMatch.replace('url ', '');
-                  }
+              // Sort by created_at descending
+              allEvents.sort((a, b) => b.created_at - a.created_at);
+              
+              // Try to find post with image first
+              let selectedEvent: Event | null = null;
+              let imageUrl: string | undefined;
+              
+              for (const event of allEvents) {
+                const extractedImage = extractImageFromPost(event);
+                if (extractedImage) {
+                  selectedEvent = event;
+                  imageUrl = extractedImage;
+                  break;
                 }
-
-                postsMap.set(slug, {
-                  roomSlug: slug,
-                  postId: latestEvent.id,
-                  content: latestEvent.content,
-                  created_at: latestEvent.created_at,
-                  imageUrl,
-                  authorPubkey: latestEvent.pubkey
-                });
               }
+              
+              // If no post with image, use latest
+              if (!selectedEvent) {
+                selectedEvent = allEvents[0];
+              }
+
+              postsMap.set(slug, {
+                roomSlug: slug,
+                postId: selectedEvent.id,
+                content: selectedEvent.content,
+                created_at: selectedEvent.created_at,
+                imageUrl,
+                authorPubkey: selectedEvent.pubkey
+              });
             }
           } catch (err) {
             console.warn(`Error fetching posts for room ${slug}:`, err);
