@@ -51,7 +51,13 @@ function extractImageFromPost(event: Event): string | undefined {
     }
   }
   
-  // 3. Check imeta tags for images
+  // 3. Check imurl tag (commonly used for images)
+  const imurlTag = event.tags.find(t => t[0] === 'imurl');
+  if (imurlTag && imurlTag[1]) {
+    return imurlTag[1];
+  }
+  
+  // 4. Check imeta tags for images
   const imetaTag = event.tags.find(t => t[0] === 'imeta');
   if (imetaTag) {
     const urlMatch = imetaTag.find(v => v.startsWith('url '));
@@ -60,7 +66,7 @@ function extractImageFromPost(event: Event): string | undefined {
     }
   }
   
-  // 4. Check image tag
+  // 5. Check image tag
   const imageTag = event.tags.find(t => t[0] === 'image');
   if (imageTag && imageTag[1]) {
     return imageTag[1];
