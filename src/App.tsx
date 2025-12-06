@@ -75,6 +75,8 @@ import OnlineEvents from "./pages/events/OnlineEvents";
 import LiveEvents from "./pages/events/LiveEvents";
 import AddEvent from "./pages/events/AddEvent";
 import EventDetail from "./pages/events/EventDetail";
+import MyEventsPage from "./pages/events/MyEvents";
+import EditEvent from "./pages/events/EditEvent";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -192,8 +194,10 @@ const App = () => (
           <Route index element={<Navigate to="/events/online" replace />} />
           <Route path="online" element={<OnlineEvents />} />
           <Route path="live" element={<LiveEvents />} />
+          <Route path="my" element={<MyEventsPage />} />
           <Route path="add" element={<AddEvent />} />
           <Route path="detail/:eventId" element={<EventDetail />} />
+          <Route path="edit/:eventId" element={<EditEvent />} />
         </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
