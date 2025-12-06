@@ -92,6 +92,7 @@ import Lana8Wonder from "./pages/Lana8Wonder";
 import NotFound from "./pages/NotFound";
 import AdminSettings from "./pages/admin/AdminSettings";
 import PublicPost from "./pages/PublicPost";
+import PublicEvent from "./pages/PublicEvent";
 
 const queryClient = new QueryClient();
 
@@ -108,6 +109,7 @@ const App = () => (
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/post/:eventId" element={<PublicPost />} />
+                <Route path="/event/:eventId" element={<PublicEvent />} />
                 <Route element={
                   <ProtectedRoute>
                     <MainLayout />
