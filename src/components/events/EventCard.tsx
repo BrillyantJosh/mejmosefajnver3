@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Globe, Users, UserPlus, Check, Loader2, X } from "lucide-react";
+import { Calendar, Clock, MapPin, Globe, Users, UserPlus, Check, Loader2, Share2 } from "lucide-react";
 import { format } from "date-fns";
 import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNavigate } from "react-router-dom";
@@ -288,41 +288,70 @@ export function EventCard({ event }: EventCardProps) {
             <span>{registrations.length} going</span>
           </div>
           
-          {userRegistration ? (
+          <div className="flex items-center gap-2">
             <Button 
-              variant="outline" 
-              size="sm"
-              className="bg-green-500/10 border-green-500/30 text-green-600 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-600"
-              onClick={handleUnregister}
-              disabled={unregistering}
+              variant="ghost" 
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleShare}
             >
-              {unregistering ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <Check className="h-4 w-4 mr-1" />
-                  Going
-                </>
-              )}
+              <Share2 className="h-4 w-4" />
             </Button>
-          ) : (
-            <Button 
-              size="sm"
-              onClick={handleRegister}
-              disabled={registering}
-            >
-              {registering ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <UserPlus className="h-4 w-4 mr-1" />
-                  I'm Going
-                </>
-              )}
-            </Button>
-          )}
+            
+            {userRegistration ? (
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="bg-green-500/10 border-green-500/30 text-green-600 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-600"
+                onClick={handleUnregister}
+                disabled={unregistering}
+              >
+                {unregistering ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Check className="h-4 w-4 mr-1" />
+                    Going
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button 
+                size="sm"
+                onClick={handleRegister}
+                disabled={registering}
+              >
+                {registering ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <UserPlus className="h-4 w-4 mr-1" />
+                    I'm Going
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>
   );
+
+  function handleShare(e: React.MouseEvent) {
+    e.stopPropagation();
+    const shareUrl = `${window.location.origin}/event/${event.id}`;
+    
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      toast({
+        title: "Link copied!",
+        description: "Share this link with anyone"
+      });
+    }).catch(() => {
+      toast({
+        title: "Copy failed",
+        description: shareUrl,
+        variant: "destructive"
+      });
+    });
+  }
 }
