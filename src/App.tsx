@@ -74,6 +74,7 @@ import LanaEventsLayout from "./pages/events/LanaEventsLayout";
 import OnlineEvents from "./pages/events/OnlineEvents";
 import LiveEvents from "./pages/events/LiveEvents";
 import AddEvent from "./pages/events/AddEvent";
+import EventDetail from "./pages/events/EventDetail";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -192,6 +193,7 @@ const App = () => (
           <Route path="online" element={<OnlineEvents />} />
           <Route path="live" element={<LiveEvents />} />
           <Route path="add" element={<AddEvent />} />
+          <Route path="detail/:eventId" element={<EventDetail />} />
         </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
