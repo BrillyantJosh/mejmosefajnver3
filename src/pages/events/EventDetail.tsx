@@ -6,13 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Calendar, Clock, MapPin, Globe, Users, ArrowLeft, 
-  ExternalLink, Youtube, FileText, Wallet
+  ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2
 } from "lucide-react";
 import { format } from "date-fns";
-import { SimplePool } from "nostr-tools";
+import { SimplePool, finalizeEvent } from "nostr-tools";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
+import { useNostrEventRegistrations } from "@/hooks/useNostrEventRegistrations";
+import { toast } from "@/hooks/use-toast";
 
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
@@ -27,6 +29,9 @@ export default function EventDetail() {
   const { parameters: systemParameters } = useSystemParameters();
   const [event, setEvent] = useState<LanaEvent | null>(null);
   const [loading, setLoading] = useState(true);
+  const [registering, setRegistering] = useState(false);
+
+  const { registrations, userRegistration, refetch: refetchRegistrations } = useNostrEventRegistrations(event?.dTag);
 
   const relays = systemParameters?.relays && systemParameters.relays.length > 0 
     ? systemParameters.relays 
@@ -350,8 +355,130 @@ export default function EventDetail() {
               </Button>
             </div>
           )}
+
+          {/* Registration Section */}
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Registration</h3>
+              <Badge variant="secondary">
+                <Users className="h-3 w-3 mr-1" />
+                {registrations.length} registered
+              </Badge>
+            </div>
+            
+            {userRegistration ? (
+              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                  <Check className="h-5 w-5" />
+                  <span className="font-medium">You are registered!</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Status: {userRegistration.status === 'going' ? 'Going' : 'Interested'}
+                  {userRegistration.seats && userRegistration.seats > 1 && ` • ${userRegistration.seats} seats`}
+                </p>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button 
+                  className="flex-1"
+                  onClick={() => handleRegister('going')}
+                  disabled={registering}
+                >
+                  {registering && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  I'm Going
+                </Button>
+                <Button 
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => handleRegister('interested')}
+                  disabled={registering}
+                >
+                  Interested
+                </Button>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
   );
+
+  async function handleRegister(status: 'going' | 'interested') {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId || !event?.dTag) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to register",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setRegistering(true);
+
+    try {
+      const pool = new SimplePool();
+      const privKeyBytes = new Uint8Array(session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+
+      const tags: string[][] = [
+        ["event", event.dTag],
+        ["status", status],
+        ["p", session.nostrHexId],
+        ["seats", "1"],
+        ["source", "Lana.app"]
+      ];
+
+      const registrationEvent = finalizeEvent({
+        kind: 53333,
+        created_at: Math.floor(Date.now() / 1000),
+        tags,
+        content: "",
+      }, privKeyBytes);
+
+      console.log('Publishing registration:', registrationEvent);
+
+      const publishPromises = pool.publish(relays, registrationEvent);
+      const publishArray = Array.from(publishPromises);
+      let successCount = 0;
+
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          if (successCount === 0) {
+            reject(new Error('Publish timeout'));
+          } else {
+            resolve();
+          }
+        }, 10000);
+
+        publishArray.forEach((promise) => {
+          promise
+            .then(() => {
+              successCount++;
+              if (successCount === 1) {
+                clearTimeout(timeout);
+                resolve();
+              }
+            })
+            .catch(() => {});
+        });
+      });
+
+      toast({
+        title: "Registered!",
+        description: status === 'going' ? "You're going to this event!" : "You marked interest in this event"
+      });
+
+      refetchRegistrations();
+
+    } catch (error) {
+      console.error('Error registering:', error);
+      toast({
+        title: "Error registering",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive"
+      });
+    } finally {
+      setRegistering(false);
+    }
+  }
 }
