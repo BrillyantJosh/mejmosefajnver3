@@ -82,12 +82,15 @@ export function useNostrEventRegistrations(eventSlug: string | undefined) {
     try {
       const pool = new SimplePool();
       
+      console.log('Fetching registrations for event slug:', eventSlug);
+      
+      // Fetch all KIND 53333 and filter client-side
       const rawEvents = await pool.querySync(relays, {
         kinds: [53333],
-        '#event': [eventSlug]
+        limit: 500
       });
 
-      console.log('Fetched registrations:', rawEvents.length);
+      console.log('Fetched all KIND 53333 events:', rawEvents.length);
 
       const parsedRegistrations: EventRegistration[] = [];
       const seenPubkeys = new Set<string>();
@@ -97,7 +100,7 @@ export function useNostrEventRegistrations(eventSlug: string | undefined) {
 
       for (const rawEvent of sortedEvents) {
         const parsed = parseRegistration(rawEvent);
-        if (parsed) {
+        if (parsed && parsed.eventSlug === eventSlug) {
           // Keep only the most recent registration per user
           if (!seenPubkeys.has(parsed.pubkey)) {
             seenPubkeys.add(parsed.pubkey);
@@ -106,6 +109,7 @@ export function useNostrEventRegistrations(eventSlug: string | undefined) {
         }
       }
 
+      console.log('Filtered registrations for this event:', parsedRegistrations.length);
       setRegistrations(parsedRegistrations);
 
       // Find current user's registration
@@ -126,4 +130,98 @@ export function useNostrEventRegistrations(eventSlug: string | undefined) {
   }, [fetchRegistrations]);
 
   return { registrations, loading, userRegistration, refetch: fetchRegistrations };
+}
+
+// Hook to fetch registrations for multiple events at once
+export function useNostrEventRegistrationsBatch(eventSlugs: string[]) {
+  const { session } = useAuth();
+  const { parameters: systemParameters } = useSystemParameters();
+  const [registrationsByEvent, setRegistrationsByEvent] = useState<Record<string, EventRegistration[]>>({});
+  const [loading, setLoading] = useState(true);
+
+  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
+    ? systemParameters.relays 
+    : DEFAULT_RELAYS;
+
+  const fetchAllRegistrations = useCallback(async () => {
+    if (eventSlugs.length === 0) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const pool = new SimplePool();
+      
+      // Fetch all KIND 53333 registrations
+      const rawEvents = await pool.querySync(relays, {
+        kinds: [53333],
+        limit: 1000
+      });
+
+      console.log('Fetched all registrations:', rawEvents.length);
+
+      const byEvent: Record<string, EventRegistration[]> = {};
+      eventSlugs.forEach(slug => {
+        byEvent[slug] = [];
+      });
+
+      // Sort by created_at descending
+      const sortedEvents = [...rawEvents].sort((a, b) => b.created_at - a.created_at);
+      const seenByEvent: Record<string, Set<string>> = {};
+
+      for (const rawEvent of sortedEvents) {
+        const tags = rawEvent.tags || [];
+        const eventTag = tags.find((t: string[]) => t[0] === 'event');
+        const statusTag = tags.find((t: string[]) => t[0] === 'status');
+        
+        if (!eventTag || !statusTag) continue;
+        
+        const eventSlug = eventTag[1];
+        const status = statusTag[1] as 'going' | 'interested';
+
+        if (!eventSlugs.includes(eventSlug)) continue;
+
+        if (!seenByEvent[eventSlug]) {
+          seenByEvent[eventSlug] = new Set();
+        }
+
+        // Keep only most recent per user per event
+        if (!seenByEvent[eventSlug].has(rawEvent.pubkey)) {
+          seenByEvent[eventSlug].add(rawEvent.pubkey);
+
+          const seatsTag = tags.find((t: string[]) => t[0] === 'seats');
+          const noteTag = tags.find((t: string[]) => t[0] === 'note');
+
+          byEvent[eventSlug].push({
+            id: rawEvent.id,
+            pubkey: rawEvent.pubkey,
+            created_at: rawEvent.created_at,
+            eventSlug,
+            status,
+            seats: seatsTag ? parseInt(seatsTag[1], 10) : undefined,
+            note: noteTag ? noteTag[1] : undefined,
+            source: undefined,
+            attachments: [],
+            guests: [],
+            content: rawEvent.content || ''
+          });
+        }
+      }
+
+      setRegistrationsByEvent(byEvent);
+
+    } catch (err) {
+      console.error('Error fetching registrations:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [eventSlugs.join(','), relays]);
+
+  useEffect(() => {
+    fetchAllRegistrations();
+  }, [fetchAllRegistrations]);
+
+  return { registrationsByEvent, loading, refetch: fetchAllRegistrations };
 }
