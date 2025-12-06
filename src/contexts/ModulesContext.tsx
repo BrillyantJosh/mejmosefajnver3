@@ -249,7 +249,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-pink-400 to-purple-400',
     image: lanaknightsImage,
     imagePosition: 'object-[50%_15%]',
-    externalUrl: 'https://www.lanaknights.com',
+    externalUrl: 'https://lanaknights.com',
     enabled: true,
     order: 20
   }
