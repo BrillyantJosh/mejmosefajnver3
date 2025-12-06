@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Calendar, Clock, MapPin, Globe, Users, ArrowLeft, 
-  ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2
+  ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2, X
 } from "lucide-react";
 import { format } from "date-fns";
 import { SimplePool, finalizeEvent } from "nostr-tools";
@@ -362,41 +362,42 @@ export default function EventDetail() {
               <h3 className="font-semibold">Registration</h3>
               <Badge variant="secondary">
                 <Users className="h-3 w-3 mr-1" />
-                {registrations.length} registered
+                {registrations.length} going
               </Badge>
             </div>
             
             {userRegistration ? (
-              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                  <Check className="h-5 w-5" />
-                  <span className="font-medium">You are registered!</span>
+              <div className="space-y-3">
+                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                    <Check className="h-5 w-5" />
+                    <span className="font-medium">You are going!</span>
+                  </div>
                 </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Status: {userRegistration.status === 'going' ? 'Going' : 'Interested'}
-                  {userRegistration.seats && userRegistration.seats > 1 && ` • ${userRegistration.seats} seats`}
-                </p>
+                <Button 
+                  variant="outline" 
+                  className="w-full text-destructive hover:bg-destructive/10"
+                  onClick={handleUnregister}
+                  disabled={registering}
+                >
+                  {registering ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <X className="h-4 w-4 mr-2" />
+                  )}
+                  Cancel Registration
+                </Button>
               </div>
             ) : (
-              <div className="flex gap-2">
-                <Button 
-                  className="flex-1"
-                  onClick={() => handleRegister('going')}
-                  disabled={registering}
-                >
-                  {registering && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  I'm Going
-                </Button>
-                <Button 
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => handleRegister('interested')}
-                  disabled={registering}
-                >
-                  Interested
-                </Button>
-              </div>
+              <Button 
+                className="w-full"
+                onClick={handleRegister}
+                disabled={registering}
+              >
+                {registering && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <UserPlus className="h-4 w-4 mr-2" />
+                I'm Going
+              </Button>
             )}
           </div>
         </CardContent>
@@ -404,7 +405,7 @@ export default function EventDetail() {
     </div>
   );
 
-  async function handleRegister(status: 'going' | 'interested') {
+  async function handleRegister() {
     if (!session?.nostrPrivateKey || !session?.nostrHexId || !event?.dTag) {
       toast({
         title: "Error",
@@ -422,7 +423,7 @@ export default function EventDetail() {
 
       const tags: string[][] = [
         ["event", event.dTag],
-        ["status", status],
+        ["status", "going"],
         ["p", session.nostrHexId],
         ["seats", "1"],
         ["source", "Lana.app"]
@@ -465,7 +466,7 @@ export default function EventDetail() {
 
       toast({
         title: "Registered!",
-        description: status === 'going' ? "You're going to this event!" : "You marked interest in this event"
+        description: "You're going to this event!"
       });
 
       refetchRegistrations();
@@ -474,6 +475,73 @@ export default function EventDetail() {
       console.error('Error registering:', error);
       toast({
         title: "Error registering",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive"
+      });
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+  async function handleUnregister() {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId || !userRegistration) {
+      return;
+    }
+
+    setRegistering(true);
+
+    try {
+      const pool = new SimplePool();
+      const privKeyBytes = new Uint8Array(session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+
+      // KIND 5 is the deletion event in Nostr
+      const deleteEvent = finalizeEvent({
+        kind: 5,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ["e", userRegistration.id],
+          ["k", "53333"]
+        ],
+        content: "Cancelled registration",
+      }, privKeyBytes);
+
+      const publishPromises = pool.publish(relays, deleteEvent);
+      const publishArray = Array.from(publishPromises);
+      let successCount = 0;
+
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          if (successCount === 0) {
+            reject(new Error('Publish timeout'));
+          } else {
+            resolve();
+          }
+        }, 10000);
+
+        publishArray.forEach((promise) => {
+          promise
+            .then(() => {
+              successCount++;
+              if (successCount === 1) {
+                clearTimeout(timeout);
+                resolve();
+              }
+            })
+            .catch(() => {});
+        });
+      });
+
+      toast({
+        title: "Unregistered",
+        description: "Your registration has been cancelled"
+      });
+
+      refetchRegistrations();
+
+    } catch (error) {
+      console.error('Error unregistering:', error);
+      toast({
+        title: "Error",
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive"
       });
