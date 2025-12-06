@@ -1,24 +1,61 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Globe } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Globe, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useNostrEvents } from "@/hooks/useNostrEvents";
+import { EventCard } from "@/components/events/EventCard";
 
 export default function OnlineEvents() {
+  const { events, loading, error, refetch } = useNostrEvents('online');
+
   return (
-    <div className="space-y-4 px-4">
-      <div className="flex items-center gap-2 mb-6">
-        <Globe className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Online Events</h1>
+    <div className="space-y-4 px-4 pb-24">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <Globe className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold">Online Events</h1>
+        </div>
+        <Button variant="ghost" size="icon" onClick={refetch} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
-      
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Coming Soon</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">
-            Online events will be displayed here. Add your first event!
-          </p>
-        </CardContent>
-      </Card>
+
+      {loading && (
+        <div className="space-y-4">
+          {[1, 2, 3].map(i => (
+            <Skeleton key={i} className="h-48 w-full" />
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-destructive">Error: {error}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && !error && events.length === 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">No Upcoming Online Events</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">
+              There are no upcoming online events. Be the first to add one!
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && !error && events.length > 0 && (
+        <div className="space-y-4">
+          {events.map(event => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
