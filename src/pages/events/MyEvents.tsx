@@ -4,17 +4,152 @@ import { SimplePool } from "nostr-tools";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Globe, MapPin, Edit, Users } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Calendar, Globe, MapPin, Edit, Users, ChevronDown, ChevronUp, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { format } from "date-fns";
 import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
+import { useNostrEventRegistrationsBatch, EventRegistration } from "@/hooks/useNostrEventRegistrations";
+import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
   'wss://relay.lanacoin-eternity.com',
   'wss://relay.lanaheartvoice.com'
 ];
+
+function AttendeeRow({ registration }: { registration: EventRegistration }) {
+  const { profile } = useNostrProfileCache(registration.pubkey);
+  const displayName = profile?.display_name || profile?.full_name || registration.pubkey.slice(0, 8) + '...';
+  
+  return (
+    <div className="flex items-center gap-2 py-2">
+      <Avatar className="h-8 w-8">
+        {profile?.picture ? (
+          <AvatarImage src={profile.picture} alt={displayName} />
+        ) : null}
+        <AvatarFallback>
+          <User className="h-3 w-3" />
+        </AvatarFallback>
+      </Avatar>
+      <span className="text-sm flex-1 truncate">{displayName}</span>
+      <Badge variant={registration.status === 'going' ? 'default' : 'secondary'} className="text-xs">
+        {registration.status === 'going' ? 'Going' : 'Interested'}
+      </Badge>
+    </div>
+  );
+}
+
+interface EventCardWithRegistrationsProps {
+  event: LanaEvent;
+  registrations: EventRegistration[];
+  onEdit: (eventId: string) => void;
+}
+
+function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardWithRegistrationsProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const status = getEventStatus(event);
+  const isPast = event.end ? event.end < new Date() : new Date(event.start.getTime() + 2 * 60 * 60 * 1000) < new Date();
+  
+  const goingCount = registrations.filter(r => r.status === 'going').length;
+  const interestedCount = registrations.filter(r => r.status === 'interested').length;
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Card className={`${isPast ? 'opacity-60' : ''}`}>
+        <CardContent className="p-4">
+          <div className="flex gap-4">
+            {event.cover && (
+              <img 
+                src={event.cover} 
+                alt={event.title}
+                className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-semibold truncate">{event.title}</h3>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  className="h-8 w-8 flex-shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(event.id);
+                  }}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                {event.isOnline ? (
+                  <Globe className="h-3 w-3" />
+                ) : (
+                  <MapPin className="h-3 w-3" />
+                )}
+                <span>{format(event.start, 'dd.MM.yyyy HH:mm')}</span>
+              </div>
+
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {status === 'happening-now' && (
+                  <Badge className="bg-green-500 hover:bg-green-600 text-white">NOW</Badge>
+                )}
+                {status === 'today' && (
+                  <Badge className="bg-amber-500 hover:bg-amber-600 text-white">TODAY</Badge>
+                )}
+                {isPast && <Badge variant="secondary">PAST</Badge>}
+                {event.status === 'canceled' && <Badge variant="destructive">CANCELED</Badge>}
+                <Badge variant="outline" className="text-xs">
+                  {event.isOnline ? 'Online' : 'Live'}
+                </Badge>
+              </div>
+            </div>
+          </div>
+
+          {/* Registration Stats */}
+          <div className="mt-4 pt-3 border-t">
+            <CollapsibleTrigger asChild>
+              <div className="flex items-center justify-between cursor-pointer hover:bg-accent/50 rounded p-2 -m-2">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1">
+                    <Users className="h-4 w-4 text-primary" />
+                    <span className="font-medium">{registrations.length}</span>
+                    <span className="text-sm text-muted-foreground">registered</span>
+                  </div>
+                  {goingCount > 0 && (
+                    <Badge variant="default" className="text-xs">{goingCount} going</Badge>
+                  )}
+                  {interestedCount > 0 && (
+                    <Badge variant="secondary" className="text-xs">{interestedCount} interested</Badge>
+                  )}
+                </div>
+                {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </div>
+            </CollapsibleTrigger>
+          </div>
+
+          <CollapsibleContent>
+            <div className="mt-3 max-h-64 overflow-y-auto">
+              {registrations.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No registrations yet</p>
+              ) : (
+                <div className="divide-y">
+                  {registrations.map(reg => (
+                    <AttendeeRow key={reg.id} registration={reg} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </CardContent>
+      </Card>
+    </Collapsible>
+  );
+}
 
 export default function MyEvents() {
   const navigate = useNavigate();
@@ -26,6 +161,10 @@ export default function MyEvents() {
   const relays = systemParameters?.relays && systemParameters.relays.length > 0 
     ? systemParameters.relays 
     : DEFAULT_RELAYS;
+
+  // Get all event slugs for batch registration fetching
+  const eventSlugs = events.map(e => e.dTag);
+  const { registrationsByEvent, loading: loadingRegistrations } = useNostrEventRegistrationsBatch(eventSlugs);
 
   const parseEvent = (event: any): LanaEvent | null => {
     try {
@@ -159,7 +298,7 @@ export default function MyEvents() {
           <h1 className="text-2xl font-bold">My Events</h1>
         </div>
         {[1, 2, 3].map(i => (
-          <Skeleton key={i} className="h-32 w-full" />
+          <Skeleton key={i} className="h-40 w-full" />
         ))}
       </div>
     );
@@ -174,7 +313,7 @@ export default function MyEvents() {
   }
 
   return (
-    <div className="space-y-4 px-4">
+    <div className="space-y-4 px-4 pb-24">
       <div className="flex items-center gap-2 mb-6">
         <Calendar className="h-6 w-6 text-primary" />
         <h1 className="text-2xl font-bold">My Events</h1>
@@ -186,79 +325,14 @@ export default function MyEvents() {
         </div>
       ) : (
         <div className="space-y-4">
-          {events.map(event => {
-            const status = getEventStatus(event);
-            const isPast = event.end ? event.end < new Date() : new Date(event.start.getTime() + 2 * 60 * 60 * 1000) < new Date();
-            
-            return (
-              <Card 
-                key={event.id} 
-                className={`cursor-pointer hover:bg-accent/50 transition-colors ${isPast ? 'opacity-60' : ''}`}
-                onClick={() => navigate(`/events/registrations/${event.id}`)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex gap-4">
-                    {event.cover && (
-                      <img 
-                        src={event.cover} 
-                        alt={event.title}
-                        className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-semibold truncate">{event.title}</h3>
-                        <div className="flex gap-1">
-                          <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          <Edit 
-                            className="h-4 w-4 text-muted-foreground flex-shrink-0 hover:text-primary" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/events/edit/${event.id}`);
-                            }}
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                        {event.isOnline ? (
-                          <Globe className="h-3 w-3" />
-                        ) : (
-                          <MapPin className="h-3 w-3" />
-                        )}
-                        <span>{format(event.start, 'dd.MM.yyyy HH:mm')}</span>
-                      </div>
-
-                      <div className="flex gap-2 mt-2 flex-wrap">
-                        {status === 'happening-now' && (
-                          <Badge className="bg-green-500 hover:bg-green-600 text-white">
-                            HAPPENING NOW
-                          </Badge>
-                        )}
-                        {status === 'today' && (
-                          <Badge className="bg-amber-500 hover:bg-amber-600 text-white">
-                            TODAY
-                          </Badge>
-                        )}
-                        {isPast && (
-                          <Badge variant="secondary">PAST</Badge>
-                        )}
-                        {event.status === 'canceled' && (
-                          <Badge variant="destructive">CANCELED</Badge>
-                        )}
-                        {event.status === 'archived' && (
-                          <Badge variant="outline">ARCHIVED</Badge>
-                        )}
-                        <Badge variant="outline" className="text-xs">
-                          {event.isOnline ? 'Online' : 'Live'}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {events.map(event => (
+            <EventCardWithRegistrations
+              key={event.id}
+              event={event}
+              registrations={registrationsByEvent[event.dTag] || []}
+              onEdit={(id) => navigate(`/events/edit/${id}`)}
+            />
+          ))}
         </div>
       )}
     </div>
