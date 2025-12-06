@@ -70,6 +70,10 @@ import MyDonations from "./pages/100millionideas/MyDonations";
 import OfflineLanaLayout from "./pages/offlinelana/OfflineLanaLayout";
 import GenerateWallet from "./pages/offlinelana/GenerateWallet";
 import OfflineWallets from "./pages/offlinelana/OfflineWallets";
+import LanaEventsLayout from "./pages/events/LanaEventsLayout";
+import OnlineEvents from "./pages/events/OnlineEvents";
+import LiveEvents from "./pages/events/LiveEvents";
+import AddEvent from "./pages/events/AddEvent";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -182,6 +186,12 @@ const App = () => (
           <Route index element={<Navigate to="/offline-lana/generate" replace />} />
           <Route path="generate" element={<GenerateWallet />} />
           <Route path="offline-wallets" element={<OfflineWallets />} />
+        </Route>
+        <Route path="/events" element={<LanaEventsLayout />}>
+          <Route index element={<Navigate to="/events/online" replace />} />
+          <Route path="online" element={<OnlineEvents />} />
+          <Route path="live" element={<LiveEvents />} />
+          <Route path="add" element={<AddEvent />} />
         </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />

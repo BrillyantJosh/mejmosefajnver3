@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -21,6 +21,7 @@ import offlinelanaImage from '@/assets/offlinelana-module.png';
 import lanapayImage from '@/assets/lanapay-module.png';
 import transparencyImage from '@/assets/transparency-module.png';
 import lanaknightsImage from '@/assets/lanaknights-module.png';
+import lanaeventsImage from '@/assets/lanaevents-module.png';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
@@ -252,6 +253,18 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     externalUrl: 'https://lanaknights.com',
     enabled: true,
     order: 20
+  },
+  {
+    id: 'lanaevents',
+    title: 'Lana Events',
+    description: 'Discover and create online and live events',
+    icon: CalendarDays,
+    path: '/events',
+    gradient: 'from-amber-400 to-orange-500',
+    image: lanaeventsImage,
+    imagePosition: 'object-[50%_25%]',
+    enabled: true,
+    order: 21
   }
 ];
 
@@ -303,7 +316,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'rock': 'ROCK',
     'unregisteredwallets': 'Unregistered Wallets',
     '100millionideas': '100 Million Ideas',
-    'lanaknights': 'Lana Knights'
+    'lanaknights': 'Lana Knights',
+    'lanaevents': 'Lana Events'
   };
   return mapping[id] || id;
 };
@@ -331,7 +345,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'ROCK': 'rock',
     'Unregistered Wallets': 'unregisteredwallets',
     '100 Million Ideas': '100millionideas',
-    'Lana Knights': 'lanaknights'
+    'Lana Knights': 'lanaknights',
+    'Lana Events': 'lanaevents'
   };
   return mapping[id] || null;
 };
