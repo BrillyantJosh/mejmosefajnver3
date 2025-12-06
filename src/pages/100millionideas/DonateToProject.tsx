@@ -29,7 +29,7 @@ const DonateToProject = () => {
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
   
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
-  const [amount, setAmount] = useState<string>("0");
+  const [lanaAmount, setLanaAmount] = useState<string>("0");
   const [message, setMessage] = useState<string>("");
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [loadingBalances, setLoadingBalances] = useState(false);
@@ -90,29 +90,31 @@ const DonateToProject = () => {
     return balance.toFixed(2);
   };
 
-  // Calculate LANA amount from EUR using exchange rate
-  const calculateLanaAmount = (): number => {
-    const eurAmount = parseFloat(amount) || 0;
-    if (eurAmount === 0 || !project) return 0;
+  // Calculate fiat amount from LANA using exchange rate
+  const calculateFiatAmount = (): number => {
+    const lana = parseFloat(lanaAmount) || 0;
+    if (lana === 0 || !project) return 0;
     
-    // Get exchange rate from system parameters
-    const exchangeRate = parameters?.exchangeRates?.EUR || 0;
+    // Get exchange rate from system parameters based on project currency
+    const currency = project.currency || 'EUR';
+    const exchangeRate = parameters?.exchangeRates?.[currency] || parameters?.exchangeRates?.EUR || 0;
     if (exchangeRate === 0) return 0;
     
-    // Formula: EUR / exchangeRate = LANA
-    return eurAmount / exchangeRate;
+    // Formula: LANA * exchangeRate = fiat
+    return lana * exchangeRate;
   };
 
-  const lanaAmount = calculateLanaAmount();
+  const fiatAmount = calculateFiatAmount();
+  const parsedLanaAmount = parseFloat(lanaAmount) || 0;
   const selectedWalletBalance = selectedWalletId && walletBalances[selectedWalletId] 
     ? walletBalances[selectedWalletId] 
     : 0;
   
-  const hasSufficientBalance = lanaAmount > 0 && selectedWalletBalance >= lanaAmount;
-  const canDonate = selectedWalletId && amount && parseFloat(amount) > 0 && hasSufficientBalance && !loadingBalances;
+  const hasSufficientBalance = parsedLanaAmount > 0 && selectedWalletBalance >= parsedLanaAmount;
+  const canDonate = selectedWalletId && lanaAmount && parsedLanaAmount > 0 && hasSufficientBalance && !loadingBalances;
 
   const handleDonate = async () => {
-    if (!selectedWalletId || !amount || !project) {
+    if (!selectedWalletId || !lanaAmount || !project) {
       toast({
         title: "Missing information",
         description: "Please select a wallet and enter an amount",
@@ -125,8 +127,8 @@ const DonateToProject = () => {
     navigate(`/100millionideas/donate-private-key/${projectId}`, {
       state: {
         selectedWalletId,
-        amount,
-        lanaAmount,
+        amount: fiatAmount.toFixed(2),
+        lanaAmount: parsedLanaAmount,
         message
       }
     });
@@ -273,32 +275,32 @@ const DonateToProject = () => {
           {/* Donation Amount */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Donation Amount ({project.currency}) *</CardTitle>
+              <CardTitle className="text-lg">Donation Amount (LANA) *</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <Input
                   type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  value={lanaAmount}
+                  onChange={(e) => setLanaAmount(e.target.value)}
                   placeholder="0"
                   step="0.01"
                   min="0"
                 />
               </div>
               
-              {/* LANA Amount Display */}
-              {parseFloat(amount) > 0 && (
+              {/* Fiat Amount Display */}
+              {parsedLanaAmount > 0 && (
                 <div className="bg-muted p-4 rounded-md space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Amount in LANA:</span>
+                    <span className="text-sm text-muted-foreground">Amount in {project.currency}:</span>
                     <span className="text-lg font-bold">
-                      {lanaAmount.toFixed(2)} LANA
+                      {fiatAmount.toFixed(2)} {project.currency}
                     </span>
                   </div>
-                  {parameters?.exchangeRates?.EUR && (
+                  {parameters?.exchangeRates?.[project.currency || 'EUR'] && (
                     <p className="text-xs text-muted-foreground">
-                      Exchange rate: 1 LANA = {parameters.exchangeRates.EUR.toFixed(6)} {project.currency}
+                      Exchange rate: 1 LANA = {(parameters.exchangeRates[project.currency || 'EUR'] || parameters.exchangeRates.EUR || 0).toFixed(6)} {project.currency}
                     </p>
                   )}
                   
@@ -341,10 +343,10 @@ const DonateToProject = () => {
             onClick={handleDonate}
             disabled={!canDonate}
             className="w-full bg-green-500 hover:bg-green-600 text-white h-12 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={!hasSufficientBalance && selectedWalletId && parseFloat(amount) > 0 ? "Insufficient balance" : ""}
+            title={!hasSufficientBalance && selectedWalletId && parsedLanaAmount > 0 ? "Insufficient balance" : ""}
           >
-            {parseFloat(amount) > 0 
-              ? `Donate ${amount} ${project.currency} (${lanaAmount.toFixed(2)} LANA)`
+            {parsedLanaAmount > 0 
+              ? `Donate ${parsedLanaAmount.toFixed(2)} LANA (${fiatAmount.toFixed(2)} ${project.currency})`
               : `Donate`
             }
           </Button>
@@ -354,12 +356,12 @@ const DonateToProject = () => {
               Please select a wallet to continue
             </p>
           )}
-          {selectedWalletId && parseFloat(amount) === 0 && (
+          {selectedWalletId && parsedLanaAmount === 0 && (
             <p className="text-sm text-center text-muted-foreground">
               Please enter an amount to donate
             </p>
           )}
-          {!hasSufficientBalance && selectedWalletId && parseFloat(amount) > 0 && (
+          {!hasSufficientBalance && selectedWalletId && parsedLanaAmount > 0 && (
             <p className="text-sm text-center text-destructive">
               Insufficient balance in selected wallet
             </p>
