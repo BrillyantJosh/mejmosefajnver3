@@ -4,7 +4,7 @@ import { SimplePool } from "nostr-tools";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Globe, MapPin, Edit } from "lucide-react";
+import { Calendar, Globe, MapPin, Edit, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { format } from "date-fns";
@@ -194,7 +194,7 @@ export default function MyEvents() {
               <Card 
                 key={event.id} 
                 className={`cursor-pointer hover:bg-accent/50 transition-colors ${isPast ? 'opacity-60' : ''}`}
-                onClick={() => navigate(`/events/edit/${event.id}`)}
+                onClick={() => navigate(`/events/registrations/${event.id}`)}
               >
                 <CardContent className="p-4">
                   <div className="flex gap-4">
@@ -208,7 +208,16 @@ export default function MyEvents() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="font-semibold truncate">{event.title}</h3>
-                        <Edit className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div className="flex gap-1">
+                          <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <Edit 
+                            className="h-4 w-4 text-muted-foreground flex-shrink-0 hover:text-primary" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/events/edit/${event.id}`);
+                            }}
+                          />
+                        </div>
                       </div>
                       
                       <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
