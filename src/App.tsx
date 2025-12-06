@@ -77,6 +77,7 @@ import AddEvent from "./pages/events/AddEvent";
 import EventDetail from "./pages/events/EventDetail";
 import MyEventsPage from "./pages/events/MyEvents";
 import EditEvent from "./pages/events/EditEvent";
+import EventRegistrations from "./pages/events/EventRegistrations";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -198,6 +199,7 @@ const App = () => (
           <Route path="add" element={<AddEvent />} />
           <Route path="detail/:eventId" element={<EventDetail />} />
           <Route path="edit/:eventId" element={<EditEvent />} />
+          <Route path="registrations/:eventId" element={<EventRegistrations />} />
         </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
