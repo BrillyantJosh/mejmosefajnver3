@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Calendar, Clock, MapPin, Globe, Users, ArrowLeft, 
-  ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2, X
+  ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2, X, Share2
 } from "lucide-react";
 import { format } from "date-fns";
 import { SimplePool, finalizeEvent } from "nostr-tools";
@@ -36,6 +36,24 @@ export default function EventDetail() {
   const relays = systemParameters?.relays && systemParameters.relays.length > 0 
     ? systemParameters.relays 
     : DEFAULT_RELAYS;
+
+  const handleShare = async () => {
+    const shareUrl = `${window.location.origin}/event/${eventId}`;
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: "Link copied!",
+        description: "Share this link with anyone"
+      });
+    } catch (err) {
+      toast({
+        title: "Copy failed",
+        description: shareUrl,
+        variant: "destructive"
+      });
+    }
+  };
 
   const parseEvent = useCallback((rawEvent: any): LanaEvent | null => {
     try {
@@ -174,10 +192,15 @@ export default function EventDetail() {
 
   return (
     <div className="space-y-4 px-4 pb-24">
-      <Button variant="ghost" onClick={() => navigate(-1)}>
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Back
-      </Button>
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
+        <Button variant="outline" size="icon" onClick={handleShare}>
+          <Share2 className="h-4 w-4" />
+        </Button>
+      </div>
 
       {event.cover && (
         <div className="relative h-48 md:h-64 w-full overflow-hidden rounded-lg">
