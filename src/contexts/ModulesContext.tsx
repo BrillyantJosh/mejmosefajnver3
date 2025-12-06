@@ -20,6 +20,7 @@ import lanapaperImage from '@/assets/lanapaper-module.png';
 import offlinelanaImage from '@/assets/offlinelana-module.png';
 import lanapayImage from '@/assets/lanapay-module.png';
 import transparencyImage from '@/assets/transparency-module.png';
+import lanaknightsImage from '@/assets/lanaknights-module.png';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
@@ -238,6 +239,19 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-yellow-500 to-orange-500',
     enabled: true,
     order: 19
+  },
+  {
+    id: 'lanaknights',
+    title: 'Lana Knights',
+    description: 'Join the Lana Knights community',
+    icon: Shield,
+    path: '/lanaknights',
+    gradient: 'from-pink-400 to-purple-400',
+    image: lanaknightsImage,
+    imagePosition: 'object-[50%_15%]',
+    externalUrl: 'https://www.lanaknights.com',
+    enabled: true,
+    order: 20
   }
 ];
 
@@ -288,7 +302,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'own': 'OWN',
     'rock': 'ROCK',
     'unregisteredwallets': 'Unregistered Wallets',
-    '100millionideas': '100 Million Ideas'
+    '100millionideas': '100 Million Ideas',
+    'lanaknights': 'Lana Knights'
   };
   return mapping[id] || id;
 };
@@ -315,7 +330,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'OWN': 'own',
     'ROCK': 'rock',
     'Unregistered Wallets': 'unregisteredwallets',
-    '100 Million Ideas': '100millionideas'
+    '100 Million Ideas': '100millionideas',
+    'Lana Knights': 'lanaknights'
   };
   return mapping[id] || null;
 };
