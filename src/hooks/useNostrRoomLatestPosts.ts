@@ -131,34 +131,33 @@ export function useNostrRoomLatestPosts(roomSlugs: string[]) {
             const allEvents = [...events, ...eventsA];
 
             if (allEvents.length > 0) {
-              // Sort by created_at descending
+              // Sort by created_at descending - newest first
               allEvents.sort((a, b) => b.created_at - a.created_at);
               
-              // Try to find post with image first
-              let selectedEvent: Event | null = null;
-              let imageUrl: string | undefined;
+              // ALWAYS use the latest post for content
+              const latestEvent = allEvents[0];
               
-              for (const event of allEvents) {
-                const extractedImage = extractImageFromPost(event);
-                if (extractedImage) {
-                  selectedEvent = event;
-                  imageUrl = extractedImage;
-                  break;
+              // Try to extract image from the latest post first
+              let imageUrl = extractImageFromPost(latestEvent);
+              
+              // If latest post has no image, try to find one from recent posts (within last 5)
+              if (!imageUrl) {
+                for (let i = 1; i < Math.min(allEvents.length, 5); i++) {
+                  const extractedImage = extractImageFromPost(allEvents[i]);
+                  if (extractedImage) {
+                    imageUrl = extractedImage;
+                    break;
+                  }
                 }
-              }
-              
-              // If no post with image, use latest
-              if (!selectedEvent) {
-                selectedEvent = allEvents[0];
               }
 
               postsMap.set(slug, {
                 roomSlug: slug,
-                postId: selectedEvent.id,
-                content: selectedEvent.content,
-                created_at: selectedEvent.created_at,
+                postId: latestEvent.id,
+                content: latestEvent.content,
+                created_at: latestEvent.created_at,
                 imageUrl,
-                authorPubkey: selectedEvent.pubkey
+                authorPubkey: latestEvent.pubkey
               });
             }
           } catch (err) {
