@@ -79,11 +79,17 @@ export default function Profiles() {
                       </p>
                     )}
                     
-                    <div className="flex gap-4 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
                       {profile.country && <span>Country: {profile.country}</span>}
                       {profile.currency && <span>Currency: {profile.currency}</span>}
                       {profile.lanaWalletID && <span>💼 Wallet</span>}
                     </div>
+                    
+                    {profile.pubkey && (
+                      <p className="text-xs text-muted-foreground mt-2 font-mono break-all">
+                        Nostr ID: {profile.pubkey}
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
