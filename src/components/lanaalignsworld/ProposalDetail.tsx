@@ -192,24 +192,36 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
         </CardContent>
       </Card>
 
-      {/* Resources */}
-      {(proposal.youtube || proposal.doc || proposal.link || proposal.donationWallet) && (
+      {/* YouTube Embed */}
+      {proposal.youtube && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Youtube className="h-4 w-4" />
+              Video
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="aspect-video rounded-lg overflow-hidden">
+              <iframe
+                src={proposal.youtube.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
+                title="YouTube video"
+                className="w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Other Resources */}
+      {(proposal.doc || proposal.link || proposal.donationWallet) && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-base">Resources</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {proposal.youtube && (
-              <a 
-                href={proposal.youtube} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-primary hover:underline"
-              >
-                <Youtube className="h-4 w-4" />
-                Watch Video
-              </a>
-            )}
             {proposal.doc && (
               <a 
                 href={proposal.doc} 
