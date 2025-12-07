@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -22,6 +22,7 @@ import lanapayImage from '@/assets/lanapay-module.png';
 import transparencyImage from '@/assets/transparency-module.png';
 import lanaknightsImage from '@/assets/lanaknights-module.png';
 import lanaeventsImage from '@/assets/lanaevents-module.png';
+import lanaalignsImage from '@/assets/lana-logo.png';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
@@ -265,6 +266,17 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     imagePosition: 'object-[50%_25%]',
     enabled: true,
     order: 21
+  },
+  {
+    id: 'lanaalignsworld',
+    title: 'Lana Aligns World',
+    description: 'Global alignment and coordination for Lana community',
+    icon: Globe,
+    path: '/lana-aligns-world',
+    gradient: 'from-cyan-500 to-blue-600',
+    image: lanaalignsImage,
+    enabled: true,
+    order: 22
   }
 ];
 
@@ -317,7 +329,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'unregisteredwallets': 'Unregistered Wallets',
     '100millionideas': '100 Million Ideas',
     'lanaknights': 'Lana Knights',
-    'lanaevents': 'Lana Events'
+    'lanaevents': 'Lana Events',
+    'lanaalignsworld': 'Lana Aligns World'
   };
   return mapping[id] || id;
 };
@@ -346,7 +359,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Unregistered Wallets': 'unregisteredwallets',
     '100 Million Ideas': '100millionideas',
     'Lana Knights': 'lanaknights',
-    'Lana Events': 'lanaevents'
+    'Lana Events': 'lanaevents',
+    'Lana Aligns World': 'lanaalignsworld'
   };
   return mapping[id] || null;
 };
