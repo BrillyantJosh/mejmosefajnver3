@@ -94,11 +94,10 @@ export function useNostrAwarenessProposals() {
       setError(null);
 
       try {
-        console.log('Fetching KIND 38883 (Awareness Proposals) from relays...');
+        console.log('Fetching KIND 38883 (Awareness Proposals) from relays:', parameters.relays);
 
         const filter: Filter = {
           kinds: [38883],
-          '#status': ['active'],
         };
 
         const events = await pool.querySync(parameters.relays, filter);
@@ -108,7 +107,9 @@ export function useNostrAwarenessProposals() {
         const proposalMap = new Map<string, AwarenessProposal>();
         
         for (const event of events) {
+          console.log('Processing event:', event.id, event.tags);
           const proposal = parseProposalFromEvent(event);
+          console.log('Parsed proposal:', proposal);
           if (proposal && proposal.status === 'active') {
             const existing = proposalMap.get(proposal.dTag);
             if (!existing || existing.createdAt < proposal.createdAt) {
