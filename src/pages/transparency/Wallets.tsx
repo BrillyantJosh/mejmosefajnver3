@@ -3,7 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Wallet as WalletIcon, TrendingUp, User } from "lucide-react";
+import { Search, Wallet as WalletIcon, TrendingUp, User, Copy, ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { supabase } from "@/integrations/supabase/client";
@@ -262,9 +264,32 @@ export default function Wallets() {
                         <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                           <WalletIcon className="h-5 w-5 text-primary" />
                         </div>
-                        <CardTitle className="text-sm font-mono truncate" title={wallet.walletId}>
+                        <CardTitle className="text-sm font-mono truncate flex-1" title={wallet.walletId}>
                           {wallet.walletId}
                         </CardTitle>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              navigator.clipboard.writeText(wallet.walletId);
+                              toast.success("Wallet address copied!");
+                            }}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              window.open(`https://chainz.cryptoid.info/lana/address.dws?${wallet.walletId}.htm`, '_blank');
+                            }}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
