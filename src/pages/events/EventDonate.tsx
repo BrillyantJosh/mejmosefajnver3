@@ -229,6 +229,7 @@ const EventDonate = () => {
   };
 
   // Calculate fiat amount from LANA using exchange rate
+  // Exchange rate format: 1 LANA = X EUR (e.g., 0.004 means 1 LANA = 0.004 EUR)
   const calculateFiatAmount = (): number => {
     const lana = parseFloat(lanaAmount) || 0;
     if (lana === 0) return 0;
@@ -236,8 +237,8 @@ const EventDonate = () => {
     const exchangeRate = parameters?.exchangeRates?.EUR || 0;
     if (exchangeRate === 0) return 0;
     
-    // LANA / exchangeRate = EUR
-    return lana / exchangeRate;
+    // LANA * exchangeRate = EUR (rate is EUR per LANA)
+    return lana * exchangeRate;
   };
 
   const fiatAmount = calculateFiatAmount();
@@ -459,7 +460,7 @@ const EventDonate = () => {
               </div>
               {parameters?.exchangeRates?.EUR && (
                 <p className="text-xs text-muted-foreground">
-                  Exchange rate: 1 EUR = {parameters.exchangeRates.EUR} LANA
+                  Exchange rate: 1 LANA = {parameters.exchangeRates.EUR} EUR
                 </p>
               )}
               
