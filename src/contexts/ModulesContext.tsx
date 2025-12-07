@@ -22,7 +22,7 @@ import lanapayImage from '@/assets/lanapay-module.png';
 import transparencyImage from '@/assets/transparency-module.png';
 import lanaknightsImage from '@/assets/lanaknights-module.png';
 import lanaeventsImage from '@/assets/lanaevents-module.png';
-import lanaalignsImage from '@/assets/lana-logo.png';
+import lanaalignsImage from '@/assets/lana-aligns-world-module.png';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
