@@ -109,7 +109,7 @@ const App = () => (
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/post/:eventId" element={<PublicPost />} />
-                <Route path="/event/:eventId" element={<PublicEvent />} />
+                <Route path="/event/:dTag" element={<PublicEvent />} />
                 <Route element={
                   <ProtectedRoute>
                     <MainLayout />
@@ -199,9 +199,9 @@ const App = () => (
           <Route path="live" element={<LiveEvents />} />
           <Route path="my" element={<MyEventsPage />} />
           <Route path="add" element={<AddEvent />} />
-          <Route path="detail/:eventId" element={<EventDetail />} />
+          <Route path="detail/:dTag" element={<EventDetail />} />
           <Route path="edit/:eventId" element={<EditEvent />} />
-          <Route path="registrations/:eventId" element={<EventRegistrations />} />
+          <Route path="registrations/:dTag" element={<EventRegistrations />} />
         </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
