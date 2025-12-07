@@ -85,7 +85,6 @@ import LanaAlignsWorldLayout from "./pages/lanaalignsworld/LanaAlignsWorldLayout
 import ActiveAlignments from "./pages/lanaalignsworld/ActiveAlignments";
 import ClosedAlignments from "./pages/lanaalignsworld/ClosedAlignments";
 import MyStatus from "./pages/lanaalignsworld/MyStatus";
-import Quorum from "./pages/lanaalignsworld/Quorum";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -215,11 +214,11 @@ const App = () => (
           <Route path="donate-result" element={<EventDonateResult />} />
         </Route>
         <Route path="/lana-aligns-world" element={<LanaAlignsWorldLayout />}>
-          <Route index element={<Navigate to="/lana-aligns-world/active" replace />} />
-          <Route path="active" element={<ActiveAlignments />} />
-          <Route path="closed" element={<ClosedAlignments />} />
+          <Route index element={<Navigate to="/lana-aligns-world/my-status" replace />} />
           <Route path="my-status" element={<MyStatus />} />
-          <Route path="quorum" element={<Quorum />} />
+          <Route path="align" element={<ActiveAlignments />} />
+          <Route path="active" element={<Navigate to="/lana-aligns-world/align" replace />} />
+          <Route path="closed" element={<ClosedAlignments />} />
         </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
