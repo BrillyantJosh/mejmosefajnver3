@@ -1,13 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, Wallet, User, FileCheck, Shield, Star, Clock, AlertCircle } from "lucide-react";
+import { CheckCircle, XCircle, Wallet, User, FileCheck, Shield, Star, Clock, AlertCircle, Info } from "lucide-react";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { useNostrRealLifeCredential } from "@/hooks/useNostrRealLifeCredential";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
-import { useAuth } from "@/contexts/AuthContext";
-import { useMemo, useEffect } from "react";
+import { useMemo } from "react";
 
 interface StatusItemProps {
   label: string;
@@ -45,8 +44,6 @@ const formatLana = (balance: number): string => {
 };
 
 export default function MyStatus() {
-  const { updateQuorumStatus } = useAuth();
-  
   // Fetch wallets (KIND 30889)
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
   
@@ -69,13 +66,6 @@ export default function MyStatus() {
 
   // Can Resist = In Lana8Wonder AND has at least 3 real-life credentials
   const canResist = lana8WonderStatus.exists && credentialStatus.referenceCount >= 3;
-
-  // Save quorum status to session when data loads
-  useEffect(() => {
-    if (!isLoading) {
-      updateQuorumStatus(isInQuorum, canResist);
-    }
-  }, [isLoading, isInQuorum, canResist, updateQuorumStatus]);
 
   if (isLoading) {
     return (

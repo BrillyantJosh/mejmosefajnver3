@@ -22,7 +22,7 @@ import lanapayImage from '@/assets/lanapay-module.png';
 import transparencyImage from '@/assets/transparency-module.png';
 import lanaknightsImage from '@/assets/lanaknights-module.png';
 import lanaeventsImage from '@/assets/lanaevents-module.png';
-import lanaalignsImage from '@/assets/lanaalignsworld-module.png';
+import lanaalignsImage from '@/assets/lana-logo.png';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
@@ -275,7 +275,6 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     path: '/lana-aligns-world',
     gradient: 'from-cyan-500 to-blue-600',
     image: lanaalignsImage,
-    imagePosition: 'object-[50%_25%]',
     enabled: true,
     order: 22
   }

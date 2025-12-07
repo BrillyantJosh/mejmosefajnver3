@@ -11,9 +11,6 @@ interface UserSession {
   lanaWalletID?: string; // LanaCoins wallet from KIND 0 profile
   lanoshi2lash?: string; // LASH value in lanoshis from KIND 0 profile
   expiresAt: number; // Unix timestamp when session expires
-  // Quorum status
-  isInQuorum?: boolean;
-  canResist?: boolean;
 }
 
 interface AuthContextType {
@@ -22,7 +19,6 @@ interface AuthContextType {
   login: (wif: string, relays?: string[], rememberMe?: boolean) => Promise<void>;
   logout: () => void;
   refreshSession: () => void;
-  updateQuorumStatus: (isInQuorum: boolean, canResist: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -176,22 +172,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(SESSION_KEY);
   };
 
-  const updateQuorumStatus = (isInQuorum: boolean, canResist: boolean) => {
-    if (!session) return;
-    
-    const updatedSession: UserSession = {
-      ...session,
-      isInQuorum,
-      canResist
-    };
-    
-    setSession(updatedSession);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(updatedSession));
-    console.log('Quorum status updated - isInQuorum:', isInQuorum, 'canResist:', canResist);
-  };
-
   return (
-    <AuthContext.Provider value={{ session, isLoading, login, logout, refreshSession, updateQuorumStatus }}>
+    <AuthContext.Provider value={{ session, isLoading, login, logout, refreshSession }}>
       {children}
     </AuthContext.Provider>
   );
