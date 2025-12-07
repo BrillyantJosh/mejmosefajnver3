@@ -208,16 +208,16 @@ const EventDonatePrivateKey = () => {
         throw error;
       }
 
-      if (data?.success && data?.txid) {
-        console.log('✅ Transaction successful! TXID:', data.txid);
+      if (data?.success && data?.txHash) {
+        console.log('✅ Transaction successful! TXID:', data.txHash);
         
         // Transaction successful - broadcast donation event to Nostr
-        await broadcastDonationEvent(data.txid);
+        await broadcastDonationEvent(data.txHash);
 
         navigate(`/events/donate-result`, {
           state: {
             success: true,
-            txId: data.txid,
+            txId: data.txHash,
             amount: state.lanaAmount,
             fiatAmount: state.fiatAmount,
             eventTitle: state.eventTitle,
