@@ -103,6 +103,15 @@ export function useNostrUserAcknowledgement(proposalDTag: string) {
     const pool = new SimplePool();
     const proposalSlug = proposalDTag.replace('awareness:', '');
     const dTagValue = `ack:${proposalSlug}:${session.nostrHexId}`;
+    const relays = parameters.relays;
+
+    interface PublishResult {
+      relay: string;
+      success: boolean;
+      error?: string;
+    }
+
+    const results: PublishResult[] = [];
 
     try {
       const eventTemplate = {
@@ -128,13 +137,74 @@ export function useNostrUserAcknowledgement(proposalDTag: string) {
       );
       const signedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
 
-      // Publish to all relays
-      try {
-        await Promise.all(pool.publish(parameters.relays, signedEvent));
-      } catch (err) {
-        console.warn('Some relays failed to publish:', err);
+      console.log('✍️ Event signed:', {
+        id: signedEvent.id,
+        kind: signedEvent.kind,
+        pubkey: signedEvent.pubkey
+      });
+
+      // Publish to each relay with proper timeout handling
+      const publishPromises = relays.map(async (relay: string) => {
+        console.log(`🔄 Publishing to ${relay}...`);
+        
+        return new Promise<void>((resolve) => {
+          // Outer timeout: 10s - guards against relay never responding
+          const timeout = setTimeout(() => {
+            results.push({ relay, success: false, error: 'Connection timeout (10s)' });
+            console.error(`❌ ${relay}: Timeout`);
+            resolve();
+          }, 10000);
+
+          try {
+            const pubs = pool.publish([relay], signedEvent);
+            
+            // Race: publish vs inner timeout (8s)
+            Promise.race([
+              Promise.all(pubs),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Publish timeout')), 8000)
+              )
+            ]).then(() => {
+              clearTimeout(timeout);
+              results.push({ relay, success: true });
+              console.log(`✅ ${relay}: Successfully published`);
+              resolve();
+            }).catch((error) => {
+              clearTimeout(timeout);
+              const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+              results.push({ relay, success: false, error: errorMsg });
+              console.error(`❌ ${relay}: ${errorMsg}`);
+              resolve();
+            });
+          } catch (error) {
+            clearTimeout(timeout);
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            results.push({ relay, success: false, error: errorMsg });
+            console.error(`❌ ${relay}: ${errorMsg}`);
+            resolve();
+          }
+        });
+      });
+
+      // Wait for ALL relays to complete or timeout
+      await Promise.all(publishPromises);
+
+      // Summary
+      const successCount = results.filter(r => r.success).length;
+      const failedCount = results.filter(r => !r.success).length;
+
+      console.log('📊 Publishing summary:', {
+        eventId: signedEvent.id,
+        total: results.length,
+        successful: successCount,
+        failed: failedCount,
+        details: results
+      });
+
+      // Success if at least 1 relay accepted
+      if (successCount === 0) {
+        throw new Error('Failed to publish to any relay');
       }
-      console.log('Vote published successfully:', signedEvent.id);
 
       // Update local state
       setAcknowledgement({
@@ -151,7 +221,7 @@ export function useNostrUserAcknowledgement(proposalDTag: string) {
       console.error('Error submitting vote:', err);
       throw err;
     } finally {
-      pool.close(parameters.relays);
+      pool.close(relays);
     }
   };
 
