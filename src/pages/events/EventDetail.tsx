@@ -139,9 +139,11 @@ export default function EventDetail() {
     if (!event) return;
     
     // Calculate LANA amount if fiatValue is set
+    // Exchange rate format: 1 LANA = X EUR (e.g., 0.004)
+    // To convert EUR to LANA: EUR / exchangeRate = LANA
     let preFilledLanaAmount: number | undefined;
     if (event.fiatValue && systemParameters?.exchangeRates?.EUR) {
-      preFilledLanaAmount = event.fiatValue * systemParameters.exchangeRates.EUR;
+      preFilledLanaAmount = event.fiatValue / systemParameters.exchangeRates.EUR;
     }
     
     navigate(`/events/donate/${encodeURIComponent(event.dTag)}`, {

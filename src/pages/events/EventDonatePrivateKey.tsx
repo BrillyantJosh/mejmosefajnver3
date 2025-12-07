@@ -213,7 +213,13 @@ const EventDonatePrivateKey = () => {
                 value={privateKey}
                 onChange={(e) => setPrivateKey(e.target.value)}
                 placeholder="Enter WIF private key"
-                className="font-mono pr-10"
+                className={`font-mono pr-10 ${
+                  isPrivateKeyValid 
+                    ? 'border-green-500 focus-visible:ring-green-500' 
+                    : validationError 
+                      ? 'border-destructive focus-visible:ring-destructive' 
+                      : ''
+                }`}
               />
               {isValidating && (
                 <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
@@ -225,8 +231,19 @@ const EventDonatePrivateKey = () => {
                 <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive" />
               )}
             </div>
+            
+            {/* Validation Status */}
+            {isPrivateKeyValid && (
+              <p className="text-sm text-green-500 mt-2 flex items-center gap-2">
+                <Check className="h-4 w-4" />
+                Private key matches the selected wallet
+              </p>
+            )}
             {validationError && (
-              <p className="text-sm text-destructive mt-1">{validationError}</p>
+              <p className="text-sm text-destructive mt-2 flex items-center gap-2">
+                <X className="h-4 w-4" />
+                {validationError}
+              </p>
             )}
           </div>
 
