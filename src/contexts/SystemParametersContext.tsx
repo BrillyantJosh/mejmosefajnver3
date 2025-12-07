@@ -188,7 +188,7 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
         trustedSigners
       });
 
-      // Store in sessionStorage
+      // Store in sessionStorage only on success
       sessionStorage.setItem('lana_system_parameters', JSON.stringify({
         relays,
         relayStatuses,
@@ -204,24 +204,18 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
     } catch (error) {
       console.error('❌ Error fetching system parameters:', error);
       
-      // Try to load from sessionStorage
-      const cached = sessionStorage.getItem('lana_system_parameters');
-      if (cached) {
-        console.log('📦 Using cached system parameters');
-        const cachedData = JSON.parse(cached);
-        setParameters({ ...cachedData, isLoading: false });
-      } else {
-        // NO FALLBACK - If relays don't work, don't show mock data
-        console.error('❌ Cannot connect to relays and no cached data available');
-        setParameters(null);
-        
-        // Retry after 10 seconds
-        console.log('🔄 Retrying connection in 10 seconds...');
-        setTimeout(() => {
-          console.log('🔄 Retrying connection...');
-          fetchSystemParameters();
-        }, 10000);
-      }
+      // NO FALLBACK - If relays don't work, don't show cached data
+      // Clear any old cached data to prevent stale data from being used
+      sessionStorage.removeItem('lana_system_parameters');
+      console.error('❌ Cannot connect to relays - no cached data will be used');
+      setParameters(null);
+      
+      // Retry after 10 seconds
+      console.log('🔄 Retrying connection in 10 seconds...');
+      setTimeout(() => {
+        console.log('🔄 Retrying connection...');
+        fetchSystemParameters();
+      }, 10000);
     } finally {
       setIsLoading(false);
       pool.close(DEFAULT_RELAYS);
