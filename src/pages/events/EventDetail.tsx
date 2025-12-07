@@ -23,7 +23,7 @@ const DEFAULT_RELAYS = [
 ];
 
 export default function EventDetail() {
-  const { eventId } = useParams<{ eventId: string }>();
+  const { dTag: urlDTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
   const { session } = useAuth();
   const { parameters: systemParameters } = useSystemParameters();
@@ -31,14 +31,18 @@ export default function EventDetail() {
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
 
-  const { registrations, userRegistration, refetch: refetchRegistrations } = useNostrEventRegistrations(event?.dTag);
+  // Decode the URL-encoded dTag
+  const decodedDTag = urlDTag ? decodeURIComponent(urlDTag) : '';
+
+  const { registrations, userRegistration, refetch: refetchRegistrations } = useNostrEventRegistrations(event?.dTag || decodedDTag);
 
   const relays = systemParameters?.relays && systemParameters.relays.length > 0 
     ? systemParameters.relays 
     : DEFAULT_RELAYS;
 
   const handleShare = async () => {
-    const shareUrl = `${window.location.origin}/event/${eventId}`;
+    // Use dTag for stable URL
+    const shareUrl = `${window.location.origin}/event/${encodeURIComponent(event?.dTag || decodedDTag)}`;
     
     try {
       await navigator.clipboard.writeText(shareUrl);
@@ -133,7 +137,7 @@ export default function EventDetail() {
 
   useEffect(() => {
     const fetchEvent = async () => {
-      if (!eventId || !session) {
+      if (!decodedDTag || !session) {
         setLoading(false);
         return;
       }
@@ -143,13 +147,18 @@ export default function EventDetail() {
       try {
         const pool = new SimplePool();
         
+        // Fetch by d tag for replaceable events
         const rawEvents = await pool.querySync(relays, {
           kinds: [36677],
-          ids: [eventId]
+          "#d": [decodedDTag]
         });
 
         if (rawEvents.length > 0) {
-          const parsed = parseEvent(rawEvents[0]);
+          // Get the most recent event (by created_at) since it's a replaceable event
+          const latestEvent = rawEvents.reduce((latest, current) => 
+            current.created_at > latest.created_at ? current : latest
+          );
+          const parsed = parseEvent(latestEvent);
           setEvent(parsed);
         }
       } catch (err) {
@@ -160,7 +169,7 @@ export default function EventDetail() {
     };
 
     fetchEvent();
-  }, [eventId, session, relays, parseEvent]);
+  }, [decodedDTag, session, relays, parseEvent]);
 
   if (loading) {
     return (

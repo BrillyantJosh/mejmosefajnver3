@@ -38,7 +38,7 @@ export function EventCard({ event }: EventCardProps) {
   const status = getEventStatus(event);
 
   const handleClick = () => {
-    navigate(`/events/detail/${event.id}`);
+    navigate(`/events/detail/${encodeURIComponent(event.dTag)}`);
   };
 
   const handleRegister = async (e: React.MouseEvent) => {
@@ -339,7 +339,8 @@ export function EventCard({ event }: EventCardProps) {
 
   function handleShare(e: React.MouseEvent) {
     e.stopPropagation();
-    const shareUrl = `${window.location.origin}/event/${event.id}`;
+    // Use dTag for stable URL
+    const shareUrl = `${window.location.origin}/event/${encodeURIComponent(event.dTag)}`;
     
     navigator.clipboard.writeText(shareUrl).then(() => {
       toast({
