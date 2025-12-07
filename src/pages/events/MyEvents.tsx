@@ -292,13 +292,13 @@ export default function MyEvents() {
 
   if (loading) {
     return (
-      <div className="space-y-4 px-4">
-        <div className="flex items-center gap-2 mb-6">
-          <Calendar className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">My Events</h1>
+      <div className="space-y-3 px-3 sm:px-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+          <h1 className="text-lg sm:text-2xl font-bold">My Events</h1>
         </div>
         {[1, 2, 3].map(i => (
-          <Skeleton key={i} className="h-40 w-full" />
+          <Skeleton key={i} className="h-32 sm:h-40 w-full" />
         ))}
       </div>
     );
@@ -306,17 +306,17 @@ export default function MyEvents() {
 
   if (!session) {
     return (
-      <div className="px-4 text-center py-12">
-        <p className="text-muted-foreground">Please log in to see your events</p>
+      <div className="px-3 sm:px-4 text-center py-12">
+        <p className="text-muted-foreground text-sm sm:text-base">Please log in to see your events</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 px-4 pb-24">
-      <div className="flex items-center gap-2 mb-6">
-        <Calendar className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">My Events</h1>
+    <div className="space-y-3 px-3 sm:px-4 pb-24">
+      <div className="flex items-center gap-2 mb-4">
+        <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+        <h1 className="text-lg sm:text-2xl font-bold">My Events</h1>
       </div>
 
       {events.length === 0 ? (
