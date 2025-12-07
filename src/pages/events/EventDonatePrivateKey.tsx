@@ -176,6 +176,10 @@ const EventDonatePrivateKey = () => {
     if (!state || !isPrivateKeyValid) return;
 
     setIsSubmitting(true);
+    console.log('🚀 Starting donation transaction...');
+    console.log('Amount:', state.lanaAmount, 'LANA');
+    console.log('From:', state.selectedWalletId);
+    console.log('To:', state.donationWallet);
 
     try {
       const electrumServers = parameters?.electrumServers || [];
@@ -183,6 +187,8 @@ const EventDonatePrivateKey = () => {
       if (electrumServers.length === 0) {
         throw new Error("No Electrum servers configured");
       }
+
+      console.log('📡 Calling send-lana-transaction with electrumServers:', electrumServers.length);
 
       // Call the send-lana-transaction edge function
       const { data, error } = await supabase.functions.invoke('send-lana-transaction', {
@@ -195,9 +201,16 @@ const EventDonatePrivateKey = () => {
         }
       });
 
-      if (error) throw error;
+      console.log('📥 Response from edge function:', { data, error });
+
+      if (error) {
+        console.error('❌ Edge function error:', error);
+        throw error;
+      }
 
       if (data?.success && data?.txid) {
+        console.log('✅ Transaction successful! TXID:', data.txid);
+        
         // Transaction successful - broadcast donation event to Nostr
         await broadcastDonationEvent(data.txid);
 
@@ -213,14 +226,19 @@ const EventDonatePrivateKey = () => {
           }
         });
       } else {
-        throw new Error(data?.error || "Transaction failed");
+        const errorMsg = data?.error || data?.message || "Transaction failed - no txid returned";
+        console.error('❌ Transaction failed:', errorMsg);
+        throw new Error(errorMsg);
       }
     } catch (error) {
-      console.error('Transaction error:', error);
+      console.error('❌ Transaction error:', error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error('Error message:', errorMessage);
+      
       navigate(`/events/donate-result`, {
         state: {
           success: false,
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: errorMessage,
           eventTitle: state.eventTitle,
           isPay: state.isPay,
           dTag: decodedDTag
