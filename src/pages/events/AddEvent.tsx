@@ -701,12 +701,15 @@ export default function AddEvent() {
                 <Wallet className="h-4 w-4" />
                 LANA Donation Wallet
               </Label>
-              <Select value={donationWallet} onValueChange={setDonationWallet}>
+              <Select 
+                value={donationWallet || "none"} 
+                onValueChange={(val) => setDonationWallet(val === "none" ? "" : val)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder={walletsLoading ? "Loading wallets..." : "Select wallet"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No wallet</SelectItem>
+                  <SelectItem value="none">No wallet</SelectItem>
                   {availableWallets.map((wallet) => (
                     <SelectItem key={wallet.walletId} value={wallet.walletId}>
                       <div className="flex flex-col">
