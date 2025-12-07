@@ -135,6 +135,23 @@ export default function EventDetail() {
     }
   }, []);
 
+  const handleDonateClick = () => {
+    if (!event) return;
+    
+    // Calculate LANA amount if fiatValue is set
+    let preFilledLanaAmount: number | undefined;
+    if (event.fiatValue && systemParameters?.exchangeRates?.EUR) {
+      preFilledLanaAmount = event.fiatValue * systemParameters.exchangeRates.EUR;
+    }
+    
+    navigate(`/events/donate/${encodeURIComponent(event.dTag)}`, {
+      state: {
+        isPay: !!event.fiatValue,
+        preFilledLanaAmount
+      }
+    });
+  };
+
   useEffect(() => {
     const fetchEvent = async () => {
       if (!decodedDTag || !session) {
@@ -328,17 +345,26 @@ export default function EventDetail() {
 
           {/* Value and Donation */}
           {(event.fiatValue || event.donationWallet) && (
-            <div className="border-t pt-4 space-y-2">
+            <div className="border-t pt-4 space-y-3">
               {event.fiatValue && (
                 <div className="text-lg font-medium text-primary">
                   Event Value: €{event.fiatValue}
                 </div>
               )}
               {event.donationWallet && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Wallet className="h-4 w-4" />
-                  <span className="font-mono">{event.donationWallet}</span>
-                </div>
+                <>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Wallet className="h-4 w-4" />
+                    <span className="font-mono">{event.donationWallet}</span>
+                  </div>
+                  <Button 
+                    className="w-full"
+                    onClick={handleDonateClick}
+                  >
+                    <Wallet className="h-4 w-4 mr-2" />
+                    {event.fiatValue ? `Pay €${event.fiatValue}` : 'Donate'}
+                  </Button>
+                </>
               )}
             </div>
           )}

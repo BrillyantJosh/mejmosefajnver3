@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Globe, Users, UserPlus, Check, Loader2, Share2 } from "lucide-react";
+import { Calendar, Clock, MapPin, Globe, Users, UserPlus, Check, Loader2, Share2, Wallet } from "lucide-react";
 import { format } from "date-fns";
 import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNavigate } from "react-router-dom";
@@ -39,6 +39,23 @@ export function EventCard({ event }: EventCardProps) {
 
   const handleClick = () => {
     navigate(`/events/detail/${encodeURIComponent(event.dTag)}`);
+  };
+
+  const handleDonateClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    // Calculate LANA amount if fiatValue is set
+    let preFilledLanaAmount: number | undefined;
+    if (event.fiatValue && systemParameters?.exchangeRates?.EUR) {
+      preFilledLanaAmount = event.fiatValue * systemParameters.exchangeRates.EUR;
+    }
+    
+    navigate(`/events/donate/${encodeURIComponent(event.dTag)}`, {
+      state: {
+        isPay: !!event.fiatValue,
+        preFilledLanaAmount
+      }
+    });
   };
 
   const handleRegister = async (e: React.MouseEvent) => {
@@ -278,6 +295,21 @@ export function EventCard({ event }: EventCardProps) {
         {event.fiatValue && (
           <div className="mt-3 text-sm font-medium text-primary">
             Value: €{event.fiatValue}
+          </div>
+        )}
+
+        {/* Donate/Pay Button */}
+        {event.donationWallet && (
+          <div className="mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={handleDonateClick}
+            >
+              <Wallet className="h-4 w-4 mr-2" />
+              {event.fiatValue ? `Pay €${event.fiatValue}` : 'Donate'}
+            </Button>
           </div>
         )}
 

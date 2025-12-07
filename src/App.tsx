@@ -78,6 +78,9 @@ import EventDetail from "./pages/events/EventDetail";
 import MyEventsPage from "./pages/events/MyEvents";
 import EditEvent from "./pages/events/EditEvent";
 import EventRegistrations from "./pages/events/EventRegistrations";
+import EventDonate from "./pages/events/EventDonate";
+import EventDonatePrivateKey from "./pages/events/EventDonatePrivateKey";
+import EventDonateResult from "./pages/events/EventDonateResult";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -202,6 +205,9 @@ const App = () => (
           <Route path="detail/:dTag" element={<EventDetail />} />
           <Route path="edit/:eventId" element={<EditEvent />} />
           <Route path="registrations/:dTag" element={<EventRegistrations />} />
+          <Route path="donate/:dTag" element={<EventDonate />} />
+          <Route path="donate-private-key/:dTag" element={<EventDonatePrivateKey />} />
+          <Route path="donate-result" element={<EventDonateResult />} />
         </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />
