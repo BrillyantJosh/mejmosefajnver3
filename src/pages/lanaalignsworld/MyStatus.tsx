@@ -1,87 +1,88 @@
-import { User, CheckCircle, XCircle, Loader2, Shield, Wallet, MapPin, Clock, UserCheck, FileCheck, Zap } from "lucide-react";
-import { useNostrQuorumStatus } from "@/hooks/useNostrQuorumStatus";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CheckCircle, XCircle, Wallet, User, FileCheck, Shield, Star, Clock, AlertCircle } from "lucide-react";
+import { useNostrWallets } from "@/hooks/useNostrWallets";
+import { useWalletBalances } from "@/hooks/useWalletBalances";
+import { useNostrRealLifeCredential } from "@/hooks/useNostrRealLifeCredential";
+import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
+import { useMemo } from "react";
 
 interface StatusItemProps {
   label: string;
-  value: 'ok' | 'missing' | 'allow' | 'not_yet' | 'unresolved' | string | undefined;
+  value: string;
   icon: React.ReactNode;
-  successValues?: string[];
+  isOk: boolean;
+  detail?: string;
 }
 
-const StatusItem = ({ label, value, icon, successValues = ['ok', 'allow'] }: StatusItemProps) => {
-  const isSuccess = value && successValues.includes(value);
-  
-  return (
-    <div className="flex items-center justify-between py-3 border-b border-border/50 last:border-0">
-      <div className="flex items-center gap-3">
-        <div className="text-muted-foreground">{icon}</div>
-        <span className="text-sm font-medium">{label}</span>
+const StatusItem = ({ label, value, icon, isOk, detail }: StatusItemProps) => (
+  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+    <div className="flex items-center gap-3">
+      <div className={`p-2 rounded-full ${isOk ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+        {icon}
       </div>
-      <div className="flex items-center gap-2">
-        {value ? (
-          <>
-            {isSuccess ? (
-              <CheckCircle className="h-4 w-4 text-green-500" />
-            ) : (
-              <XCircle className="h-4 w-4 text-destructive" />
-            )}
-            <span className={`text-sm ${isSuccess ? 'text-green-500' : 'text-destructive'}`}>
-              {value}
-            </span>
-          </>
-        ) : (
-          <span className="text-sm text-muted-foreground">N/A</span>
-        )}
+      <div>
+        <p className="font-medium">{label}</p>
+        {detail && <p className="text-sm text-muted-foreground">{detail}</p>}
       </div>
     </div>
-  );
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium">{value}</span>
+      {isOk ? (
+        <CheckCircle className="h-5 w-5 text-green-500" />
+      ) : (
+        <XCircle className="h-5 w-5 text-red-500" />
+      )}
+    </div>
+  </div>
+);
+
+const formatLana = (lanoshis: number): string => {
+  const lana = lanoshis / 100000000;
+  return lana.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 export default function MyStatus() {
-  const { quorumStatus, isLoading } = useNostrQuorumStatus();
+  // Fetch wallets (KIND 30889)
+  const { wallets, isLoading: walletsLoading } = useNostrWallets();
+  
+  // Get wallet addresses for balance fetch
+  const walletAddresses = useMemo(() => wallets.map(w => w.walletId), [wallets]);
+  
+  // Fetch balances
+  const { totalBalance, isLoading: balancesLoading } = useWalletBalances(walletAddresses);
+  
+  // Fetch credentials (KIND 87033 with real_life)
+  const { status: credentialStatus, isLoading: credentialsLoading } = useNostrRealLifeCredential();
+  
+  // Fetch Lana8Wonder status (KIND 88888)
+  const { status: lana8WonderStatus, isLoading: lana8WonderLoading } = useNostrLana8Wonder();
 
-  const formatTimestamp = (timestamp: number | undefined) => {
-    if (!timestamp) return 'N/A';
-    return new Date(timestamp * 1000).toLocaleString();
-  };
+  const isLoading = walletsLoading || balancesLoading || credentialsLoading || lana8WonderLoading;
 
-  const formatHoldings = (holdings: string | undefined) => {
-    if (!holdings) return 'N/A';
-    const lanoshis = parseInt(holdings, 10);
-    const lana = lanoshis / 100000000;
-    return `${lana.toLocaleString()} LANA`;
-  };
+  // Calculate overall status
+  const allRequirementsMet = useMemo(() => {
+    return (
+      wallets.length > 0 &&
+      totalBalance > 0 &&
+      credentialStatus.hasRealLifeReference &&
+      lana8WonderStatus.exists
+    );
+  }, [wallets, totalBalance, credentialStatus, lana8WonderStatus]);
 
   if (isLoading) {
     return (
-      <div className="p-4">
-        <div className="flex items-center gap-2 mb-6">
-          <User className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-          <h1 className="text-lg sm:text-2xl font-bold">My Status</h1>
-        </div>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </div>
-    );
-  }
-
-  if (!quorumStatus) {
-    return (
-      <div className="p-4">
-        <div className="flex items-center gap-2 mb-6">
-          <User className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-          <h1 className="text-lg sm:text-2xl font-bold">My Status</h1>
-        </div>
+      <div className="container mx-auto p-4 space-y-6">
+        <h1 className="text-2xl font-bold">My Status</h1>
         <Card>
-          <CardContent className="py-12">
-            <div className="text-center text-muted-foreground">
-              <XCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-              <p className="text-lg font-medium">No Quorum Status Found</p>
-              <p className="text-sm mt-2">Your quorum status has not been evaluated yet.</p>
-            </div>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {[...Array(6)].map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
           </CardContent>
         </Card>
       </div>
@@ -89,142 +90,131 @@ export default function MyStatus() {
   }
 
   return (
-    <div className="p-4">
-      <div className="flex items-center gap-2 mb-6">
-        <User className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-        <h1 className="text-lg sm:text-2xl font-bold">My Status</h1>
-      </div>
-
-      {/* Main Status Card */}
-      <Card className="mb-4">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base sm:text-lg">Quorum Status</CardTitle>
-            <Badge 
-              variant={quorumStatus.status === 'in-quorum' ? 'default' : 'destructive'}
-              className="text-xs"
-            >
-              {quorumStatus.status === 'in-quorum' ? 'In Quorum' : 'Not In Quorum'}
-            </Badge>
-          </div>
+    <div className="container mx-auto p-4 space-y-6">
+      <h1 className="text-2xl font-bold">My Status</h1>
+      
+      {/* Overall Status Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Quorum Eligibility
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Scope</span>
-              <p className="font-medium">{quorumStatus.scope}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Can Resist</span>
-              <p className={`font-medium ${quorumStatus.canResist === 'allow' ? 'text-green-500' : 'text-amber-500'}`}>
-                {quorumStatus.canResist === 'allow' ? 'Yes' : 'Not Yet'}
-              </p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Last Updated</span>
-              <p className="font-medium text-xs">{formatTimestamp(quorumStatus.updatedAt)}</p>
-            </div>
-            {quorumStatus.location && (
-              <div>
-                <span className="text-muted-foreground">Location</span>
-                <p className="font-medium">{quorumStatus.location}</p>
-              </div>
+          <div className="flex items-center gap-4">
+            <Badge 
+              variant={allRequirementsMet ? "default" : "destructive"}
+              className="text-lg px-4 py-2"
+            >
+              {allRequirementsMet ? "In Quorum" : "Not In Quorum"}
+            </Badge>
+            {allRequirementsMet ? (
+              <p className="text-muted-foreground">All requirements are met. You can participate in alignment decisions.</p>
+            ) : (
+              <p className="text-muted-foreground">Some requirements are not met. Complete them to join the quorum.</p>
             )}
           </div>
         </CardContent>
       </Card>
 
       {/* Holdings Card */}
-      {(quorumStatus.wallet || quorumStatus.holdings) && (
-        <Card className="mb-4">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-              <Wallet className="h-4 w-4" />
-              Holdings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              {quorumStatus.wallet && (
-                <div>
-                  <span className="text-muted-foreground">Wallet ID</span>
-                  <p className="font-mono text-xs break-all">{quorumStatus.wallet}</p>
-                </div>
-              )}
-              {quorumStatus.holdings && (
-                <div>
-                  <span className="text-muted-foreground">Total Holdings</span>
-                  <p className="font-bold text-lg text-primary">{formatHoldings(quorumStatus.holdings)}</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Requirements Breakdown */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-            <Shield className="h-4 w-4" />
-            Requirements Breakdown
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wallet className="h-5 w-5" />
+            Holdings
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-0">
-          <StatusItem 
-            label="Profile (KIND 0)" 
-            value={quorumStatus.profile} 
-            icon={<UserCheck className="h-4 w-4" />}
-          />
-          <StatusItem 
-            label="Registry" 
-            value={quorumStatus.registry} 
-            icon={<FileCheck className="h-4 w-4" />}
-          />
-          <StatusItem 
-            label="Self Responsibility" 
-            value={quorumStatus.selfResp} 
-            icon={<Shield className="h-4 w-4" />}
-            successValues={['ok']}
-          />
-          <StatusItem 
-            label="Credentials" 
-            value={quorumStatus.credentials} 
-            icon={<FileCheck className="h-4 w-4" />}
-          />
-          <StatusItem 
-            label="Lana8Wonder" 
-            value={quorumStatus.lana8wonder} 
-            icon={<Zap className="h-4 w-4" />}
-          />
-          {quorumStatus.location && (
-            <StatusItem 
-              label="Location" 
-              value={quorumStatus.location} 
-              icon={<MapPin className="h-4 w-4" />}
-              successValues={[quorumStatus.location]}
-            />
-          )}
-          {quorumStatus.activity && (
-            <div className="flex items-center justify-between py-3 border-b border-border/50 last:border-0">
-              <div className="flex items-center gap-3">
-                <div className="text-muted-foreground"><Clock className="h-4 w-4" /></div>
-                <span className="text-sm font-medium">Last Activity</span>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-full ${wallets.length > 0 ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+                <Wallet className="h-5 w-5" />
               </div>
-              <span className="text-sm text-muted-foreground">
-                {formatTimestamp(quorumStatus.activity)}
-              </span>
+              <div>
+                <p className="font-medium">Registered Wallets</p>
+                <p className="text-sm text-muted-foreground">{wallets.length} wallet{wallets.length !== 1 ? 's' : ''} found</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold">{formatLana(totalBalance)} LANA</p>
+              <p className="text-sm text-muted-foreground">Total Balance</p>
+            </div>
+          </div>
+          
+          {wallets.length === 0 && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10 text-yellow-600">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm">You need to register at least one wallet to join the quorum.</span>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* TTL Info */}
-      {quorumStatus.ttl && (
-        <p className="text-xs text-muted-foreground mt-4 text-center">
-          Status expires: {formatTimestamp(quorumStatus.ttl)}
-        </p>
-      )}
+      {/* Requirements Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Requirements Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <StatusItem
+            label="Profile"
+            value="OK"
+            icon={<User className="h-5 w-5" />}
+            isOk={true}
+            detail="Verified at login (KIND 0)"
+          />
+          
+          <StatusItem
+            label="Registry"
+            value="OK"
+            icon={<FileCheck className="h-5 w-5" />}
+            isOk={true}
+            detail="Default: registered"
+          />
+          
+          <StatusItem
+            label="Self Responsibility"
+            value="OK"
+            icon={<Shield className="h-5 w-5" />}
+            isOk={true}
+            detail="Default: accepted"
+          />
+          
+          <StatusItem
+            label="Credentials"
+            value={credentialStatus.hasRealLifeReference ? "OK" : "Missing"}
+            icon={<CheckCircle className="h-5 w-5" />}
+            isOk={credentialStatus.hasRealLifeReference}
+            detail={
+              credentialStatus.hasRealLifeReference 
+                ? `${credentialStatus.referenceCount} real-life reference${credentialStatus.referenceCount !== 1 ? 's' : ''} (KIND 87033)`
+                : "Need at least 1 real-life reference"
+            }
+          />
+          
+          <StatusItem
+            label="Lana8Wonder"
+            value={lana8WonderStatus.exists ? "OK" : "Missing"}
+            icon={<Star className="h-5 w-5" />}
+            isOk={lana8WonderStatus.exists}
+            detail={
+              lana8WonderStatus.exists 
+                ? `Plan registered (KIND 88888)`
+                : "No Lana8Wonder plan found"
+            }
+          />
+          
+          <StatusItem
+            label="Last Activity"
+            value="Now"
+            icon={<Clock className="h-5 w-5" />}
+            isOk={true}
+            detail="Currently active"
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }
