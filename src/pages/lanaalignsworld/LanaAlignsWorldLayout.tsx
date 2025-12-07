@@ -4,6 +4,11 @@ import { Activity, Archive, User, Users } from "lucide-react";
 
 const alignsNavItems = [
   {
+    title: "My Status",
+    path: "/lana-aligns-world/my-status",
+    icon: User
+  },
+  {
     title: "Active",
     path: "/lana-aligns-world/active",
     icon: Activity
@@ -12,11 +17,6 @@ const alignsNavItems = [
     title: "Closed",
     path: "/lana-aligns-world/closed",
     icon: Archive
-  },
-  {
-    title: "My Status",
-    path: "/lana-aligns-world/my-status",
-    icon: User
   },
   {
     title: "Quorum",
