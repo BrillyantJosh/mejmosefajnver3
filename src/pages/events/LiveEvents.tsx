@@ -9,13 +9,13 @@ export default function LiveEvents() {
   const { events, loading, error, refetch } = useNostrEvents('live');
 
   return (
-    <div className="space-y-4 px-4 pb-24">
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-3 px-3 sm:px-4 pb-24">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <MapPin className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">Live Events</h1>
+          <MapPin className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+          <h1 className="text-lg sm:text-2xl font-bold">Live Events</h1>
         </div>
-        <Button variant="ghost" size="icon" onClick={refetch} disabled={loading}>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={refetch} disabled={loading}>
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
         </Button>
       </div>
