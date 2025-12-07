@@ -12,6 +12,7 @@ import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useToast } from "@/hooks/use-toast";
 import { QRScanner } from "@/components/QRScanner";
 import { useAuth } from "@/contexts/AuthContext";
+import { SimplePool, finalizeEvent } from "nostr-tools";
 
 interface LocationState {
   selectedWalletId: string;
@@ -22,11 +23,18 @@ interface LocationState {
   isPay: boolean;
 }
 
+const DEFAULT_RELAYS = [
+  'wss://relay.lanavault.space',
+  'wss://relay.lanacoin-eternity.com',
+  'wss://relay.lanaheartvoice.com'
+];
+
 const EventDonatePrivateKey = () => {
   const { dTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const { parameters } = useSystemParameters();
+  const { session } = useAuth();
   const { toast } = useToast();
   
   const state = location.state as LocationState | null;
@@ -39,6 +47,10 @@ const EventDonatePrivateKey = () => {
   const [showScanner, setShowScanner] = useState(false);
 
   const decodedDTag = dTag ? decodeURIComponent(dTag) : '';
+
+  const relays = parameters?.relays && parameters.relays.length > 0 
+    ? parameters.relays 
+    : DEFAULT_RELAYS;
 
   // Validate private key against selected wallet
   useEffect(() => {
@@ -74,6 +86,83 @@ const EventDonatePrivateKey = () => {
     return () => clearTimeout(debounceTimer);
   }, [privateKey, state?.selectedWalletId]);
 
+  // Helper to convert hex string to Uint8Array
+  const hexToBytes = (hex: string): Uint8Array => {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < hex.length; i += 2) {
+      bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+    }
+    return bytes;
+  };
+
+  // Broadcast donation event to Nostr relays (KIND 53334)
+  const broadcastDonationEvent = async (txId: string) => {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId) {
+      console.log('No Nostr session, skipping donation event broadcast');
+      return;
+    }
+
+    try {
+      const pool = new SimplePool();
+      const privKeyBytes = hexToBytes(session.nostrPrivateKey);
+
+      // Build tags for KIND 53334
+      const tags: string[][] = [
+        ["event", decodedDTag],
+        ["txid", txId],
+        ["amount_lana", state!.lanaAmount.toFixed(8)],
+        ["from_wallet", state!.selectedWalletId],
+        ["to_wallet", state!.donationWallet],
+        ["p", session.nostrHexId],
+        ["source", "Lana.app"],
+        ["attachment", `https://lana.lanablock.com/tx/${txId}`]
+      ];
+
+      const donationEvent = finalizeEvent({
+        kind: 53334,
+        created_at: Math.floor(Date.now() / 1000),
+        tags,
+        content: "",
+      }, privKeyBytes);
+
+      console.log('Broadcasting donation event:', donationEvent);
+
+      // Publish to relays
+      const publishPromises = pool.publish(relays, donationEvent);
+      const publishArray = Array.from(publishPromises);
+      let successCount = 0;
+
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          if (successCount === 0) {
+            console.log('Donation event broadcast timeout, but continuing...');
+          }
+          resolve();
+        }, 10000);
+
+        publishArray.forEach((promise) => {
+          promise
+            .then(() => {
+              successCount++;
+              console.log(`Donation event published to ${successCount} relay(s)`);
+              if (successCount === 1) {
+                clearTimeout(timeout);
+                resolve();
+              }
+            })
+            .catch((err) => {
+              console.error('Relay publish error:', err);
+            });
+        });
+      });
+
+      console.log(`Donation event broadcast complete. Success: ${successCount} relay(s)`);
+    } catch (error) {
+      console.error('Error broadcasting donation event:', error);
+      // Don't throw - we don't want to fail the whole flow if broadcast fails
+    }
+  };
+
   const handleSubmit = async () => {
     if (!state || !isPrivateKeyValid) return;
 
@@ -99,7 +188,10 @@ const EventDonatePrivateKey = () => {
 
       if (error) throw error;
 
-      if (data?.success) {
+      if (data?.success && data?.txid) {
+        // Transaction successful - broadcast donation event to Nostr
+        await broadcastDonationEvent(data.txid);
+
         navigate(`/events/donate-result`, {
           state: {
             success: true,
