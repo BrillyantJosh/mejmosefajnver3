@@ -83,7 +83,7 @@ import EventDonatePrivateKey from "./pages/events/EventDonatePrivateKey";
 import EventDonateResult from "./pages/events/EventDonateResult";
 import LanaAlignsWorldLayout from "./pages/lanaalignsworld/LanaAlignsWorldLayout";
 import ActiveAlignments from "./pages/lanaalignsworld/ActiveAlignments";
-import ClosedAlignments from "./pages/lanaalignsworld/ClosedAlignments";
+
 import MyStatus from "./pages/lanaalignsworld/MyStatus";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
@@ -218,7 +218,7 @@ const App = () => (
           <Route path="my-status" element={<MyStatus />} />
           <Route path="align" element={<ActiveAlignments />} />
           <Route path="active" element={<Navigate to="/lana-aligns-world/align" replace />} />
-          <Route path="closed" element={<ClosedAlignments />} />
+          
         </Route>
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/wallet" element={<Wallet />} />

@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Activity, Archive, User } from "lucide-react";
+import { Activity, User } from "lucide-react";
 
 const alignsNavItems = [
   {
@@ -12,11 +12,6 @@ const alignsNavItems = [
     title: "Align",
     path: "/lana-aligns-world/align",
     icon: Activity
-  },
-  {
-    title: "Closed",
-    path: "/lana-aligns-world/closed",
-    icon: Archive
   }
 ];
 
