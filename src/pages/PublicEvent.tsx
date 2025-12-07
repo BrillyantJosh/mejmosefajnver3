@@ -244,17 +244,26 @@ export default function PublicEvent() {
 
             {/* Value and Donation */}
             {(event.fiatValue || event.donationWallet) && (
-              <div className="border-t pt-4 space-y-2">
+              <div className="border-t pt-4 space-y-3">
                 {event.fiatValue && (
                   <div className="text-lg font-medium text-primary">
                     Event Value: €{event.fiatValue}
                   </div>
                 )}
                 {event.donationWallet && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Wallet className="h-4 w-4" />
-                    <span className="font-mono truncate">{event.donationWallet}</span>
-                  </div>
+                  <>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Wallet className="h-4 w-4" />
+                      <span className="font-mono truncate">{event.donationWallet}</span>
+                    </div>
+                    <Button 
+                      className="w-full"
+                      onClick={() => navigate('/login')}
+                    >
+                      <Wallet className="h-4 w-4 mr-2" />
+                      {event.fiatValue ? `Pay €${event.fiatValue}` : 'Donate'} (Login required)
+                    </Button>
+                  </>
                 )}
               </div>
             )}
