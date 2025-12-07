@@ -6,12 +6,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Plus, X, Calendar, MapPin, Globe, Link2, ImagePlus } from "lucide-react";
+import { Loader2, Plus, X, Calendar, MapPin, Globe, Link2, ImagePlus, Wallet } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { SimplePool, finalizeEvent } from "nostr-tools";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useNostrWallets } from "@/hooks/useNostrWallets";
 
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
@@ -40,6 +41,13 @@ const LANGUAGES = [
 export default function AddEvent() {
   const { session } = useAuth();
   const { parameters: systemParameters } = useSystemParameters();
+  const { wallets, isLoading: walletsLoading } = useNostrWallets();
+  
+  // Filter out excluded wallet types
+  const EXCLUDED_WALLET_TYPES = ['LanaPays.Us', 'Knights', 'Lana8Wonder'];
+  const availableWallets = wallets.filter(
+    w => w.status === 'active' && !EXCLUDED_WALLET_TYPES.includes(w.walletType)
+  );
   
   const [isOnline, setIsOnline] = useState(true);
   const [publishing, setPublishing] = useState(false);
@@ -689,13 +697,28 @@ export default function AddEvent() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="donationWallet">LANA Donation Wallet</Label>
-              <Input
-                id="donationWallet"
-                value={donationWallet}
-                onChange={(e) => setDonationWallet(e.target.value)}
-                placeholder="LiJoPc..."
-              />
+              <Label htmlFor="donationWallet" className="flex items-center gap-2">
+                <Wallet className="h-4 w-4" />
+                LANA Donation Wallet
+              </Label>
+              <Select value={donationWallet} onValueChange={setDonationWallet}>
+                <SelectTrigger>
+                  <SelectValue placeholder={walletsLoading ? "Loading wallets..." : "Select wallet"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No wallet</SelectItem>
+                  {availableWallets.map((wallet) => (
+                    <SelectItem key={wallet.walletId} value={wallet.walletId}>
+                      <div className="flex flex-col">
+                        <span className="font-mono text-sm">{wallet.walletId}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {wallet.walletType}{wallet.note ? ` - ${wallet.note}` : ''}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
