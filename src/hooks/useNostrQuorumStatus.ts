@@ -32,7 +32,7 @@ export const useNostrQuorumStatus = () => {
 
   useEffect(() => {
     const fetchQuorumStatus = async () => {
-      if (!session?.nostrNpubId || !parameters?.relays || parameters.relays.length === 0) {
+      if (!session?.nostrNpubId || !session?.nostrHexId || !parameters?.relays || parameters.relays.length === 0) {
         setIsLoading(false);
         return;
       }
@@ -42,15 +42,31 @@ export const useNostrQuorumStatus = () => {
 
       try {
         console.log('🎯 Fetching KIND 38806 quorum status for user...');
+        console.log('📌 User npub:', session.nostrNpubId);
+        console.log('📌 User HEX:', session.nostrHexId);
         
-        // Query for KIND 38806 events where the p tag matches the user's npub
-        const events = await pool.querySync(relays, {
+        // First try with npub
+        console.log('🔍 Trying query with NPUB...');
+        let events = await pool.querySync(relays, {
           kinds: [38806],
           '#p': [session.nostrNpubId],
           limit: 10
         });
 
-        console.log(`📋 Found ${events.length} KIND 38806 quorum status events`);
+        console.log(`📋 Found ${events.length} KIND 38806 events with NPUB`);
+
+        // If no results, try with HEX
+        if (events.length === 0) {
+          console.log('🔍 No results with NPUB, trying with HEX...');
+          events = await pool.querySync(relays, {
+            kinds: [38806],
+            '#p': [session.nostrHexId],
+            limit: 10
+          });
+          console.log(`📋 Found ${events.length} KIND 38806 events with HEX`);
+        }
+
+        console.log(`📋 Total KIND 38806 quorum status events found: ${events.length}`);
 
         if (events.length === 0) {
           setQuorumStatus(null);
