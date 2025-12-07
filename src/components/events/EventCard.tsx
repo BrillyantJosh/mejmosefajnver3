@@ -219,7 +219,7 @@ export function EventCard({ event }: EventCardProps) {
       onClick={handleClick}
     >
       {event.cover && (
-        <div className="relative h-40 w-full overflow-hidden rounded-t-lg">
+        <div className="relative h-32 sm:h-40 w-full overflow-hidden rounded-t-lg">
           <img 
             src={event.cover} 
             alt={event.title}
@@ -227,46 +227,43 @@ export function EventCard({ event }: EventCardProps) {
           />
           {status !== 'upcoming' && (
             <Badge 
-              className={`absolute top-2 right-2 ${
+              className={`absolute top-2 right-2 text-xs ${
                 status === 'happening-now' 
                   ? 'bg-green-500 text-white animate-pulse' 
                   : 'bg-amber-500 text-white'
               }`}
             >
-              {status === 'happening-now' ? 'HAPPENING NOW' : 'TODAY'}
+              {status === 'happening-now' ? 'NOW' : 'TODAY'}
             </Badge>
           )}
         </div>
       )}
       
-      <CardContent className={`p-4 ${!event.cover ? 'pt-4' : ''}`}>
+      <CardContent className={`p-3 sm:p-4 ${!event.cover ? 'pt-3 sm:pt-4' : ''}`}>
         {!event.cover && status !== 'upcoming' && (
           <Badge 
-            className={`mb-2 ${
+            className={`mb-2 text-xs ${
               status === 'happening-now' 
                 ? 'bg-green-500 text-white animate-pulse' 
                 : 'bg-amber-500 text-white'
             }`}
           >
-            {status === 'happening-now' ? 'HAPPENING NOW' : 'TODAY'}
+            {status === 'happening-now' ? 'NOW' : 'TODAY'}
           </Badge>
         )}
         
         <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className="font-semibold text-lg line-clamp-2">{event.title}</h3>
-          <Badge variant="secondary" className="shrink-0">
+          <h3 className="font-semibold text-base sm:text-lg line-clamp-2">{event.title}</h3>
+          <Badge variant="secondary" className="shrink-0 text-xs">
             {event.eventType}
           </Badge>
         </div>
         
-        <div className="space-y-2 text-sm text-muted-foreground">
+        <div className="space-y-1.5 text-xs sm:text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            <span>{format(event.start, 'PPP')}</span>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
+            <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+            <span className="truncate">{format(event.start, 'dd.MM.yyyy')}</span>
+            <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 ml-1" />
             <span>
               {format(event.start, 'HH:mm')}
               {event.end && ` - ${format(event.end, 'HH:mm')}`}
@@ -275,13 +272,13 @@ export function EventCard({ event }: EventCardProps) {
           
           {event.isOnline ? (
             <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-blue-500" />
-              <span className="text-blue-500">Online Event</span>
+              <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-500 shrink-0" />
+              <span className="text-blue-500">Online</span>
             </div>
           ) : (
             event.location && (
               <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-red-500" />
+                <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500 shrink-0" />
                 <span className="line-clamp-1">{event.location}</span>
               </div>
             )
@@ -289,78 +286,79 @@ export function EventCard({ event }: EventCardProps) {
         </div>
         
         {event.content && (
-          <p className="mt-3 text-sm text-muted-foreground line-clamp-2">
+          <p className="mt-2 text-xs sm:text-sm text-muted-foreground line-clamp-2">
             {event.content.replace(/\*\*/g, '').replace(/\n/g, ' ')}
           </p>
         )}
 
         {event.fiatValue && (
-          <div className="mt-3 text-sm font-medium text-primary">
-            Value: €{event.fiatValue}
+          <div className="mt-2 text-xs sm:text-sm font-medium text-primary">
+            €{event.fiatValue}
           </div>
         )}
 
         {/* Donate/Pay Button */}
         {event.donationWallet && (
-          <div className="mt-3">
+          <div className="mt-2">
             <Button
               variant="outline"
               size="sm"
-              className="w-full"
+              className="w-full h-8 text-xs sm:text-sm"
               onClick={handleDonateClick}
             >
-              <Wallet className="h-4 w-4 mr-2" />
+              <Wallet className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
               {event.fiatValue ? `Pay €${event.fiatValue}` : 'Donate'}
             </Button>
           </div>
         )}
 
         {/* Registration Section */}
-        <div className="mt-4 pt-3 border-t flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Users className="h-4 w-4" />
-            <span>{registrations.length} going</span>
+        <div className="mt-3 pt-2 sm:pt-3 border-t flex items-center justify-between gap-1 sm:gap-2">
+          <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground">
+            <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span>{registrations.length}</span>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <Button 
               variant="ghost" 
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7 sm:h-8 sm:w-8"
               onClick={handleShare}
             >
-              <Share2 className="h-4 w-4" />
+              <Share2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
             
             {userRegistration ? (
               <Button 
                 variant="outline" 
                 size="sm"
-                className="bg-green-500/10 border-green-500/30 text-green-600 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-600"
+                className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3 bg-green-500/10 border-green-500/30 text-green-600 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-600"
                 onClick={handleUnregister}
                 disabled={unregistering}
               >
                 {unregistering ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <>
-                    <Check className="h-4 w-4 mr-1" />
-                    Going
+                    <Check className="h-3.5 w-3.5 sm:mr-1" />
+                    <span className="hidden sm:inline">Going</span>
                   </>
                 )}
               </Button>
             ) : (
               <Button 
                 size="sm"
+                className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3"
                 onClick={handleRegister}
                 disabled={registering}
               >
                 {registering ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <>
-                    <UserPlus className="h-4 w-4 mr-1" />
-                    I'm Going
+                    <UserPlus className="h-3.5 w-3.5 sm:mr-1" />
+                    <span className="hidden sm:inline">I'm Going</span>
                   </>
                 )}
               </Button>
