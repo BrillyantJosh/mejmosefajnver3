@@ -20,19 +20,26 @@ function parseAcknowledgementFromEvent(event: Event): UserAcknowledgement | null
       return tag ? tag[1] : '';
     };
 
-    const eTag = event.tags.find(t => t[0] === 'e' && t[2] === 'proposal');
-    const proposalDTag = eTag ? eTag[1] : '';
+    // Get d tag to extract proposal reference
+    const dTag = getTag('d');
     const ack = getTag('ack') as 'yes' | 'resistance';
 
-    if (!proposalDTag || !ack) {
+    if (!dTag || !ack) {
+      console.log('❌ Missing dTag or ack:', { dTag, ack });
       return null;
     }
+
+    // Extract proposal slug from d tag: "ack:<slug>:<user_hex>"
+    const dTagParts = dTag.split(':');
+    const proposalSlug = dTagParts.length >= 2 ? dTagParts[1] : '';
+
+    console.log('✅ Parsed acknowledgement:', { dTag, proposalSlug, ack });
 
     return {
       id: event.id,
       pubkey: event.pubkey,
       createdAt: event.created_at,
-      proposalDTag,
+      proposalDTag: `awareness:${proposalSlug}`,
       ack,
       content: event.content,
       donationWallet: getTag('donation_wallet') || undefined,
@@ -70,7 +77,9 @@ export function useNostrUserAcknowledgement(proposalDTag: string, proposalEventI
         '#d': [dTagValue],
       };
 
+      console.log('🔍 Fetching acknowledgement with filter:', { dTagValue, filter });
       const events = await pool.querySync(parameters.relays, filter);
+      console.log('📋 Found acknowledgement events:', events.length, events);
       
       // Get the newest acknowledgement
       let newestAck: UserAcknowledgement | null = null;
