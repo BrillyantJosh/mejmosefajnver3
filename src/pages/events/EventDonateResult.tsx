@@ -79,7 +79,7 @@ const EventDonateResult = () => {
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={() => window.open(`https://lana.lanablock.com/tx/${state.txId}`, '_blank')}
+                onClick={() => window.open(`https://chainz.cryptoid.info/lana/tx.dws?${state.txId}.htm`, '_blank')}
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
                 View on Explorer
