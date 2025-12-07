@@ -436,12 +436,30 @@ const EventDonate = () => {
             <Input
               type="number"
               value={lanaAmount}
-              onChange={(e) => setLanaAmount(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Prevent entering more than available balance
+                if (selectedWalletId && selectedWalletBalance > 0) {
+                  const numValue = parseFloat(value) || 0;
+                  if (numValue > selectedWalletBalance) {
+                    setLanaAmount(selectedWalletBalance.toFixed(2));
+                    return;
+                  }
+                }
+                setLanaAmount(value);
+              }}
               placeholder="0"
               step="0.01"
               min="0"
+              max={selectedWalletId ? selectedWalletBalance : undefined}
               disabled={isPay}
+              className={parsedLanaAmount > 0 && selectedWalletId && !hasSufficientBalance ? 'border-destructive' : ''}
             />
+            {selectedWalletId && selectedWalletBalance > 0 && !isPay && (
+              <p className="text-sm text-muted-foreground mt-2">
+                Max available: {selectedWalletBalance.toFixed(2)} LANA
+              </p>
+            )}
             {isPay && event.fiatValue && (
               <p className="text-sm text-muted-foreground mt-2">
                 Event price: €{event.fiatValue.toFixed(2)}
