@@ -215,7 +215,7 @@ const App = () => (
           <Route path="donate-result" element={<EventDonateResult />} />
         </Route>
         <Route path="/lana-aligns-world" element={<LanaAlignsWorldLayout />}>
-          <Route index element={<Navigate to="/lana-aligns-world/active" replace />} />
+          <Route index element={<Navigate to="/lana-aligns-world/my-status" replace />} />
           <Route path="active" element={<ActiveAlignments />} />
           <Route path="closed" element={<ClosedAlignments />} />
           <Route path="my-status" element={<MyStatus />} />
