@@ -16,18 +16,22 @@ import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { toast } from "@/hooks/use-toast";
 
 export default function PublicEvent() {
-  const { eventId } = useParams<{ eventId: string }>();
+  const { dTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
   const { parameters } = useSystemParameters();
+  
+  // Decode the URL-encoded dTag
+  const decodedDTag = dTag ? decodeURIComponent(dTag) : '';
   
   const relays = parameters?.relays && parameters.relays.length > 0
     ? parameters.relays
     : undefined;
 
-  const { event, profile, loading, error } = useNostrPublicEvent(eventId || '', relays);
+  const { event, profile, loading, error } = useNostrPublicEvent(decodedDTag, relays);
 
   const handleShare = async () => {
-    const shareUrl = `${window.location.origin}/event/${eventId}`;
+    // Use dTag for stable URL
+    const shareUrl = `${window.location.origin}/event/${encodeURIComponent(event?.dTag || decodedDTag)}`;
     
     try {
       await navigator.clipboard.writeText(shareUrl);

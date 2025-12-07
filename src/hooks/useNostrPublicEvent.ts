@@ -15,7 +15,7 @@ const DEFAULT_RELAYS = [
   'wss://relay.lanaheartvoice.com'
 ];
 
-export function useNostrPublicEvent(eventId: string, systemRelays?: string[]) {
+export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
   const [event, setEvent] = useState<LanaEvent | null>(null);
   const [profile, setProfile] = useState<NostrProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +24,7 @@ export function useNostrPublicEvent(eventId: string, systemRelays?: string[]) {
   const relays = systemRelays && systemRelays.length > 0 ? systemRelays : DEFAULT_RELAYS;
 
   useEffect(() => {
-    if (!eventId) {
+    if (!dTag) {
       setLoading(false);
       return;
     }
@@ -116,11 +116,11 @@ export function useNostrPublicEvent(eventId: string, systemRelays?: string[]) {
         setLoading(true);
         setError(null);
 
-        // Fetch event by ID (KIND 36677)
+        // Fetch event by d tag (KIND 36677 - Parameterized Replaceable Event)
         const events = await Promise.race([
           pool.querySync(relays, {
             kinds: [36677],
-            ids: [eventId]
+            "#d": [dTag]
           }),
           new Promise<never>((_, reject) => 
             setTimeout(() => reject(new Error('Timeout')), EVENT_TIMEOUT)
@@ -135,7 +135,10 @@ export function useNostrPublicEvent(eventId: string, systemRelays?: string[]) {
           return;
         }
 
-        const rawEvent = events[0];
+        // Get the most recent event (by created_at) since it's a replaceable event
+        const rawEvent = events.reduce((latest, current) => 
+          current.created_at > latest.created_at ? current : latest
+        );
         const parsedEvent = parseEvent(rawEvent);
 
         if (!parsedEvent) {
@@ -183,7 +186,7 @@ export function useNostrPublicEvent(eventId: string, systemRelays?: string[]) {
       isMounted = false;
       pool.close(relays);
     };
-  }, [eventId, relays]);
+  }, [dTag, relays]);
 
   return { event, profile, loading, error };
 }
