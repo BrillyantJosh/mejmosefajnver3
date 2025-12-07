@@ -178,11 +178,11 @@ const EventDonatePrivateKey = () => {
       // Call the send-lana-transaction edge function
       const { data, error } = await supabase.functions.invoke('send-lana-transaction', {
         body: {
-          private_key: privateKey,
-          sender_address: state.selectedWalletId,
-          recipient_address: state.donationWallet,
+          privateKey: privateKey,
+          senderAddress: state.selectedWalletId,
+          recipientAddress: state.donationWallet,
           amount: state.lanaAmount,
-          electrum_servers: electrumServers
+          electrumServers: electrumServers
         }
       });
 
