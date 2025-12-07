@@ -43,7 +43,7 @@ function parseAcknowledgementFromEvent(event: Event): UserAcknowledgement | null
   }
 }
 
-export function useNostrUserAcknowledgement(proposalDTag: string) {
+export function useNostrUserAcknowledgement(proposalDTag: string, proposalEventId?: string) {
   const { parameters } = useSystemParameters();
   const { session } = useAuth();
   const [acknowledgement, setAcknowledgement] = useState<UserAcknowledgement | null>(null);
@@ -96,8 +96,8 @@ export function useNostrUserAcknowledgement(proposalDTag: string) {
   }, [fetchAcknowledgement]);
 
   const submitVote = async (ackType: 'yes' | 'resistance', content: string): Promise<boolean> => {
-    if (!parameters?.relays || !session?.nostrPrivateKey || !session?.nostrHexId) {
-      throw new Error('Not authenticated or no relays available');
+    if (!parameters?.relays || !session?.nostrPrivateKey || !session?.nostrHexId || !proposalEventId) {
+      throw new Error('Not authenticated, no relays available, or missing proposal event ID');
     }
 
     const pool = new SimplePool();
@@ -118,7 +118,7 @@ export function useNostrUserAcknowledgement(proposalDTag: string) {
         kind: 38884,
         created_at: Math.floor(Date.now() / 1000),
         tags: [
-          ['e', proposalDTag, 'proposal'],
+          ['e', proposalEventId, '', 'reply'],
           ['p', session.nostrHexId],
           ['ack', ackType],
           ['d', dTagValue],

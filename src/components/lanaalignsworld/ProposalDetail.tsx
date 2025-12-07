@@ -47,7 +47,7 @@ function getTimeRemaining(endTimestamp: number): { text: string; isEnded: boolea
 export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps) {
   const { status: lana8WonderStatus, isLoading: isLoadingLana8Wonder } = useNostrLana8Wonder();
   const { status: credentialStatus, isLoading: isLoadingCredentials } = useNostrRealLifeCredential();
-  const { acknowledgement, isLoading: isLoadingAck, submitVote, refetch } = useNostrUserAcknowledgement(proposal.dTag);
+  const { acknowledgement, isLoading: isLoadingAck, submitVote, refetch } = useNostrUserAcknowledgement(proposal.dTag, proposal.id);
   
   const [voteDialogOpen, setVoteDialogOpen] = useState(false);
   const [voteType, setVoteType] = useState<'yes' | 'resistance'>('yes');
