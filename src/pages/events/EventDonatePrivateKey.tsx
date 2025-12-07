@@ -86,25 +86,24 @@ const EventDonatePrivateKey = () => {
     return () => clearTimeout(debounceTimer);
   }, [privateKey, state?.selectedWalletId]);
 
-  // Helper to convert hex string to Uint8Array
-  const hexToBytes = (hex: string): Uint8Array => {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-      bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
-    }
-    return bytes;
-  };
-
   // Broadcast donation event to Nostr relays (KIND 53334)
   const broadcastDonationEvent = async (txId: string) => {
+    console.log('🔔 Starting donation event broadcast...');
+    console.log('Session nostrPrivateKey exists:', !!session?.nostrPrivateKey);
+    console.log('Session nostrHexId:', session?.nostrHexId);
+    
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
-      console.log('No Nostr session, skipping donation event broadcast');
+      console.log('❌ No Nostr session, skipping donation event broadcast');
       return;
     }
 
     try {
       const pool = new SimplePool();
-      const privKeyBytes = hexToBytes(session.nostrPrivateKey);
+      
+      // Convert hex private key to bytes (same as AddEvent.tsx)
+      const privKeyBytes = new Uint8Array(
+        session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
+      );
 
       // Build tags for KIND 53334
       const tags: string[][] = [
@@ -118,6 +117,8 @@ const EventDonatePrivateKey = () => {
         ["attachment", `https://lana.lanablock.com/tx/${txId}`]
       ];
 
+      console.log('📝 Creating donation event with tags:', tags);
+
       const donationEvent = finalizeEvent({
         kind: 53334,
         created_at: Math.floor(Date.now() / 1000),
@@ -125,17 +126,19 @@ const EventDonatePrivateKey = () => {
         content: "",
       }, privKeyBytes);
 
-      console.log('Broadcasting donation event:', donationEvent);
+      console.log('📤 Broadcasting donation event:', donationEvent);
+      console.log('📡 Publishing to relays:', relays);
 
-      // Publish to relays
+      // Publish to relays (same pattern as AddEvent.tsx)
       const publishPromises = pool.publish(relays, donationEvent);
       const publishArray = Array.from(publishPromises);
       let successCount = 0;
+      let errorCount = 0;
 
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           if (successCount === 0) {
-            console.log('Donation event broadcast timeout, but continuing...');
+            console.log('⏱️ Donation event broadcast timeout, but continuing...');
           }
           resolve();
         }, 10000);
@@ -144,21 +147,27 @@ const EventDonatePrivateKey = () => {
           promise
             .then(() => {
               successCount++;
-              console.log(`Donation event published to ${successCount} relay(s)`);
+              console.log(`✅ Donation event published to relay (${successCount}/${relays.length})`);
               if (successCount === 1) {
                 clearTimeout(timeout);
                 resolve();
               }
             })
             .catch((err) => {
-              console.error('Relay publish error:', err);
+              errorCount++;
+              console.error('❌ Relay publish error:', err);
+              if (errorCount === publishArray.length) {
+                clearTimeout(timeout);
+                console.log('❌ All relays failed');
+                resolve(); // Still resolve, don't reject - we don't want to fail the whole flow
+              }
             });
         });
       });
 
-      console.log(`Donation event broadcast complete. Success: ${successCount} relay(s)`);
+      console.log(`🎉 Donation event broadcast complete. Success: ${successCount}/${relays.length} relay(s)`);
     } catch (error) {
-      console.error('Error broadcasting donation event:', error);
+      console.error('❌ Error broadcasting donation event:', error);
       // Don't throw - we don't want to fail the whole flow if broadcast fails
     }
   };
