@@ -86,20 +86,21 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
   };
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
+    <div className="px-3 py-4 sm:p-4 max-w-4xl mx-auto">
       {/* Back button */}
       <Button 
         variant="ghost" 
         onClick={onBack} 
-        className="mb-4 -ml-2"
+        className="mb-3 sm:mb-4 -ml-2 h-9 text-sm"
+        size="sm"
       >
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to Proposals
+        <ArrowLeft className="h-4 w-4 mr-1.5" />
+        Back
       </Button>
 
       {/* Header with image */}
       {proposal.img && (
-        <div className="w-full h-48 sm:h-64 overflow-hidden rounded-lg mb-6">
+        <div className="w-full h-40 sm:h-48 md:h-64 overflow-hidden rounded-lg mb-4 sm:mb-6">
           <img 
             src={proposal.img} 
             alt={proposal.title}
@@ -109,74 +110,74 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
       )}
 
       {/* Title and badges */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold">{proposal.title}</h1>
-        <div className="flex gap-2 shrink-0">
-          <Badge variant={proposal.level === 'global' ? 'default' : 'secondary'}>
+      <div className="flex flex-col gap-2 sm:gap-3 mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight">{proposal.title}</h1>
+        <div className="flex flex-wrap gap-1.5 sm:gap-2">
+          <Badge variant={proposal.level === 'global' ? 'default' : 'secondary'} className="text-[10px] sm:text-xs">
             {proposal.level === 'global' ? (
-              <><Globe className="h-3 w-3 mr-1" /> Global</>
+              <><Globe className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" /> Global</>
             ) : (
-              <><MapPin className="h-3 w-3 mr-1" /> Local</>
+              <><MapPin className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" /> Local</>
             )}
           </Badge>
-          <Badge variant={timeRemaining.isEnded ? 'destructive' : 'outline'}>
-            <Clock className="h-3 w-3 mr-1" />
+          <Badge variant={timeRemaining.isEnded ? 'destructive' : 'outline'} className="text-[10px] sm:text-xs">
+            <Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
             {timeRemaining.text}
           </Badge>
         </div>
       </div>
 
       {/* Short perspective */}
-      <p className="text-lg text-muted-foreground mb-6">
+      <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-4 sm:mb-6">
         {proposal.shortPerspective}
       </p>
 
       {/* Long perspective */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">Full Perspective</CardTitle>
+      <Card className="mb-4 sm:mb-6">
+        <CardHeader className="p-3 sm:p-4 pb-2">
+          <CardTitle className="text-sm sm:text-base">Full Perspective</CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm leading-relaxed">{proposal.longPerspective}</p>
+        <CardContent className="p-3 sm:p-4 pt-0">
+          <p className="text-xs sm:text-sm leading-relaxed">{proposal.longPerspective}</p>
         </CardContent>
       </Card>
 
       {/* Consequences */}
-      <div className="grid sm:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
         <Card className="border-green-500/30 bg-green-500/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2 text-green-600 dark:text-green-400">
-              <CheckCircle className="h-4 w-4" />
+          <CardHeader className="p-3 sm:p-4 pb-1 sm:pb-2">
+            <CardTitle className="text-sm sm:text-base flex items-center gap-1.5 sm:gap-2 text-green-600 dark:text-green-400">
+              <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               If Accepted
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm">{proposal.consequenceYes || 'Not specified'}</p>
+          <CardContent className="p-3 sm:p-4 pt-0">
+            <p className="text-xs sm:text-sm">{proposal.consequenceYes || 'Not specified'}</p>
           </CardContent>
         </Card>
         
         <Card className="border-red-500/30 bg-red-500/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2 text-red-600 dark:text-red-400">
-              <XCircle className="h-4 w-4" />
+          <CardHeader className="p-3 sm:p-4 pb-1 sm:pb-2">
+            <CardTitle className="text-sm sm:text-base flex items-center gap-1.5 sm:gap-2 text-red-600 dark:text-red-400">
+              <XCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               If Not Accepted
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm">{proposal.consequenceNo || 'Not specified'}</p>
+          <CardContent className="p-3 sm:p-4 pt-0">
+            <p className="text-xs sm:text-sm">{proposal.consequenceNo || 'Not specified'}</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Timeline */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
+      <Card className="mb-4 sm:mb-6">
+        <CardHeader className="p-3 sm:p-4 pb-2">
+          <CardTitle className="text-sm sm:text-base flex items-center gap-1.5 sm:gap-2">
+            <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Timeline
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
+        <CardContent className="p-3 sm:p-4 pt-0 space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Started</span>
             <span>{formatDate(proposal.start)}</span>
@@ -194,14 +195,14 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
 
       {/* YouTube Embed */}
       {proposal.youtube && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Youtube className="h-4 w-4" />
+        <Card className="mb-4 sm:mb-6">
+          <CardHeader className="p-3 sm:p-4 pb-2">
+            <CardTitle className="text-sm sm:text-base flex items-center gap-1.5 sm:gap-2">
+              <Youtube className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Video
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 sm:p-4 pt-0">
             <div className="aspect-video rounded-lg overflow-hidden">
               <iframe
                 src={proposal.youtube.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
@@ -217,19 +218,19 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
 
       {/* Other Resources */}
       {(proposal.doc || proposal.link || proposal.donationWallet) && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Resources</CardTitle>
+        <Card className="mb-4 sm:mb-6">
+          <CardHeader className="p-3 sm:p-4 pb-2">
+            <CardTitle className="text-sm sm:text-base">Resources</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="p-3 sm:p-4 pt-0 space-y-2 sm:space-y-3">
             {proposal.doc && (
               <a 
                 href={proposal.doc} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-primary hover:underline"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-primary hover:underline"
               >
-                <FileText className="h-4 w-4" />
+                <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 View Document
               </a>
             )}
@@ -238,86 +239,86 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
                 href={proposal.link} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-primary hover:underline"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-primary hover:underline"
               >
-                <ExternalLink className="h-4 w-4" />
+                <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 External Link
               </a>
             )}
             {proposal.donationWallet && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Wallet className="h-4 w-4" />
-                <span className="font-mono text-xs truncate">{proposal.donationWallet}</span>
+              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
+                <Wallet className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="font-mono text-[10px] sm:text-xs truncate max-w-[200px] sm:max-w-none">{proposal.donationWallet}</span>
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      <Separator className="my-6" />
+      <Separator className="my-4 sm:my-6" />
 
       {/* Current vote status */}
       {!isLoadingAck && acknowledgement && (
-        <Alert className={acknowledgement.ack === 'yes' 
-          ? 'border-green-500/30 bg-green-500/10 mb-4' 
-          : 'border-destructive/30 bg-destructive/10 mb-4'}>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <div>
-              <strong>You have already voted: </strong>
-              <Badge variant={acknowledgement.ack === 'yes' ? 'default' : 'destructive'} className="ml-2">
+        <Alert className={`${acknowledgement.ack === 'yes' 
+          ? 'border-green-500/30 bg-green-500/10' 
+          : 'border-destructive/30 bg-destructive/10'} mb-3 sm:mb-4`}>
+          <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <AlertDescription className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex-1">
+              <span className="text-xs sm:text-sm font-medium">You have already voted: </span>
+              <Badge variant={acknowledgement.ack === 'yes' ? 'default' : 'destructive'} className="ml-1.5 sm:ml-2 text-[10px] sm:text-xs">
                 {acknowledgement.ack === 'yes' ? 'Accepted' : 'Resisted'}
               </Badge>
               {acknowledgement.content && (
-                <p className="text-sm text-muted-foreground mt-1 italic">"{acknowledgement.content}"</p>
+                <p className="text-[10px] sm:text-sm text-muted-foreground mt-1 italic">"{acknowledgement.content}"</p>
               )}
             </div>
-            <Button variant="ghost" size="sm" onClick={() => refetch()} className="shrink-0">
-              <RefreshCw className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={() => refetch()} className="shrink-0 h-7 w-7 p-0 sm:h-8 sm:w-8">
+              <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Button>
           </AlertDescription>
         </Alert>
       )}
 
       {/* Voting section */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold">
+      <div className="space-y-3 sm:space-y-4">
+        <h2 className="text-base sm:text-lg font-semibold">
           {acknowledgement ? 'Change Your Vote' : 'Cast Your Vote'}
         </h2>
         
         {timeRemaining.isEnded ? (
-          <p className="text-muted-foreground">Voting has ended for this proposal.</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">Voting has ended for this proposal.</p>
         ) : (
           <>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col gap-2 sm:gap-3">
               <Button 
                 onClick={() => handleOpenVoteDialog('yes')}
-                className="flex-1 bg-green-600 hover:bg-green-700"
+                className="w-full bg-green-600 hover:bg-green-700 h-10 sm:h-11 text-sm sm:text-base"
                 disabled={isLoadingPermissions || isLoadingAck}
               >
-                <CheckCircle className="h-4 w-4 mr-2" />
+                <CheckCircle className="h-4 w-4 mr-1.5 sm:mr-2" />
                 {acknowledgement?.ack === 'yes' ? 'Change Acceptance' : 'Accept Proposal'}
               </Button>
               
               <Button 
                 onClick={() => handleOpenVoteDialog('resistance')}
                 variant="destructive"
-                className="flex-1"
+                className="w-full h-10 sm:h-11 text-sm sm:text-base"
                 disabled={isLoadingPermissions || isLoadingAck || !canResist}
               >
-                <XCircle className="h-4 w-4 mr-2" />
+                <XCircle className="h-4 w-4 mr-1.5 sm:mr-2" />
                 {acknowledgement?.ack === 'resistance' ? 'Change Resistance' : 'Resist Proposal'}
               </Button>
             </div>
             
             {!canResist && !isLoadingPermissions && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-[10px] sm:text-sm text-muted-foreground">
                 You can vote to accept, but cannot resist proposals. To resist, you need a Lana8Wonder plan and at least 3 real-life credentials.
               </p>
             )}
 
             {acknowledgement && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-[10px] sm:text-sm text-muted-foreground">
                 You can change your vote at any time while voting is open.
               </p>
             )}
