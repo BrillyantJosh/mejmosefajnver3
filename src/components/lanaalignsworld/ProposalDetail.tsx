@@ -1,9 +1,13 @@
-import { ArrowLeft, Globe, MapPin, Calendar, ExternalLink, FileText, Youtube, CheckCircle, XCircle, Clock, Wallet } from "lucide-react";
+import { useState } from 'react';
+import { ArrowLeft, Globe, MapPin, Calendar, ExternalLink, FileText, Youtube, CheckCircle, XCircle, Clock, Wallet, AlertCircle, RefreshCw } from "lucide-react";
 import { AwarenessProposal } from "@/hooks/useNostrAwarenessProposals";
+import { useNostrUserAcknowledgement } from "@/hooks/useNostrUserAcknowledgement";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import VoteDialog from "./VoteDialog";
 
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { useNostrRealLifeCredential } from "@/hooks/useNostrRealLifeCredential";
@@ -43,6 +47,11 @@ function getTimeRemaining(endTimestamp: number): { text: string; isEnded: boolea
 export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps) {
   const { status: lana8WonderStatus, isLoading: isLoadingLana8Wonder } = useNostrLana8Wonder();
   const { status: credentialStatus, isLoading: isLoadingCredentials } = useNostrRealLifeCredential();
+  const { acknowledgement, isLoading: isLoadingAck, submitVote, refetch } = useNostrUserAcknowledgement(proposal.dTag);
+  
+  const [voteDialogOpen, setVoteDialogOpen] = useState(false);
+  const [voteType, setVoteType] = useState<'yes' | 'resistance'>('yes');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const timeRemaining = getTimeRemaining(proposal.end);
   const isLoadingPermissions = isLoadingLana8Wonder || isLoadingCredentials;
@@ -53,16 +62,27 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
   // Can resist if has Lana8Wonder AND 3+ credentials
   const canResist = lana8WonderStatus.exists && (credentialStatus?.referenceCount || 0) >= 3;
 
-  const handleVoteAccept = () => {
-    toast.info("Voting functionality coming soon");
-  };
-
-  const handleResist = () => {
-    if (!canResist) {
+  const handleOpenVoteDialog = (type: 'yes' | 'resistance') => {
+    if (type === 'resistance' && !canResist) {
       toast.error("You need Lana8Wonder and at least 3 real-life credentials to resist a proposal");
       return;
     }
-    toast.info("Resist functionality coming soon");
+    setVoteType(type);
+    setVoteDialogOpen(true);
+  };
+
+  const handleSubmitVote = async (content: string) => {
+    setIsSubmitting(true);
+    try {
+      await submitVote(voteType, content);
+      toast.success(voteType === 'yes' ? 'Acceptance submitted successfully' : 'Resistance submitted successfully');
+      setVoteDialogOpen(false);
+    } catch (error) {
+      toast.error('Failed to submit vote. Please try again.');
+      console.error('Vote submission error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -131,7 +151,7 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm">{proposal.consequenceYes}</p>
+            <p className="text-sm">{proposal.consequenceYes || 'Not specified'}</p>
           </CardContent>
         </Card>
         
@@ -143,7 +163,7 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm">{proposal.consequenceNo}</p>
+            <p className="text-sm">{proposal.consequenceNo || 'Not specified'}</p>
           </CardContent>
         </Card>
       </div>
@@ -224,9 +244,34 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
 
       <Separator className="my-6" />
 
+      {/* Current vote status */}
+      {!isLoadingAck && acknowledgement && (
+        <Alert className={acknowledgement.ack === 'yes' 
+          ? 'border-green-500/30 bg-green-500/10 mb-4' 
+          : 'border-destructive/30 bg-destructive/10 mb-4'}>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <div>
+              <strong>You have already voted: </strong>
+              <Badge variant={acknowledgement.ack === 'yes' ? 'default' : 'destructive'} className="ml-2">
+                {acknowledgement.ack === 'yes' ? 'Accepted' : 'Resisted'}
+              </Badge>
+              {acknowledgement.content && (
+                <p className="text-sm text-muted-foreground mt-1 italic">"{acknowledgement.content}"</p>
+              )}
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => refetch()} className="shrink-0">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Voting section */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Cast Your Vote</h2>
+        <h2 className="text-lg font-semibold">
+          {acknowledgement ? 'Change Your Vote' : 'Cast Your Vote'}
+        </h2>
         
         {timeRemaining.isEnded ? (
           <p className="text-muted-foreground">Voting has ended for this proposal.</p>
@@ -234,22 +279,22 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
           <>
             <div className="flex flex-col sm:flex-row gap-3">
               <Button 
-                onClick={handleVoteAccept}
+                onClick={() => handleOpenVoteDialog('yes')}
                 className="flex-1 bg-green-600 hover:bg-green-700"
-                disabled={isLoadingPermissions}
+                disabled={isLoadingPermissions || isLoadingAck}
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
-                Accept Proposal
+                {acknowledgement?.ack === 'yes' ? 'Change Acceptance' : 'Accept Proposal'}
               </Button>
               
               <Button 
-                onClick={handleResist}
+                onClick={() => handleOpenVoteDialog('resistance')}
                 variant="destructive"
                 className="flex-1"
-                disabled={isLoadingPermissions || !canResist}
+                disabled={isLoadingPermissions || isLoadingAck || !canResist}
               >
                 <XCircle className="h-4 w-4 mr-2" />
-                Resist Proposal
+                {acknowledgement?.ack === 'resistance' ? 'Change Resistance' : 'Resist Proposal'}
               </Button>
             </div>
             
@@ -258,9 +303,26 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
                 You can vote to accept, but cannot resist proposals. To resist, you need a Lana8Wonder plan and at least 3 real-life credentials.
               </p>
             )}
+
+            {acknowledgement && (
+              <p className="text-sm text-muted-foreground">
+                You can change your vote at any time while voting is open.
+              </p>
+            )}
           </>
         )}
       </div>
+
+      {/* Vote Dialog */}
+      <VoteDialog
+        isOpen={voteDialogOpen}
+        onClose={() => setVoteDialogOpen(false)}
+        voteType={voteType}
+        proposalTitle={proposal.title}
+        onSubmit={handleSubmitVote}
+        isSubmitting={isSubmitting}
+        existingContent={acknowledgement?.ack === voteType ? acknowledgement.content : ''}
+      />
     </div>
   );
 }
