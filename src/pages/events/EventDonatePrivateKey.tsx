@@ -175,6 +175,16 @@ const EventDonatePrivateKey = () => {
   const handleSubmit = async () => {
     if (!state || !isPrivateKeyValid) return;
 
+    // Prevent sending to same address
+    if (state.selectedWalletId === state.donationWallet) {
+      toast({
+        title: "Invalid transaction",
+        description: "Cannot send to the same wallet address. The event's donation wallet is the same as your sender wallet.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     console.log('🚀 Starting donation transaction...');
     console.log('Amount:', state.lanaAmount, 'LANA');
