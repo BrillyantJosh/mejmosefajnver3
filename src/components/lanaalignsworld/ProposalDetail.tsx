@@ -1,5 +1,41 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ArrowLeft, Globe, MapPin, Calendar, ExternalLink, FileText, Youtube, CheckCircle, XCircle, Clock, Wallet, AlertCircle, RefreshCw } from "lucide-react";
+
+// Helper to format text with line breaks and bold
+function FormattedText({ text }: { text: string }) {
+  const formattedContent = useMemo(() => {
+    if (!text) return null;
+    
+    // Split by line breaks
+    const lines = text.split(/\n/);
+    
+    return lines.map((line, lineIndex) => {
+      // Process bold text with ** or *
+      const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+      
+      const formattedLine = parts.map((part, partIndex) => {
+        // Check for **bold** pattern
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={partIndex}>{part.slice(2, -2)}</strong>;
+        }
+        // Check for *bold* pattern
+        if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+          return <strong key={partIndex}>{part.slice(1, -1)}</strong>;
+        }
+        return part;
+      });
+      
+      return (
+        <span key={lineIndex}>
+          {formattedLine}
+          {lineIndex < lines.length - 1 && <br />}
+        </span>
+      );
+    });
+  }, [text]);
+  
+  return <>{formattedContent}</>;
+}
 import { AwarenessProposal } from "@/hooks/useNostrAwarenessProposals";
 import { useNostrUserAcknowledgement } from "@/hooks/useNostrUserAcknowledgement";
 import { Button } from "@/components/ui/button";
@@ -138,7 +174,9 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
           <CardTitle className="text-sm sm:text-base">Full Perspective</CardTitle>
         </CardHeader>
         <CardContent className="p-3 sm:p-4 pt-0">
-          <p className="text-xs sm:text-sm leading-relaxed">{proposal.longPerspective}</p>
+          <div className="text-xs sm:text-sm leading-relaxed whitespace-pre-line">
+            <FormattedText text={proposal.longPerspective} />
+          </div>
         </CardContent>
       </Card>
 
