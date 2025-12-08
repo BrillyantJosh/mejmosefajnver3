@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { ArrowLeft, Globe, MapPin, Calendar, ExternalLink, FileText, Youtube, CheckCircle, XCircle, Clock, Wallet, AlertCircle, RefreshCw } from "lucide-react";
+import { ArrowLeft, Globe, MapPin, Calendar, ExternalLink, FileText, Youtube, CheckCircle, XCircle, Clock, Wallet, AlertCircle, RefreshCw, Share2 } from "lucide-react";
 
 // Helper to format text with line breaks and bold
 function FormattedText({ text }: { text: string }) {
@@ -121,18 +121,39 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
     }
   };
 
+  const handleShare = async () => {
+    const shareUrl = `${window.location.origin}/proposal/${encodeURIComponent(proposal.dTag)}`;
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("Link copied! Share this link with anyone");
+    } catch (err) {
+      toast.error("Failed to copy link");
+    }
+  };
+
   return (
     <div className="px-3 py-4 sm:p-4 max-w-4xl mx-auto">
-      {/* Back button */}
-      <Button 
-        variant="ghost" 
-        onClick={onBack} 
-        className="mb-3 sm:mb-4 -ml-2 h-9 text-sm"
-        size="sm"
-      >
-        <ArrowLeft className="h-4 w-4 mr-1.5" />
-        Back
-      </Button>
+      {/* Back and Share buttons */}
+      <div className="flex items-center justify-between mb-3 sm:mb-4">
+        <Button 
+          variant="ghost" 
+          onClick={onBack} 
+          className="-ml-2 h-9 text-sm"
+          size="sm"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1.5" />
+          Back
+        </Button>
+        <Button 
+          variant="outline" 
+          size="icon"
+          onClick={handleShare}
+          className="h-9 w-9"
+        >
+          <Share2 className="h-4 w-4" />
+        </Button>
+      </div>
 
       {/* Header with image */}
       {proposal.img && (
