@@ -67,12 +67,12 @@ export default function ChatMessage({
   if (type === 'audio' && audioUrl) {
     return (
       <div className={`flex flex-col mb-4 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
-        <div className="text-xs text-muted-foreground mb-1">
+        <div className="text-xs text-muted-foreground mb-1 max-w-[calc(100vw-4rem)] truncate">
           {sender}{role && ` (${role})`} • {timestamp}
         </div>
-        <div className={`flex items-center gap-2 ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
           {showLashButton && <LashButton />}
-          <Card className={`p-3 max-w-md w-full ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
+          <Card className={`p-2 md:p-3 flex-1 min-w-0 ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
             <AudioPlayer audioUrl={audioUrl} />
           </Card>
         </div>
@@ -82,13 +82,13 @@ export default function ChatMessage({
 
   return (
     <div className={`flex flex-col mb-4 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
-      <div className="text-xs text-muted-foreground mb-1">
+      <div className="text-xs text-muted-foreground mb-1 max-w-[calc(100vw-4rem)] truncate">
         {sender}{role && ` (${role})`} • {timestamp}
       </div>
-      <div className={`flex items-center gap-2 ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
         {showLashButton && <LashButton />}
-        <Card className={`p-3 max-w-md ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
-          <p className="text-sm">{content}</p>
+        <Card className={`p-2 md:p-3 max-w-[85vw] md:max-w-md ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
+          <p className="text-sm break-words">{content}</p>
         </Card>
       </div>
     </div>
