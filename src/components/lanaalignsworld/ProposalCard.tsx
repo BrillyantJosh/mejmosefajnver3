@@ -1,8 +1,10 @@
-import { Globe, MapPin, Calendar, ExternalLink, FileText, Youtube, Image, CheckCircle, XCircle } from "lucide-react";
+import { Globe, MapPin, Calendar, ExternalLink, FileText, Youtube, Image, CheckCircle, XCircle, Share2 } from "lucide-react";
 import { AwarenessProposal } from "@/hooks/useNostrAwarenessProposals";
 import { useNostrUserAcknowledgement } from "@/hooks/useNostrUserAcknowledgement";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 function getTimeRemaining(endTimestamp: number): string {
   const now = Math.floor(Date.now() / 1000);
@@ -23,6 +25,18 @@ export default function ProposalCard({ proposal, onClick }: ProposalCardProps) {
   const { acknowledgement, isLoading: isLoadingAck } = useNostrUserAcknowledgement(proposal.dTag, proposal.id);
   const hasMedia = proposal.img || proposal.youtube || proposal.doc || proposal.link;
 
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    const shareUrl = `${window.location.origin}/proposal/${encodeURIComponent(proposal.dTag)}`;
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("Link copied! Share this link with anyone");
+    } catch (err) {
+      toast.error("Failed to copy link");
+    }
+  };
+
   return (
     <Card 
       className="cursor-pointer hover:shadow-lg transition-shadow border-border/50 hover:border-primary/30 active:scale-[0.98]" 
@@ -36,13 +50,23 @@ export default function ProposalCard({ proposal, onClick }: ProposalCardProps) {
       <CardHeader className="p-3 sm:p-4 pb-2">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-base sm:text-lg leading-tight line-clamp-2">{proposal.title}</CardTitle>
-          <Badge variant={proposal.level === 'global' ? 'default' : 'secondary'} className="shrink-0 text-[10px] sm:text-xs px-1.5 sm:px-2">
-            {proposal.level === 'global' ? (
-              <><Globe className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" /> Global</>
-            ) : (
-              <><MapPin className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" /> Local</>
-            )}
-          </Badge>
+          <div className="flex items-center gap-1 shrink-0">
+            <Badge variant={proposal.level === 'global' ? 'default' : 'secondary'} className="text-[10px] sm:text-xs px-1.5 sm:px-2">
+              {proposal.level === 'global' ? (
+                <><Globe className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" /> Global</>
+              ) : (
+                <><MapPin className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" /> Local</>
+              )}
+            </Badge>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-7 w-7 sm:h-8 sm:w-8"
+              onClick={handleShare}
+            >
+              <Share2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-3 sm:p-4 pt-0 space-y-2 sm:space-y-3">
