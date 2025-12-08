@@ -41,6 +41,8 @@ export interface LanaEvent {
   maxGuests?: number;
   // d tag for event identification
   dTag: string;
+  // Timezone (IANA format)
+  timezone?: string;
 }
 
 type EventFilter = 'online' | 'live';
@@ -125,6 +127,7 @@ export function useNostrEvents(filter: EventFilter) {
         recording: getTagValue('recording'),
         maxGuests: maxGuestsStr ? parseInt(maxGuestsStr, 10) : undefined,
         dTag,
+        timezone: getTagValue('timezone'),
       };
     } catch (err) {
       console.error('Error parsing event:', err);

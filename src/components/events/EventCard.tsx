@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Globe, Users, UserPlus, Check, Loader2, Share2, Wallet } from "lucide-react";
+import { Calendar, Clock, MapPin, Globe, Users, UserPlus, Check, Loader2, Share2, Wallet, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNavigate } from "react-router-dom";
@@ -11,6 +11,7 @@ import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrEventRegistrations } from "@/hooks/useNostrEventRegistrations";
 import { SimplePool, finalizeEvent } from "nostr-tools";
 import { toast } from "@/hooks/use-toast";
+import { getTimezoneAbbreviation, getUserTimezone, formatTimeInTimezone } from "@/lib/timezones";
 
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
@@ -267,8 +268,20 @@ export function EventCard({ event }: EventCardProps) {
             <span>
               {format(event.start, 'HH:mm')}
               {event.end && ` - ${format(event.end, 'HH:mm')}`}
+              {event.timezone && (
+                <span className="ml-1 text-muted-foreground">
+                  ({getTimezoneAbbreviation(event.start, event.timezone)})
+                </span>
+              )}
             </span>
           </div>
+          
+          {!event.timezone && (
+            <div className="flex items-center gap-1 text-amber-500">
+              <AlertTriangle className="h-3 w-3" />
+              <span className="text-xs">Legacy event (no timezone)</span>
+            </div>
+          )}
           
           {event.isOnline ? (
             <div className="space-y-2">

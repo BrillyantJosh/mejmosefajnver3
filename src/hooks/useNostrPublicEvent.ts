@@ -104,6 +104,7 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
           recording: getTagValue('recording'),
           maxGuests: maxGuestsStr ? parseInt(maxGuestsStr, 10) : undefined,
           dTag,
+          timezone: getTagValue('timezone'),
         };
       } catch (err) {
         console.error('Error parsing event:', err);
