@@ -100,6 +100,7 @@ import NotFound from "./pages/NotFound";
 import AdminSettings from "./pages/admin/AdminSettings";
 import PublicPost from "./pages/PublicPost";
 import PublicEvent from "./pages/PublicEvent";
+import PublicProposal from "./pages/PublicProposal";
 
 const queryClient = new QueryClient();
 
@@ -117,6 +118,7 @@ const App = () => (
                 <Route path="/login" element={<Login />} />
                 <Route path="/post/:eventId" element={<PublicPost />} />
                 <Route path="/event/:dTag" element={<PublicEvent />} />
+                <Route path="/proposal/:dTag" element={<PublicProposal />} />
                 <Route element={
                   <ProtectedRoute>
                     <MainLayout />
