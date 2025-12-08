@@ -16,6 +16,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
+import { COMMON_TIMEZONES, DEFAULT_TIMEZONE, getTimezoneOffset } from "@/lib/timezones";
 
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
@@ -65,6 +66,7 @@ export default function EditEvent() {
   const [content, setContent] = useState("");
   const [eventType, setEventType] = useState("awareness");
   const [language, setLanguage] = useState("sl");
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [startDate, setStartDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -136,6 +138,7 @@ export default function EditEvent() {
       setContent(event.content || '');
       setEventType(getTagValue('event_type') || 'awareness');
       setLanguage(getTagValue('language') || 'sl');
+      setTimezone(getTagValue('timezone') || DEFAULT_TIMEZONE);
       setStatus((getTagValue('status') as 'active' | 'archived' | 'canceled') || 'active');
 
       const startStr = getTagValue('start');
@@ -346,8 +349,9 @@ export default function EditEvent() {
       const privKeyBytes = new Uint8Array(session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
 
       // Use the original d tag to make this a replaceable event
-      const startDateTime = `${startDate}T${startTime}:00+01:00`;
-      const endDateTime = endDate && endTime ? `${endDate}T${endTime}:00+01:00` : null;
+      const tzOffset = getTimezoneOffset(timezone, new Date(`${startDate}T${startTime}`));
+      const startDateTime = `${startDate}T${startTime}:00${tzOffset}`;
+      const endDateTime = endDate && endTime ? `${endDate}T${endTime}:00${tzOffset}` : null;
 
       // Build tags
       const tags: string[][] = [
@@ -357,7 +361,8 @@ export default function EditEvent() {
         ["start", startDateTime],
         ["language", language],
         ["event_type", eventType],
-        ["p", session.nostrHexId]
+        ["p", session.nostrHexId],
+        ["timezone", timezone]
       ];
 
       if (endDateTime) {
@@ -576,6 +581,22 @@ export default function EditEvent() {
             <CardTitle className="text-lg">Date & Time</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="timezone">Timezone *</Label>
+              <Select value={timezone} onValueChange={setTimezone}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMMON_TIMEZONES.map(tz => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="startDate">Start Date *</Label>
