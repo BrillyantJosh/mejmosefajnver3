@@ -231,11 +231,11 @@ export default function EventDetail() {
       </div>
 
       {event.cover && (
-        <div className="relative h-48 md:h-64 w-full overflow-hidden rounded-lg">
+        <div className="relative w-full overflow-hidden rounded-lg bg-muted/30">
           <img 
             src={event.cover} 
             alt={event.title}
-            className="h-full w-full object-cover"
+            className="w-full h-auto max-h-[70vh] object-contain mx-auto"
           />
           {status !== 'upcoming' && (
             <Badge 
