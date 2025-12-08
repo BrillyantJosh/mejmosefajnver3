@@ -3,9 +3,9 @@ import { SimplePool, Filter, Event } from 'nostr-tools';
 import { AwarenessProposal } from './useNostrAwarenessProposals';
 
 const DEFAULT_RELAYS = [
-  'wss://relay.damus.io',
-  'wss://nos.lol',
-  'wss://relay.nostr.band',
+  'wss://relay.lanavault.space',
+  'wss://relay.lanacoin-eternity.com',
+  'wss://relay.lanaheartvoice.com',
 ];
 
 function parseProposalFromEvent(event: Event): AwarenessProposal | null {
