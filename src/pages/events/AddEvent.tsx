@@ -13,6 +13,7 @@ import { SimplePool, finalizeEvent } from "nostr-tools";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
+import { COMMON_TIMEZONES, DEFAULT_TIMEZONE, getTimezoneOffset } from "@/lib/timezones";
 
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
@@ -58,6 +59,7 @@ export default function AddEvent() {
   const [content, setContent] = useState("");
   const [eventType, setEventType] = useState("awareness");
   const [language, setLanguage] = useState("sl");
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [startDate, setStartDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -240,9 +242,10 @@ export default function AddEvent() {
       // Generate unique event ID
       const eventSlug = `event:${Date.now()}-${Math.random().toString(36).substring(7)}`;
       
-      // Format datetime
-      const startDateTime = `${startDate}T${startTime}:00+01:00`;
-      const endDateTime = endDate && endTime ? `${endDate}T${endTime}:00+01:00` : null;
+      // Format datetime with timezone offset
+      const tzOffset = getTimezoneOffset(timezone, new Date(`${startDate}T${startTime}`));
+      const startDateTime = `${startDate}T${startTime}:00${tzOffset}`;
+      const endDateTime = endDate && endTime ? `${endDate}T${endTime}:00${tzOffset}` : null;
 
       // Build tags
       const tags: string[][] = [
@@ -252,7 +255,8 @@ export default function AddEvent() {
         ["start", startDateTime],
         ["language", language],
         ["event_type", eventType],
-        ["p", session.nostrHexId]
+        ["p", session.nostrHexId],
+        ["timezone", timezone]
       ];
 
       // Add end time if provided
@@ -465,6 +469,22 @@ export default function AddEvent() {
             <CardTitle className="text-lg">Date & Time</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="timezone">Timezone *</Label>
+              <Select value={timezone} onValueChange={setTimezone}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMMON_TIMEZONES.map(tz => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="startDate">Start Date *</Label>

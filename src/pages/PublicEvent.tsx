@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   Calendar, Clock, MapPin, Globe, Users, 
-  ExternalLink, Youtube, FileText, Wallet, Loader2, AlertCircle, LogIn, Share2
+  ExternalLink, Youtube, FileText, Wallet, Loader2, AlertCircle, LogIn, Share2, AlertTriangle
 } from "lucide-react";
 import { format } from "date-fns";
 import { useNostrPublicEvent } from "@/hooks/useNostrPublicEvent";
@@ -14,6 +14,7 @@ import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { getEventStatus } from "@/hooks/useNostrEvents";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { toast } from "@/hooks/use-toast";
+import { getTimezoneAbbreviation, getUserTimezone, formatTimeInTimezone } from "@/lib/timezones";
 
 export default function PublicEvent() {
   const { dTag } = useParams<{ dTag: string }>();
@@ -183,8 +184,32 @@ export default function PublicEvent() {
                 <span>
                   {format(event.start, 'HH:mm')}
                   {event.end && ` - ${format(event.end, 'HH:mm')}`}
+                  {event.timezone && (
+                    <span className="ml-2 text-muted-foreground">
+                      ({event.timezone})
+                    </span>
+                  )}
                 </span>
               </div>
+              
+              {/* Show user's local time if different timezone */}
+              {event.timezone && event.timezone !== getUserTimezone() && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+                  <Clock className="h-4 w-4" />
+                  <span>
+                    Your local time: {format(event.start, 'HH:mm')}
+                    {event.end && ` - ${format(event.end, 'HH:mm')}`}
+                    {' '}({getTimezoneAbbreviation(event.start, getUserTimezone())})
+                  </span>
+                </div>
+              )}
+              
+              {!event.timezone && (
+                <div className="flex items-center gap-2 text-sm text-amber-500">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>Legacy event - timezone not specified (assumed Europe/Ljubljana)</span>
+                </div>
+              )}
             </div>
 
             {/* Location */}
