@@ -564,7 +564,8 @@ export default function EditEvent() {
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Event description, agenda, instructions..."
-                rows={5}
+                rows={10}
+                className="min-h-[200px]"
               />
             </div>
           </CardContent>

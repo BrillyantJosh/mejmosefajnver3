@@ -189,11 +189,30 @@ export default function PublicEvent() {
 
             {/* Location */}
             {event.isOnline ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Globe className="h-5 w-5 text-blue-500" />
                   <span className="font-medium text-blue-500">Online Event</span>
                 </div>
+                {event.youtubeUrl && (() => {
+                  const getYouTubeId = (url: string): string | null => {
+                    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+                    const match = url.match(regExp);
+                    return match && match[2].length === 11 ? match[2] : null;
+                  };
+                  const videoId = getYouTubeId(event.youtubeUrl);
+                  return videoId ? (
+                    <div className="aspect-video w-full rounded-lg overflow-hidden">
+                      <iframe
+                        src={`https://www.youtube.com/embed/${videoId}`}
+                        title="YouTube video"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full"
+                      />
+                    </div>
+                  ) : null;
+                })()}
                 {event.onlineUrl && (
                   <Button 
                     variant="outline" 
@@ -211,7 +230,7 @@ export default function PublicEvent() {
                     onClick={() => window.open(event.youtubeUrl, '_blank')}
                   >
                     <Youtube className="h-4 w-4 mr-2" />
-                    Watch on YouTube
+                    Open on YouTube
                   </Button>
                 )}
               </div>
