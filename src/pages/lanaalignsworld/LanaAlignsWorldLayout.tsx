@@ -1,8 +1,13 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Activity, User } from "lucide-react";
+import { Activity, Info, User } from "lucide-react";
 
 const alignsNavItems = [
+  {
+    title: "Info",
+    path: "/lana-aligns-world/info",
+    icon: Info
+  },
   {
     title: "My Status",
     path: "/lana-aligns-world/my-status",
