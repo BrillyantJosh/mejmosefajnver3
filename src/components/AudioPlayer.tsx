@@ -2,6 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Play, Pause, Volume2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface AudioPlayerProps {
   audioUrl: string;
@@ -13,6 +19,9 @@ export function AudioPlayer({ audioUrl }: AudioPlayerProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [playbackRate, setPlaybackRate] = useState(1);
+
+  const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2];
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -73,6 +82,14 @@ export function AudioPlayer({ audioUrl }: AudioPlayerProps) {
     setCurrentTime(newTime);
   };
 
+  const handleSpeedChange = (speed: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    
+    audio.playbackRate = speed;
+    setPlaybackRate(speed);
+  };
+
   const formatTime = (timeInSeconds: number): string => {
     if (!isFinite(timeInSeconds)) return '0:00';
     
@@ -113,8 +130,32 @@ export function AudioPlayer({ audioUrl }: AudioPlayerProps) {
         />
       </div>
 
+      {/* Speed Control */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="flex-shrink-0 h-8 px-2 text-xs font-medium min-w-[45px]"
+          >
+            {playbackRate}x
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-[60px]">
+          {playbackSpeeds.map((speed) => (
+            <DropdownMenuItem
+              key={speed}
+              onClick={() => handleSpeedChange(speed)}
+              className={playbackRate === speed ? 'bg-accent' : ''}
+            >
+              {speed}x
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       {/* Time Display */}
-      <span className="text-sm text-muted-foreground flex-shrink-0 font-mono whitespace-nowrap min-w-[85px] text-right">
+      <span className="text-xs text-muted-foreground flex-shrink-0 font-mono whitespace-nowrap min-w-[70px] text-right">
         {formatTime(currentTime)} / {formatTime(duration)}
       </span>
 
