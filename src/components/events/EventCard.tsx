@@ -268,11 +268,11 @@ export function EventCard({ event }: EventCardProps) {
             <span>
               {format(event.start, 'HH:mm')}
               {event.end && ` - ${format(event.end, 'HH:mm')}`}
-              {event.timezone && (
+              {event.timezone ? (
                 <span className="ml-1 text-muted-foreground">
                   ({getTimezoneAbbreviation(event.start, event.timezone)})
                 </span>
-              )}
+              ) : null}
             </span>
           </div>
           
