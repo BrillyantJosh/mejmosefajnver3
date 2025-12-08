@@ -68,18 +68,39 @@ export function useNostrPublicProposal(dTag: string, systemRelays?: string[]) {
     const relays = systemRelays && systemRelays.length > 0 ? systemRelays : DEFAULT_RELAYS;
     const pool = new SimplePool();
     let isMounted = true;
+    let foundProposal = false;
 
     const fetchProposal = async () => {
       try {
         console.log('Fetching proposal with dTag:', dTag, 'from relays:', relays);
 
-        const filter: Filter = {
+        // First try with #d filter
+        const filterWithD: Filter = {
           kinds: [38883],
           '#d': [dTag],
         };
 
-        const events = await pool.querySync(relays, filter);
-        console.log(`Received ${events.length} events for dTag:`, dTag);
+        let events = await pool.querySync(relays, filterWithD);
+        console.log(`Received ${events.length} events with #d filter for dTag:`, dTag);
+
+        // If no results, try fetching all and filter manually (some relays don't support #d for parameterized events)
+        if (events.length === 0) {
+          console.log('No results with #d filter, trying to fetch all and filter manually...');
+          const filterAll: Filter = {
+            kinds: [38883],
+            limit: 100,
+          };
+          
+          const allEvents = await pool.querySync(relays, filterAll);
+          console.log(`Received ${allEvents.length} total KIND 38883 events`);
+          
+          // Filter by d-tag manually
+          events = allEvents.filter(e => {
+            const eventDTag = e.tags.find(t => t[0] === 'd')?.[1];
+            return eventDTag === dTag;
+          });
+          console.log(`Found ${events.length} events matching dTag after manual filter`);
+        }
 
         if (!isMounted) return;
 
@@ -94,7 +115,9 @@ export function useNostrPublicProposal(dTag: string, systemRelays?: string[]) {
         const parsedProposal = parseProposalFromEvent(sortedEvents[0]);
 
         if (parsedProposal) {
+          foundProposal = true;
           setProposal(parsedProposal);
+          setError(null);
         } else {
           setError('Failed to parse proposal data');
         }
@@ -114,13 +137,13 @@ export function useNostrPublicProposal(dTag: string, systemRelays?: string[]) {
 
     // Timeout for slow relays
     const timeout = setTimeout(() => {
-      if (isMounted && loading) {
+      if (isMounted && loading && !foundProposal) {
         setLoading(false);
         if (!proposal) {
-          setError('Request timed out');
+          setError('Request timed out - please try again');
         }
       }
-    }, 15000);
+    }, 20000);
 
     return () => {
       isMounted = false;
