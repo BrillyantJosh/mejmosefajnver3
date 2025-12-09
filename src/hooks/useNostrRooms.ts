@@ -27,9 +27,9 @@ export const useNostrRooms = () => {
 
   const RELAYS = useMemo(() => {
     return parameters?.relays || [
-      "wss://relay.damus.io",
-      "wss://relay.primal.net",
-      "wss://nos.lol"
+      "wss://relay.lanavault.space",
+      "wss://relay.lanacoin-eternity.com",
+      "wss://relay.lanaheartvoice.com"
     ];
   }, [parameters]);
 

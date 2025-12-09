@@ -10,22 +10,12 @@ import { PostReplies } from "@/components/social/PostReplies";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 
 // Lana-specific relays where posts are stored
-const LANA_RELAYS = [
+const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
   'wss://relay.lanacoin-eternity.com',
   'wss://relay.lanaheartvoice.com',
   'wss://relay.lovelana.org'
 ];
-
-// Fallback to generic Nostr relays
-const FALLBACK_RELAYS = [
-  'wss://relay.damus.io',
-  'wss://nos.lol',
-  'wss://relay.nostr.band'
-];
-
-// Use Lana relays first, then fallback relays
-const DEFAULT_RELAYS = [...LANA_RELAYS, ...FALLBACK_RELAYS];
 
 export default function PublicPost() {
   const { eventId } = useParams<{ eventId: string }>();
