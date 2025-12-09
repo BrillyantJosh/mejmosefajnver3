@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, User, Home, Settings, LogOut, Shield, Heart } from "lucide-react";
 import logoImage from "@/assets/lana-logo.png";
@@ -31,11 +31,42 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const { getEnabledModules } = useModules();
   const { isAdmin, appSettings } = useAdmin();
-  const { logout: authLogout } = useAuth();
+  const { logout: authLogout, refreshSession } = useAuth();
   const { profile } = useNostrProfile();
   const { unpaidCount } = useNostrUnpaidLashes();
+  const lastRefreshRef = useRef<number>(Date.now());
   
   const dynamicModules = getEnabledModules();
+  
+  // Periodic session refresh every 15 minutes to keep session alive
+  useEffect(() => {
+    const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
+    
+    const checkAndRefresh = () => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current >= REFRESH_INTERVAL) {
+        refreshSession();
+        lastRefreshRef.current = now;
+      }
+    };
+
+    // Check on visibility change (when user returns to tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkAndRefresh();
+      }
+    };
+
+    // Also set up interval for background refresh
+    const intervalId = setInterval(checkAndRefresh, REFRESH_INTERVAL);
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refreshSession]);
   
   // Auto-send lashes in background when NOT on /lash/pay page
   const isOnPayLashesPage = location.pathname === '/lash/pay';

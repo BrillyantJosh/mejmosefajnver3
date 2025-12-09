@@ -1,6 +1,13 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { convertWifToIds } from '@/lib/crypto';
 import { SimplePool } from 'nostr-tools';
+
+// TypeScript declaration for document.wasDiscarded (Chrome Memory Saver feature)
+declare global {
+  interface Document {
+    wasDiscarded?: boolean;
+  }
+}
 
 interface UserSession {
   lanaPrivateKey: string;
@@ -33,7 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return session.expiresAt > Date.now();
   };
 
-  const refreshSession = () => {
+  const refreshSession = useCallback(() => {
     if (!session) return;
     
     const updatedSession: UserSession = {
@@ -42,31 +49,98 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     
     setSession(updatedSession);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(updatedSession));
-    console.log('Session refreshed, new expiration:', new Date(updatedSession.expiresAt));
-  };
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(updatedSession));
+      console.log('Session refreshed, new expiration:', new Date(updatedSession.expiresAt));
+    } catch (e) {
+      console.warn('Failed to save refreshed session to localStorage:', e);
+    }
+  }, [session]);
 
-  useEffect(() => {
-    // Load session from localStorage on mount
-    const storedSession = localStorage.getItem(SESSION_KEY);
-    if (storedSession) {
-      try {
+  // Helper function to load session from localStorage
+  const loadSessionFromStorage = useCallback((): UserSession | null => {
+    try {
+      const storedSession = localStorage.getItem(SESSION_KEY);
+      if (storedSession) {
         const parsedSession: UserSession = JSON.parse(storedSession);
-        
-        // Validate session expiration
         if (isSessionValid(parsedSession)) {
-          setSession(parsedSession);
-          console.log('Session loaded successfully, expires:', new Date(parsedSession.expiresAt));
+          return parsedSession;
         } else {
           console.log('Session expired, removing...');
           localStorage.removeItem(SESSION_KEY);
         }
-      } catch (error) {
-        console.error('Failed to parse stored session:', error);
-        localStorage.removeItem(SESSION_KEY);
       }
+    } catch (error) {
+      console.error('Failed to parse stored session:', error);
+      // Don't remove on parse error - might be temporary issue
+    }
+    return null;
+  }, []);
+
+  // Load session from localStorage on mount
+  useEffect(() => {
+    const loadedSession = loadSessionFromStorage();
+    if (loadedSession) {
+      setSession(loadedSession);
+      console.log('Session loaded successfully, expires:', new Date(loadedSession.expiresAt));
     }
     setIsLoading(false);
+  }, [loadSessionFromStorage]);
+
+  // Handle Chrome Memory Saver - detect if tab was discarded and restore session
+  useEffect(() => {
+    if (document.wasDiscarded) {
+      console.log('Tab was discarded by Chrome Memory Saver, restoring session...');
+      const loadedSession = loadSessionFromStorage();
+      if (loadedSession) {
+        setSession(loadedSession);
+        console.log('Session restored after tab discard');
+      }
+    }
+  }, [loadSessionFromStorage]);
+
+  // Save session to localStorage when tab goes to background (prevents data loss on discard)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && session) {
+        try {
+          localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+          console.log('Session saved before tab went to background');
+        } catch (e) {
+          console.warn('Failed to save session on visibility change:', e);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [session]);
+
+  // Cross-tab session synchronization
+  useEffect(() => {
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === SESSION_KEY) {
+        if (event.newValue === null) {
+          // User logged out in another tab
+          console.log('Session cleared in another tab, logging out...');
+          setSession(null);
+        } else {
+          // Session updated in another tab
+          try {
+            const updatedSession: UserSession = JSON.parse(event.newValue);
+            if (isSessionValid(updatedSession)) {
+              setSession(updatedSession);
+              console.log('Session synced from another tab');
+            }
+          } catch (e) {
+            console.error('Failed to sync session from storage event:', e);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const login = async (wif: string, relays?: string[], rememberMe: boolean = false) => {
