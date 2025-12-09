@@ -16,6 +16,7 @@ import {
 import { MessageSquarePlus, Search, Loader2, X } from "lucide-react";
 import { SimplePool } from 'nostr-tools/pool';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 
 interface Profile {
@@ -36,12 +37,9 @@ export default function NewChatDrawer({ onSelectUser }: NewChatDrawerProps) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
   const { session } = useAuth();
+  const { parameters } = useSystemParameters();
 
-  const relays = [
-    'wss://relay.damus.io',
-    'wss://relay.nostr.band',
-    'wss://nos.lol',
-  ];
+  const relays = parameters?.relays || [];
 
   // Reset when drawer closes
   useEffect(() => {
@@ -59,6 +57,11 @@ export default function NewChatDrawer({ onSelectUser }: NewChatDrawerProps) {
     }
 
     const searchProfiles = async () => {
+      if (!relays || relays.length === 0) {
+        console.warn('No relays available yet');
+        return;
+      }
+      
       setSearching(true);
       try {
         const pool = new SimplePool();
@@ -66,7 +69,7 @@ export default function NewChatDrawer({ onSelectUser }: NewChatDrawerProps) {
         
         const events = await pool.querySync(relays, {
           kinds: [0],
-          limit: 20
+          limit: 500
         });
 
         const foundProfiles = events
