@@ -5,9 +5,9 @@ import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { isLashExpired } from '@/lib/lashExpiration';
 
 const DEFAULT_RELAYS = [
-  'wss://relay.damus.io',
-  'wss://relay.primal.net',
-  'wss://nos.lol'
+  'wss://relay.lanavault.space',
+  'wss://relay.lanacoin-eternity.com',
+  'wss://relay.lanaheartvoice.com'
 ];
 
 export interface UnpaidLashDetail {
