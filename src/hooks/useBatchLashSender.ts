@@ -5,9 +5,9 @@ import { SimplePool, finalizeEvent } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 const DEFAULT_RELAYS = [
-  'wss://relay.damus.io',
-  'wss://relay.primal.net',
-  'wss://nos.lol'
+  'wss://relay.lanavault.space',
+  'wss://relay.lanacoin-eternity.com',
+  'wss://relay.lanaheartvoice.com'
 ];
 
 interface UnpaidLash {
