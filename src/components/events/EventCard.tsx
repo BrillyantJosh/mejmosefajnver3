@@ -21,9 +21,10 @@ const DEFAULT_RELAYS = [
 
 interface EventCardProps {
   event: LanaEvent;
+  showRegistrationCount?: boolean;
 }
 
-export function EventCard({ event }: EventCardProps) {
+export function EventCard({ event, showRegistrationCount = false }: EventCardProps) {
   const navigate = useNavigate();
   const { session } = useAuth();
   const { parameters: systemParameters } = useSystemParameters();
@@ -351,10 +352,14 @@ export function EventCard({ event }: EventCardProps) {
 
         {/* Registration Section */}
         <div className="mt-3 pt-2 sm:pt-3 border-t flex items-center justify-between gap-1 sm:gap-2">
-          <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground">
-            <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            <span>{registrations.length}</span>
-          </div>
+          {showRegistrationCount ? (
+            <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground">
+              <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span>{registrations.length}</span>
+            </div>
+          ) : (
+            <div />
+          )}
           
           <div className="flex items-center gap-1 sm:gap-2">
             <Button 
