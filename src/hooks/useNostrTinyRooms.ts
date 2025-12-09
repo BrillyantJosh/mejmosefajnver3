@@ -29,9 +29,9 @@ export function useNostrTinyRooms(userPubkey?: string) {
     }
 
     const RELAYS = parameters?.relays || [
-      "wss://relay.damus.io",
-      "wss://relay.primal.net",
-      "wss://nos.lol",
+      "wss://relay.lanavault.space",
+      "wss://relay.lanacoin-eternity.com",
+      "wss://relay.lanaheartvoice.com",
     ];
 
     const pool = new SimplePool();

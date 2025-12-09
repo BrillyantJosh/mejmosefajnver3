@@ -32,9 +32,9 @@ import { useNostrUnpaidLashDetails, UnpaidLashDetail } from '@/hooks/useNostrUnp
 import { useBatchLashSender } from '@/hooks/useBatchLashSender';
 
 const DEFAULT_RELAYS = [
-  'wss://relay.damus.io',
-  'wss://relay.primal.net',
-  'wss://nos.lol'
+  'wss://relay.lanavault.space',
+  'wss://relay.lanacoin-eternity.com',
+  'wss://relay.lanaheartvoice.com'
 ];
 
 interface BlockStatus {
