@@ -73,6 +73,7 @@ import OfflineWallets from "./pages/offlinelana/OfflineWallets";
 import LanaEventsLayout from "./pages/events/LanaEventsLayout";
 import OnlineEvents from "./pages/events/OnlineEvents";
 import LiveEvents from "./pages/events/LiveEvents";
+import PastEvents from "./pages/events/PastEvents";
 import AddEvent from "./pages/events/AddEvent";
 import EventDetail from "./pages/events/EventDetail";
 import MyEventsPage from "./pages/events/MyEvents";
@@ -206,6 +207,7 @@ const App = () => (
           <Route index element={<Navigate to="/events/online" replace />} />
           <Route path="online" element={<OnlineEvents />} />
           <Route path="live" element={<LiveEvents />} />
+          <Route path="past" element={<PastEvents />} />
           <Route path="my" element={<MyEventsPage />} />
           <Route path="add" element={<AddEvent />} />
           <Route path="detail/:dTag" element={<EventDetail />} />
