@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Calendar, Globe, MapPin, Edit, Users, ChevronDown, ChevronUp, User } from "lucide-react";
+import { Calendar, Globe, MapPin, Edit, Users, ChevronDown, ChevronUp, User, Plus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { format } from "date-fns";
@@ -315,9 +315,15 @@ export default function MyEvents() {
 
   return (
     <div className="space-y-3 px-3 sm:px-4 pb-24">
-      <div className="flex items-center gap-2 mb-4">
-        <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-        <h1 className="text-lg sm:text-2xl font-bold">My Events</h1>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+          <h1 className="text-lg sm:text-2xl font-bold">My Events</h1>
+        </div>
+        <Button onClick={() => navigate('/events/add')} size="sm">
+          <Plus className="h-4 w-4 mr-1" />
+          Add
+        </Button>
       </div>
 
       {events.length === 0 ? (
