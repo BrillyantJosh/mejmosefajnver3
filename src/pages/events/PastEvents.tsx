@@ -2,10 +2,12 @@ import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Globe, MapPin, Calendar, Play } from "lucide-react";
+import { Globe, MapPin, Calendar, Play, Share2 } from "lucide-react";
 import { useNostrPastEvents } from "@/hooks/useNostrPastEvents";
 import { format } from "date-fns";
+import { toast } from "@/hooks/use-toast";
 
 const LANGUAGES = [
   { value: 'all', label: 'All Languages' },
@@ -21,6 +23,23 @@ function getYouTubeId(url: string): string | null {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
   const match = url.match(regExp);
   return (match && match[2].length === 11) ? match[2] : null;
+}
+
+function handleShare(dTag: string) {
+  const shareUrl = `${window.location.origin}/event/${encodeURIComponent(dTag)}`;
+  
+  navigator.clipboard.writeText(shareUrl).then(() => {
+    toast({
+      title: "Link copied!",
+      description: "Share this link with anyone"
+    });
+  }).catch(() => {
+    toast({
+      title: "Copy failed",
+      description: shareUrl,
+      variant: "destructive"
+    });
+  });
 }
 
 export default function PastEvents() {
@@ -120,13 +139,23 @@ export default function PastEvents() {
             <CardHeader className="pb-2">
               <div className="flex items-start justify-between gap-2">
                 <CardTitle className="text-lg leading-tight">{event.title}</CardTitle>
-                <Badge variant={event.isOnline ? "secondary" : "outline"} className="shrink-0">
-                  {event.isOnline ? (
-                    <><Globe className="h-3 w-3 mr-1" /> Online</>
-                  ) : (
-                    <><MapPin className="h-3 w-3 mr-1" /> Live</>
-                  )}
-                </Badge>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleShare(event.dTag)}
+                  >
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                  <Badge variant={event.isOnline ? "secondary" : "outline"}>
+                    {event.isOnline ? (
+                      <><Globe className="h-3 w-3 mr-1" /> Online</>
+                    ) : (
+                      <><MapPin className="h-3 w-3 mr-1" /> Live</>
+                    )}
+                  </Badge>
+                </div>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Calendar className="h-4 w-4" />
