@@ -1,9 +1,20 @@
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Globe, MapPin, Calendar, Play } from "lucide-react";
 import { useNostrPastEvents } from "@/hooks/useNostrPastEvents";
 import { format } from "date-fns";
+
+const LANGUAGES = [
+  { value: 'all', label: 'All Languages' },
+  { value: 'sl', label: 'Slovenščina' },
+  { value: 'en', label: 'English' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'hr', label: 'Hrvatski' },
+  { value: 'sr', label: 'Srpski' }
+];
 
 // Extract YouTube video ID from URL
 function getYouTubeId(url: string): string | null {
@@ -14,11 +25,20 @@ function getYouTubeId(url: string): string | null {
 
 export default function PastEvents() {
   const { events, loading, error } = useNostrPastEvents();
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
+
+  const filteredEvents = useMemo(() => {
+    if (selectedLanguage === 'all') return events;
+    return events.filter(event => event.language === selectedLanguage);
+  }, [events, selectedLanguage]);
 
   if (loading) {
     return (
       <div className="p-4 space-y-4">
-        <h1 className="text-2xl font-bold mb-6">Past Events</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold">Past Events</h1>
+          <Skeleton className="h-10 w-40" />
+        </div>
         {[1, 2, 3].map((i) => (
           <Card key={i}>
             <CardContent className="p-4">
@@ -44,14 +64,30 @@ export default function PastEvents() {
     );
   }
 
-  if (events.length === 0) {
+  if (filteredEvents.length === 0) {
     return (
       <div className="p-4">
-        <h1 className="text-2xl font-bold mb-6">Past Events</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold">Past Events</h1>
+          <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+            <SelectTrigger className="w-40 bg-background">
+              <SelectValue placeholder="Language" />
+            </SelectTrigger>
+            <SelectContent className="bg-background border shadow-lg z-50">
+              {LANGUAGES.map(lang => (
+                <SelectItem key={lang.value} value={lang.value}>
+                  {lang.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
             <Play className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No past events with recordings available yet.</p>
+            <p>{selectedLanguage === 'all' 
+              ? 'No past events with recordings available yet.' 
+              : 'No past events with recordings in this language.'}</p>
           </CardContent>
         </Card>
       </div>
@@ -60,9 +96,23 @@ export default function PastEvents() {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-2xl font-bold mb-6">Past Events</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Past Events</h1>
+        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+          <SelectTrigger className="w-40 bg-background">
+            <SelectValue placeholder="Language" />
+          </SelectTrigger>
+          <SelectContent className="bg-background border shadow-lg z-50">
+            {LANGUAGES.map(lang => (
+              <SelectItem key={lang.value} value={lang.value}>
+                {lang.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       
-      {events.map((event) => {
+      {filteredEvents.map((event) => {
         const videoId = getYouTubeId(event.youtubeRecordingUrl);
         
         return (

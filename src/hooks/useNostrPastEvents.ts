@@ -21,6 +21,7 @@ export interface PastEvent {
   cover?: string;
   youtubeRecordingUrl: string;
   dTag: string;
+  language: string;
 }
 
 export function useNostrPastEvents() {
@@ -46,6 +47,7 @@ export function useNostrPastEvents() {
       const startStr = getTagValue('start');
       const dTag = getTagValue('d');
       const youtubeRecordingUrl = getTagValue('youtube_recording');
+      const language = getTagValue('language') || 'unknown';
 
       // Only include events with youtube_recording
       if (!title || !startStr || !dTag || !youtubeRecordingUrl) {
@@ -73,6 +75,7 @@ export function useNostrPastEvents() {
         cover: getTagValue('cover'),
         youtubeRecordingUrl,
         dTag,
+        language,
       };
     } catch (err) {
       console.error('Error parsing event:', err);
