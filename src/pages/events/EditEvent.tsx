@@ -76,6 +76,7 @@ export default function EditEvent() {
   // Online fields
   const [onlineUrl, setOnlineUrl] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeRecordingUrl, setYoutubeRecordingUrl] = useState("");
   
   // Physical fields
   const [location, setLocation] = useState("");
@@ -160,6 +161,7 @@ export default function EditEvent() {
         setIsOnline(true);
         setOnlineUrl(onlineUrlValue);
         setYoutubeUrl(getTagValue('youtube') || '');
+        setYoutubeRecordingUrl(getTagValue('youtube_recording') || '');
       } else {
         setIsOnline(false);
         setLat(getTagValue('lat') || '');
@@ -373,6 +375,14 @@ export default function EditEvent() {
         tags.push(["online", onlineUrl.trim()]);
         if (youtubeUrl.trim()) {
           tags.push(["youtube", youtubeUrl.trim()]);
+        }
+        // Add youtube_recording with auto-correct for missing protocol
+        let recordingUrl = youtubeRecordingUrl.trim();
+        if (recordingUrl && !recordingUrl.startsWith('http://') && !recordingUrl.startsWith('https://')) {
+          recordingUrl = 'https://' + recordingUrl;
+        }
+        if (recordingUrl) {
+          tags.push(["youtube_recording", recordingUrl]);
         }
       } else {
         tags.push(["lat", lat.trim()]);
@@ -665,7 +675,7 @@ export default function EditEvent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="youtubeUrl">YouTube URL (optional)</Label>
+                <Label htmlFor="youtubeUrl">YouTube Promo URL (optional)</Label>
                 <Input
                   id="youtubeUrl"
                   type="url"
@@ -673,6 +683,19 @@ export default function EditEvent() {
                   onChange={(e) => setYoutubeUrl(e.target.value)}
                   placeholder="https://youtu.be/..."
                 />
+                <p className="text-xs text-muted-foreground">Promo video pred dogodkom</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="youtubeRecordingUrl">YouTube povezava posnetka (optional)</Label>
+                <Input
+                  id="youtubeRecordingUrl"
+                  type="url"
+                  value={youtubeRecordingUrl}
+                  onChange={(e) => setYoutubeRecordingUrl(e.target.value)}
+                  placeholder="https://youtu.be/XYZ123"
+                />
+                <p className="text-xs text-muted-foreground">Uporabite šele po koncu dogodka. To je končni posnetek, ki ga udeleženci lahko ponovno pogledajo.</p>
               </div>
             </CardContent>
           </Card>

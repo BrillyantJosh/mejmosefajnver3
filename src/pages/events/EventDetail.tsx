@@ -115,6 +115,7 @@ export default function EventDetail() {
         isOnline,
         onlineUrl,
         youtubeUrl: getTagValue('youtube'),
+        youtubeRecordingUrl: getTagValue('youtube_recording'),
         location: getTagValue('location'),
         lat,
         lon,
@@ -307,6 +308,16 @@ export default function EventDetail() {
                   Join Event
                 </Button>
               )}
+              {event.youtubeRecordingUrl && (
+                <Button 
+                  variant="default" 
+                  className="w-full"
+                  onClick={() => window.open(event.youtubeRecordingUrl, '_blank')}
+                >
+                  <Youtube className="h-4 w-4 mr-2" />
+                  Posnetek dogodka
+                </Button>
+              )}
               {event.youtubeUrl && (
                 <Button 
                   variant="outline" 
@@ -314,7 +325,7 @@ export default function EventDetail() {
                   onClick={() => window.open(event.youtubeUrl, '_blank')}
                 >
                   <Youtube className="h-4 w-4 mr-2" />
-                  Watch on YouTube
+                  Promo Video
                 </Button>
               )}
             </div>

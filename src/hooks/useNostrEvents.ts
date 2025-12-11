@@ -25,6 +25,7 @@ export interface LanaEvent {
   isOnline: boolean;
   onlineUrl?: string;
   youtubeUrl?: string;
+  youtubeRecordingUrl?: string;
   // Physical event fields
   location?: string;
   lat?: number;
@@ -114,6 +115,7 @@ export function useNostrEvents(filter: EventFilter) {
         isOnline,
         onlineUrl,
         youtubeUrl: getTagValue('youtube'),
+        youtubeRecordingUrl: getTagValue('youtube_recording'),
         location: getTagValue('location'),
         lat,
         lon,
