@@ -342,8 +342,43 @@ export default function PublicEvent() {
               </div>
             )}
 
-            {/* Recording */}
-            {event.recording && (
+            {/* YouTube Recording */}
+            {event.youtubeRecordingUrl && (() => {
+              const getYouTubeId = (url: string): string | null => {
+                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+                const match = url.match(regExp);
+                return match && match[2].length === 11 ? match[2] : null;
+              };
+              const videoId = getYouTubeId(event.youtubeRecordingUrl);
+              return (
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold mb-2">Event Recording</h3>
+                  {videoId ? (
+                    <div className="aspect-video w-full rounded-lg overflow-hidden">
+                      <iframe
+                        src={`https://www.youtube.com/embed/${videoId}`}
+                        title="Event Recording"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full"
+                      />
+                    </div>
+                  ) : (
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={() => window.open(event.youtubeRecordingUrl, '_blank')}
+                    >
+                      <Youtube className="h-4 w-4 mr-2" />
+                      Watch Recording
+                    </Button>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Recording (legacy field) */}
+            {event.recording && !event.youtubeRecordingUrl && (
               <div className="border-t pt-4">
                 <h3 className="font-semibold mb-2">Recording</h3>
                 <Button 

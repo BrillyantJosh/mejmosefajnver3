@@ -91,6 +91,7 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
           isOnline,
           onlineUrl,
           youtubeUrl: getTagValue('youtube'),
+          youtubeRecordingUrl: getTagValue('youtube_recording'),
           location: getTagValue('location'),
           lat,
           lon,
