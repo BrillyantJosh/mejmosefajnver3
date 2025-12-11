@@ -687,7 +687,7 @@ export default function EditEvent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="youtubeRecordingUrl">YouTube povezava posnetka (optional)</Label>
+                <Label htmlFor="youtubeRecordingUrl">YouTube Recording Link (optional)</Label>
                 <Input
                   id="youtubeRecordingUrl"
                   type="url"
@@ -695,7 +695,7 @@ export default function EditEvent() {
                   onChange={(e) => setYoutubeRecordingUrl(e.target.value)}
                   placeholder="https://youtu.be/XYZ123"
                 />
-                <p className="text-xs text-muted-foreground">Uporabite šele po koncu dogodka. To je končni posnetek, ki ga udeleženci lahko ponovno pogledajo.</p>
+                <p className="text-xs text-muted-foreground">Use this only after the event has ended. This is the final recording participants can rewatch.</p>
               </div>
             </CardContent>
           </Card>
