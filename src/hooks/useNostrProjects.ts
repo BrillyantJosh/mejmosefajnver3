@@ -17,6 +17,7 @@ export interface ProjectData {
   wallet: string;
   responsibilityStatement: string;
   projectType: string;
+  status: 'draft' | 'active';
   ownerPubkey: string;
   participants: string[];
   coverImage?: string;
@@ -47,6 +48,7 @@ const parseProjectEvent = (event: Event): ProjectData | null => {
     const wallet = getTag('wallet');
     const responsibilityStatement = getTag('responsibility_statement');
     const projectType = getTag('project_type');
+    const status = getTag('status') as 'draft' | 'active' | undefined;
 
     if (!title || !shortDesc || !fiatGoal || !currency || !wallet) {
       return null;
@@ -86,6 +88,7 @@ const parseProjectEvent = (event: Event): ProjectData | null => {
       wallet,
       responsibilityStatement: responsibilityStatement || '',
       projectType: projectType || 'Inspiration',
+      status: status || 'active',
       ownerPubkey,
       participants,
       coverImage,
@@ -149,13 +152,17 @@ export const useNostrProjects = () => {
           }
         });
 
-        // Filter out blocked projects (if no KIND 31235 exists, project is visible by default)
+        // Filter out blocked projects and draft projects
         const visibleProjects = parsedProjects.filter(project => {
           const isBlocked = blockedProjects.has(project.id);
+          const isDraft = project.status === 'draft';
           if (isBlocked) {
             console.log(`🚫 Project "${project.title}" is blocked`);
           }
-          return !isBlocked;
+          if (isDraft) {
+            console.log(`📝 Project "${project.title}" is draft, hiding from public`);
+          }
+          return !isBlocked && !isDraft;
         });
 
         console.log(`✅ ${visibleProjects.length} visible projects out of ${parsedProjects.length} total`);
