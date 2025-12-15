@@ -84,11 +84,20 @@ function base58Decode(encoded: string): Uint8Array {
   return bytes;
 }
 
+// Normalize WIF key - remove invisible characters
+function normalizeWif(wif: string): string {
+  // Remove spaces, zero-width chars, BOM, newlines, tabs
+  return wif.replace(/[\s\u200B-\u200D\uFEFF\r\n\t]/g, '').trim();
+}
+
 // Convert WIF to raw private key hex
 async function wifToPrivateKey(wif: string): Promise<string> {
   try {
+    // Normalize WIF - remove invisible characters
+    const normalizedWif = normalizeWif(wif);
+    
     // Decode Base58
-    const decoded = base58Decode(wif);
+    const decoded = base58Decode(normalizedWif);
     
     // Extract components
     const payload = decoded.slice(0, -4);
@@ -100,13 +109,13 @@ async function wifToPrivateKey(wif: string): Promise<string> {
     
     for (let i = 0; i < 4; i++) {
       if (checksum[i] !== expectedChecksum[i]) {
-        throw new Error('Neveljavna WIF kontrolna vsota');
+        throw new Error('Invalid WIF checksum');
       }
     }
     
     // Verify prefix (0xb0 for LanaCoin)
     if (payload[0] !== 0xb0) {
-      throw new Error('Neveljaven WIF prefix');
+      throw new Error('Invalid WIF prefix');
     }
     
     // Extract private key (32 bytes after prefix)
@@ -114,7 +123,7 @@ async function wifToPrivateKey(wif: string): Promise<string> {
     return bytesToHex(privateKey);
     
   } catch (error) {
-    throw new Error(`Neveljaven WIF format: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Invalid WIF format: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -210,6 +219,6 @@ export async function convertWifToIds(wif: string) {
     };
     
   } catch (error) {
-    throw new Error(`Konverzija ni uspela: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
