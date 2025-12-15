@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageSquare, Search, AlertCircle, Trash2, ArrowLeft, Heart, Mic, ImagePlus, Send, Loader2, Reply, X } from "lucide-react";
+import { MessageSquare, Search, AlertCircle, Trash2, ArrowLeft, Heart, Mic, ImagePlus, Send, Loader2, Reply, X, History } from "lucide-react";
+
+const MESSAGES_PER_PAGE = 20;
 import { useNostrDMs } from "@/hooks/useNostrDMs";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -33,6 +35,7 @@ export default function Chat() {
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
   const [optimisticLashes, setOptimisticLashes] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [visibleCount, setVisibleCount] = useState(MESSAGES_PER_PAGE);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
   const { giveLash, isSending: isSendingLash } = useNostrLash();
@@ -48,10 +51,16 @@ export default function Chat() {
     unreadCount: 0
   } : null);
 
-  // LASH tracking hooks
-  const messageIds = displayConversation?.messages.map(m => m.id) || [];
+  // LASH tracking hooks - only for visible messages
+  const allMessages = displayConversation?.messages || [];
+  const visibleMessages = useMemo(() => {
+    if (allMessages.length <= visibleCount) return allMessages;
+    return allMessages.slice(-visibleCount);
+  }, [allMessages, visibleCount]);
   
-  // Unified LASH hook - reads from Supabase cache + syncs with relays
+  const hasMoreMessages = allMessages.length > visibleCount;
+  
+  const messageIds = visibleMessages.map(m => m.id);
   const { 
     lashCounts, 
     userLashedIds, 
@@ -70,6 +79,13 @@ export default function Chat() {
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
+
+  // Reset visible count when conversation changes
+  useEffect(() => {
+    if (selectedPubkey) {
+      setVisibleCount(MESSAGES_PER_PAGE);
+    }
+  }, [selectedPubkey]);
 
   // Scroll to bottom when conversation opens
   useEffect(() => {
@@ -172,6 +188,11 @@ export default function Chat() {
   const handleBackToList = () => {
     setSelectedPubkey(null);
     setReplyingTo(null);
+    setVisibleCount(MESSAGES_PER_PAGE);
+  };
+
+  const handleLoadMore = () => {
+    setVisibleCount(prev => prev + MESSAGES_PER_PAGE);
   };
 
   const findMessageById = (messageId: string) => {
@@ -583,7 +604,7 @@ export default function Chat() {
                   className="flex-1 overflow-y-auto overflow-x-hidden space-y-4 mb-4 px-4 md:pr-2 md:pb-2 md:px-0 w-full"
                   style={{ scrollBehavior: 'smooth' }}
                 >
-                  {displayConversation.messages.length === 0 ? (
+                  {allMessages.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-muted-foreground">
                       <div className="text-center">
                         <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -591,7 +612,21 @@ export default function Chat() {
                       </div>
                     </div>
                   ) : null}
-                  {displayConversation.messages.map((msg) => (
+                  {/* Load History Button */}
+                  {hasMoreMessages && (
+                    <div className="flex justify-center py-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleLoadMore}
+                        className="gap-2"
+                      >
+                        <History className="w-4 h-4" />
+                        Load History ({allMessages.length - visibleCount} older)
+                      </Button>
+                    </div>
+                  )}
+                  {visibleMessages.map((msg) => (
                     <div 
                       key={msg.id}
                       id={`message-${msg.id}`}
