@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import QRCode from "react-qr-code";
 import lana8wonderBg from "@/assets/lana8wonder-bg.png";
+import knightsBg from "@/assets/knights-bg.png";
 
 interface WalletWithBalance {
   walletId: string;
@@ -189,14 +190,20 @@ export default function Wallet() {
           {sortedWallets.map((wallet) => (
             <Card 
               key={wallet.eventId || wallet.walletId} 
-              className="hover:shadow-lg transition-shadow relative overflow-hidden"
+              className={`hover:shadow-lg transition-shadow relative overflow-hidden ${
+                wallet.walletType === "Main Wallet" ? "bg-green-500/10 border-green-500/30" : ""
+              }`}
               style={wallet.walletType === "Lana8Wonder" ? {
                 backgroundImage: `url(${lana8wonderBg})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
+              } : wallet.walletType === "Knights" ? {
+                backgroundImage: `url(${knightsBg})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
               } : undefined}
             >
-              {wallet.walletType === "Lana8Wonder" && (
+              {(wallet.walletType === "Lana8Wonder" || wallet.walletType === "Knights") && (
                 <div className="absolute inset-0 bg-background/85" />
               )}
               <CardHeader className="relative z-10">
