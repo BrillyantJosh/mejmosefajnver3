@@ -1,5 +1,7 @@
 # Post-Remix Setup Guide
 
+> **POMEMBNO**: Po remixu je potrebno nastaviti CRON opravila IN Storage RLS politike!
+
 Po remixu projekta je potrebno ročno nastaviti CRON opravila v Supabase. Ta dokument vsebuje vse potrebne SQL ukaze.
 
 ---
@@ -152,7 +154,58 @@ SELECT cron.unschedule('sync-kind-38888');
 
 ---
 
-## 6. Checklist po remixu
+## 6. Storage RLS politike
+
+Po remixu je potrebno nastaviti RLS politike za storage buckete (`dm-audio`, `dm-images`, `post-images`).
+
+```sql
+-- ============================================
+-- STORAGE RLS POLICIES - Kopiraj in zaženi v SQL Editorju
+-- ============================================
+
+-- dm-audio bucket
+CREATE POLICY "Anyone can upload dm audio"
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'dm-audio');
+
+CREATE POLICY "Anyone can view dm audio"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'dm-audio');
+
+CREATE POLICY "Anyone can delete dm audio"
+ON storage.objects FOR DELETE
+USING (bucket_id = 'dm-audio');
+
+-- dm-images bucket
+CREATE POLICY "Anyone can upload dm images"
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'dm-images');
+
+CREATE POLICY "Anyone can view dm images"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'dm-images');
+
+CREATE POLICY "Anyone can delete dm images"
+ON storage.objects FOR DELETE
+USING (bucket_id = 'dm-images');
+
+-- post-images bucket
+CREATE POLICY "Anyone can upload post images"
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'post-images');
+
+CREATE POLICY "Anyone can view post images"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'post-images');
+
+CREATE POLICY "Anyone can delete post images"
+ON storage.objects FOR DELETE
+USING (bucket_id = 'post-images');
+```
+
+---
+
+## 7. Checklist po remixu
 
 - [ ] Ustvari nov Supabase projekt
 - [ ] Kopiraj `PROJECT_REF` iz URL-ja projekta
@@ -160,3 +213,4 @@ SELECT cron.unschedule('sync-kind-38888');
 - [ ] Omogoči `pg_cron` in `pg_net` razširitvi
 - [ ] Zaženi SQL za nastavitev vseh CRON opravil
 - [ ] Preveri, da so opravila aktivna z `SELECT * FROM cron.job`
+- [ ] Zaženi SQL za Storage RLS politike (dm-audio, dm-images, post-images)
