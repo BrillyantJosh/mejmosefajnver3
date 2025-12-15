@@ -63,6 +63,11 @@ function base58CheckDecode(str: string): Uint8Array {
   return payload;
 }
 
+// Normalize WIF key - remove invisible characters
+function normalizeWif(wif: string): string {
+  return wif.replace(/[\s\u200B-\u200D\uFEFF\r\n\t]/g, '').trim();
+}
+
 async function base58CheckEncode(payload: Uint8Array): Promise<string> {
   const hash1 = await crypto.subtle.digest('SHA-256', new Uint8Array(payload));
   const hash2 = await crypto.subtle.digest('SHA-256', hash1);
@@ -482,8 +487,9 @@ async function buildSignedTx(
     console.log(`💰 Selected ${selectedUTXOs.length} UTXOs with total value: ${totalValue} satoshis`);
     console.log(`💸 Transaction breakdown: Amount=${totalAmount}, Fee=${fee}, Change=${totalValue - totalNeeded}`);
     
-    // Decode private key
-    const privateKeyBytes = base58CheckDecode(privateKeyWIF);
+    // Decode private key (normalize first to remove invisible chars)
+    const normalizedPrivateKey = normalizeWif(privateKeyWIF);
+    const privateKeyBytes = base58CheckDecode(normalizedPrivateKey);
     const privateKeyHex = uint8ArrayToHex(privateKeyBytes.slice(1));
     console.log('🔑 Private key decoded successfully');
     
@@ -731,7 +737,8 @@ serve(async (req) => {
         .slice(0, 16);
       console.log('🔑 Private key hash (first 16 chars):', hashHex);
       
-      const privateKeyBytes = base58CheckDecode(privateKey);
+      const normalizedKey = normalizeWif(privateKey);
+      const privateKeyBytes = base58CheckDecode(normalizedKey);
       const privateKeyHex = uint8ArrayToHex(privateKeyBytes.slice(1));
       const generatedPubKey = privateKeyToPublicKey(privateKeyHex);
       console.log('🔓 Generated public key:', uint8ArrayToHex(generatedPubKey).slice(0, 32) + '...');
