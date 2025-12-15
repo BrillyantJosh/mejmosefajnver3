@@ -93,6 +93,21 @@ export default function Wallet() {
     return { value: fiatValue, currency };
   };
 
+  // Sort wallets by type priority
+  const walletTypeOrder: Record<string, number> = {
+    "Main Wallet": 1,
+    "Wallet": 2,
+    "LanaPays.Us": 3,
+    "Knights": 4,
+    "Lana8Wonder": 5,
+  };
+
+  const sortedWallets = [...walletsWithBalances].sort((a, b) => {
+    const orderA = walletTypeOrder[a.walletType] || 99;
+    const orderB = walletTypeOrder[b.walletType] || 99;
+    return orderA - orderB;
+  });
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-6 flex items-center justify-between">
@@ -170,7 +185,7 @@ export default function Wallet() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {walletsWithBalances.map((wallet) => (
+          {sortedWallets.map((wallet) => (
             <Card 
               key={wallet.eventId || wallet.walletId} 
               className="hover:shadow-lg transition-shadow"
