@@ -54,7 +54,6 @@ export function useNostrDMs() {
   const [connected, setConnected] = useState(false);
   const [totalEvents, setTotalEvents] = useState(0);
   const [readStatuses, setReadStatuses] = useState<Map<string, boolean>>(new Map());
-  const [supabaseAvailable, setSupabaseAvailable] = useState(true);
   const pool = useMemo(() => new SimplePool(), []);
   
   // Get relays from system parameters or use default
@@ -113,136 +112,7 @@ export function useNostrDMs() {
     }
   }, [session?.nostrPrivateKey, session?.nostrHexId]);
 
-  // Save message to DB for instant loading
-  const saveMessageToDB = useCallback(async (event: Event, theirPubkey: string, decryptedContent: string) => {
-    // Skip if Supabase is unavailable
-    if (!supabaseAvailable) {
-      console.log('⏭️ Skipping DB save - Supabase unavailable');
-      return;
-    }
-    
-    try {
-      const { error } = await supabase
-        .from('direct_messages')
-        .upsert({
-          event_id: event.id,
-          sender_pubkey: event.pubkey,
-          recipient_pubkey: theirPubkey,
-          content: event.content,
-          decrypted_content: decryptedContent,
-          created_at: new Date(event.created_at * 1000).toISOString(),
-          kind: event.kind,
-          tags: event.tags as any,
-          raw_event: event as any
-        } as any, { 
-          onConflict: 'event_id',
-          ignoreDuplicates: true 
-        });
-      
-      if (error && !error.message.includes('duplicate')) {
-        console.error('❌ Error saving message to DB:', error);
-      }
-    } catch (error) {
-      console.error('❌ Exception in saveMessageToDB:', error);
-    }
-  }, [supabaseAvailable]);
-
-  // Load messages from DB for instant display - returns true if successful
-  const loadMessagesFromDB = useCallback(async (): Promise<boolean> => {
-    if (!session?.nostrHexId) return false;
-    
-    console.log('⚡ Loading messages from DB for instant display...');
-    
-    try {
-      // Add timeout for Supabase call (4 seconds)
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Supabase timeout')), 4000)
-      );
-      
-      const queryPromise = supabase
-        .from('direct_messages')
-        .select('*')
-        .or(`sender_pubkey.eq.${session.nostrHexId},recipient_pubkey.eq.${session.nostrHexId}`)
-        .order('created_at', { ascending: true });
-      
-      const { data: messages, error } = await Promise.race([
-        queryPromise,
-        timeoutPromise
-      ]);
-      
-      if (error) {
-        console.warn('⚠️ Supabase error, falling back to relays:', error);
-        setSupabaseAvailable(false);
-        return false;
-      }
-      
-      console.log('✅ Loaded', messages?.length || 0, 'messages from DB');
-      setSupabaseAvailable(true);
-      
-      if (!messages || messages.length === 0) {
-        return true; // Supabase works, but no messages yet
-      }
-      
-      // Group messages into conversations
-      const conversationsMap = new Map<string, Conversation>();
-      
-      for (const msg of messages) {
-        const contactPubkey = msg.sender_pubkey === session.nostrHexId 
-          ? msg.recipient_pubkey 
-          : msg.sender_pubkey;
-        
-        if (!conversationsMap.has(contactPubkey)) {
-          conversationsMap.set(contactPubkey, { 
-            pubkey: contactPubkey, 
-            messages: [],
-            unreadCount: 0
-          });
-        }
-        
-        const isOwn = msg.sender_pubkey === session.nostrHexId;
-        const isRead = isOwn ? true : (readStatuses.get(msg.event_id) ?? false);
-        
-        // Parse reply tag from stored tags
-        let replyToId: string | undefined;
-        if (msg.tags && Array.isArray(msg.tags)) {
-          const replyTag = msg.tags.find(
-            (tag: any) => Array.isArray(tag) && tag[0] === 'e' && tag[3] === 'reply'
-          );
-          replyToId = replyTag ? replyTag[1] : undefined;
-        }
-        
-        conversationsMap.get(contactPubkey)!.messages.push({
-          id: msg.event_id,
-          pubkey: msg.sender_pubkey,
-          content: msg.content,
-          decryptedContent: msg.decrypted_content || undefined,
-          created_at: new Date(msg.created_at).getTime() / 1000,
-          isOwn,
-          isRead,
-          replyToId
-        });
-      }
-      
-      // Calculate unread counts and set last messages
-      conversationsMap.forEach((conversation, pubkey) => {
-        conversation.messages.sort((a, b) => a.created_at - b.created_at);
-        conversation.lastMessage = conversation.messages[conversation.messages.length - 1];
-        conversation.unreadCount = conversation.messages.filter(m => !m.isOwn && !m.isRead).length;
-      });
-      
-      setConversations(conversationsMap);
-      setLoading(false);
-      console.log('✅ Instant load complete -', conversationsMap.size, 'conversations ready');
-      return true;
-    } catch (error) {
-      console.warn('⚠️ Supabase unavailable, falling back to Nostr relays:', error);
-      setSupabaseAvailable(false);
-      return false;
-    }
-  }, [session?.nostrHexId, readStatuses]);
-
-
-  // Supabase read status functions
+  // Supabase read status functions (KEEP - for dm_read_status table)
   const saveMessageReadStatus = useCallback(async (
     userNostrId: string,
     messageEventId: string,
@@ -251,10 +121,6 @@ export function useNostrDMs() {
     isOwn: boolean
   ) => {
     if (isOwn) return; // Don't track own messages
-    if (!supabaseAvailable) {
-      console.log('⏭️ Skipping read status save - Supabase unavailable');
-      return;
-    }
     
     try {
       const { error } = await supabase
@@ -278,17 +144,12 @@ export function useNostrDMs() {
     } catch (error) {
       console.error('❌ Exception in saveMessageReadStatus:', error);
     }
-  }, [supabaseAvailable]);
+  }, []);
 
   const markMessagesAsReadInDB = useCallback(async (
     userNostrId: string,
     conversationPubkey: string
   ) => {
-    if (!supabaseAvailable) {
-      console.log('⏭️ Skipping mark as read - Supabase unavailable');
-      return;
-    }
-    
     try {
       const { error } = await supabase
         .from('dm_read_status')
@@ -309,7 +170,7 @@ export function useNostrDMs() {
     } catch (error) {
       console.error('❌ Exception in markMessagesAsReadInDB:', error);
     }
-  }, [supabaseAvailable]);
+  }, []);
 
   const loadReadStatuses = useCallback(async (userNostrId: string) => {
     try {
@@ -411,9 +272,6 @@ export function useNostrDMs() {
 
     const decryptedContent = await decryptMessage(event, otherPubkey);
 
-    // Save to DB for instant loading next time
-    await saveMessageToDB(event, otherPubkey, decryptedContent);
-
     // Save read status in database (only for received messages)
     if (!isOwn && session.nostrHexId) {
       await saveMessageReadStatus(
@@ -468,8 +326,9 @@ export function useNostrDMs() {
 
       return newConversations;
     });
-  }, [session?.nostrHexId, decryptMessage, readStatuses, saveMessageReadStatus, saveMessageToDB]);
+  }, [session?.nostrHexId, decryptMessage, readStatuses, saveMessageReadStatus]);
 
+  // Load messages ONLY from Nostr relays
   useEffect(() => {
     if (!session?.nostrHexId || !session?.nostrPrivateKey) {
       setLoading(false);
@@ -480,23 +339,14 @@ export function useNostrDMs() {
     let cleanupFn: (() => void) | undefined;
 
     const loadMessages = async () => {
-      // Step 1: Try to INSTANT LOAD from DB (with timeout)
-      const dbLoadSuccess = await loadMessagesFromDB();
-      
-      if (!dbLoadSuccess) {
-        // Supabase unavailable - show loading state while fetching from relays
-        console.log('⚠️ Supabase unavailable, loading directly from Nostr relays...');
-        setLoading(true);
-      }
-      
-      // Step 2: SYNC from Nostr relays (background if DB worked, primary if not)
-      console.log('🔌 Connecting to Nostr relays for', dbLoadSuccess ? 'background sync' : 'primary load', '...');
+      console.log('🔌 Loading messages from Nostr relays...');
       console.log('📍 Your Nostr ID:', session.nostrHexId);
       console.log('📡 Relays:', RELAYS);
       setConnected(true);
+      setLoading(true);
 
       try {
-        // Step 1: Query historical messages (last 30 days)
+        // Query historical messages (last 30 days)
         const thirtyDaysAgo = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
         
         console.log('📥 Fetching historical messages...');
@@ -560,9 +410,9 @@ export function useNostrDMs() {
 
         // Set loading to false after processing relay messages
         setLoading(false);
-        console.log('✅ Historical messages synced from Nostr');
+        console.log('✅ Historical messages loaded from Nostr relays');
 
-        // Step 2: Subscribe to new messages (real-time)
+        // Subscribe to new messages (real-time)
         if (!isSubscribed) return;
         
         const now = Math.floor(Date.now() / 1000);
@@ -628,89 +478,13 @@ export function useNostrDMs() {
       setConnected(false);
       if (cleanupFn) cleanupFn();
     };
-  }, [session?.nostrHexId, session?.nostrPrivateKey, processMessage, pool, loadMessagesFromDB, RELAYS]);
+  }, [session?.nostrHexId, session?.nostrPrivateKey, processMessage, pool, RELAYS]);
 
-  // Supabase Realtime subscription for instant DB updates
+  // Supabase Realtime subscription for READ STATUS updates ONLY
   useEffect(() => {
     if (!session?.nostrHexId) return;
 
-    console.log('🔔 Setting up Supabase Realtime subscription...');
-
-    // Subscribe to NEW messages in DB
-    const messagesChannel = supabase
-      .channel('direct-messages-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'direct_messages'
-        },
-        async (payload) => {
-          console.log('⚡ NEW message from Supabase DB:', payload);
-          const newMsg = payload.new as any;
-          
-          // Check if this message involves current user
-          const isForMe = newMsg.sender_pubkey === session.nostrHexId || 
-                          newMsg.recipient_pubkey === session.nostrHexId;
-          
-          if (!isForMe) {
-            console.log('⏭️  Skipping DB event - not for me');
-            return;
-          }
-          
-          // Convert to DirectMessage format
-          const contactPubkey = newMsg.sender_pubkey === session.nostrHexId 
-            ? newMsg.recipient_pubkey 
-            : newMsg.sender_pubkey;
-          
-          const isOwn = newMsg.sender_pubkey === session.nostrHexId;
-          const isRead = isOwn ? true : (readStatuses.get(newMsg.event_id) ?? false);
-          
-          const message: DirectMessage = {
-            id: newMsg.event_id,
-            pubkey: newMsg.sender_pubkey,
-            content: newMsg.content,
-            decryptedContent: newMsg.decrypted_content || undefined,
-            created_at: new Date(newMsg.created_at).getTime() / 1000,
-            isOwn,
-            isRead
-          };
-          
-          // Update conversations state
-          setConversations(prev => {
-            const newConversations = new Map(prev);
-            const existing = newConversations.get(contactPubkey) || {
-              pubkey: contactPubkey,
-              messages: [],
-              unreadCount: 0
-            };
-
-            // Check if message already exists (prevent duplicates)
-            if (existing.messages.some(m => m.id === message.id)) {
-              console.log('⏭️  Message already exists in UI');
-              return prev;
-            }
-
-            const updatedMessages = [...existing.messages, message].sort(
-              (a, b) => a.created_at - b.created_at
-            );
-
-            const unreadCount = updatedMessages.filter(m => !m.isOwn && !m.isRead).length;
-
-            newConversations.set(contactPubkey, {
-              ...existing,
-              messages: updatedMessages,
-              lastMessage: updatedMessages[updatedMessages.length - 1],
-              unreadCount
-            });
-
-            console.log('✅ UI updated from Supabase realtime');
-            return newConversations;
-          });
-        }
-      )
-      .subscribe();
+    console.log('🔔 Setting up Supabase Realtime subscription for read status...');
 
     // Subscribe to READ STATUS updates
     const readStatusChannel = supabase
@@ -761,15 +535,14 @@ export function useNostrDMs() {
       )
       .subscribe();
 
-    console.log('✅ Supabase Realtime subscriptions active');
+    console.log('✅ Supabase Realtime subscription active (read status only)');
 
     // Cleanup
     return () => {
-      console.log('🔌 Closing Supabase Realtime subscriptions...');
-      supabase.removeChannel(messagesChannel);
+      console.log('🔌 Closing Supabase Realtime subscription...');
       supabase.removeChannel(readStatusChannel);
     };
-  }, [session?.nostrHexId, readStatuses]);
+  }, [session?.nostrHexId]);
 
   const sendMessage = useCallback(async (recipientPubkey: string, message: string, replyToId?: string) => {
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
@@ -827,7 +600,7 @@ export function useNostrDMs() {
             
             // Wait for publish with timeout
             await Promise.race([
-              publishPromises[0], // Only one promise since we're publishing to one relay
+              publishPromises[0],
               new Promise((_, reject) => 
                 setTimeout(() => reject(new Error('Publish timeout after 8s')), 8000)
               )
@@ -870,7 +643,6 @@ export function useNostrDMs() {
           variant: 'destructive'
         });
       }
-      // Success case: no toast, silent success
     } catch (error) {
       console.error('❌ Error sending message:', error);
       toast({
@@ -915,7 +687,7 @@ export function useNostrDMs() {
             console.log(`🔄 Publishing deletion to ${relay}...`);
             const publishPromises = pool.publish([relay], deletionEvent);
             await Promise.race([
-              publishPromises[0], // Only one promise since we're publishing to one relay
+              publishPromises[0],
               new Promise((_, reject) => 
                 setTimeout(() => reject(new Error('Deletion timeout after 8s')), 8000)
               )
