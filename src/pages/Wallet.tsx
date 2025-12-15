@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import QRCode from "react-qr-code";
+import lana8wonderBg from "@/assets/lana8wonder-bg.png";
 
 interface WalletWithBalance {
   walletId: string;
@@ -188,9 +189,17 @@ export default function Wallet() {
           {sortedWallets.map((wallet) => (
             <Card 
               key={wallet.eventId || wallet.walletId} 
-              className="hover:shadow-lg transition-shadow"
+              className="hover:shadow-lg transition-shadow relative overflow-hidden"
+              style={wallet.walletType === "Lana8Wonder" ? {
+                backgroundImage: `url(${lana8wonderBg})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              } : undefined}
             >
-              <CardHeader>
+              {wallet.walletType === "Lana8Wonder" && (
+                <div className="absolute inset-0 bg-background/85" />
+              )}
+              <CardHeader className="relative z-10">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -228,7 +237,7 @@ export default function Wallet() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-3 relative z-10">
                 <div className="flex flex-col gap-2 p-3 rounded-lg bg-muted/50">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
