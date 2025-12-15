@@ -270,13 +270,15 @@ export default function Wallet() {
                   </a>
                 </Button>
 
-                <Button
-                  size="sm"
-                  className="w-full"
-                  onClick={() => window.location.href = `/send-lana?walletId=${wallet.walletId}&balance=${wallet.balance || 0}`}
-                >
-                  Send
-                </Button>
+                {wallet.walletType !== "Lana8Wonder" && wallet.walletType !== "Knights" && (
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={() => window.location.href = `/send-lana?walletId=${wallet.walletId}&balance=${wallet.balance || 0}`}
+                  >
+                    Send
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}
