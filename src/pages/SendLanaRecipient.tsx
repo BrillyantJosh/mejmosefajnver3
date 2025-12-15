@@ -302,14 +302,14 @@ export default function SendLanaRecipient() {
                       <Button
                         key={wallet.walletId}
                         variant={recipientWalletId === wallet.walletId ? "default" : "outline"}
-                        className="w-full justify-start h-auto py-3"
+                        className="w-full justify-start h-auto py-3 overflow-hidden"
                         onClick={() => setRecipientWalletId(wallet.walletId)}
                       >
-                        <div className="text-left">
+                        <div className="text-left w-full overflow-hidden">
                           <p className="font-mono text-xs break-all">{wallet.walletId}</p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-muted-foreground break-words whitespace-normal">
                             {wallet.walletType}
-                            {wallet.note && ` - ${wallet.note}`}
+                            {wallet.note && ` - ${wallet.note.length > 50 ? wallet.note.slice(0, 50) + '...' : wallet.note}`}
                           </p>
                         </div>
                       </Button>
