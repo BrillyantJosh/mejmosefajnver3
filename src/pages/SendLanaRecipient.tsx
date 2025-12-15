@@ -4,13 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, ArrowRight, Scan, Search, User } from "lucide-react";
+import { ArrowLeft, ArrowRight, Scan, Search, User, Wallet } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Html5Qrcode } from "html5-qrcode";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { SimplePool } from "nostr-tools";
 import { validateLanaWalletIdWithMessage } from "@/lib/lanaWalletValidation";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 
 interface SearchResult {
   pubkey: string;
@@ -28,6 +30,7 @@ export default function SendLanaRecipient() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { parameters } = useSystemParameters();
+  const { session } = useAuth();
 
   const walletId = searchParams.get("walletId") || "";
   const amount = searchParams.get("amount") || "";
@@ -45,6 +48,15 @@ export default function SendLanaRecipient() {
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
   const relays = parameters?.relays || [];
+
+  // Fetch user's own wallets
+  const { wallets: userWallets, isLoading: isLoadingWallets } = useNostrUserWallets(session?.nostrHexId || null);
+  
+  // Filter wallets - only "Main Wallet" or "Wallet" types, exclude the source wallet
+  const eligibleWallets = userWallets.filter(w => 
+    (w.walletType === "Main Wallet" || w.walletType === "Wallet") && 
+    w.walletId !== walletId
+  );
 
   // QR Code Scanner
   const startScanner = async () => {
@@ -246,10 +258,14 @@ export default function SendLanaRecipient() {
         </CardHeader>
         <CardContent className="space-y-6">
           <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="manual">
                 <User className="h-4 w-4 mr-2" />
                 Manual
+              </TabsTrigger>
+              <TabsTrigger value="mywallets">
+                <Wallet className="h-4 w-4 mr-2" />
+                My Wallets
               </TabsTrigger>
               <TabsTrigger value="scan">
                 <Scan className="h-4 w-4 mr-2" />
@@ -270,6 +286,36 @@ export default function SendLanaRecipient() {
                   value={recipientWalletId}
                   onChange={(e) => setRecipientWalletId(e.target.value)}
                 />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="mywallets" className="space-y-4">
+              <div className="space-y-2">
+                <Label>Select one of your wallets</Label>
+                {isLoadingWallets ? (
+                  <p className="text-sm text-muted-foreground">Loading wallets...</p>
+                ) : eligibleWallets.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No eligible wallets found (Main Wallet or Wallet types)</p>
+                ) : (
+                  <div className="space-y-2">
+                    {eligibleWallets.map((wallet) => (
+                      <Button
+                        key={wallet.walletId}
+                        variant={recipientWalletId === wallet.walletId ? "default" : "outline"}
+                        className="w-full justify-start h-auto py-3"
+                        onClick={() => setRecipientWalletId(wallet.walletId)}
+                      >
+                        <div className="text-left">
+                          <p className="font-mono text-xs break-all">{wallet.walletId}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {wallet.walletType}
+                            {wallet.note && ` - ${wallet.note}`}
+                          </p>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                )}
               </div>
             </TabsContent>
 
