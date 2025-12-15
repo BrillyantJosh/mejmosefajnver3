@@ -60,6 +60,11 @@ function base58CheckDecode(str: string): Uint8Array {
   return payload;
 }
 
+// Normalize WIF key - remove invisible characters
+function normalizeWif(wif: string): string {
+  return wif.replace(/[\s\u200B-\u200D\uFEFF\r\n\t]/g, '').trim();
+}
+
 async function base58CheckEncode(payload: Uint8Array): Promise<string> {
   const hash1 = await crypto.subtle.digest('SHA-256', new Uint8Array(payload));
   const hash2 = await crypto.subtle.digest('SHA-256', hash1);
@@ -405,7 +410,8 @@ async function buildSignedTx(
 ) {
   console.log(`🔧 Building multi-output transaction: ${recipients.length} outputs, ${selectedUTXOs.length} inputs`);
   
-  const privateKeyBytes = base58CheckDecode(privateKeyWIF);
+  const normalizedPrivateKey = normalizeWif(privateKeyWIF);
+  const privateKeyBytes = base58CheckDecode(normalizedPrivateKey);
   const privateKeyHex = uint8ArrayToHex(privateKeyBytes.slice(1));
   const publicKey = privateKeyToPublicKey(privateKeyHex);
   
