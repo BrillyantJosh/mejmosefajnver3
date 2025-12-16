@@ -1,5 +1,6 @@
 import { useNostrProjects } from "@/hooks/useNostrProjects";
 import ProjectCard from "@/components/100millionideas/ProjectCard";
+import ProjectsSummaryBar from "@/components/100millionideas/ProjectsSummaryBar";
 import { Loader2 } from "lucide-react";
 
 const Projects = () => {
@@ -13,6 +14,8 @@ const Projects = () => {
           Browse and discover innovative projects on LanaCrowd
         </p>
       </div>
+
+      <ProjectsSummaryBar />
 
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
