@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.refresh-nostr-profiles]
 verify_jwt = false
+
+[functions.sync-room-posts]
+verify_jwt = false
