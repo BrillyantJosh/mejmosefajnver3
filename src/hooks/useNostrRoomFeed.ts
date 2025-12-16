@@ -61,20 +61,26 @@ export function useNostrRoomFeed(roomSlug: string | undefined) {
       setOldestTimestamp(null);
 
       try {
-        const filter = {
-          kinds: [1],
-          '#t': [roomSlug],
-          limit: 10
-        };
-        
-        console.log('📡 Room feed filter:', filter);
+        console.log('📡 Room feed querying for #t and #a tags:', roomSlug);
 
-        const events = await Promise.race([
-          pool.querySync(RELAYS, filter),
-          new Promise<Event[]>((_, reject) => 
+        // Query both #t and #a tags (some posts use alternative tag)
+        const [eventsT, eventsA] = await Promise.race([
+          Promise.all([
+            pool.querySync(RELAYS, { kinds: [1], '#t': [roomSlug], limit: 20 }),
+            pool.querySync(RELAYS, { kinds: [1], '#a': [roomSlug], limit: 20 })
+          ]),
+          new Promise<[Event[], Event[]]>((_, reject) => 
             setTimeout(() => reject(new Error('Query timeout')), 15000)
           )
         ]);
+
+        // Combine and deduplicate by event id
+        const allEvents = [...eventsT, ...eventsA];
+        const events = Array.from(
+          new Map(allEvents.map(e => [e.id, e])).values()
+        );
+
+        console.log(`📨 Received ${eventsT.length} #t events + ${eventsA.length} #a events = ${events.length} unique events`);
 
         if (!isSubscribed) return;
 
@@ -144,21 +150,26 @@ export function useNostrRoomFeed(roomSlug: string | undefined) {
     setLoadingMore(true);
 
     try {
-      const filter = {
-        kinds: [1],
-        '#t': [roomSlug],
-        until: oldestTimestamp - 1, // Get posts older than current oldest
-        limit: 10
-      };
+      const until = oldestTimestamp - 1;
 
-      const events = await Promise.race([
-        pool.querySync(RELAYS, filter),
-        new Promise<Event[]>((_, reject) => 
+      // Query both #t and #a tags for older posts
+      const [eventsT, eventsA] = await Promise.race([
+        Promise.all([
+          pool.querySync(RELAYS, { kinds: [1], '#t': [roomSlug], until, limit: 20 }),
+          pool.querySync(RELAYS, { kinds: [1], '#a': [roomSlug], until, limit: 20 })
+        ]),
+        new Promise<[Event[], Event[]]>((_, reject) => 
           setTimeout(() => reject(new Error('Query timeout')), 15000)
         )
       ]);
 
-      console.log(`📨 Loaded ${events.length} more events`);
+      // Combine and deduplicate
+      const allEvents = [...eventsT, ...eventsA];
+      const events = Array.from(
+        new Map(allEvents.map(e => [e.id, e])).values()
+      );
+
+      console.log(`📨 Loaded ${events.length} more events (${eventsT.length} #t + ${eventsA.length} #a)`);
 
       // Filter only main posts
       const mainPosts = events.filter(event => {
