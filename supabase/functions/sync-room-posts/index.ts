@@ -66,31 +66,45 @@ Deno.serve(async (req) => {
       .single();
 
     const relays: string[] = systemParams?.relays || DEFAULT_RELAYS;
-    console.log(`📡 Using ${relays.length} relays`);
+    console.log(`📡 Using ${relays.length} relays:`, relays);
 
-    // 2. Fetch rooms from Nostr (KIND 38889)
+    // 2. Fetch rooms manifest from Nostr (KIND 38889)
     const pool = new SimplePool();
     const thirtyDaysAgo = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
 
-    // Fetch rooms
-    const roomEvents = await pool.querySync(relays, {
+    const ROOMS_PUBKEY = "b66ccf84bc6cf1a56ba9941f29932824f4986803358a0bed03769a1cbf480101";
+    
+    // Fetch rooms manifest - specific author and d-tag
+    const roomManifestEvents = await pool.querySync(relays, {
       kinds: [38889],
-      limit: 100
+      authors: [ROOMS_PUBKEY],
+      '#d': ['rooms'],
+      limit: 1
     });
 
-    console.log(`🏠 Found ${roomEvents.length} rooms`);
+    console.log(`🏠 Found ${roomManifestEvents.length} room manifest events`);
 
-    const roomsToProcess: { slug: string; title: string }[] = [];
-    for (const event of roomEvents) {
-      const dTag = event.tags.find((t: string[]) => t[0] === 'd');
-      const titleTag = event.tags.find((t: string[]) => t[0] === 'title');
-      if (dTag?.[1]) {
-        roomsToProcess.push({
-          slug: dTag[1],
-          title: titleTag?.[1] || dTag[1]
-        });
-      }
+    if (roomManifestEvents.length === 0) {
+      console.log('No rooms manifest found');
+      pool.close(relays);
+      return new Response(
+        JSON.stringify({ success: true, roomsProcessed: 0, message: 'No rooms manifest found' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
+
+    // Get the latest manifest
+    const manifest = roomManifestEvents.reduce((latest: any, event: any) => {
+      if (!latest || event.created_at > latest.created_at) return event;
+      return latest;
+    }, null);
+
+    // Parse rooms from tags
+    const roomTags = manifest.tags.filter((t: string[]) => t[0] === 'room');
+    const roomsToProcess: { slug: string; title: string }[] = roomTags.map((tag: string[]) => ({
+      slug: tag[1],
+      title: tag[2] || tag[1]
+    }));
 
     console.log(`📝 Processing ${roomsToProcess.length} rooms`);
 
@@ -99,45 +113,62 @@ Deno.serve(async (req) => {
 
     for (const room of roomsToProcess) {
       try {
-        // Fetch posts for this room (KIND 1 with #t or #a tag)
+        console.log(`🔍 Fetching posts for room: ${room.slug}`);
+        
+        // Fetch posts for this room (KIND 1 with #t tag) - no since filter first
         const posts = await pool.querySync(relays, {
           kinds: [1],
           '#t': [room.slug],
-          since: thirtyDaysAgo,
-          limit: 100
+          limit: 50
         });
 
-        // Also try with #a tag for addressable events
+        console.log(`   Found ${posts.length} posts with #t tag`);
+
+        // Also try with #a tag (just slug, not with kind prefix)
         const postsWithA = await pool.querySync(relays, {
           kinds: [1],
-          '#a': [`38889:${room.slug}`],
-          since: thirtyDaysAgo,
-          limit: 100
+          '#a': [room.slug],
+          limit: 50
         });
+
+        console.log(`   Found ${postsWithA.length} posts with #a tag`);
 
         // Combine and dedupe
         const allPosts = [...posts, ...postsWithA];
         const uniquePosts = Array.from(
-          new Map(allPosts.map(p => [p.id, p])).values()
+          new Map(allPosts.map((p: any) => [p.id, p])).values()
         );
 
         // Sort by created_at desc
-        uniquePosts.sort((a, b) => b.created_at - a.created_at);
+        uniquePosts.sort((a: any, b: any) => b.created_at - a.created_at);
 
-        const postCount = uniquePosts.length;
-        const latestPost = uniquePosts[0];
+        // Count posts from last 30 days
+        const postCount = uniquePosts.filter((p: any) => p.created_at >= thirtyDaysAgo).length;
+        const latestPost = uniquePosts[0] as any;
 
         if (latestPost) {
+          // Try to find image from latest posts
+          let imageUrl = extractImageFromPost(latestPost);
+          if (!imageUrl) {
+            for (let i = 1; i < Math.min(uniquePosts.length, 5); i++) {
+              imageUrl = extractImageFromPost(uniquePosts[i]);
+              if (imageUrl) break;
+            }
+          }
+
           results.push({
             room_slug: room.slug,
             post_event_id: latestPost.id,
             content: latestPost.content?.substring(0, 500) || '',
             author_pubkey: latestPost.pubkey,
             created_at: latestPost.created_at,
-            image_url: extractImageFromPost(latestPost),
+            image_url: imageUrl,
             post_count: postCount,
             fetched_at: new Date().toISOString()
           });
+          console.log(`   ✅ Added ${room.slug} with ${postCount} posts (last 30d)`);
+        } else {
+          console.log(`   ⚠️ No posts found for ${room.slug}`);
         }
       } catch (roomError) {
         console.error(`Error processing room ${room.slug}:`, roomError);
