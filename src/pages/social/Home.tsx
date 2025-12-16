@@ -5,6 +5,7 @@ import { useNostrRooms } from "@/hooks/useNostrRooms";
 import { useNostrRoomPostCounts } from "@/hooks/useNostrRoomPostCounts";
 import { useNostrRoomLatestPosts } from "@/hooks/useNostrRoomLatestPosts";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
+import { useAdmin } from "@/contexts/AdminContext";
 
 interface NostrRoom {
   slug: string;
@@ -139,6 +140,7 @@ function SimpleRoomItem({
 export default function Home() {
   const navigate = useNavigate();
   const { rooms, loading } = useNostrRooms();
+  const { appSettings } = useAdmin();
   
   const roomSlugs = useMemo(() => rooms.map(r => r.slug), [rooms]);
   const { postCounts, loading: loadingCounts } = useNostrRoomPostCounts(roomSlugs);
@@ -150,17 +152,24 @@ export default function Home() {
     const oneDayAgo = now - 86400;
     const oneWeekAgo = now - 604800;
 
-    // Rooms with explicit order (first 4, with default room at position 2)
+    // Rooms with explicit order (first 4)
     const orderedRooms = rooms
       .filter(r => r.order < 9999)
       .sort((a, b) => a.order - b.order);
     
-    // Find default room and insert at position 2
-    const defaultRoom = rooms.find(r => r.slug === 'default' || r.slug === 'general');
-    let featured = orderedRooms.slice(0, 4);
+    // Get default room from app_settings (by title)
+    const defaultRoomTitle = (appSettings?.default_rooms as string[] | undefined)?.[0];
+    const defaultRoom = defaultRoomTitle 
+      ? rooms.find(r => r.title === defaultRoomTitle || r.slug.toLowerCase() === defaultRoomTitle.toLowerCase())
+      : null;
     
-    if (defaultRoom && !featured.some(r => r.slug === defaultRoom.slug)) {
-      featured = [featured[0], defaultRoom, ...featured.slice(1, 3)].filter(Boolean);
+    // Build featured list - default room from app_settings is always first
+    let featured = orderedRooms.slice(0, 4);
+    if (defaultRoom) {
+      // Remove default room if already in list
+      featured = featured.filter(r => r.slug !== defaultRoom.slug);
+      // Add default room at first position
+      featured = [defaultRoom, ...featured].slice(0, 4);
     }
 
     // Remaining rooms
@@ -197,7 +206,7 @@ export default function Home() {
       lastWeekRooms: lastWeek.sort(sortByPosts).slice(0, 5),
       otherRooms: other.sort(sortByPosts)
     };
-  }, [rooms, latestPosts, postCounts]);
+  }, [rooms, latestPosts, postCounts, appSettings]);
 
   const handleRoomClick = (roomSlug: string) => {
     // Navigate to feed with room filter
