@@ -5,7 +5,14 @@ import { useMemo } from "react";
 
 const ProjectsSummaryBar = () => {
   const { projects, isLoading: projectsLoading } = useNostrProjects();
-  const { summary, isLoading: donationsLoading } = useNostrAllProjectDonations();
+  
+  // Extract visible project IDs
+  const visibleProjectIds = useMemo(() => 
+    projects.map(p => p.id), 
+    [projects]
+  );
+  
+  const { summary, isLoading: donationsLoading } = useNostrAllProjectDonations(visibleProjectIds);
 
   const totalGoal = useMemo(() => {
     return projects.reduce((sum, project) => {
