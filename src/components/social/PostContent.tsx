@@ -227,10 +227,13 @@ export function PostContent({ content, tags }: PostContentProps) {
       };
     }).filter(Boolean);
     
-    // Extract URLs from content (for link previews)
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    // Extract URLs from content (for link previews) - including www. links
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
     const urlMatches = displayContent.match(urlRegex);
-    const urls: string[] = urlMatches ? urlMatches : [];
+    // Normalize URLs - add http:// to www. links
+    const urls: string[] = urlMatches 
+      ? urlMatches.map(url => url.toLowerCase().startsWith('www.') ? `http://${url}` : url)
+      : [];
     
     // Remove iframe HTML and split content by URLs to render text and links separately
     let contentWithoutIframes = displayContent;
@@ -288,8 +291,9 @@ export function PostContent({ content, tags }: PostContentProps) {
         {/* Render text content with formatting */}
         <div className="mb-4 break-words">
           {parts.map((part, index) => {
-            // Check if this part is a URL
-            if (urls.includes(part)) {
+            // Check if this part is a URL (either with http:// or www.)
+            const normalizedPart = part.toLowerCase().startsWith('www.') ? `http://${part}` : part;
+            if (urls.includes(normalizedPart) || urls.includes(part)) {
               // Don't render the URL text, we'll show preview below
               return null;
             }
