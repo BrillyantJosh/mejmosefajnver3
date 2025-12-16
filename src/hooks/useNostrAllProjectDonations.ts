@@ -7,7 +7,7 @@ export interface AllProjectsDonationSummary {
   donationCount: number;
 }
 
-export const useNostrAllProjectDonations = (validProjectIds?: string[]) => {
+export const useNostrAllProjectDonations = () => {
   const { parameters } = useSystemParameters();
   const [summary, setSummary] = useState<AllProjectsDonationSummary>({
     totalRaisedFiat: 0,
@@ -35,16 +35,7 @@ export const useNostrAllProjectDonations = (validProjectIds?: string[]) => {
         let count = 0;
 
         allDonationEvents.forEach(event => {
-          const projectTag = event.tags.find(t => t[0] === 'project')?.[1];
           const amountFiatTag = event.tags.find(t => t[0] === 'amount_fiat')?.[1];
-          
-          // Filter donations only for valid (active) projects
-          if (validProjectIds && projectTag) {
-            if (!validProjectIds.includes(projectTag)) {
-              return;
-            }
-          }
-          
           if (amountFiatTag) {
             const amount = parseFloat(amountFiatTag);
             if (!isNaN(amount)) {
@@ -67,7 +58,7 @@ export const useNostrAllProjectDonations = (validProjectIds?: string[]) => {
     };
 
     fetchAllDonations();
-  }, [parameters?.relays, validProjectIds]);
+  }, [parameters?.relays]);
 
   return { summary, isLoading };
 };
