@@ -2,8 +2,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, MessageSquare, Clock } from "lucide-react";
 import { useNostrRooms } from "@/hooks/useNostrRooms";
-import { useNostrRoomPostCounts } from "@/hooks/useNostrRoomPostCounts";
-import { useNostrRoomLatestPosts } from "@/hooks/useNostrRoomLatestPosts";
+import { useRoomLatestPostsFromDB } from "@/hooks/useRoomLatestPostsFromDB";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { useAdmin } from "@/contexts/AdminContext";
 
@@ -31,13 +30,13 @@ function FeaturedCard({
   size = 'large'
 }: { 
   room: NostrRoom; 
-  latestPost?: { content: string; imageUrl?: string; created_at: number };
+  latestPost?: { content: string; imageUrl?: string; createdAt: number };
   postCount: number;
   onClick: () => void;
   size?: 'hero' | 'large' | 'medium' | 'small';
 }) {
   const imageUrl = latestPost?.imageUrl 
-    ? getProxiedImageUrl(latestPost.imageUrl, latestPost.created_at) 
+    ? getProxiedImageUrl(latestPost.imageUrl, latestPost.createdAt) 
     : undefined;
   
   const isLargeSize = size === 'hero' || size === 'large';
@@ -142,9 +141,8 @@ export default function Home() {
   const { rooms, loading } = useNostrRooms();
   const { appSettings } = useAdmin();
   
-  const roomSlugs = useMemo(() => rooms.map(r => r.slug), [rooms]);
-  const { postCounts, loading: loadingCounts } = useNostrRoomPostCounts(roomSlugs);
-  const { latestPosts, loading: loadingPosts } = useNostrRoomLatestPosts(roomSlugs);
+  // Use cached data from DB for fast initial load
+  const { latestPosts, postCounts, loading: loadingCached } = useRoomLatestPostsFromDB();
 
   // Sort rooms into categories
   const { featuredRooms, last24hRooms, lastWeekRooms, otherRooms } = useMemo(() => {
@@ -184,9 +182,9 @@ export default function Home() {
     remaining.forEach(room => {
       const post = latestPosts.get(room.slug);
       if (post) {
-        if (post.created_at >= oneDayAgo) {
+        if (post.createdAt >= oneDayAgo) {
           last24h.push(room);
-        } else if (post.created_at >= oneWeekAgo) {
+        } else if (post.createdAt >= oneWeekAgo) {
           lastWeek.push(room);
         } else {
           other.push(room);
@@ -213,7 +211,7 @@ export default function Home() {
     navigate(`/social/feed/${roomSlug}`);
   };
 
-  if (loading) {
+  if (loading || loadingCached) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
