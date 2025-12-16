@@ -281,6 +281,45 @@ export type Database = {
         }
         Relationships: []
       }
+      room_latest_posts: {
+        Row: {
+          author_pubkey: string
+          content: string
+          created_at: number
+          fetched_at: string | null
+          id: string
+          image_url: string | null
+          post_count: number | null
+          post_event_id: string
+          room_slug: string
+          updated_at: string | null
+        }
+        Insert: {
+          author_pubkey: string
+          content: string
+          created_at: number
+          fetched_at?: string | null
+          id?: string
+          image_url?: string | null
+          post_count?: number | null
+          post_event_id: string
+          room_slug: string
+          updated_at?: string | null
+        }
+        Update: {
+          author_pubkey?: string
+          content?: string
+          created_at?: number
+          fetched_at?: string | null
+          id?: string
+          image_url?: string | null
+          post_count?: number | null
+          post_event_id?: string
+          room_slug?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       transaction_history: {
         Row: {
           block_height: number
