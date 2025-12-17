@@ -147,10 +147,15 @@ export default function SendLanaRecipient() {
 
     try {
       const pool = new SimplePool();
-      const events = await pool.querySync(relays, {
-        kinds: [0],
-        limit: 50,
-      });
+      const events = await Promise.race([
+        pool.querySync(relays, {
+          kinds: [0],
+          limit: 1000,
+        }),
+        new Promise<any[]>((_, reject) => 
+          setTimeout(() => reject(new Error('Search timeout')), 10000)
+        )
+      ]);
 
       const matchingProfiles = events
         .map((event) => {
