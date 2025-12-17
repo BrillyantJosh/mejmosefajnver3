@@ -33,10 +33,15 @@ export const useNostrKind0Profiles = () => {
       const pool = new SimplePool();
       
       try {
-        const events = await pool.querySync(relays, {
-          kinds: [0],
-          limit: 100
-        });
+        const events = await Promise.race([
+          pool.querySync(relays, {
+            kinds: [0],
+            limit: 1000
+          }),
+          new Promise<any[]>((_, reject) => 
+            setTimeout(() => reject(new Error('Fetch timeout')), 10000)
+          )
+        ]);
 
         const profileMap = new Map<string, Kind0Profile>();
         
