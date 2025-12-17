@@ -469,6 +469,13 @@ export default function Profile() {
                 </div>
               </div>
 
+              {session?.nostrHexId && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <Label className="text-muted-foreground text-xs">Nostr HEX ID</Label>
+                  <p className="font-mono text-xs break-all select-all">{session.nostrHexId}</p>
+                </div>
+              )}
+
               <Separator />
 
               <div className="grid gap-6 md:grid-cols-2">
