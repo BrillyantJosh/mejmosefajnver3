@@ -601,7 +601,7 @@ export default function Chat() {
                 {/* Messages */}
                 <div 
                   ref={messagesContainerRef}
-                  className="flex-1 overflow-y-auto overflow-x-hidden space-y-4 mb-4 px-4 md:pr-2 md:pb-2 md:px-0 w-full"
+                  className="flex-1 overflow-y-auto overflow-x-hidden space-y-4 mb-4 px-4 pt-20 md:pt-0 md:pr-2 md:pb-2 md:px-0 w-full"
                   style={{ scrollBehavior: 'smooth' }}
                 >
                   {allMessages.length === 0 ? (
