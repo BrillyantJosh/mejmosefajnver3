@@ -18,7 +18,11 @@ export default defineConfig(({ mode }) => ({
       includeAssets: ["favicon.png", "icon-192.png", "icon-512.png"],
       manifest: false, // Using external manifest.json
       workbox: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // Only precache essential files, not large module images
+        globPatterns: ["**/*.{js,css,html,ico,svg,woff2}"],
+        // Exclude large images from precaching
+        globIgnores: ["**/assets/*-module*.png", "**/assets/*-hero*.png", "**/assets/*-bg*.png", "**/assets/*-icon*.png"],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB limit
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
@@ -28,6 +32,18 @@ export default defineConfig(({ mode }) => ({
               expiration: {
                 maxEntries: 100,
                 maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+              },
+            },
+          },
+          {
+            // Cache large images at runtime instead of precaching
+            urlPattern: /\.(?:png|jpg|jpeg|gif|webp)$/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "image-cache",
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
               },
             },
           },
