@@ -541,13 +541,13 @@ export default function AddEvent() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="onlineUrl">Event URL *</Label>
+                <Label htmlFor="onlineUrl">Google Meet / Event URL *</Label>
                 <Input
                   id="onlineUrl"
                   type="url"
                   value={onlineUrl}
                   onChange={(e) => setOnlineUrl(e.target.value)}
-                  placeholder="https://mejmosefajn.org/room/events"
+                  placeholder="https://meet.google.com/xxx-xxxx-xxx"
                   required={isOnline}
                 />
               </div>
