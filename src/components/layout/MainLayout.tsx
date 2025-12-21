@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, User, Home, Settings, LogOut, Shield, Heart } from "lucide-react";
+import { Menu, X, User, Home, Settings, LogOut, Shield, Heart, Download } from "lucide-react";
 import logoImage from "@/assets/lana-logo.png";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,12 @@ import { useAutoLashSender } from "@/hooks/useAutoLashSender";
 import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { toast } from "sonner";
 import InstallPromptBanner from "./InstallPromptBanner";
+import InstallAppDialog from "./InstallAppDialog";
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
 
 const fixedMenuItems = [
   { title: "Home", icon: Home, path: "/" },
@@ -36,13 +42,70 @@ export default function MainLayout() {
   const { profile } = useNostrProfile();
   const { unpaidCount } = useNostrUnpaidLashes();
   const lastRefreshRef = useRef<number>(Date.now());
-  
+
   const dynamicModules = getEnabledModules();
-  
+
+  // --- PWA install prompt state (shared for banner + header) ---
+  const [installHelpOpen, setInstallHelpOpen] = useState(false);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isInAppBrowser, setIsInAppBrowser] = useState(false);
+
+  useEffect(() => {
+    const isDismissed = localStorage.getItem("pwa-install-dismissed");
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+
+    if (isDismissed || isStandalone) return;
+
+    const ua = navigator.userAgent || "";
+    const iOS = /iPad|iPhone|iPod/.test(ua);
+    setIsIOS(iOS);
+
+    // Detect common iOS in-app browsers (where Add to Home Screen is often missing)
+    const inApp = iOS && /(FBAN|FBAV|Instagram|Line|Twitter|WhatsApp|GSA)/i.test(ua);
+    setIsInAppBrowser(inApp);
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      setShowInstallBanner(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    // iOS has no beforeinstallprompt — show banner as instructions
+    if (iOS) setShowInstallBanner(true);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) {
+      setInstallHelpOpen(true);
+      return;
+    }
+
+    await deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === "accepted") {
+      setShowInstallBanner(false);
+      toast.success("Namestitev zagnana");
+    }
+    setDeferredPrompt(null);
+  };
+
+  const handleDismissInstallBanner = () => {
+    setShowInstallBanner(false);
+    localStorage.setItem("pwa-install-dismissed", "true");
+  };
+
   // Periodic session refresh every 15 minutes to keep session alive
   useEffect(() => {
     const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
-    
+
     const checkAndRefresh = () => {
       const now = Date.now();
       if (now - lastRefreshRef.current >= REFRESH_INTERVAL) {
@@ -53,24 +116,24 @@ export default function MainLayout() {
 
     // Check on visibility change (when user returns to tab)
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === "visible") {
         checkAndRefresh();
       }
     };
 
     // Also set up interval for background refresh
     const intervalId = setInterval(checkAndRefresh, REFRESH_INTERVAL);
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [refreshSession]);
-  
+
   // Auto-send lashes in background when NOT on /lash/pay page
-  const isOnPayLashesPage = location.pathname === '/lash/pay';
+  const isOnPayLashesPage = location.pathname === "/lash/pay";
   useAutoLashSender({ enabled: !isOnPayLashesPage });
 
   const handleLogout = () => {
@@ -81,16 +144,31 @@ export default function MainLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Install Prompt Banner */}
-      <InstallPromptBanner />
-      
+      <InstallPromptBanner
+        show={showInstallBanner}
+        isIOS={isIOS}
+        canInstall={!!deferredPrompt}
+        onInstall={handleInstall}
+        onDismiss={handleDismissInstallBanner}
+        onOpenHelp={() => setInstallHelpOpen(true)}
+      />
+
+      <InstallAppDialog
+        open={installHelpOpen}
+        onOpenChange={setInstallHelpOpen}
+        isIOS={isIOS}
+        isInAppBrowser={isInAppBrowser}
+        canInstall={!!deferredPrompt}
+        onInstall={handleInstall}
+      />
+
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between px-4">
           <Link to="/" className="flex items-center space-x-2 min-w-0 flex-1 mr-4">
-            <img 
-              src={logoImage} 
-              alt="Logo" 
+            <img
+              src={logoImage}
+              alt="Logo"
               className="h-8 w-8 object-contain flex-shrink-0"
             />
             <span className="text-lg md:text-xl font-bold bg-gradient-to-r from-purple-400 via-purple-500 to-pink-500 bg-clip-text text-transparent truncate">
@@ -111,8 +189,8 @@ export default function MainLayout() {
                   <span className="text-xs font-bold">LASH</span>
                 </Button>
                 {unpaidCount > 0 && (
-                  <Badge 
-                    variant="destructive" 
+                  <Badge
+                    variant="destructive"
                     className="absolute -top-2 -right-2 h-5 min-w-5 flex items-center justify-center px-1 text-xs font-bold"
                   >
                     {unpaidCount}
@@ -121,17 +199,32 @@ export default function MainLayout() {
               </Link>
               <div className="flex flex-col items-end">
                 {profile.display_name && (
-                  <p className="text-sm font-medium truncate max-w-[150px]">{profile.display_name}</p>
+                  <p className="text-sm font-medium truncate max-w-[150px]">
+                    {profile.display_name}
+                  </p>
                 )}
                 {profile.name && (
-                  <p className="text-xs text-muted-foreground truncate max-w-[150px]">@{profile.name}</p>
+                  <p className="text-xs text-muted-foreground truncate max-w-[150px]">
+                    @{profile.name}
+                  </p>
                 )}
               </div>
             </div>
           )}
 
           {/* Desktop Menu */}
-          <div className="hidden md:block">
+          <div className="hidden md:flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setInstallHelpOpen(true)}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Namesti
+            </Button>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon">
@@ -142,10 +235,7 @@ export default function MainLayout() {
                 {/* Fixed Menu Items */}
                 {fixedMenuItems.map((item) => (
                   <DropdownMenuItem key={item.path} asChild>
-                    <Link
-                      to={item.path}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
+                    <Link to={item.path} className="flex items-center gap-2 cursor-pointer">
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
@@ -155,23 +245,20 @@ export default function MainLayout() {
                   <LogOut className="h-4 w-4 mr-2" />
                   <span>Logout</span>
                 </DropdownMenuItem>
-                
+
                 {/* Separator */}
                 {dynamicModules.length > 0 && <DropdownMenuSeparator />}
-                
+
                 {/* Dynamic Module Items */}
                 {dynamicModules.map((module) => (
                   <DropdownMenuItem key={module.path} asChild>
-                    <Link
-                      to={module.path}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
+                    <Link to={module.path} className="flex items-center gap-2 cursor-pointer">
                       <module.icon className="h-4 w-4" />
                       <span>{module.title}</span>
                     </Link>
                   </DropdownMenuItem>
                 ))}
-                
+
                 {/* Admin Section */}
                 {isAdmin && <DropdownMenuSeparator />}
                 {isAdmin && (
@@ -189,19 +276,27 @@ export default function MainLayout() {
             </DropdownMenu>
           </div>
 
-          {/* Mobile Menu Button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? (
-              <X className="h-5 w-5" />
-            ) : (
-              <Menu className="h-5 w-5" />
-            )}
-          </Button>
+          {/* Mobile Buttons */}
+          <div className="md:hidden flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setInstallHelpOpen(true)}
+              aria-label="Namesti aplikacijo"
+            >
+              <Download className="h-5 w-5" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Meni"
+            >
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+          </div>
         </div>
 
         {/* Mobile Menu */}
@@ -224,7 +319,7 @@ export default function MainLayout() {
                   <span>{item.title}</span>
                 </Link>
               ))}
-              
+
               <button
                 onClick={() => {
                   handleLogout();
@@ -235,12 +330,10 @@ export default function MainLayout() {
                 <LogOut className="h-5 w-5" />
                 <span>Logout</span>
               </button>
-              
+
               {/* Separator */}
-              {dynamicModules.length > 0 && (
-                <div className="border-t my-2" />
-              )}
-              
+              {dynamicModules.length > 0 && <div className="border-t my-2" />}
+
               {/* Dynamic Module Items */}
               {dynamicModules.map((module) => (
                 <Link
@@ -257,7 +350,7 @@ export default function MainLayout() {
                   <span>{module.title}</span>
                 </Link>
               ))}
-              
+
               {/* Admin Section */}
               {isAdmin && <div className="border-t my-2" />}
               {isAdmin && (

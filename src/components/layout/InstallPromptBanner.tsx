@@ -1,95 +1,56 @@
-import { useState, useEffect } from "react";
-import { X, Download, Smartphone } from "lucide-react";
+import { X, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
+type Props = {
+  show: boolean;
+  isIOS: boolean;
+  canInstall: boolean;
+  onInstall?: () => void;
+  onDismiss: () => void;
+  onOpenHelp: () => void;
+};
 
-export default function InstallPromptBanner() {
-  const [showBanner, setShowBanner] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isIOS, setIsIOS] = useState(false);
-
-  useEffect(() => {
-    // Check if already installed or dismissed
-    const isDismissed = localStorage.getItem("pwa-install-dismissed");
-    const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
-    
-    if (isDismissed || isStandalone) {
-      return;
-    }
-
-    // Check if iOS
-    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    setIsIOS(iOS);
-
-    // Listen for the beforeinstallprompt event (Android/Chrome)
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setShowBanner(true);
-    };
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-
-    // For iOS, show the banner with instructions
-    if (iOS && !isStandalone) {
-      setShowBanner(true);
-    }
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    };
-  }, []);
-
-  const handleInstall = async () => {
-    if (deferredPrompt) {
-      await deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === "accepted") {
-        setShowBanner(false);
-      }
-      setDeferredPrompt(null);
-    }
-  };
-
-  const handleDismiss = () => {
-    setShowBanner(false);
-    localStorage.setItem("pwa-install-dismissed", "true");
-  };
-
-  if (!showBanner) return null;
+export default function InstallPromptBanner({
+  show,
+  isIOS,
+  canInstall,
+  onInstall,
+  onDismiss,
+  onOpenHelp,
+}: Props) {
+  if (!show) return null;
 
   return (
     <div className="bg-primary text-primary-foreground px-4 py-2 flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2 min-w-0 flex-1">
+      <button
+        type="button"
+        onClick={onOpenHelp}
+        className="flex items-center gap-2 min-w-0 flex-1 text-left"
+        aria-label="Navodila za namestitev aplikacije"
+      >
         <Smartphone className="h-4 w-4 flex-shrink-0" />
         <span className="text-sm truncate">
-          {isIOS 
-            ? "Tap Share → Add to Home Screen" 
-            : "Install app for better experience"
-          }
+          {isIOS ? "Namestitev na iPhone: tapni za navodila" : "Namesti aplikacijo"}
         </span>
-      </div>
+      </button>
+
       <div className="flex items-center gap-1 flex-shrink-0">
-        {!isIOS && deferredPrompt && (
+        {!isIOS && canInstall && onInstall && (
           <Button
             size="sm"
             variant="secondary"
-            onClick={handleInstall}
+            onClick={onInstall}
             className="h-7 px-2 text-xs"
           >
-            <Download className="h-3 w-3 mr-1" />
-            Install
+            Namesti
           </Button>
         )}
         <Button
           size="sm"
           variant="ghost"
-          onClick={handleDismiss}
+          onClick={onDismiss}
           className="h-7 w-7 p-0 hover:bg-primary-foreground/20"
+          aria-label="Zapri"
         >
           <X className="h-4 w-4" />
         </Button>
