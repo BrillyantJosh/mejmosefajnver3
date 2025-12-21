@@ -17,8 +17,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, Send, Key } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, Send, Key, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
+import { QRScanner } from '@/components/QRScanner';
 
 interface LocationState {
   sourceWalletId: string;
@@ -28,7 +29,7 @@ interface LocationState {
   accountId: number;
 }
 
-const ALLOWED_WALLET_TYPES = ['Wallets', 'Main Wallet'];
+const ALLOWED_WALLET_TYPES = ['Wallet', 'Main Wallet'];
 
 export default function Lana8WonderTransfer() {
   const navigate = useNavigate();
@@ -45,6 +46,7 @@ export default function Lana8WonderTransfer() {
   const [keyError, setKeyError] = useState('');
   const [selectedDestination, setSelectedDestination] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
 
   // Filter wallets to only show allowed types and exclude source wallet
   const destinationWallets = wallets.filter(
@@ -249,32 +251,53 @@ export default function Lana8WonderTransfer() {
 
           <div className="space-y-2">
             <Label htmlFor="privateKey">Private Key (WIF)</Label>
-            <div className="relative">
-              <Input
-                id="privateKey"
-                type="password"
-                placeholder="Enter your private key"
-                value={privateKey}
-                onChange={e => setPrivateKey(e.target.value)}
-                className={`pr-10 ${
-                  privateKey
-                    ? isKeyValid
-                      ? 'border-green-500 focus-visible:ring-green-500'
-                      : keyError
-                      ? 'border-destructive focus-visible:ring-destructive'
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  id="privateKey"
+                  type="password"
+                  placeholder="Enter your private key"
+                  value={privateKey}
+                  onChange={e => setPrivateKey(e.target.value)}
+                  className={`pr-10 ${
+                    privateKey
+                      ? isKeyValid
+                        ? 'border-green-500 focus-visible:ring-green-500'
+                        : keyError
+                        ? 'border-destructive focus-visible:ring-destructive'
+                        : ''
                       : ''
-                    : ''
-                }`}
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                {isValidatingKey && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                {!isValidatingKey && isKeyValid && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-                {!isValidatingKey && keyError && <AlertCircle className="h-4 w-4 text-destructive" />}
+                  }`}
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {isValidatingKey && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  {!isValidatingKey && isKeyValid && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                  {!isValidatingKey && keyError && <AlertCircle className="h-4 w-4 text-destructive" />}
+                </div>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setShowQRScanner(true)}
+                title="Scan QR Code"
+              >
+                <QrCode className="w-4 h-4" />
+              </Button>
             </div>
             {keyError && <p className="text-sm text-destructive">{keyError}</p>}
             {isKeyValid && <p className="text-sm text-green-600">Private key validated ✓</p>}
           </div>
+
+          <QRScanner
+            isOpen={showQRScanner}
+            onClose={() => setShowQRScanner(false)}
+            onScan={(data) => {
+              setPrivateKey(data);
+              setShowQRScanner(false);
+              toast.success('QR Code scanned - Private key loaded');
+            }}
+          />
         </CardContent>
       </Card>
 
