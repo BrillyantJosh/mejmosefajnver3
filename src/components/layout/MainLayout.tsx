@@ -92,7 +92,7 @@ export default function MainLayout() {
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === "accepted") {
       setShowInstallBanner(false);
-      toast.success("Namestitev zagnana");
+      toast.success("Installation started");
     }
     setDeferredPrompt(null);
   };
@@ -222,7 +222,7 @@ export default function MainLayout() {
               className="gap-2"
             >
               <Download className="h-4 w-4" />
-              Namesti
+              Install
             </Button>
 
             <DropdownMenu>
@@ -283,7 +283,7 @@ export default function MainLayout() {
               variant="ghost"
               size="icon"
               onClick={() => setInstallHelpOpen(true)}
-              aria-label="Namesti aplikacijo"
+              aria-label="Install app"
             >
               <Download className="h-5 w-5" />
             </Button>
