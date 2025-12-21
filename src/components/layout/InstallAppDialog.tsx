@@ -1,4 +1,4 @@
-import { Download, Info, Smartphone } from "lucide-react";
+import { Download, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import lanaLogo from "@/assets/lana-logo.png";
 
 type Props = {
   open: boolean;
@@ -29,12 +30,12 @@ export default function InstallAppDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Smartphone className="h-5 w-5" />
-            Namesti aplikacijo
+          <DialogTitle className="flex items-center gap-3">
+            <img src={lanaLogo} alt="Lana" className="h-8 w-8 rounded" />
+            Install App
           </DialogTitle>
           <DialogDescription>
-            Dodaj aplikacijo na začetni zaslon za hitrejši dostop in polnozaslonski način.
+            Add the app to your home screen for faster access and fullscreen mode.
           </DialogDescription>
         </DialogHeader>
 
@@ -46,8 +47,8 @@ export default function InstallAppDialog({
                   <div className="flex items-start gap-2">
                     <Info className="mt-0.5 h-4 w-4" />
                     <p>
-                      Videti je, da si v “in-app” brskalniku (WhatsApp/Instagram/Facebook). V tem načinu
-                      “Add to Home Screen” pogosto ni na voljo.
+                      It looks like you're in an in-app browser (WhatsApp/Instagram/Facebook). 
+                      "Add to Home Screen" is often not available in this mode.
                     </p>
                   </div>
                 </div>
@@ -55,20 +56,20 @@ export default function InstallAppDialog({
 
               <ol className="list-decimal pl-5 space-y-2">
                 <li>
-                  Odpri stran v <b>Safari</b> (ne v aplikacijskem brskalniku).
+                  Open this page in <b>Safari</b> (not in an in-app browser).
                 </li>
                 <li>
-                  Pritisni <b>Share</b> (kvadratek s puščico navzgor).
+                  Tap the <b>Share</b> button (square with an arrow pointing up).
                 </li>
                 <li>
-                  Izberi <b>Add to Home Screen</b> (Dodaj na začetni zaslon).
+                  Select <b>Add to Home Screen</b>.
                 </li>
-                <li>Potrdi z <b>Add</b>.</li>
+                <li>Confirm by tapping <b>Add</b>.</li>
               </ol>
 
               <div className="rounded-md border bg-muted/40 p-3">
                 <p className="text-muted-foreground">
-                  Na iOS ni gumba za “download” kot na računalniku—namestitev je vedno prek Share menija.
+                  On iOS there is no "download" button like on desktop—installation is always through the Share menu.
                 </p>
               </div>
             </div>
@@ -77,12 +78,12 @@ export default function InstallAppDialog({
               {canInstall ? (
                 <Button onClick={onInstall} className="w-full">
                   <Download className="mr-2 h-4 w-4" />
-                  Namesti zdaj
+                  Install Now
                 </Button>
               ) : (
                 <div className="rounded-md border bg-muted/40 p-3">
                   <p className="text-muted-foreground">
-                    Če se gumb za namestitev ne prikaže: v Chromu odpri meni (⋮) → <b>Install app</b> ali
+                    If the install button doesn't appear: in Chrome open the menu (⋮) → <b>Install app</b> or
                     <b> Add to Home screen</b>.
                   </p>
                 </div>
