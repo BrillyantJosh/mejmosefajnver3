@@ -4,10 +4,11 @@ import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrWallets } from '@/hooks/useNostrWallets';
 import { supabase } from '@/integrations/supabase/client';
 import { SimplePool, Event } from 'nostr-tools';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, ExternalLink, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Loader2, ExternalLink, Sparkles, CheckCircle2, AlertCircle, ArrowRightLeft } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -36,6 +37,7 @@ interface AnnuityPlan {
 }
 
 const Lana8Wonder = () => {
+  const navigate = useNavigate();
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
@@ -246,10 +248,29 @@ const Lana8Wonder = () => {
                         {needsCashOut && (
                           <Alert variant="destructive">
                             <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                            <AlertTitle className="text-sm md:text-base">Cash Out Required</AlertTitle>
-                            <AlertDescription className="text-xs md:text-sm">
-                              You need to cash out <strong>{cashOutAmount.toFixed(4)} LANA</strong> (≈{cashOutFiat.toFixed(2)} {annuityPlan.currency}) from this account before the next split.
-                            </AlertDescription>
+                            <div className="flex-1">
+                              <AlertTitle className="text-sm md:text-base">Cash Out Required</AlertTitle>
+                              <AlertDescription className="text-xs md:text-sm">
+                                You need to cash out <strong>{cashOutAmount.toFixed(4)} LANA</strong> (≈{cashOutFiat.toFixed(2)} {annuityPlan.currency}) from this account before the next split.
+                              </AlertDescription>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 md:mt-0 md:ml-4 whitespace-nowrap"
+                              onClick={() => navigate('/lana8wonder/transfer', {
+                                state: {
+                                  sourceWalletId: account.wallet,
+                                  cashOutAmount: cashOutAmount,
+                                  cashOutFiat: cashOutFiat,
+                                  currency: annuityPlan.currency,
+                                  accountId: account.account_id,
+                                }
+                              })}
+                            >
+                              <ArrowRightLeft className="h-4 w-4 mr-2" />
+                              Transfer
+                            </Button>
                           </Alert>
                         )}
                         {account.levels.map(level => {
