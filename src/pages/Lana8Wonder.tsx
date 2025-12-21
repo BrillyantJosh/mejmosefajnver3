@@ -246,18 +246,20 @@ const Lana8Wonder = () => {
                     <AccordionContent>
                       <div className="space-y-3 md:space-y-4 mt-2">
                         {needsCashOut && (
-                          <Alert variant="destructive">
-                            <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                            <div className="flex-1">
-                              <AlertTitle className="text-sm md:text-base">Cash Out Required</AlertTitle>
-                              <AlertDescription className="text-xs md:text-sm">
-                                You need to cash out <strong>{cashOutAmount.toFixed(4)} LANA</strong> (≈{cashOutFiat.toFixed(2)} {annuityPlan.currency}) from this account before the next split.
-                              </AlertDescription>
+                          <Alert variant="destructive" className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                              <div>
+                                <AlertTitle className="text-sm md:text-base">Cash Out Required</AlertTitle>
+                                <AlertDescription className="text-xs md:text-sm">
+                                  You need to cash out <strong>{cashOutAmount.toFixed(4)} LANA</strong> (≈{cashOutFiat.toFixed(2)} {annuityPlan.currency}) from this account before the next split.
+                                </AlertDescription>
+                              </div>
                             </div>
                             <Button
-                              variant="outline"
+                              variant="default"
                               size="sm"
-                              className="mt-2 md:mt-0 md:ml-4 whitespace-nowrap"
+                              className="whitespace-nowrap bg-green-600 hover:bg-green-700 text-white self-end md:self-auto"
                               onClick={() => navigate('/lana8wonder/transfer', {
                                 state: {
                                   sourceWalletId: account.wallet,
