@@ -97,6 +97,7 @@ import SendLanaResult from "./pages/SendLanaResult";
 import SellLana from "./pages/SellLana";
 import BuyLana from "./pages/BuyLana";
 import Lana8Wonder from "./pages/Lana8Wonder";
+import Lana8WonderTransfer from "./pages/Lana8WonderTransfer";
 import NotFound from "./pages/NotFound";
 import AdminSettings from "./pages/admin/AdminSettings";
 import PublicPost from "./pages/PublicPost";
@@ -235,6 +236,7 @@ const App = () => (
                   <Route path="/sell-lana" element={<SellLana />} />
                   <Route path="/buy-lana" element={<BuyLana />} />
                   <Route path="/lana8wonder" element={<Lana8Wonder />} />
+                  <Route path="/lana8wonder/transfer" element={<Lana8WonderTransfer />} />
                   <Route path="/music" element={<LanaMusicLayout />}>
                     <Route index element={<Songs />} />
                     <Route path="popular" element={<Popular />} />
