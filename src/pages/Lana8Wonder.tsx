@@ -242,7 +242,7 @@ const Lana8Wonder = () => {
                     asChild
                   >
                     <a
-                      href={`https://explorer.lana.net.co/tx/${successData.txHash}`}
+                      href={`https://chainz.cryptoid.info/lana/tx.dws?${successData.txHash}`}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
