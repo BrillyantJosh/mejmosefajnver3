@@ -4,13 +4,20 @@ import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrWallets } from '@/hooks/useNostrWallets';
 import { supabase } from '@/integrations/supabase/client';
 import { SimplePool, Event } from 'nostr-tools';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, ExternalLink, Sparkles, CheckCircle2, AlertCircle, ArrowRightLeft } from 'lucide-react';
+import { Loader2, ExternalLink, Sparkles, CheckCircle2, AlertCircle, ArrowRightLeft, Copy, X } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { toast } from 'sonner';
+
+interface TransferSuccessState {
+  transferSuccess?: boolean;
+  txHash?: string;
+  amount?: number;
+}
 
 interface AnnuityLevel {
   row_id: string;
@@ -38,6 +45,7 @@ interface AnnuityPlan {
 
 const Lana8Wonder = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
@@ -46,6 +54,26 @@ const Lana8Wonder = () => {
   const [eligibleWallets, setEligibleWallets] = useState<string[]>([]);
   const [accountBalances, setAccountBalances] = useState<Record<string, number>>({});
   const [loadingBalances, setLoadingBalances] = useState(false);
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [successData, setSuccessData] = useState<{ txHash: string; amount: number } | null>(null);
+
+  // Handle transfer success state
+  useEffect(() => {
+    const state = location.state as TransferSuccessState | undefined;
+    if (state?.transferSuccess && state?.txHash) {
+      setShowSuccessBanner(true);
+      setSuccessData({ txHash: state.txHash, amount: state.amount || 0 });
+      // Clear the state so it doesn't show again on refresh
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, location.pathname, navigate]);
+
+  const copyTxHash = () => {
+    if (successData?.txHash) {
+      navigator.clipboard.writeText(successData.txHash);
+      toast.success('Transaction hash copied!');
+    }
+  };
 
   const relays = parameters?.relays || [];
   const exchangeRates = parameters?.exchangeRates;
@@ -187,6 +215,54 @@ const Lana8Wonder = () => {
   if (annuityPlan) {
     return (
       <div className="container mx-auto p-3 md:p-4 pb-24 space-y-4 md:space-y-6">
+        {showSuccessBanner && successData && (
+          <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <AlertTitle className="text-green-800 dark:text-green-200">Transfer Successful!</AlertTitle>
+            <AlertDescription className="text-green-700 dark:text-green-300">
+              <div className="space-y-2">
+                <p>Successfully transferred <strong>{successData.amount.toFixed(4)} LANA</strong></p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs">TX:</span>
+                  <code className="font-mono text-xs bg-green-100 dark:bg-green-900 px-2 py-1 rounded break-all">
+                    {successData.txHash}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2"
+                    onClick={copyTxHash}
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2"
+                    asChild
+                  >
+                    <a
+                      href={`https://explorer.lana.net.co/tx/${successData.txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            </AlertDescription>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute top-2 right-2 h-6 w-6 p-0"
+              onClick={() => setShowSuccessBanner(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </Alert>
+        )}
+
         <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
           <Sparkles className="h-6 w-6 md:h-8 md:w-8 text-primary flex-shrink-0" />
           <div>

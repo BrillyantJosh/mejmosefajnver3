@@ -101,11 +101,11 @@ export default function Lana8WonderTransfer() {
     try {
       const { data, error } = await supabase.functions.invoke('send-lana-transaction', {
         body: {
-          sender_address: state.sourceWalletId,
-          recipient_address: selectedDestination,
-          amount_lana: state.cashOutAmount,
-          private_key_wif: privateKey,
-          electrum_servers: parameters?.electrumServers || [],
+          senderAddress: state.sourceWalletId,
+          recipientAddress: selectedDestination,
+          amount: state.cashOutAmount,
+          privateKey: privateKey,
+          electrumServers: parameters?.electrumServers || [],
         },
       });
 
@@ -116,7 +116,7 @@ export default function Lana8WonderTransfer() {
         navigate('/lana8wonder', {
           state: {
             transferSuccess: true,
-            txid: data.txid,
+            txHash: data.txHash,
             amount: state.cashOutAmount,
           },
         });
