@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { User, Save, Loader2, Navigation, Map, Plus, Upload, X } from "lucide-react";
+import { User, Save, Loader2, Navigation, Map, Plus, Upload, X, Eye, EyeOff, Copy } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -62,6 +62,7 @@ export default function Profile() {
   const { profile, isLoading, isPublishing, publishProfile } = useNostrProfile();
   const { languages, isLoading: languagesLoading } = useLanguages();
   const [isEditing, setIsEditing] = useState(false);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -472,7 +473,55 @@ export default function Profile() {
               {session?.nostrHexId && (
                 <div className="bg-muted/50 rounded-lg p-3">
                   <Label className="text-muted-foreground text-xs">Nostr HEX ID</Label>
-                  <p className="font-mono text-xs break-all select-all">{session.nostrHexId}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-mono text-xs break-all select-all flex-1">{session.nostrHexId}</p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(session.nostrHexId);
+                        toast({ title: "Copied", description: "Nostr HEX ID copied to clipboard" });
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {session?.nostrPrivateKey && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <Label className="text-muted-foreground text-xs">Nostr Private Key</Label>
+                  <div className="flex items-center gap-2">
+                    <p className="font-mono text-xs break-all select-all flex-1">
+                      {showPrivateKey 
+                        ? (typeof session.nostrPrivateKey === 'string' 
+                            ? session.nostrPrivateKey 
+                            : Array.from(session.nostrPrivateKey as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join(''))
+                        : '••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••'}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowPrivateKey(!showPrivateKey)}
+                    >
+                      {showPrivateKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const key = typeof session.nostrPrivateKey === 'string' 
+                          ? session.nostrPrivateKey 
+                          : Array.from(session.nostrPrivateKey as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('');
+                        navigator.clipboard.writeText(key);
+                        toast({ title: "Copied", description: "Nostr Private Key copied to clipboard" });
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-destructive mt-1">⚠️ Never share your private key!</p>
                 </div>
               )}
 
