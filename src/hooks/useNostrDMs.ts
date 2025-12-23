@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
+import { SimplePool, Event, finalizeEvent, nip04 } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { toast } from '@/hooks/use-toast';
-import { nip04Encrypt, nip04Decrypt } from '@/lib/nostr-nip04';
+import { nip04Decrypt as customNip04Decrypt } from '@/lib/nostr-nip04';
 import { supabase } from '@/integrations/supabase/client';
 import { useNostrProfilesCacheBulk } from './useNostrProfilesCacheBulk';
 
@@ -78,37 +78,46 @@ export function useNostrDMs() {
   const decryptMessage = useCallback(async (event: Event, theirPubkey: string): Promise<string> => {
     if (!session?.nostrPrivateKey) return '';
     
+    const privateKeyHex = typeof session.nostrPrivateKey === 'string' 
+      ? session.nostrPrivateKey
+      : bytesToHex(session.nostrPrivateKey);
+    
+    console.log('🔓 Attempting decrypt:', {
+      eventId: event.id.slice(0, 8),
+      eventAuthor: event.pubkey.slice(0, 8),
+      myPubkey: session.nostrHexId.slice(0, 8),
+      theirPubkey: theirPubkey.slice(0, 8),
+      encryptedPreview: event.content.slice(0, 30) + '...'
+    });
+    
+    // Try standard nostr-tools NIP-04 first (compatible with DAMUS, Amethyst, etc.)
     try {
-      console.log('🔓 Attempting decrypt:', {
-        eventId: event.id.slice(0, 8),
-        eventAuthor: event.pubkey.slice(0, 8),
-        myPubkey: session.nostrHexId.slice(0, 8),
-        theirPubkey: theirPubkey.slice(0, 8),
-        encryptedPreview: event.content.slice(0, 30) + '...'
-      });
-      
-      // Use custom NIP-04 decrypt
-      const privateKeyHex = typeof session.nostrPrivateKey === 'string' 
-        ? session.nostrPrivateKey
-        : bytesToHex(session.nostrPrivateKey);
-        
-      const decrypted = await nip04Decrypt(
-        event.content,
-        privateKeyHex,
-        theirPubkey
-      );
-      
-      console.log('✅ Decrypt success:', decrypted.slice(0, 20) + '...');
+      const decrypted = await nip04.decrypt(privateKeyHex, theirPubkey, event.content);
+      console.log('✅ Decrypt success (nostr-tools):', decrypted.slice(0, 20) + '...');
       return decrypted;
-    } catch (error) {
-      console.error('❌ Decrypt failed:', {
-        error: error instanceof Error ? error.message : 'Unknown',
-        eventId: event.id.slice(0, 8),
-        eventAuthor: event.pubkey.slice(0, 8),
-        recipientTag: event.tags.find(t => t[0] === 'p')?.[1]?.slice(0, 8),
-        myPubkey: session.nostrHexId.slice(0, 8)
-      });
-      return `[Cannot decrypt - wrong key]`;
+    } catch (error1) {
+      console.log('⚠️ Standard NIP-04 failed, trying custom fallback...');
+      
+      // Fallback to custom implementation for old messages encrypted with our custom method
+      try {
+        const decrypted = await customNip04Decrypt(
+          event.content,
+          privateKeyHex,
+          theirPubkey
+        );
+        console.log('✅ Decrypt success (custom fallback):', decrypted.slice(0, 20) + '...');
+        return decrypted;
+      } catch (error2) {
+        console.error('❌ Both decrypt methods failed:', {
+          standardError: error1 instanceof Error ? error1.message : 'Unknown',
+          customError: error2 instanceof Error ? error2.message : 'Unknown',
+          eventId: event.id.slice(0, 8),
+          eventAuthor: event.pubkey.slice(0, 8),
+          recipientTag: event.tags.find(t => t[0] === 'p')?.[1]?.slice(0, 8),
+          myPubkey: session.nostrHexId.slice(0, 8)
+        });
+        return `[Cannot decrypt - wrong key]`;
+      }
     }
   }, [session?.nostrPrivateKey, session?.nostrHexId]);
 
@@ -557,16 +566,12 @@ export function useNostrDMs() {
     try {
       console.log('🔐 Encrypting message to:', recipientPubkey.slice(0, 8) + '...');
       
-      // Use custom NIP-04 encrypt
+      // Use standard nostr-tools NIP-04 encrypt (compatible with DAMUS, Amethyst, etc.)
       const privateKeyHex = typeof session.nostrPrivateKey === 'string' 
         ? session.nostrPrivateKey
         : bytesToHex(session.nostrPrivateKey);
       
-      const encrypted = await nip04Encrypt(
-        message,
-        privateKeyHex,
-        recipientPubkey
-      );
+      const encrypted = await nip04.encrypt(privateKeyHex, recipientPubkey, message);
 
       console.log('✍️ Signing event...');
       const privKeyBytes = typeof session.nostrPrivateKey === 'string' 
