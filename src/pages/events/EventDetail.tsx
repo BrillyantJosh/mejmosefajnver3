@@ -36,6 +36,9 @@ export default function EventDetail() {
   const decodedDTag = urlDTag ? decodeURIComponent(urlDTag) : '';
 
   const { registrations, userRegistration, refetch: refetchRegistrations } = useNostrEventRegistrations(event?.dTag || decodedDTag);
+  
+  // Countdown hook - must be called unconditionally (before any early returns)
+  const countdown = useEventCountdown(event?.start || new Date());
 
   const relays = systemParameters?.relays && systemParameters.relays.length > 0 
     ? systemParameters.relays 
@@ -219,7 +222,6 @@ export default function EventDetail() {
   }
 
   const status = getEventStatus(event);
-  const countdown = useEventCountdown(event.start);
 
   return (
     <div className="space-y-4 px-4 pb-24">
