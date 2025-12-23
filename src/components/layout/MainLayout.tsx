@@ -252,10 +252,17 @@ export default function MainLayout() {
                 {/* Dynamic Module Items */}
                 {dynamicModules.map((module) => (
                   <DropdownMenuItem key={module.path} asChild>
-                    <Link to={module.path} className="flex items-center gap-2 cursor-pointer">
-                      <module.icon className="h-4 w-4" />
-                      <span>{module.title}</span>
-                    </Link>
+                    {module.externalUrl ? (
+                      <a href={module.externalUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 cursor-pointer">
+                        <module.icon className="h-4 w-4" />
+                        <span>{module.title}</span>
+                      </a>
+                    ) : (
+                      <Link to={module.path} className="flex items-center gap-2 cursor-pointer">
+                        <module.icon className="h-4 w-4" />
+                        <span>{module.title}</span>
+                      </Link>
+                    )}
                   </DropdownMenuItem>
                 ))}
 
@@ -336,19 +343,33 @@ export default function MainLayout() {
 
               {/* Dynamic Module Items */}
               {dynamicModules.map((module) => (
-                <Link
-                  key={module.path}
-                  to={module.path}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    location.pathname.startsWith(module.path)
-                      ? "bg-secondary text-primary font-medium"
-                      : "hover:bg-secondary/50"
-                  }`}
-                >
-                  <module.icon className="h-5 w-5" />
-                  <span>{module.title}</span>
-                </Link>
+                module.externalUrl ? (
+                  <a
+                    key={module.path}
+                    href={module.externalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-secondary/50"
+                  >
+                    <module.icon className="h-5 w-5" />
+                    <span>{module.title}</span>
+                  </a>
+                ) : (
+                  <Link
+                    key={module.path}
+                    to={module.path}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                      location.pathname.startsWith(module.path)
+                        ? "bg-secondary text-primary font-medium"
+                        : "hover:bg-secondary/50"
+                    }`}
+                  >
+                    <module.icon className="h-5 w-5" />
+                    <span>{module.title}</span>
+                  </Link>
+                )
               ))}
 
               {/* Admin Section */}
