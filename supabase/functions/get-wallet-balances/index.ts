@@ -184,8 +184,7 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    console.log('Electrum Balance Aggregator started');
+  console.log('Electrum Balance Aggregator started');
 
     // Parse request body
     let requestBody = null;
@@ -231,7 +230,23 @@ Deno.serve(async (req) => {
 
     // Initialize and fetch balances
     const aggregator = new ElectrumBalanceAggregator(electrumServers);
-    const balances = await aggregator.fetchWalletBalances(walletAddresses);
+
+    let balances: WalletBalance[] = [];
+    let globalError: string | null = null;
+
+    try {
+      balances = await aggregator.fetchWalletBalances(walletAddresses);
+    } catch (e) {
+      globalError = e instanceof Error ? e.message : 'Unknown error';
+      console.error('Failed to fetch balances from all servers:', globalError);
+      // Return a per-wallet error list instead of throwing a 500 (prevents blank screens)
+      balances = walletAddresses.map((address: string) => ({
+        wallet_id: address,
+        balance: 0,
+        status: 'inactive',
+        error: globalError || 'Unknown error',
+      }));
+    }
 
     // Calculate totals
     const totalBalance = balances.reduce((sum, b) => sum + b.balance, 0);
@@ -239,31 +254,21 @@ Deno.serve(async (req) => {
     const errorCount = balances.filter((b) => b.error).length;
 
     const result = {
-      success: true,
+      success: successCount > 0,
       total_balance: Math.round(totalBalance * 100) / 100,
       wallets: balances,
       success_count: successCount,
       error_count: errorCount,
+      global_error: globalError,
       timestamp: new Date().toISOString(),
     };
 
-    console.log(`Electrum aggregation completed: ${successCount} success, ${errorCount} errors, total: ${result.total_balance} LANA`);
+    console.log(
+      `Electrum aggregation completed: ${successCount} success, ${errorCount} errors, total: ${result.total_balance} LANA`
+    );
 
+    // Always return 200 so the client can handle errors gracefully.
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error) {
-    console.error('Error in Electrum balance aggregator:', error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
-  }
 });
