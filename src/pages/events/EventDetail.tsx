@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Calendar, Clock, MapPin, Globe, Users, ArrowLeft, 
-  ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2, X, Share2, AlertTriangle
+  ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2, X, Share2, AlertTriangle, Timer
 } from "lucide-react";
 import { format } from "date-fns";
 import { SimplePool, finalizeEvent } from "nostr-tools";
@@ -16,6 +16,7 @@ import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNostrEventRegistrations } from "@/hooks/useNostrEventRegistrations";
 import { toast } from "@/hooks/use-toast";
 import { formatTimeInTimezone, getTimezoneAbbreviation, getUserTimezone } from "@/lib/timezones";
+import { useEventCountdown } from "@/hooks/useEventCountdown";
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
   'wss://relay.lanacoin-eternity.com',
@@ -218,6 +219,7 @@ export default function EventDetail() {
   }
 
   const status = getEventStatus(event);
+  const countdown = useEventCountdown(event.start);
 
   return (
     <div className="space-y-4 px-4 pb-24">
@@ -276,6 +278,16 @@ export default function EventDetail() {
         </CardHeader>
         
         <CardContent className="space-y-6">
+          {/* Countdown */}
+          {countdown.isWithin12Hours && !countdown.isStarted && (
+            <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 flex items-center justify-center gap-3">
+              <Timer className="h-5 w-5 text-primary animate-pulse" />
+              <span className="text-lg font-semibold text-primary">
+                Starts in {countdown.displayString}
+              </span>
+            </div>
+          )}
+          
           {/* Date and Time */}
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-lg">
