@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Calendar, Clock, MapPin, Globe, Users, ArrowLeft, 
-  ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2, X, Share2
+  ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2, X, Share2, AlertTriangle
 } from "lucide-react";
 import { format } from "date-fns";
 import { SimplePool, finalizeEvent } from "nostr-tools";
@@ -15,7 +15,7 @@ import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNostrEventRegistrations } from "@/hooks/useNostrEventRegistrations";
 import { toast } from "@/hooks/use-toast";
-
+import { formatTimeInTimezone, getTimezoneAbbreviation, getUserTimezone } from "@/lib/timezones";
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
   'wss://relay.lanacoin-eternity.com',
@@ -285,10 +285,32 @@ export default function EventDetail() {
             <div className="flex items-center gap-2 text-lg">
               <Clock className="h-5 w-5 text-primary" />
               <span>
-                {format(event.start, 'HH:mm')}
-                {event.end && ` - ${format(event.end, 'HH:mm')}`}
+                {formatTimeInTimezone(event.start, event.timezone || 'Europe/Ljubljana')}
+                {event.end && ` - ${formatTimeInTimezone(event.end, event.timezone || 'Europe/Ljubljana')}`}
+                <span className="ml-2 text-muted-foreground">
+                  ({getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')})
+                </span>
               </span>
             </div>
+            
+            {/* Show user's local time if different timezone */}
+            {(event.timezone || 'Europe/Ljubljana') !== getUserTimezone() && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+                <Clock className="h-4 w-4" />
+                <span>
+                  Your local time: {formatTimeInTimezone(event.start, getUserTimezone())}
+                  {event.end && ` - ${formatTimeInTimezone(event.end, getUserTimezone())}`}
+                  {' '}({getTimezoneAbbreviation(event.start, getUserTimezone())})
+                </span>
+              </div>
+            )}
+            
+            {!event.timezone && (
+              <div className="flex items-center gap-2 text-sm text-amber-500">
+                <AlertTriangle className="h-4 w-4" />
+                <span>Legacy event - timezone not specified (assumed Europe/Ljubljana)</span>
+              </div>
+            )}
           </div>
 
           {/* Location */}

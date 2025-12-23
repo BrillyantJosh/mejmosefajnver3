@@ -179,30 +179,28 @@ export default function PublicEvent() {
                 <Calendar className="h-5 w-5 text-primary" />
                 <span className="font-medium">{format(event.start, 'PPPP')}</span>
               </div>
-              <div className="flex items-center gap-2 text-lg">
-                <Clock className="h-5 w-5 text-primary" />
+            <div className="flex items-center gap-2 text-lg">
+              <Clock className="h-5 w-5 text-primary" />
+              <span>
+                {formatTimeInTimezone(event.start, event.timezone || 'Europe/Ljubljana')}
+                {event.end && ` - ${formatTimeInTimezone(event.end, event.timezone || 'Europe/Ljubljana')}`}
+                <span className="ml-2 text-muted-foreground">
+                  ({getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')})
+                </span>
+              </span>
+            </div>
+              
+            {/* Show user's local time if different timezone */}
+            {(event.timezone || 'Europe/Ljubljana') !== getUserTimezone() && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+                <Clock className="h-4 w-4" />
                 <span>
-                  {format(event.start, 'HH:mm')}
-                  {event.end && ` - ${format(event.end, 'HH:mm')}`}
-                  {event.timezone && (
-                    <span className="ml-2 text-muted-foreground">
-                      ({event.timezone})
-                    </span>
-                  )}
+                  Your local time: {formatTimeInTimezone(event.start, getUserTimezone())}
+                  {event.end && ` - ${formatTimeInTimezone(event.end, getUserTimezone())}`}
+                  {' '}({getTimezoneAbbreviation(event.start, getUserTimezone())})
                 </span>
               </div>
-              
-              {/* Show user's local time if different timezone */}
-              {event.timezone && event.timezone !== getUserTimezone() && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
-                  <Clock className="h-4 w-4" />
-                  <span>
-                    Your local time: {format(event.start, 'HH:mm')}
-                    {event.end && ` - ${format(event.end, 'HH:mm')}`}
-                    {' '}({getTimezoneAbbreviation(event.start, getUserTimezone())})
-                  </span>
-                </div>
-              )}
+            )}
               
               {!event.timezone && (
                 <div className="flex items-center gap-2 text-sm text-amber-500">

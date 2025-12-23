@@ -267,13 +267,11 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
             <span className="truncate">{format(event.start, 'dd.MM.yyyy')}</span>
             <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 ml-1" />
             <span>
-              {format(event.start, 'HH:mm')}
-              {event.end && ` - ${format(event.end, 'HH:mm')}`}
-              {event.timezone ? (
-                <span className="ml-1 text-muted-foreground">
-                  ({getTimezoneAbbreviation(event.start, event.timezone)})
-                </span>
-              ) : null}
+              {formatTimeInTimezone(event.start, event.timezone || 'Europe/Ljubljana')}
+              {event.end && ` - ${formatTimeInTimezone(event.end, event.timezone || 'Europe/Ljubljana')}`}
+              <span className="ml-1 text-muted-foreground">
+                ({getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')})
+              </span>
             </span>
           </div>
           
