@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Globe, Users, UserPlus, Check, Loader2, Share2, Wallet, AlertTriangle } from "lucide-react";
+import { Calendar, Clock, MapPin, Globe, Users, UserPlus, Check, Loader2, Share2, Wallet, AlertTriangle, Timer } from "lucide-react";
 import { format } from "date-fns";
 import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +12,7 @@ import { useNostrEventRegistrations } from "@/hooks/useNostrEventRegistrations";
 import { SimplePool, finalizeEvent } from "nostr-tools";
 import { toast } from "@/hooks/use-toast";
 import { getTimezoneAbbreviation, getUserTimezone, formatTimeInTimezone } from "@/lib/timezones";
+import { useEventCountdown } from "@/hooks/useEventCountdown";
 
 const DEFAULT_RELAYS = [
   'wss://relay.lanavault.space',
@@ -38,7 +39,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
     : DEFAULT_RELAYS;
 
   const status = getEventStatus(event);
-
+  const countdown = useEventCountdown(event.start);
   const handleClick = () => {
     navigate(`/events/detail/${encodeURIComponent(event.dTag)}`);
   };
@@ -274,6 +275,13 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
               </span>
             </span>
           </div>
+          
+          {countdown.isWithin12Hours && !countdown.isStarted && (
+            <div className="flex items-center gap-1 text-primary">
+              <Timer className="h-3 w-3 animate-pulse" />
+              <span className="text-xs font-medium">Starts in {countdown.displayString}</span>
+            </div>
+          )}
           
           {!event.timezone && (
             <div className="flex items-center gap-1 text-amber-500">
