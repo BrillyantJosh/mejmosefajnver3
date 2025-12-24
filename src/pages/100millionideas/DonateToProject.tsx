@@ -28,12 +28,6 @@ const DonateToProject = () => {
   const { projects, isLoading: projectsLoading } = useNostrProjects();
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
   
-  // Filter out LanaPays.Us and Lana8Wonder wallets
-  const availableWallets = wallets.filter(wallet => 
-    wallet.walletType !== 'LanaPays.Us' && 
-    wallet.walletType !== 'Lana8Wonder'
-  );
-  
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
   const [lanaAmount, setLanaAmount] = useState<string>("0");
   const [message, setMessage] = useState<string>("");
@@ -43,11 +37,11 @@ const DonateToProject = () => {
   const project = projects.find(p => p.id === projectId);
 
   useEffect(() => {
-    if (availableWallets && availableWallets.length > 0) {
-      const walletIds = availableWallets.map(w => w.walletId);
+    if (wallets && wallets.length > 0) {
+      const walletIds = wallets.map(w => w.walletId);
       fetchWalletBalances(walletIds);
     }
-  }, [availableWallets]);
+  }, [wallets]);
 
   const fetchWalletBalances = async (walletIds: string[]) => {
     setLoadingBalances(true);
@@ -156,7 +150,7 @@ const DonateToProject = () => {
     );
   }
 
-  const selectedWallet = availableWallets.find(w => w.walletId === selectedWalletId);
+  const selectedWallet = wallets.find(w => w.walletId === selectedWalletId);
 
   return (
     <div className="min-h-screen bg-background">
@@ -205,7 +199,7 @@ const DonateToProject = () => {
               <CardTitle className="text-lg">Your Wallet (FROM) *</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {!availableWallets || availableWallets.length === 0 ? (
+              {!wallets || wallets.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No wallets found. Please register a wallet first.
                 </p>
@@ -218,7 +212,7 @@ const DonateToProject = () => {
                         <SelectValue placeholder="Select wallet" />
                       </SelectTrigger>
                       <SelectContent>
-                        {availableWallets.map((wallet) => (
+                        {wallets.map((wallet) => (
                           <SelectItem key={wallet.walletId} value={wallet.walletId}>
                             <div className="flex flex-col items-start">
                               <div className="font-mono text-xs">
