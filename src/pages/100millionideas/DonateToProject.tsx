@@ -212,18 +212,20 @@ const DonateToProject = () => {
                         <SelectValue placeholder="Select wallet" />
                       </SelectTrigger>
                       <SelectContent>
-                        {wallets.map((wallet) => (
-                          <SelectItem key={wallet.walletId} value={wallet.walletId}>
-                            <div className="flex flex-col items-start">
-                              <div className="font-mono text-xs">
-                                {wallet.walletId.substring(0, 10)}...{wallet.walletId.substring(wallet.walletId.length - 8)}
+                        {wallets
+                          .filter(wallet => wallet.walletType !== 'Lana8Wonder')
+                          .map((wallet) => (
+                            <SelectItem key={wallet.walletId} value={wallet.walletId}>
+                              <div className="flex flex-col items-start">
+                                <div className="font-mono text-xs">
+                                  {wallet.walletId.substring(0, 10)}...{wallet.walletId.substring(wallet.walletId.length - 8)}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {wallet.walletType} {wallet.note && `- ${wallet.note.substring(0, 20)}`}
+                                </div>
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                {wallet.walletType} {wallet.note && `- ${wallet.note.substring(0, 20)}`}
-                              </div>
-                            </div>
-                          </SelectItem>
-                        ))}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                     <p className="text-sm text-muted-foreground mt-2">
