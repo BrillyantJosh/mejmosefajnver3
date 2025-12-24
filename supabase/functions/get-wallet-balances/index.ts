@@ -83,10 +83,19 @@ class ElectrumBalanceAggregator {
   async fetchBatchBalances(server: ElectrumServer, addresses: string[]) {
     return new Promise<{ balances: WalletBalance[]; errors: string[] }>(async (resolve, reject) => {
       let conn: Deno.Conn | null = null;
+
+      // Keep this tight; balance lookup should not stall the whole app.
+      const CONNECT_AND_READ_TIMEOUT_MS = 4500;
+      const startedAt = Date.now();
+
       const timeout = setTimeout(() => {
-        if (conn) conn.close();
+        try {
+          conn?.close();
+        } catch {
+          // ignore
+        }
         reject(new Error('Connection timeout'));
-      }, 10000);
+      }, CONNECT_AND_READ_TIMEOUT_MS);
 
       try {
         // Connect to Electrum server
@@ -103,7 +112,7 @@ class ElectrumBalanceAggregator {
         for (const address of addresses) {
           const request = {
             id: requestId++,
-            method: "blockchain.address.get_balance",
+            method: 'blockchain.address.get_balance',
             params: [address],
           };
           const requestData = JSON.stringify(request) + '\n';
@@ -113,9 +122,13 @@ class ElectrumBalanceAggregator {
         // Read responses
         const decoder = new TextDecoder();
         let buffer = '';
-        const responses = new Map();
+        const responses = new Map<number, any>();
 
         while (responses.size < addresses.length) {
+          if (Date.now() - startedAt > CONNECT_AND_READ_TIMEOUT_MS) {
+            break;
+          }
+
           const chunk = new Uint8Array(4096);
           const bytesRead = await conn.read(chunk);
           if (bytesRead === null) break;
@@ -127,13 +140,14 @@ class ElectrumBalanceAggregator {
           buffer = lines.pop() || '';
 
           for (const line of lines) {
-            if (line.trim()) {
-              try {
-                const response = JSON.parse(line);
+            if (!line.trim()) continue;
+            try {
+              const response = JSON.parse(line);
+              if (typeof response?.id === 'number') {
                 responses.set(response.id, response);
-              } catch (e) {
-                console.warn('Failed to parse response:', line);
               }
+            } catch {
+              console.warn('Failed to parse response:', line);
             }
           }
         }
@@ -167,11 +181,20 @@ class ElectrumBalanceAggregator {
         }
 
         clearTimeout(timeout);
-        conn.close();
+        try {
+          conn.close();
+        } catch {
+          // ignore
+        }
+
         resolve({ balances, errors });
       } catch (error) {
         clearTimeout(timeout);
-        if (conn) conn.close();
+        try {
+          conn?.close();
+        } catch {
+          // ignore
+        }
         reject(error);
       }
     });
@@ -184,16 +207,15 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  console.log('Electrum Balance Aggregator started');
+  try {
+    console.log('Electrum Balance Aggregator started');
 
     // Parse request body
-    let requestBody = null;
+    let requestBody: any = null;
     try {
       const text = await req.text();
-      if (text) {
-        requestBody = JSON.parse(text);
-      }
-    } catch (e) {
+      if (text) requestBody = JSON.parse(text);
+    } catch {
       // Ignore parsing errors
     }
 
@@ -239,7 +261,6 @@ Deno.serve(async (req) => {
     } catch (e) {
       globalError = e instanceof Error ? e.message : 'Unknown error';
       console.error('Failed to fetch balances from all servers:', globalError);
-      // Return a per-wallet error list instead of throwing a 500 (prevents blank screens)
       balances = walletAddresses.map((address: string) => ({
         wallet_id: address,
         balance: 0,
@@ -271,4 +292,19 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+  } catch (error) {
+    console.error('Error in Electrum balance aggregator:', error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
 });
+
