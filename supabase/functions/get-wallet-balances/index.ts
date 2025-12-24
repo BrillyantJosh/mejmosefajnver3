@@ -83,19 +83,10 @@ class ElectrumBalanceAggregator {
   async fetchBatchBalances(server: ElectrumServer, addresses: string[]) {
     return new Promise<{ balances: WalletBalance[]; errors: string[] }>(async (resolve, reject) => {
       let conn: Deno.Conn | null = null;
-
-      // Keep this tight; balance lookup should not stall the whole app.
-      const CONNECT_AND_READ_TIMEOUT_MS = 4500;
-      const startedAt = Date.now();
-
       const timeout = setTimeout(() => {
-        try {
-          conn?.close();
-        } catch {
-          // ignore
-        }
+        if (conn) conn.close();
         reject(new Error('Connection timeout'));
-      }, CONNECT_AND_READ_TIMEOUT_MS);
+      }, 10000);
 
       try {
         // Connect to Electrum server
@@ -112,7 +103,7 @@ class ElectrumBalanceAggregator {
         for (const address of addresses) {
           const request = {
             id: requestId++,
-            method: 'blockchain.address.get_balance',
+            method: "blockchain.address.get_balance",
             params: [address],
           };
           const requestData = JSON.stringify(request) + '\n';
@@ -122,13 +113,9 @@ class ElectrumBalanceAggregator {
         // Read responses
         const decoder = new TextDecoder();
         let buffer = '';
-        const responses = new Map<number, any>();
+        const responses = new Map();
 
         while (responses.size < addresses.length) {
-          if (Date.now() - startedAt > CONNECT_AND_READ_TIMEOUT_MS) {
-            break;
-          }
-
           const chunk = new Uint8Array(4096);
           const bytesRead = await conn.read(chunk);
           if (bytesRead === null) break;
@@ -140,14 +127,13 @@ class ElectrumBalanceAggregator {
           buffer = lines.pop() || '';
 
           for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const response = JSON.parse(line);
-              if (typeof response?.id === 'number') {
+            if (line.trim()) {
+              try {
+                const response = JSON.parse(line);
                 responses.set(response.id, response);
+              } catch (e) {
+                console.warn('Failed to parse response:', line);
               }
-            } catch {
-              console.warn('Failed to parse response:', line);
             }
           }
         }
@@ -181,20 +167,11 @@ class ElectrumBalanceAggregator {
         }
 
         clearTimeout(timeout);
-        try {
-          conn.close();
-        } catch {
-          // ignore
-        }
-
+        conn.close();
         resolve({ balances, errors });
       } catch (error) {
         clearTimeout(timeout);
-        try {
-          conn?.close();
-        } catch {
-          // ignore
-        }
+        if (conn) conn.close();
         reject(error);
       }
     });
@@ -211,11 +188,13 @@ Deno.serve(async (req) => {
     console.log('Electrum Balance Aggregator started');
 
     // Parse request body
-    let requestBody: any = null;
+    let requestBody = null;
     try {
       const text = await req.text();
-      if (text) requestBody = JSON.parse(text);
-    } catch {
+      if (text) {
+        requestBody = JSON.parse(text);
+      }
+    } catch (e) {
       // Ignore parsing errors
     }
 
@@ -252,22 +231,7 @@ Deno.serve(async (req) => {
 
     // Initialize and fetch balances
     const aggregator = new ElectrumBalanceAggregator(electrumServers);
-
-    let balances: WalletBalance[] = [];
-    let globalError: string | null = null;
-
-    try {
-      balances = await aggregator.fetchWalletBalances(walletAddresses);
-    } catch (e) {
-      globalError = e instanceof Error ? e.message : 'Unknown error';
-      console.error('Failed to fetch balances from all servers:', globalError);
-      balances = walletAddresses.map((address: string) => ({
-        wallet_id: address,
-        balance: 0,
-        status: 'inactive',
-        error: globalError || 'Unknown error',
-      }));
-    }
+    const balances = await aggregator.fetchWalletBalances(walletAddresses);
 
     // Calculate totals
     const totalBalance = balances.reduce((sum, b) => sum + b.balance, 0);
@@ -275,20 +239,16 @@ Deno.serve(async (req) => {
     const errorCount = balances.filter((b) => b.error).length;
 
     const result = {
-      success: successCount > 0,
+      success: true,
       total_balance: Math.round(totalBalance * 100) / 100,
       wallets: balances,
       success_count: successCount,
       error_count: errorCount,
-      global_error: globalError,
       timestamp: new Date().toISOString(),
     };
 
-    console.log(
-      `Electrum aggregation completed: ${successCount} success, ${errorCount} errors, total: ${result.total_balance} LANA`
-    );
+    console.log(`Electrum aggregation completed: ${successCount} success, ${errorCount} errors, total: ${result.total_balance} LANA`);
 
-    // Always return 200 so the client can handle errors gracefully.
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -307,4 +267,3 @@ Deno.serve(async (req) => {
     );
   }
 });
-
