@@ -171,7 +171,7 @@ export default function MainLayout() {
               alt="Logo"
               className="h-8 w-8 object-contain flex-shrink-0"
             />
-            <span className="text-lg md:text-xl font-bold bg-gradient-to-r from-purple-400 via-purple-500 to-pink-500 bg-clip-text text-transparent truncate">
+            <span className="text-lg md:text-xl font-bold bg-gradient-to-r from-lana-blue-deep via-lana-mid to-lana-orange-vibrant bg-clip-text text-transparent truncate">
               {appSettings?.app_name || "Nostr App"}
             </span>
           </Link>

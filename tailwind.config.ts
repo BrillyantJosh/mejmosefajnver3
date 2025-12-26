@@ -57,6 +57,17 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        lana: {
+          blue: {
+            deep: "hsl(var(--lana-blue-deep))",
+            cyan: "hsl(var(--lana-blue-cyan))",
+          },
+          mid: "hsl(var(--lana-mid))",
+          orange: {
+            soft: "hsl(var(--lana-orange-soft))",
+            vibrant: "hsl(var(--lana-orange-vibrant))",
+          },
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
