@@ -17,9 +17,10 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 15%;
 
-    --primary: 160 70% 45%;
+    /* Lana Blue-to-Orange Palette */
+    --primary: 205 90% 42%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 263 70% 45%;
+    --primary-hover: 193 64% 49%;
 
     --secondary: 240 5% 96%;
     --secondary-foreground: 240 10% 15%;
@@ -28,7 +29,7 @@ All colors MUST be HSL.
     --muted: 240 5% 96%;
     --muted-foreground: 240 4% 46%;
 
-    --accent: 160 70% 45%;
+    --accent: 24 88% 53%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
@@ -36,11 +37,19 @@ All colors MUST be HSL.
 
     --border: 240 6% 90%;
     --input: 240 6% 90%;
-    --ring: 263 70% 50%;
+    --ring: 205 90% 42%;
 
     --radius: 0.75rem;
 
-    --gradient-primary: linear-gradient(135deg, hsl(263 70% 50%), hsl(280 70% 60%));
+    /* Lana gradient colors */
+    --lana-blue-deep: 205 90% 42%;
+    --lana-blue-cyan: 193 64% 49%;
+    --lana-mid: 189 24% 49%;
+    --lana-orange-soft: 30 79% 54%;
+    --lana-orange-vibrant: 24 88% 53%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(205 90% 42%), hsl(24 88% 53%));
+    --gradient-lana: linear-gradient(90deg, hsl(205 90% 42%), hsl(193 64% 49%), hsl(30 79% 54%), hsl(24 88% 53%));
     --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(240 5% 98%));
     
     --shadow-sm: 0 1px 2px 0 hsl(240 10% 15% / 0.05);
@@ -60,9 +69,10 @@ All colors MUST be HSL.
     --popover: 240 10% 12%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 263 70% 55%;
+    /* Lana Blue-to-Orange Palette (Dark Mode) */
+    --primary: 205 85% 50%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 263 70% 60%;
+    --primary-hover: 193 70% 55%;
 
     --secondary: 240 5% 18%;
     --secondary-foreground: 0 0% 98%;
@@ -71,7 +81,7 @@ All colors MUST be HSL.
     --muted: 240 5% 18%;
     --muted-foreground: 240 5% 65%;
 
-    --accent: 263 70% 55%;
+    --accent: 24 85% 58%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 63% 45%;
@@ -79,7 +89,14 @@ All colors MUST be HSL.
 
     --border: 240 5% 20%;
     --input: 240 5% 20%;
-    --ring: 263 70% 55%;
+    --ring: 205 85% 50%;
+
+    /* Lana gradient colors (Dark Mode) */
+    --lana-blue-deep: 205 85% 50%;
+    --lana-blue-cyan: 193 70% 55%;
+    --lana-mid: 189 30% 55%;
+    --lana-orange-soft: 30 82% 58%;
+    --lana-orange-vibrant: 24 85% 58%;
   }
 }
 
