@@ -4,6 +4,7 @@ import { AppSettings, ThemeColors } from "@/types/admin";
 import { toast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
+import { createSignedAdminAuthEvent } from "@/lib/nostrSigning";
 
 interface AdminContextType {
   isAdmin: boolean;
@@ -85,6 +86,31 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const invokeSignedSettingsUpdate = async (key: string, value: unknown) => {
+    if (!session?.nostrHexId || !session?.nostrPrivateKey) {
+      throw new Error('Not authenticated');
+    }
+
+    // Create a signed Nostr event to prove identity
+    const signedEvent = await createSignedAdminAuthEvent(
+      session.nostrPrivateKey,
+      session.nostrHexId,
+      'update-app-settings',
+      key
+    );
+
+    const { data, error } = await supabase.functions.invoke('update-app-settings', {
+      body: {
+        signedEvent,
+        key,
+        value
+      }
+    });
+
+    if (error) throw error;
+    return data;
+  };
+
   const updateAppName = async (name: string) => {
     if (!session?.nostrHexId) {
       toast({ 
@@ -96,16 +122,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke('update-app-settings', {
-        body: {
-          nostrHexId: session.nostrHexId,
-          key: 'app_name',
-          value: name
-        }
-      });
-
-      if (error) throw error;
-
+      await invokeSignedSettingsUpdate('app_name', name);
       setAppSettings(prev => prev ? { ...prev, app_name: name } : null);
       toast({ title: "Success", description: "App name updated successfully" });
     } catch (error) {
@@ -129,16 +146,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke('update-app-settings', {
-        body: {
-          nostrHexId: session.nostrHexId,
-          key: 'theme_colors',
-          value: colors
-        }
-      });
-
-      if (error) throw error;
-
+      await invokeSignedSettingsUpdate('theme_colors', colors);
       setAppSettings(prev => prev ? { ...prev, theme_colors: colors } : null);
       toast({ title: "Success", description: "Theme colors updated successfully" });
     } catch (error) {
@@ -162,16 +170,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke('update-app-settings', {
-        body: {
-          nostrHexId: session.nostrHexId,
-          key: 'default_rooms',
-          value: rooms
-        }
-      });
-
-      if (error) throw error;
-
+      await invokeSignedSettingsUpdate('default_rooms', rooms);
       setAppSettings(prev => prev ? { ...prev, default_rooms: rooms } : null);
       toast({ title: "Success", description: "Default rooms updated successfully" });
     } catch (error) {
