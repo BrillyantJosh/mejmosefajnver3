@@ -439,16 +439,22 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
         tags.push(["a", selectedRoom]);
       }
       
-      // Add image URLs as imurl tags
+      // Add image URLs as NIP-92 imeta tags for compatibility with Damus and other clients
       imageUrls.forEach(url => {
-        tags.push(['imurl', url]);
+        tags.push(['imeta', `url ${url}`, 'm image/jpeg']);
       });
+      
+      // Append image URLs to content for clients that read them from content (like Damus)
+      let finalContent = markdownContent;
+      if (imageUrls.length > 0) {
+        finalContent = markdownContent + '\n\n' + imageUrls.join('\n');
+      }
       
       const event = finalizeEvent({
         kind: 1,
         created_at: Math.floor(Date.now() / 1000),
         tags,
-        content: markdownContent,
+        content: finalContent,
       }, privKeyBytes);
 
       console.log('Publishing to relays:', relays);

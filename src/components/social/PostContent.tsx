@@ -194,17 +194,29 @@ export function PostContent({ content, tags }: PostContentProps) {
   const displayContent = translatedContent || content;
 
   try {
-    // Extract image URLs from "imurl" tags
+    // Extract image URLs from tags - support both old "imurl" and NIP-92 "imeta" formats
     const imageUrls: string[] = tags
       ? tags
-          .filter((tag) => tag[0] === 'imurl')
-          .map((tag) => tag[1])
-          .filter(Boolean)
+          .filter((tag) => tag[0] === 'imurl' || tag[0] === 'imeta')
+          .map((tag) => {
+            if (tag[0] === 'imurl') return tag[1];
+            // For imeta tag, find url parameter (format: "url https://...")
+            const urlParam = tag.find(param => param.startsWith('url '));
+            return urlParam ? urlParam.substring(4) : null;
+          })
+          .filter(Boolean) as string[]
       : [];
+    
+    // Filter out image URLs from content to avoid showing them twice
+    let cleanContent = displayContent;
+    imageUrls.forEach(url => {
+      cleanContent = cleanContent.replace(url, '').replace(/\n\n\n+/g, '\n\n');
+    });
+    cleanContent = cleanContent.trim();
     
     // Extract and parse iframes from content
     const iframeRegex = /<iframe[^>]*src=["']([^"']+)["'][^>]*>.*?<\/iframe>/gi;
-    const iframeMatches = Array.from(displayContent.matchAll(iframeRegex));
+    const iframeMatches = Array.from(cleanContent.matchAll(iframeRegex));
     const iframes = iframeMatches.map(match => {
       const fullMatch = match[0];
       const src = match[1];
@@ -228,15 +240,18 @@ export function PostContent({ content, tags }: PostContentProps) {
     }).filter(Boolean);
     
     // Extract URLs from content (for link previews) - including www. links
+    // But filter out image URLs that we already handle via tags
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
-    const urlMatches = displayContent.match(urlRegex);
-    // Normalize URLs - add http:// to www. links
+    const urlMatches = cleanContent.match(urlRegex);
+    // Normalize URLs - add http:// to www. links, filter out image URLs
     const urls: string[] = urlMatches 
-      ? urlMatches.map(url => url.toLowerCase().startsWith('www.') ? `http://${url}` : url)
+      ? urlMatches
+          .map(url => url.toLowerCase().startsWith('www.') ? `http://${url}` : url)
+          .filter(url => !imageUrls.includes(url))
       : [];
     
     // Remove iframe HTML and split content by URLs to render text and links separately
-    let contentWithoutIframes = displayContent;
+    let contentWithoutIframes = cleanContent;
     iframes.forEach(iframe => {
       if (iframe) {
         contentWithoutIframes = contentWithoutIframes.replace(iframe.original, '');
