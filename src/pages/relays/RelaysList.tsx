@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Radio, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Radio, CheckCircle2, XCircle, Loader2, Copy, Check } from "lucide-react";
+import { toast } from "sonner";
 
 type RelayStatus = 'checking' | 'connected' | 'error';
 
@@ -10,6 +12,18 @@ export default function RelaysList() {
   const { parameters } = useSystemParameters();
   const relays = parameters?.relays || [];
   const [relayStatuses, setRelayStatuses] = useState<Map<string, RelayStatus>>(new Map());
+  const [copiedRelay, setCopiedRelay] = useState<string | null>(null);
+
+  const handleCopy = async (relay: string) => {
+    try {
+      await navigator.clipboard.writeText(relay);
+      setCopiedRelay(relay);
+      toast.success("Relay copied to clipboard");
+      setTimeout(() => setCopiedRelay(null), 2000);
+    } catch (err) {
+      toast.error("Failed to copy relay");
+    }
+  };
 
   useEffect(() => {
     const checkRelayConnectivity = async () => {
@@ -83,14 +97,27 @@ export default function RelaysList() {
                     key={index}
                     className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-secondary/50 transition-colors"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`h-2 w-2 rounded-full ${
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className={`h-2 w-2 rounded-full flex-shrink-0 ${
                         status === 'connected' ? 'bg-green-500' :
                         status === 'error' ? 'bg-red-500' :
                         'bg-yellow-500 animate-pulse'
                       }`} />
-                      <span className="font-mono text-sm">{relay}</span>
+                      <span className="font-mono text-sm truncate">{relay}</span>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleCopy(relay)}
+                      >
+                        {copiedRelay === relay ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
                     {status === 'checking' && (
                       <Badge variant="secondary" className="gap-1">
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -109,6 +136,7 @@ export default function RelaysList() {
                         Error
                       </Badge>
                     )}
+                    </div>
                   </div>
                 );
               })}
