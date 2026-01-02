@@ -354,17 +354,47 @@ const Lana8Wonder = () => {
                         {account.levels.map(level => {
                           const isLevelTriggered = currentPrice >= level.trigger_price;
                           
+                          // Določi status izplačila za ta nivo
+                          // Nivo je izplačan če je triggered IN je balance <= remaining_lanas za ta nivo (z 2% toleranco)
+                          const isLevelPaidOut = isLevelTriggered && 
+                            balance !== undefined && 
+                            balance <= level.remaining_lanas * 1.02;
+                          
+                          // Nivo čaka izplačilo če je triggered AMPAK balance > remaining_lanas
+                          const isLevelPendingCashOut = isLevelTriggered && 
+                            balance !== undefined && 
+                            balance > level.remaining_lanas * 1.02;
+                          
+                          // Določi CSS razrede glede na status
+                          let cardClassName = 'p-3 md:p-4';
+                          if (isLevelPaidOut) {
+                            cardClassName += ' border-green-500 bg-green-50 dark:bg-green-950';
+                          } else if (isLevelPendingCashOut) {
+                            cardClassName += ' border-orange-500 bg-orange-50 dark:bg-orange-950';
+                          }
+                          
                           return (
                             <Card 
                               key={level.row_id} 
-                              className={`p-3 md:p-4 ${isLevelTriggered ? 'border-green-500 bg-green-50 dark:bg-green-950' : ''}`}
+                              className={cardClassName}
                             >
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 text-xs md:text-sm">
                                 <div>
                                   <span className="text-muted-foreground">Level:</span>
                                   <div className="flex items-center gap-2">
                                     <p className="font-semibold">{level.level_no}</p>
-                                    {isLevelTriggered && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                                    {isLevelPaidOut && (
+                                      <Badge variant="default" className="bg-green-500 text-white text-[10px] px-1.5 py-0">
+                                        <CheckCircle2 className="h-3 w-3 mr-0.5" />
+                                        Izplačano
+                                      </Badge>
+                                    )}
+                                    {isLevelPendingCashOut && (
+                                      <Badge variant="default" className="bg-orange-500 text-white text-[10px] px-1.5 py-0">
+                                        <AlertCircle className="h-3 w-3 mr-0.5" />
+                                        Čaka
+                                      </Badge>
+                                    )}
                                   </div>
                                 </div>
                                 <div>
