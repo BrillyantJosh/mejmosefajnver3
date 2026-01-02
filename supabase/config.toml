@@ -1,13 +1,1 @@
-project_id = "emimbfrxykvrbrovbrsf"
-
-[functions.fetch-url-metadata]
-verify_jwt = false
-
-[functions.sync-kind-38888]
-verify_jwt = false
-
-[functions.refresh-nostr-profiles]
-verify_jwt = false
-
-[functions.sync-room-posts]
-verify_jwt = false
+project_id = "atsnfnrckwjrutszlmxw"
