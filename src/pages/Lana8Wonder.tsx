@@ -386,13 +386,13 @@ const Lana8Wonder = () => {
                                     {isLevelPaidOut && (
                                       <Badge variant="default" className="bg-green-500 text-white text-[10px] px-1.5 py-0">
                                         <CheckCircle2 className="h-3 w-3 mr-0.5" />
-                                        Izplačano
+                                        Paid Out
                                       </Badge>
                                     )}
                                     {isLevelPendingCashOut && (
                                       <Badge variant="default" className="bg-orange-500 text-white text-[10px] px-1.5 py-0">
                                         <AlertCircle className="h-3 w-3 mr-0.5" />
-                                        Čaka
+                                        Pending
                                       </Badge>
                                     )}
                                   </div>
