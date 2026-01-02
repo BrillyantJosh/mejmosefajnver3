@@ -30,7 +30,10 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
   };
 
   return (
-    <Card className="overflow-hidden hover:shadow-lg transition-shadow">
+    <Card 
+      className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+      onClick={handleSupportProject}
+    >
       {/* Cover Image */}
       {project.coverImage && (
         <div className="aspect-video w-full overflow-hidden">
