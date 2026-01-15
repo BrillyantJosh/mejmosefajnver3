@@ -3,24 +3,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, Wallet, ArrowRight, Sparkles, Grid, CheckCircle2, Loader2, Calendar } from "lucide-react";
+import { AlertCircle, Wallet, ArrowRight, Sparkles, Grid, CheckCircle2, Loader2, Calendar, Lightbulb } from "lucide-react";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 import { useNostrEvents } from "@/hooks/useNostrEvents";
+import { useNostrProjects } from "@/hooks/useNostrProjects";
 import { EventCardMini } from "@/components/events/EventCardMini";
+import ProjectCardMini from "@/components/100millionideas/ProjectCardMini";
 
 export default function Dashboard() {
   const { lana8Wonder, wallets } = useDashboardData();
   const { profile } = useNostrProfile();
   const { events: onlineEvents, loading: onlineLoading } = useNostrEvents('online');
   const { events: liveEvents, loading: liveLoading } = useNostrEvents('live');
+  const { projects, isLoading: projectsLoading } = useNostrProjects();
+
+  // Filter projects added in the last 5 days
+  const fiveDaysAgo = Math.floor(Date.now() / 1000) - (5 * 24 * 60 * 60);
+  const newProjects = projects
+    .filter(p => p.createdAt >= fiveDaysAgo)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 6);
 
   const formatNumber = (num: number) => {
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   // Show full-page loading spinner while data is loading
-  const isInitialLoading = wallets.isLoading || lana8Wonder.isLoading || onlineLoading || liveLoading;
+  const isInitialLoading = wallets.isLoading || lana8Wonder.isLoading || onlineLoading || liveLoading || projectsLoading;
 
   if (isInitialLoading) {
     return (
@@ -201,6 +211,42 @@ export default function Dashboard() {
                     .map((event) => (
                       <EventCardMini key={event.id} event={event} />
                     ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {/* New Projects Card */}
+          {newProjects.length > 0 && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
+                    <Lightbulb className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-lg">New Projects</h3>
+                      <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-600">
+                        {newProjects.length} new
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      Recently added to 100 Million FUN
+                    </p>
+                  </div>
+                  <Link to="/100millionideas">
+                    <Button variant="outline" size="sm" className="gap-2 shrink-0">
+                      View All
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
+                
+                {/* Projects Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {newProjects.map((project) => (
+                    <ProjectCardMini key={project.id} project={project} />
+                  ))}
                 </div>
               </CardContent>
             </Card>
