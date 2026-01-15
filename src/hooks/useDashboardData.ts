@@ -204,19 +204,20 @@ export const useDashboardData = (): DashboardData => {
     annuityPlan.accounts.forEach(account => {
       const balance = accountBalances[account.wallet] || 0;
       
-      // Find the current level based on current price
-      const sortedLevels = [...account.levels].sort((a, b) => a.trigger_price - b.trigger_price);
-      let currentLevelIndex = 0;
-      for (let i = 0; i < sortedLevels.length; i++) {
-        if (currentPrice >= sortedLevels[i].trigger_price) {
-          currentLevelIndex = i;
-        }
-      }
-      const currentLevel = sortedLevels[currentLevelIndex];
-      const expectedRemaining = currentLevel?.remaining_lanas || 0;
+      // Find the last triggered level (highest level_no where price >= trigger)
+      // This matches the logic in Lana8Wonder.tsx
+      const triggeredLevels = account.levels
+        .filter(l => currentPrice >= l.trigger_price)
+        .sort((a, b) => b.level_no - a.level_no);
+      
+      const lastTriggeredLevel = triggeredLevels[0];
+      const expectedRemaining = lastTriggeredLevel?.remaining_lanas || 0;
       
       // Check if cash out is needed (balance > expected * 1.02)
-      const needsCashOut = balance > expectedRemaining * 1.02;
+      const needsCashOut = balance !== undefined && 
+        lastTriggeredLevel && 
+        balance > expectedRemaining * 1.02;
+        
       if (needsCashOut) {
         const cashOutAmount = balance - expectedRemaining;
         totalCashOut += cashOutAmount;
