@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SimplePool, Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { arraysEqual } from '@/lib/arrayComparison';
@@ -25,23 +25,35 @@ export interface DonationProposal {
   paymentTxId?: string;
 }
 
-export const useNostrDonationProposals = (userPubkey?: string) => {
+export interface UseNostrDonationProposalsOptions {
+  poll?: boolean;
+  pollIntervalMs?: number;
+}
+
+export const useNostrDonationProposals = (
+  userPubkey?: string,
+  options: UseNostrDonationProposalsOptions = {}
+) => {
+  const { poll = true, pollIntervalMs = 10000 } = options;
   const { parameters } = useSystemParameters();
   const [proposals, setProposals] = useState<DonationProposal[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
   const relays = parameters?.relays || [];
 
   useEffect(() => {
     const fetchProposals = async () => {
       if (relays.length === 0) {
-        setProposals([]);
-        setIsLoading(false);
+        // Only clear if we haven't loaded yet
+        if (!hasLoadedOnceRef.current) {
+          setProposals([]);
+          setIsLoading(false);
+        }
         return;
       }
 
       // Loading indicator only for initial load
-      if (!hasLoadedOnce) {
+      if (!hasLoadedOnceRef.current) {
         setIsLoading(true);
       }
       const pool = new SimplePool();
@@ -117,23 +129,24 @@ export const useNostrDonationProposals = (userPubkey?: string) => {
           // Sort by newest first
           parsedProposals.sort((a, b) => b.createdAt - a.createdAt);
           
-          // Only update state if data actually changed
-          if (!arraysEqual(parsedProposals, proposals)) {
-            console.log('📋 Proposals updated');
-            setProposals(parsedProposals);
-          }
+          // Only update state if data actually changed (use functional setter to avoid stale closure)
+          setProposals(prev => arraysEqual(parsedProposals, prev) ? prev : parsedProposals);
         } else {
-          if (proposals.length > 0) {
+          // Only clear if this is the initial load
+          if (!hasLoadedOnceRef.current) {
             setProposals([]);
           }
         }
       } catch (error) {
         console.error('❌ Error fetching donation proposals:', error);
-        setProposals([]);
+        // DO NOT clear proposals after first successful load - keep last known good state
+        if (!hasLoadedOnceRef.current) {
+          setProposals([]);
+        }
       } finally {
-        if (!hasLoadedOnce) {
+        if (!hasLoadedOnceRef.current) {
           setIsLoading(false);
-          setHasLoadedOnce(true);
+          hasLoadedOnceRef.current = true;
         }
         pool.close(relays);
       }
@@ -141,10 +154,12 @@ export const useNostrDonationProposals = (userPubkey?: string) => {
 
     fetchProposals();
 
-    // Poll every 10 seconds for updates
-    const interval = setInterval(fetchProposals, 10000);
-    return () => clearInterval(interval);
-  }, [relays.join(',')]);
+    // Only set up polling if poll option is true
+    if (poll) {
+      const interval = setInterval(fetchProposals, pollIntervalMs);
+      return () => clearInterval(interval);
+    }
+  }, [relays.join(','), userPubkey, poll, pollIntervalMs]);
 
   return {
     proposals,
