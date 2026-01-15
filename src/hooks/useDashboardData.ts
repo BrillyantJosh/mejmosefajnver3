@@ -249,12 +249,8 @@ export const useDashboardData = (): DashboardData => {
     return exchangeRates?.[userCurrency as 'EUR' | 'USD' | 'GBP'] || exchangeRates?.EUR || 0;
   };
 
-  // Lana8Wonder is still loading if:
-  // 1. We're fetching the annuity plan, OR
-  // 2. We have a plan with accounts and balances haven't been fetched yet
-  const lana8WonderStillLoading = lana8WonderLoading || 
-    balancesLoading || 
-    (annuityPlan !== null && annuityPlan.accounts.length > 0 && Object.keys(accountBalances).length === 0);
+  // Lana8Wonder is still loading while fetching annuity plan or balances
+  const lana8WonderStillLoading = lana8WonderLoading || balancesLoading;
 
   return {
     lana8Wonder: {
