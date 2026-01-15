@@ -77,7 +77,7 @@ function parseProposalFromEvent(event: Event): AwarenessProposal | null {
 
 export function useNostrAwarenessProposals() {
   const { parameters } = useSystemParameters();
-  const [proposals, setProposals] = useState<AwarenessProposal[]>([]);
+  const [allProposals, setAllProposals] = useState<AwarenessProposal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -118,11 +118,9 @@ export function useNostrAwarenessProposals() {
           }
         }
 
-        const activeProposals = Array.from(proposalMap.values())
-          .sort((a, b) => b.createdAt - a.createdAt);
-
-        console.log(`Found ${activeProposals.length} active proposals`);
-        setProposals(activeProposals);
+        const proposals = Array.from(proposalMap.values());
+        console.log(`Found ${proposals.length} proposals with active status`);
+        setAllProposals(proposals);
       } catch (err) {
         console.error('Error fetching awareness proposals:', err);
         setError('Failed to fetch proposals');
@@ -135,5 +133,14 @@ export function useNostrAwarenessProposals() {
     fetchProposals();
   }, [parameters?.relays]);
 
-  return { proposals, isLoading, error };
+  // Separate active (not yet ended) from expired (already ended)
+  const now = Math.floor(Date.now() / 1000);
+  const activeProposals = allProposals
+    .filter(p => p.end > now)
+    .sort((a, b) => a.end - b.end); // Soonest ending first
+  const expiredProposals = allProposals
+    .filter(p => p.end <= now)
+    .sort((a, b) => b.end - a.end); // Most recently ended first
+
+  return { activeProposals, expiredProposals, isLoading, error };
 }
