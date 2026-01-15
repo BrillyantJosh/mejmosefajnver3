@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { SimplePool, Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { arraysEqual } from '@/lib/arrayComparison';
@@ -28,141 +28,170 @@ export interface DonationProposal {
 export interface UseNostrDonationProposalsOptions {
   poll?: boolean;
   pollIntervalMs?: number;
+  enabled?: boolean;
 }
 
 export const useNostrDonationProposals = (
   userPubkey?: string,
   options: UseNostrDonationProposalsOptions = {}
 ) => {
-  const { poll = true, pollIntervalMs = 10000 } = options;
+  const { poll = true, pollIntervalMs = 10000, enabled = true } = options;
   const { parameters } = useSystemParameters();
   const [proposals, setProposals] = useState<DonationProposal[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const hasLoadedOnceRef = useRef(false);
+  const fetchStartedRef = useRef(false);
   const relays = parameters?.relays || [];
 
-  useEffect(() => {
-    const fetchProposals = async () => {
-      if (relays.length === 0) {
-        // Only clear if we haven't loaded yet
-        if (!hasLoadedOnceRef.current) {
-          setProposals([]);
-          setIsLoading(false);
-        }
-        return;
-      }
+  const fetchProposals = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
 
-      // Loading indicator only for initial load
+    if (relays.length === 0) {
       if (!hasLoadedOnceRef.current) {
-        setIsLoading(true);
+        setProposals([]);
+        setIsLoading(false);
       }
-      const pool = new SimplePool();
+      return;
+    }
 
-      try {
-        console.log('📥 Fetching KIND 90900 donation proposals...');
+    // Loading indicator only for initial load
+    if (!hasLoadedOnceRef.current) {
+      setIsLoading(true);
+    }
+    const pool = new SimplePool();
 
-        const filter: any = {
-          kinds: [90900],
-          limit: 100
-        };
+    try {
+      console.log('📥 Fetching KIND 90900 donation proposals...');
 
-        // Filter by payer if userPubkey is provided
-        if (userPubkey) {
-          filter['#p'] = [userPubkey];
-        }
+      const filter: any = {
+        kinds: [90900],
+        limit: 100
+      };
 
-        const events = await Promise.race([
-          pool.querySync(relays, filter),
-          new Promise<Event[]>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), 10000)
-          )
-        ]) as Event[];
+      // Filter by payer if userPubkey is provided
+      if (userPubkey) {
+        filter['#p'] = [userPubkey];
+      }
 
-        if (events && events.length > 0) {
-          console.log(`✅ Found ${events.length} donation proposals`);
+      const events = await Promise.race([
+        pool.querySync(relays, filter),
+        new Promise<Event[]>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), 15000)
+        )
+      ]) as Event[];
 
-          const parsedProposals: DonationProposal[] = events
-            .map(event => {
-              const dTag = event.tags.find(t => t[0] === 'd')?.[1] || '';
-              
-              // Separate payer and recipient p tags
-              const payerTag = event.tags.find(t => t[0] === 'p' && t[2] === 'payer')?.[1];
-              const recipientTag = event.tags.find(t => t[0] === 'p' && t[2] === 'recipient')?.[1] || '';
-              
-              // If userPubkey filter is requested, verify this user is the payer
-              if (userPubkey && payerTag !== userPubkey) {
-                return null; // Skip this proposal
-              }
-              
-              const walletTag = event.tags.find(t => t[0] === 'wallet')?.[1] || '';
-              const fiatTag = event.tags.find(t => t[0] === 'fiat');
-              const lanaTag = event.tags.find(t => t[0] === 'lana')?.[1] || '';
-              const lanoshiTag = event.tags.find(t => t[0] === 'lanoshi')?.[1] || '';
-              const typeTag = event.tags.find(t => t[0] === 'type')?.[1] || '';
-              const serviceTag = event.tags.find(t => t[0] === 'service')?.[1] || '';
-              const refTag = event.tags.find(t => t[0] === 'ref')?.[1];
-              const expiresTag = event.tags.find(t => t[0] === 'expires')?.[1];
-              const urlTag = event.tags.find(t => t[0] === 'url')?.[1];
+      if (events && events.length > 0) {
+        console.log(`✅ Found ${events.length} donation proposals`);
 
-              return {
-                id: event.id,
-                d: dTag,
-                payerPubkey: payerTag || '',
-                recipientPubkey: recipientTag,
-                wallet: walletTag,
-                fiatCurrency: fiatTag?.[1] || '',
-                fiatAmount: fiatTag?.[2] || '',
-                lanaAmount: lanaTag,
-                lanoshiAmount: lanoshiTag,
-                type: typeTag,
-                service: serviceTag,
-                ref: refTag,
-                expires: expiresTag ? parseInt(expiresTag) : undefined,
-                url: urlTag,
-                content: event.content,
-                createdAt: event.created_at,
-                eventId: event.id
-              } as DonationProposal;
-            })
-            .filter(p => p !== null) as DonationProposal[];
+        const parsedProposals: DonationProposal[] = events
+          .map(event => {
+            const dTag = event.tags.find(t => t[0] === 'd')?.[1] || '';
+            
+            // Separate payer and recipient p tags
+            const payerTag = event.tags.find(t => t[0] === 'p' && t[2] === 'payer')?.[1];
+            const recipientTag = event.tags.find(t => t[0] === 'p' && t[2] === 'recipient')?.[1] || '';
+            
+            // If userPubkey filter is requested, verify this user is the payer
+            if (userPubkey && payerTag !== userPubkey) {
+              return null; // Skip this proposal
+            }
+            
+            const walletTag = event.tags.find(t => t[0] === 'wallet')?.[1] || '';
+            const fiatTag = event.tags.find(t => t[0] === 'fiat');
+            const lanaTag = event.tags.find(t => t[0] === 'lana')?.[1] || '';
+            const lanoshiTag = event.tags.find(t => t[0] === 'lanoshi')?.[1] || '';
+            const typeTag = event.tags.find(t => t[0] === 'type')?.[1] || '';
+            const serviceTag = event.tags.find(t => t[0] === 'service')?.[1] || '';
+            const refTag = event.tags.find(t => t[0] === 'ref')?.[1];
+            const expiresTag = event.tags.find(t => t[0] === 'expires')?.[1];
+            const urlTag = event.tags.find(t => t[0] === 'url')?.[1];
 
-          // Sort by newest first
-          parsedProposals.sort((a, b) => b.createdAt - a.createdAt);
-          
-          // Only update state if data actually changed (use functional setter to avoid stale closure)
-          setProposals(prev => arraysEqual(parsedProposals, prev) ? prev : parsedProposals);
-        } else {
-          // Only clear if this is the initial load
-          if (!hasLoadedOnceRef.current) {
-            setProposals([]);
-          }
-        }
-      } catch (error) {
-        console.error('❌ Error fetching donation proposals:', error);
-        // DO NOT clear proposals after first successful load - keep last known good state
+            return {
+              id: event.id,
+              d: dTag,
+              payerPubkey: payerTag || '',
+              recipientPubkey: recipientTag,
+              wallet: walletTag,
+              fiatCurrency: fiatTag?.[1] || '',
+              fiatAmount: fiatTag?.[2] || '',
+              lanaAmount: lanaTag,
+              lanoshiAmount: lanoshiTag,
+              type: typeTag,
+              service: serviceTag,
+              ref: refTag,
+              expires: expiresTag ? parseInt(expiresTag) : undefined,
+              url: urlTag,
+              content: event.content,
+              createdAt: event.created_at,
+              eventId: event.id
+            } as DonationProposal;
+          })
+          .filter(p => p !== null) as DonationProposal[];
+
+        // Sort by newest first
+        parsedProposals.sort((a, b) => b.createdAt - a.createdAt);
+        
+        // Only update state if data actually changed
+        setProposals(prev => arraysEqual(parsedProposals, prev) ? prev : parsedProposals);
+      } else {
+        // Only clear if this is the initial load
         if (!hasLoadedOnceRef.current) {
           setProposals([]);
         }
-      } finally {
-        if (!hasLoadedOnceRef.current) {
-          setIsLoading(false);
-          hasLoadedOnceRef.current = true;
-        }
-        pool.close(relays);
       }
-    };
+    } catch (error) {
+      console.error('❌ Error fetching donation proposals:', error);
+      // DO NOT clear proposals after first successful load - keep last known good state
+      if (!hasLoadedOnceRef.current) {
+        setProposals([]);
+      }
+    } finally {
+      if (!hasLoadedOnceRef.current) {
+        setIsLoading(false);
+        hasLoadedOnceRef.current = true;
+      }
+      pool.close(relays);
+    }
+  }, [enabled, relays.join(','), userPubkey]);
 
-    fetchProposals();
+  useEffect(() => {
+    if (!enabled) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Only fetch once when enabled (unless polling)
+    if (!fetchStartedRef.current) {
+      fetchStartedRef.current = true;
+      fetchProposals();
+    }
 
     // Only set up polling if poll option is true
-    if (poll) {
-      const interval = setInterval(fetchProposals, pollIntervalMs);
-      return () => clearInterval(interval);
+    let interval: NodeJS.Timeout | undefined;
+    if (poll && enabled) {
+      interval = setInterval(fetchProposals, pollIntervalMs);
     }
-  }, [relays.join(','), userPubkey, poll, pollIntervalMs]);
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [enabled, poll, pollIntervalMs, fetchProposals]);
+
+  // Reset refs when enabled changes to false
+  useEffect(() => {
+    if (!enabled) {
+      fetchStartedRef.current = false;
+      hasLoadedOnceRef.current = false;
+    }
+  }, [enabled]);
 
   return {
     proposals,
-    isLoading
+    isLoading: enabled ? isLoading : false,
+    refetch: fetchProposals
   };
 };
