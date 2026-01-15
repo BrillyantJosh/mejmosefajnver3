@@ -3,20 +3,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, Wallet, ArrowRight, Sparkles, Grid, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, Wallet, ArrowRight, Sparkles, Grid, CheckCircle2, Loader2, Calendar } from "lucide-react";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
+import { useNostrEvents } from "@/hooks/useNostrEvents";
+import { EventCardMini } from "@/components/events/EventCardMini";
 
 export default function Dashboard() {
   const { lana8Wonder, wallets } = useDashboardData();
   const { profile } = useNostrProfile();
+  const { events: onlineEvents, loading: onlineLoading } = useNostrEvents('online');
+  const { events: liveEvents, loading: liveLoading } = useNostrEvents('live');
 
   const formatNumber = (num: number) => {
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   // Show full-page loading spinner while data is loading
-  const isInitialLoading = wallets.isLoading || lana8Wonder.isLoading;
+  const isInitialLoading = wallets.isLoading || lana8Wonder.isLoading || onlineLoading || liveLoading;
 
   if (isInitialLoading) {
     return (
@@ -157,6 +161,46 @@ export default function Dashboard() {
                 <div className="flex flex-col items-center gap-2">
                   <CheckCircle2 className="h-8 w-8 text-muted-foreground" />
                   <p className="text-muted-foreground">No new notifications at this time.</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Lana Events Card */}
+          {(onlineEvents.length > 0 || liveEvents.length > 0) && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Calendar className="h-6 w-6 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-lg">Upcoming Events</h3>
+                      <Badge variant="secondary" className="text-xs">
+                        {onlineEvents.length + liveEvents.length} events
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      Don't miss these upcoming Lana community events
+                    </p>
+                  </div>
+                  <Link to="/events">
+                    <Button variant="outline" size="sm" className="gap-2 shrink-0">
+                      View All
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
+                
+                {/* Events Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[...onlineEvents, ...liveEvents]
+                    .sort((a, b) => a.start.getTime() - b.start.getTime())
+                    .slice(0, 6)
+                    .map((event) => (
+                      <EventCardMini key={event.id} event={event} />
+                    ))}
                 </div>
               </CardContent>
             </Card>
