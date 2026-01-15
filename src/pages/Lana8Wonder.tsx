@@ -317,6 +317,16 @@ const Lana8Wonder = () => {
                         ) : balance !== undefined ? (
                           <Badge variant="default">{balance.toFixed(4)} LANA</Badge>
                         ) : null}
+                        {needsCashOut && !loadingBalances && (
+                          <Badge 
+                            variant="destructive" 
+                            className="flex items-center gap-1 text-xs"
+                          >
+                            <AlertCircle className="h-3 w-3" />
+                            <span className="hidden sm:inline">Cash Out:</span>
+                            {cashOutAmount.toFixed(2)} LANA
+                          </Badge>
+                        )}
                       </div>
                     </AccordionTrigger>
                     <AccordionContent>
