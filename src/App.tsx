@@ -10,7 +10,8 @@ import { SystemParametersProvider } from "./contexts/SystemParametersContext";
 import { AdminProtectedRoute, ProtectedRoute } from "./components/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
 import Login from "./pages/Login";
-import Home from "./pages/Home";
+import Dashboard from "./pages/Dashboard";
+import Modules from "./pages/Modules";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import SocialLayout from "./pages/social/SocialLayout";
@@ -126,7 +127,8 @@ const App = () => (
                     <MainLayout />
                   </ProtectedRoute>
                 }>
-                  <Route path="/" element={<Home />} />
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/modules" element={<Modules />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/social" element={<SocialLayout />}>
