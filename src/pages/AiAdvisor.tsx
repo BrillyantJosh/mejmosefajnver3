@@ -179,10 +179,11 @@ export default function AiAdvisor() {
   };
 
   const suggestedQuestions = [
-    "Kakšno je moje trenutno stanje?",
+    "Pokaži mi stanje po denarnicah",
+    "Koliko LANA imam skupaj?",
     "Koliko moram izplačati iz Lana8Wonder?",
     "Imam kakšna čakajoča plačila?",
-    "Povzemi moje finance",
+    "Katera denarnica ima največ sredstev?",
   ];
 
   return (
