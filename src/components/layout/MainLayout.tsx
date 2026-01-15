@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, User, Home, Settings, LogOut, Shield, Heart, Download } from "lucide-react";
+import { Menu, X, User, Home, Settings, LogOut, Shield, Heart, Download, Grid } from "lucide-react";
 import logoImage from "@/assets/lana-logo.png";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,7 @@ interface BeforeInstallPromptEvent extends Event {
 
 const fixedMenuItems = [
   { title: "Home", icon: Home, path: "/" },
+  { title: "Modules", icon: Grid, path: "/modules" },
   { title: "Profile", icon: User, path: "/profile" },
   { title: "Settings", icon: Settings, path: "/settings" },
 ];
