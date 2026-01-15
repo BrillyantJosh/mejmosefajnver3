@@ -110,7 +110,7 @@ export const useNostrProjects = () => {
 
   useEffect(() => {
     if (!parameters?.relays) {
-      setIsLoading(false);
+      // Don't set loading to false - wait for relays to be available
       return;
     }
 
@@ -178,5 +178,8 @@ export const useNostrProjects = () => {
     fetchProjects();
   }, [parameters?.relays]);
 
-  return { projects, isLoading };
+  // Keep loading true until relays are available
+  const isReady = !!parameters?.relays;
+
+  return { projects, isLoading: isLoading || !isReady };
 };
