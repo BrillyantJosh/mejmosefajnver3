@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Loader2, Search, User, Wallet, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { t } from '@/lib/aiAdvisorTranslations';
 
 interface RecipientWallet {
   walletId: string;
@@ -25,6 +26,7 @@ interface SearchResult {
 
 interface RecipientSelectorProps {
   searchQuery: string;
+  language?: string;
   onSelect: (recipient: {
     name: string;
     pubkey: string;
@@ -34,7 +36,7 @@ interface RecipientSelectorProps {
   onCancel: () => void;
 }
 
-export function RecipientSelector({ searchQuery, onSelect, onCancel }: RecipientSelectorProps) {
+export function RecipientSelector({ searchQuery, language, onSelect, onCancel }: RecipientSelectorProps) {
   const { parameters } = useSystemParameters();
   const [query, setQuery] = useState(searchQuery);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -44,7 +46,7 @@ export function RecipientSelector({ searchQuery, onSelect, onCancel }: Recipient
 
   const handleSearch = async () => {
     if (!query.trim() || query.trim().length < 2) {
-      setError('Iskalni niz mora imeti vsaj 2 znaka');
+      setError(t('searchMinChars', language));
       return;
     }
 
@@ -66,14 +68,14 @@ export function RecipientSelector({ searchQuery, onSelect, onCancel }: Recipient
       if (data?.results) {
         setResults(data.results);
         if (data.results.length === 0) {
-          setError('Ni najdenih uporabnikov z denarnicami');
+          setError(t('noUsersWithWallets', language));
         }
       } else {
-        setError('Iskanje ni vrnilo rezultatov');
+        setError(t('noResultsReturned', language));
       }
     } catch (err) {
       console.error('Search error:', err);
-      setError('Napaka pri iskanju. Poskusite ponovno.');
+      setError(t('searchError', language));
     } finally {
       setIsSearching(false);
     }
@@ -90,19 +92,18 @@ export function RecipientSelector({ searchQuery, onSelect, onCancel }: Recipient
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
           <Search className="h-5 w-5" />
-          Izberi prejemnika
+          {t('selectRecipient', language)}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Search Input */}
         <div className="space-y-2">
-          <Label>Ime ali prikazno ime</Label>
+          <Label>{t('nameOrDisplayName', language)}</Label>
           <div className="flex gap-2">
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Vnesite ime uporabnika..."
+              placeholder={t('enterUserName', language)}
               disabled={isSearching}
             />
             <Button onClick={handleSearch} disabled={isSearching || query.trim().length < 2}>
@@ -115,20 +116,17 @@ export function RecipientSelector({ searchQuery, onSelect, onCancel }: Recipient
           </div>
         </div>
 
-        {/* Error Message */}
         {error && (
           <p className="text-sm text-destructive text-center">{error}</p>
         )}
 
-        {/* Loading State */}
         {isSearching && (
           <div className="flex flex-col items-center py-8 gap-2">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Iščem uporabnike...</p>
+            <p className="text-sm text-muted-foreground">{t('searchingUsers', language)}</p>
           </div>
         )}
 
-        {/* Results */}
         {!isSearching && results.length > 0 && (
           <ScrollArea className="h-[300px]">
             <div className="space-y-3">
@@ -182,17 +180,15 @@ export function RecipientSelector({ searchQuery, onSelect, onCancel }: Recipient
           </ScrollArea>
         )}
 
-        {/* No Results */}
         {!isSearching && hasSearched && results.length === 0 && !error && (
           <div className="text-center py-8">
             <User className="h-12 w-12 mx-auto text-muted-foreground/50 mb-2" />
-            <p className="text-sm text-muted-foreground">Ni najdenih uporabnikov</p>
+            <p className="text-sm text-muted-foreground">{t('noUsersFound', language)}</p>
           </div>
         )}
 
-        {/* Cancel Button */}
         <Button variant="outline" onClick={onCancel} className="w-full">
-          Prekliči
+          {t('cancel', language)}
         </Button>
       </CardContent>
     </Card>

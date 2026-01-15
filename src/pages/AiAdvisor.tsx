@@ -7,8 +7,10 @@ import { Bot, Send, User, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import { useAiAdvisorContext } from '@/hooks/useAiAdvisorContext';
 import { RecipientSelector } from '@/components/ai-advisor/RecipientSelector';
 import { PaymentForm } from '@/components/ai-advisor/PaymentForm';
+import { useNostrProfile } from '@/hooks/useNostrProfile';
 import { cn } from '@/lib/utils';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { t, getTranslation } from '@/lib/aiAdvisorTranslations';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -41,6 +43,11 @@ export default function AiAdvisor() {
   
   const context = useAiAdvisorContext();
   const { parameters } = useSystemParameters();
+  const { profile } = useNostrProfile();
+  
+  // Get user's language from profile
+  const userLanguage = profile?.lang || 'en';
+  const trans = getTranslation(userLanguage);
   
   // Payment flow state
   const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null);
@@ -57,7 +64,6 @@ export default function AiAdvisor() {
     }
   }, [messages]);
 
-  // Parse AI response for payment intent
   const parsePaymentIntent = (content: string): PaymentIntent | null => {
     try {
       const jsonMatch = content.match(/\{[^}]*"action"\s*:\s*"payment"[^}]*\}/);
@@ -104,6 +110,7 @@ export default function AiAdvisor() {
             pendingPayments: context.pendingPayments,
             unpaidLashes: context.unpaidLashes,
           },
+          language: userLanguage, // Pass language to backend
         }),
       });
 
@@ -189,12 +196,12 @@ export default function AiAdvisor() {
     if (success && txHash) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `✅ Transakcija uspešno poslana!\n\nTx Hash: ${txHash}`,
+        content: `${t('txSuccess', userLanguage)}\n\n${t('txHash', userLanguage)}: ${txHash}`,
       }]);
     } else if (error) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `❌ Napaka: ${error}`,
+        content: t('txError', userLanguage, { error }),
       }]);
     }
   };
@@ -204,10 +211,9 @@ export default function AiAdvisor() {
     setShowRecipientSelector(false);
     setPaymentIntent(null);
     setSelectedRecipient(null);
-    setMessages(prev => [...prev, { role: 'assistant', content: 'Plačilo preklicano.' }]);
+    setMessages(prev => [...prev, { role: 'assistant', content: t('paymentCancelled', userLanguage) }]);
   };
 
-  // Get source wallet details
   const getSourceWallet = () => {
     if (!paymentIntent || !context.wallets?.details) return null;
     const wallet = context.wallets.details.find(
@@ -218,7 +224,6 @@ export default function AiAdvisor() {
 
   const sourceWallet = getSourceWallet();
 
-  // Calculate LANA amount from fiat if needed
   const getLanaAmount = () => {
     if (!paymentIntent) return 0;
     if (paymentIntent.currency === 'LANA') return paymentIntent.amount;
@@ -226,19 +231,20 @@ export default function AiAdvisor() {
     return rate > 0 ? paymentIntent.amount / rate : 0;
   };
 
+  // Localized suggested questions
   const suggestedQuestions = [
-    "Pokaži mi stanje po denarnicah",
-    "Koliko LANA imam skupaj?",
-    "Plačaj Borisu 50 LANA",
-    "Pošlji Ani 100 LANA iz glavne denarnice",
+    trans.showBalances,
+    trans.totalBalance,
+    trans.payBoris,
+    trans.sendFromMain,
   ];
 
-  // Show recipient selector overlay
   if (showRecipientSelector && paymentIntent) {
     return (
       <div className="container max-w-4xl mx-auto p-4">
         <RecipientSelector
           searchQuery={paymentIntent.recipient}
+          language={userLanguage}
           onSelect={handleRecipientSelect}
           onCancel={handlePaymentCancel}
         />
@@ -246,7 +252,6 @@ export default function AiAdvisor() {
     );
   }
 
-  // Show payment form overlay
   if (showPaymentForm && paymentIntent && selectedRecipient && sourceWallet) {
     return (
       <div className="container max-w-4xl mx-auto p-4">
@@ -258,6 +263,7 @@ export default function AiAdvisor() {
           senderWalletId={sourceWallet.walletId}
           senderWalletBalance={sourceWallet.balance}
           currency={context.wallets?.currency || 'EUR'}
+          language={userLanguage}
           onComplete={handlePaymentComplete}
           onCancel={handlePaymentCancel}
         />
@@ -275,21 +281,21 @@ export default function AiAdvisor() {
                 <Sparkles className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <CardTitle className="text-lg">AI Svetovalec</CardTitle>
-                <p className="text-sm text-muted-foreground">Vprašaj me ali pošlji plačilo</p>
+                <CardTitle className="text-lg">{trans.aiAdvisor}</CardTitle>
+                <p className="text-sm text-muted-foreground">{trans.askOrPay}</p>
               </div>
             </div>
             {messages.length > 0 && (
               <Button variant="ghost" size="sm" onClick={() => { setMessages([]); setError(null); }}>
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Nova poizvedba
+                {trans.newQuery}
               </Button>
             )}
           </div>
           {context.isLoading && (
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
               <Loader2 className="h-3 w-3 animate-spin" />
-              Nalagam podatke...
+              {trans.loadingData}
             </p>
           )}
         </CardHeader>
@@ -299,9 +305,9 @@ export default function AiAdvisor() {
             {messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center py-8">
                 <Bot className="h-12 w-12 text-muted-foreground/50 mb-4" />
-                <h3 className="font-medium mb-2">Kako ti lahko pomagam?</h3>
+                <h3 className="font-medium mb-2">{trans.howCanIHelp}</h3>
                 <p className="text-sm text-muted-foreground mb-6 max-w-md">
-                  Lahko vprašaš o stanju ali pošlješ plačilo.
+                  {trans.askOrSendPayment}
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center max-w-lg">
                   {suggestedQuestions.map((q, i) => (
@@ -346,7 +352,7 @@ export default function AiAdvisor() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Vprašaj ali pošlji plačilo..."
+                placeholder={trans.askPlaceholder}
                 className="resize-none min-h-[44px] max-h-32"
                 rows={1}
                 disabled={isLoading}
