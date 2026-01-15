@@ -8,55 +8,24 @@ const corsHeaders = {
 const systemPrompt = `Ti si AI svetovalec za Lana ekosistem. Uporabnik ti bo zastavil vprašanja o svojem finančnem stanju v Lana sistemu.
 
 KONTEKST O DENARNICAH (WALLETS):
-- Uporabnik ima lahko več denarnic (wallets) različnih tipov
-- Tipi denarnic: "Main Wallet" (glavna), "Wallet" (običajna), "LanaPays.Us", "Knights", "Lana8Wonder"
-- Za vsako denarnico imaš na voljo: walletId, walletType, note (opis), balance (stanje v LANA), balanceFiat (stanje v fiat valuti)
-- Če uporabnik vpraša za stanje posamezne denarnice, mu lahko poveš točno stanje
-- Če vpraša za skupno stanje, seštej vse balances
-- Denarnice tipa "Lana8Wonder" in "Knights" so posebne - iz njih se ne da pošiljati LANA neposredno
+- Uporabnik ima lahko več denarnic različnih tipov
+- Tipi: "Main Wallet" (glavna), "Wallet" (običajna), "LanaPays.Us", "Knights", "Lana8Wonder"
+- Za pošiljanje LANA lahko uporabnik uporabi samo "Main Wallet" ali "Wallet" tip
 
-KONTEKST O LANA8WONDER:
-- Lana8Wonder je annuity (renta) plan, ki uporabniku omogoča postopno izplačevanje LANA kovancev
-- Vsak account ima več "nivojev" (levels), vsak nivo ima trigger_price
-- Ko trenutna cena (currentPrice) preseže trigger_price nivoja, postane ta nivo "triggered"
-- Uporabnik mora izvesti "cash out" če je balance > remaining_lanas za triggered nivo
-- Cash out pomeni prenesti presežek LANA na drug wallet
+POŠILJANJE PLAČIL:
+Ko uporabnik izrazi željo po plačilu, vrni SAMO JSON v tej obliki:
+{"action":"payment","recipient":"ime","amount":100,"currency":"LANA","sourceWallet":"Main Wallet"}
 
-KONTEKST O UNCONDITIONAL PAYMENTS:
-- To so plačila, ki jih uporabnik prejme neposredno
-- Pending proposals so čakajoča plačila, ki še niso bila izplačana
-- Paid payments so že izplačana plačila
-
-KONTEKST O UNPAID LASHES:
-- LASH so mali zneski LANA, ki jih uporabniki pošiljajo drug drugemu
-- Unpaid lashes so tisti, ki še niso bili plačani
+Primeri:
+- "Plačaj Borisu 50 LANA" → {"action":"payment","recipient":"Boris","amount":50,"currency":"LANA","sourceWallet":"Main Wallet"}
+- "Pošlji Ani 100 LANA" → {"action":"payment","recipient":"Ana","amount":100,"currency":"LANA","sourceWallet":"Main Wallet"}
 
 NAVODILA:
-1. Odgovori jasno, prijazno in jedrnato v slovenščini ali angleščini (odvisno od vprašanja uporabnika)
-2. Če uporabnik vpraša za stanje na denarnicah, uporabi podatke iz wallets.details
-3. Za vsako denarnico lahko poveš: ID denarnice, tip, stanje v LANA in fiat valuti
-4. Če uporabnik vpraša koliko mora izplačati iz Lana8Wonder, izračunaj in pojasni
-5. Če podatkov ni ali so prazni, to jasno povej
-6. Uporabi konkretne številke iz konteksta
-7. Predlagaj naslednje korake, če je smiselno (npr. "Pojdi na Wallet stran za pošiljanje LANA")
-8. Bodi prijazen in pomagaj uporabniku razumeti njegovo stanje
-
-PRIMERI ODGOVOROV:
-
-Vprašanje: "Koliko LANA imam na vseh denarnicah?"
-Odgovor: Na podlagi tvojih podatkov imaš skupno X LANA (približno Y EUR) na Z denarnicah.
-
-Vprašanje: "Pokaži mi stanje po denarnicah"
-Odgovor: Tvoje denarnice:
-1. [walletId prvi del...] (Main Wallet): X LANA (Y EUR)
-2. [walletId prvi del...] (Wallet): X LANA (Y EUR)
-...
-
-Vprašanje: "Katera denarnica ima največ sredstev?"
-Odgovor: Denarnica [walletId] tipa [walletType] ima največ sredstev: X LANA (Y EUR).`;
+1. Odgovori jasno in prijazno v slovenščini ali angleščini
+2. Za stanja uporabi podatke iz wallets.details
+3. Če zaznaš intent za plačilo, vrni SAMO JSON brez razlage`;
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -66,35 +35,25 @@ serve(async (req) => {
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY is not configured");
       throw new Error("AI service is not configured");
     }
 
-    // Build context message
     let contextMessage = "";
     if (context) {
       contextMessage = `\n\nTRENUTNI PODATKI UPORABNIKA:\n`;
-      
       if (context.wallets) {
         contextMessage += `\nWALLETS:\n${JSON.stringify(context.wallets, null, 2)}`;
       }
-      
       if (context.lana8Wonder) {
         contextMessage += `\nLANA8WONDER:\n${JSON.stringify(context.lana8Wonder, null, 2)}`;
       }
-      
       if (context.pendingPayments) {
         contextMessage += `\nPENDING PAYMENTS:\n${JSON.stringify(context.pendingPayments, null, 2)}`;
       }
-      
       if (context.unpaidLashes) {
         contextMessage += `\nUNPAID LASHES:\n${JSON.stringify(context.unpaidLashes, null, 2)}`;
       }
     }
-
-    const fullSystemPrompt = systemPrompt + contextMessage;
-    
-    console.log("Calling Lovable AI Gateway with context");
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -105,7 +64,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: fullSystemPrompt },
+          { role: "system", content: systemPrompt + contextMessage },
           ...messages,
         ],
         stream: true,
@@ -114,28 +73,17 @@ serve(async (req) => {
 
     if (!response.ok) {
       if (response.status === 429) {
-        console.error("Rate limit exceeded");
-        return new Response(JSON.stringify({ error: "Rate limits exceeded, please try again later." }), {
+        return new Response(JSON.stringify({ error: "Rate limits exceeded" }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        console.error("Payment required");
-        return new Response(JSON.stringify({ error: "AI service requires payment. Please contact support." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
       return new Response(JSON.stringify({ error: "AI service error" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Stream the response back
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });

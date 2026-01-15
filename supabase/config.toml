@@ -2,3 +2,6 @@ project_id = "atsnfnrckwjrutszlmxw"
 
 [functions.ai-advisor]
 verify_jwt = false
+
+[functions.search-recipient]
+verify_jwt = false
