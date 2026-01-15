@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { SimplePool } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
@@ -48,12 +48,18 @@ export interface LanaEvent {
 
 type EventFilter = 'online' | 'live';
 
-export function useNostrEvents(filter: EventFilter) {
+export interface UseNostrEventsOptions {
+  enabled?: boolean;
+}
+
+export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOptions) {
+  const { enabled = true } = options || {};
   const { session } = useAuth();
   const { parameters: systemParameters } = useSystemParameters();
   const [events, setEvents] = useState<LanaEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fetchStartedRef = useRef(false);
 
   const relays = systemParameters?.relays && systemParameters.relays.length > 0 
     ? systemParameters.relays 
@@ -138,7 +144,7 @@ export function useNostrEvents(filter: EventFilter) {
   };
 
   const fetchEvents = useCallback(async () => {
-    if (!session) {
+    if (!enabled || !session) {
       setLoading(false);
       return;
     }
@@ -202,13 +208,29 @@ export function useNostrEvents(filter: EventFilter) {
     } finally {
       setLoading(false);
     }
-  }, [session, relays, filter]);
+  }, [enabled, session, relays, filter]);
 
   useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
 
-  return { events, loading, error, refetch: fetchEvents };
+    // Only fetch once when enabled
+    if (!fetchStartedRef.current) {
+      fetchStartedRef.current = true;
+      fetchEvents();
+    }
+  }, [enabled, fetchEvents]);
+
+  // Reset fetch started ref when enabled changes to false
+  useEffect(() => {
+    if (!enabled) {
+      fetchStartedRef.current = false;
+    }
+  }, [enabled]);
+
+  return { events, loading: enabled ? loading : false, error, refetch: fetchEvents };
 }
 
 export function getEventStatus(event: LanaEvent): 'happening-now' | 'today' | 'upcoming' {
