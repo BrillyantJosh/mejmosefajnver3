@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, Wallet, ArrowRight, Sparkles, Grid, CheckCircle2, Loader2, Calendar, CreditCard, Clock } from "lucide-react";
+import { AlertCircle, Wallet, ArrowRight, Sparkles, Grid, CheckCircle2, Calendar, CreditCard, Clock } from "lucide-react";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 import { useNostrEvents } from "@/hooks/useNostrEvents";
@@ -36,19 +36,7 @@ export default function Dashboard() {
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Show full-page loading spinner while data is loading
-  const isInitialLoading = wallets.isLoading || lana8Wonder.isLoading || onlineLoading || liveLoading || proposalsLoading;
-
-  if (isInitialLoading) {
-    return (
-      <div className="max-w-4xl mx-auto flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading your dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+  const eventsLoading = onlineLoading || liveLoading;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -184,7 +172,24 @@ export default function Dashboard() {
           )}
 
           {/* Lana Events Card */}
-          {(onlineEvents.length > 0 || liveEvents.length > 0) && (
+          {eventsLoading ? (
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4 mb-4">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-5 w-1/3" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[1, 2, 3].map(i => (
+                    <Skeleton key={i} className="h-32 rounded-lg" />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : (onlineEvents.length > 0 || liveEvents.length > 0) ? (
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-start gap-4 mb-4">
@@ -221,10 +226,27 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
           {/* Unconditional Payments Card */}
-          {pendingProposals.length > 0 && (
+          {proposalsLoading ? (
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4 mb-4">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-5 w-1/3" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {[1, 2, 3].map(i => (
+                    <Skeleton key={i} className="h-12 rounded-lg" />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : pendingProposals.length > 0 ? (
             <Card className="border-amber-500/50 bg-amber-500/5">
               <CardContent className="p-6">
                 <div className="flex items-start gap-4 mb-4">
@@ -274,7 +296,7 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
-          )}
+          ) : null}
         </div>
       </div>
 
