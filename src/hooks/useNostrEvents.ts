@@ -139,7 +139,7 @@ export function useNostrEvents(filter: EventFilter) {
 
   const fetchEvents = useCallback(async () => {
     if (!session) {
-      setLoading(false);
+      // Don't set loading to false - wait for session to be available
       return;
     }
 
@@ -208,7 +208,10 @@ export function useNostrEvents(filter: EventFilter) {
     fetchEvents();
   }, [fetchEvents]);
 
-  return { events, loading, error, refetch: fetchEvents };
+  // Keep loading true until session is available
+  const isReady = !!session;
+
+  return { events, loading: loading || !isReady, error, refetch: fetchEvents };
 }
 
 export function getEventStatus(event: LanaEvent): 'happening-now' | 'today' | 'upcoming' {
