@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, Wallet, ArrowRight, Sparkles, Grid, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, Wallet, ArrowRight, Sparkles, Grid, CheckCircle2 } from "lucide-react";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 
@@ -15,19 +15,6 @@ export default function Dashboard() {
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Show full-page loading spinner while data is loading
-  const isInitialLoading = wallets.isLoading || lana8Wonder.isLoading;
-
-  if (isInitialLoading) {
-    return (
-      <div className="max-w-4xl mx-auto flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading your dashboard...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-4xl mx-auto">
