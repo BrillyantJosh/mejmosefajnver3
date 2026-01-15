@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SimplePool, Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { arraysEqual } from '@/lib/arrayComparison';
@@ -22,23 +22,34 @@ export interface DonationPayment {
   createdAt: number;
 }
 
-export const useNostrDonationPayments = () => {
+export interface UseNostrDonationPaymentsOptions {
+  poll?: boolean;
+  pollIntervalMs?: number;
+}
+
+export const useNostrDonationPayments = (
+  options: UseNostrDonationPaymentsOptions = {}
+) => {
+  const { poll = true, pollIntervalMs = 5000 } = options;
   const { parameters } = useSystemParameters();
   const [payments, setPayments] = useState<DonationPayment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
   const relays = parameters?.relays || [];
 
   useEffect(() => {
     const fetchPayments = async () => {
       if (relays.length === 0) {
-        setPayments([]);
-        setIsLoading(false);
+        // Only clear if we haven't loaded yet
+        if (!hasLoadedOnceRef.current) {
+          setPayments([]);
+          setIsLoading(false);
+        }
         return;
       }
 
       // Loading indicator only for initial load
-      if (!hasLoadedOnce) {
+      if (!hasLoadedOnceRef.current) {
         setIsLoading(true);
       }
       const pool = new SimplePool();
@@ -93,23 +104,24 @@ export const useNostrDonationPayments = () => {
             };
           });
 
-          // Only update state if data actually changed
-          if (!arraysEqual(parsedPayments, payments)) {
-            console.log('💳 Payment status changed, updating...');
-            setPayments(parsedPayments);
-          }
+          // Only update state if data actually changed (use functional setter to avoid stale closure)
+          setPayments(prev => arraysEqual(parsedPayments, prev) ? prev : parsedPayments);
         } else {
-          if (payments.length > 0) {
+          // Only clear if this is the initial load
+          if (!hasLoadedOnceRef.current) {
             setPayments([]);
           }
         }
       } catch (error) {
         console.error('❌ Error fetching donation payments:', error);
-        setPayments([]);
+        // DO NOT clear payments after first successful load - keep last known good state
+        if (!hasLoadedOnceRef.current) {
+          setPayments([]);
+        }
       } finally {
-        if (!hasLoadedOnce) {
+        if (!hasLoadedOnceRef.current) {
           setIsLoading(false);
-          setHasLoadedOnce(true);
+          hasLoadedOnceRef.current = true;
         }
         pool.close(relays);
       }
@@ -117,10 +129,12 @@ export const useNostrDonationPayments = () => {
 
     fetchPayments();
 
-    // Poll every 5 seconds for payment status updates
-    const interval = setInterval(fetchPayments, 5000);
-    return () => clearInterval(interval);
-  }, [relays.join(',')]);
+    // Only set up polling if poll option is true
+    if (poll) {
+      const interval = setInterval(fetchPayments, pollIntervalMs);
+      return () => clearInterval(interval);
+    }
+  }, [relays.join(','), poll, pollIntervalMs]);
 
   return {
     payments,

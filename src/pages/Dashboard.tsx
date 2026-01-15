@@ -20,8 +20,8 @@ export default function Dashboard() {
   const { profile } = useNostrProfile();
   const { events: onlineEvents, loading: onlineLoading } = useNostrEvents('online');
   const { events: liveEvents, loading: liveLoading } = useNostrEvents('live');
-  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(session?.nostrHexId);
-  const { payments } = useNostrDonationPayments();
+  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(session?.nostrHexId, { poll: false });
+  const { payments } = useNostrDonationPayments({ poll: false });
 
   const pendingProposals = useMemo(() => {
     return proposals.filter(proposal => {
