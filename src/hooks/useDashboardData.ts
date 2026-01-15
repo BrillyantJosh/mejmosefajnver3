@@ -60,7 +60,7 @@ export const useDashboardData = (): DashboardData => {
 
   // Wallet state
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
-  const [walletBalancesLoading, setWalletBalancesLoading] = useState(false);
+  const [walletBalancesLoading, setWalletBalancesLoading] = useState(true);
 
   const relays = parameters?.relays || [];
   const exchangeRates = parameters?.exchangeRates;
