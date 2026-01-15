@@ -1,26 +1,43 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, Wallet, ArrowRight, Sparkles, Grid, CheckCircle2, Loader2, Calendar } from "lucide-react";
+import { AlertCircle, Wallet, ArrowRight, Sparkles, Grid, CheckCircle2, Loader2, Calendar, CreditCard, Clock } from "lucide-react";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 import { useNostrEvents } from "@/hooks/useNostrEvents";
+import { useNostrDonationProposals } from "@/hooks/useNostrDonationProposals";
+import { useNostrDonationPayments } from "@/hooks/useNostrDonationPayments";
+import { useAuth } from "@/contexts/AuthContext";
 import { EventCardMini } from "@/components/events/EventCardMini";
+import { formatCurrency } from "@/lib/currencyConversion";
 
 export default function Dashboard() {
+  const { session } = useAuth();
   const { lana8Wonder, wallets } = useDashboardData();
   const { profile } = useNostrProfile();
   const { events: onlineEvents, loading: onlineLoading } = useNostrEvents('online');
   const { events: liveEvents, loading: liveLoading } = useNostrEvents('live');
+  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(session?.nostrHexId);
+  const { payments } = useNostrDonationPayments();
+
+  const pendingProposals = useMemo(() => {
+    return proposals.filter(proposal => {
+      const isPaid = payments.some(p => 
+        p.proposalDTag === proposal.d || p.proposalEventId === proposal.eventId
+      );
+      return !isPaid;
+    });
+  }, [proposals, payments]);
 
   const formatNumber = (num: number) => {
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   // Show full-page loading spinner while data is loading
-  const isInitialLoading = wallets.isLoading || lana8Wonder.isLoading || onlineLoading || liveLoading;
+  const isInitialLoading = wallets.isLoading || lana8Wonder.isLoading || onlineLoading || liveLoading || proposalsLoading;
 
   if (isInitialLoading) {
     return (
@@ -201,6 +218,59 @@ export default function Dashboard() {
                     .map((event) => (
                       <EventCardMini key={event.id} event={event} />
                     ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Unconditional Payments Card */}
+          {pendingProposals.length > 0 && (
+            <Card className="border-amber-500/50 bg-amber-500/5">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="h-12 w-12 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                    <CreditCard className="h-6 w-6 text-amber-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-lg">Pending Payments</h3>
+                      <Badge variant="outline" className="text-xs border-amber-500 text-amber-600">
+                        {pendingProposals.length} pending
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      You have unconditional payment requests waiting
+                    </p>
+                  </div>
+                  <Link to="/unconditional-payment">
+                    <Button variant="outline" size="sm" className="gap-2 shrink-0">
+                      View All
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
+                
+                {/* Simple list of pending payments */}
+                <div className="space-y-2">
+                  {pendingProposals.slice(0, 5).map((proposal) => (
+                    <div 
+                      key={proposal.eventId} 
+                      className="flex items-center justify-between p-3 bg-background rounded-lg border"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Clock className="h-4 w-4 text-amber-500 shrink-0" />
+                        <span className="font-medium truncate">{proposal.service || 'Payment'}</span>
+                      </div>
+                      <span className="text-sm font-medium text-amber-600 shrink-0">
+                        {formatCurrency(parseFloat(proposal.fiatAmount), proposal.fiatCurrency)}
+                      </span>
+                    </div>
+                  ))}
+                  {pendingProposals.length > 5 && (
+                    <p className="text-xs text-muted-foreground text-center pt-2">
+                      +{pendingProposals.length - 5} more pending payments
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
