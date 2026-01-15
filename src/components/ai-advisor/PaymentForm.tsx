@@ -11,6 +11,7 @@ import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { convertWifToIds } from '@/lib/crypto';
 import { Html5Qrcode } from 'html5-qrcode';
 import { toast } from 'sonner';
+import { t } from '@/lib/aiAdvisorTranslations';
 
 interface PaymentFormProps {
   recipientName: string;
@@ -20,6 +21,7 @@ interface PaymentFormProps {
   senderWalletId: string;
   senderWalletBalance: number;
   currency: string;
+  language?: string;
   onComplete: (success: boolean, txHash?: string, error?: string) => void;
   onCancel: () => void;
 }
@@ -32,6 +34,7 @@ export function PaymentForm({
   senderWalletId,
   senderWalletBalance,
   currency,
+  language,
   onComplete,
   onCancel,
 }: PaymentFormProps) {
@@ -46,7 +49,6 @@ export function PaymentForm({
   const [isScanning, setIsScanning] = useState(false);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
-  // Validate private key in real-time
   useEffect(() => {
     const validatePrivateKey = async () => {
       if (!privateKey.trim()) {
@@ -61,16 +63,14 @@ export function PaymentForm({
         
         if (derivedIds.walletId !== senderWalletId) {
           setIsPrivateKeyValid(false);
-          setValidationError(
-            `Privatni ključ ne ustreza! Ključ je za: ${derivedIds.walletId.slice(0, 8)}...`
-          );
+          setValidationError(t('privateKeyMismatch', language, { walletId: derivedIds.walletId.slice(0, 8) }));
         } else {
           setIsPrivateKeyValid(true);
           setValidationError('');
         }
       } catch (err) {
         setIsPrivateKeyValid(false);
-        setValidationError('Neveljaven format privatnega ključa');
+        setValidationError(t('invalidKeyFormat', language));
       } finally {
         setIsValidating(false);
       }
@@ -78,9 +78,8 @@ export function PaymentForm({
 
     const timeoutId = setTimeout(validatePrivateKey, 500);
     return () => clearTimeout(timeoutId);
-  }, [privateKey, senderWalletId]);
+  }, [privateKey, senderWalletId, language]);
 
-  // QR Scanner
   const startScanner = async () => {
     try {
       setIsScanning(true);
@@ -88,7 +87,7 @@ export function PaymentForm({
 
       const cameras = await Html5Qrcode.getCameras();
       if (!cameras || cameras.length === 0) {
-        setError('Ni dostopnih kamer.');
+        setError(t('noCamerasFound', language));
         setIsScanning(false);
         return;
       }
@@ -108,7 +107,7 @@ export function PaymentForm({
         () => {}
       );
     } catch (err: any) {
-      setError(`Napaka kamere: ${err.message || 'Preverite dovoljenja.'}`);
+      setError(t('cameraError', language, { error: err.message || '' }));
       setIsScanning(false);
     }
   };
@@ -125,7 +124,6 @@ export function PaymentForm({
     }
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (html5QrCodeRef.current) {
@@ -136,7 +134,7 @@ export function PaymentForm({
 
   const handleSubmit = async () => {
     if (!privateKey.trim() || !isPrivateKeyValid) {
-      setError('Vnesite veljaven privatni ključ');
+      setError(t('enterValidKey', language));
       return;
     }
 
@@ -144,7 +142,7 @@ export function PaymentForm({
     setError('');
 
     try {
-      toast.info('Pošiljam transakcijo...');
+      toast.info(t('sendingTransaction', language));
 
       const { data, error: txError } = await supabase.functions.invoke('send-lana-transaction', {
         body: {
@@ -160,13 +158,13 @@ export function PaymentForm({
       if (txError) throw txError;
 
       if (data?.success) {
-        toast.success('Transakcija uspešno poslana!');
+        toast.success(t('transactionSuccess', language));
         onComplete(true, data.txHash);
       } else {
-        throw new Error(data?.error || 'Transakcija ni uspela');
+        throw new Error(data?.error || t('transactionError', language));
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Napaka pri transakciji';
+      const errorMessage = err instanceof Error ? err.message : t('transactionError', language);
       setError(errorMessage);
       toast.error(errorMessage);
       onComplete(false, undefined, errorMessage);
@@ -179,7 +177,6 @@ export function PaymentForm({
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Check if enough balance
   const hasEnoughBalance = senderWalletBalance >= amount;
 
   return (
@@ -187,25 +184,24 @@ export function PaymentForm({
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
           <Send className="h-5 w-5" />
-          Potrdi plačilo
+          {t('confirmPayment', language)}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Transaction Summary */}
         <div className="p-4 rounded-lg bg-muted/50 space-y-3">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
               <User className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Prejemnik</p>
+              <p className="text-sm text-muted-foreground">{t('recipient', language)}</p>
               <p className="font-semibold">{recipientName}</p>
             </div>
           </div>
           
           <div className="text-xs text-muted-foreground">
-            <p>Na denarnico: <span className="font-mono">{recipientWalletId.slice(0, 12)}...{recipientWalletId.slice(-8)}</span></p>
-            <p>Tip: {recipientWalletType}</p>
+            <p>{t('toWallet', language)}: <span className="font-mono">{recipientWalletId.slice(0, 12)}...{recipientWalletId.slice(-8)}</span></p>
+            <p>{t('type', language)}: {recipientWalletType}</p>
           </div>
 
           <div className="pt-2 border-t">
@@ -215,15 +211,14 @@ export function PaymentForm({
           </div>
         </div>
 
-        {/* Sender Info */}
         <div className="p-3 rounded-lg bg-muted/30">
           <div className="flex items-center gap-2">
             <Wallet className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Iz denarnice:</span>
+            <span className="text-sm text-muted-foreground">{t('fromWallet', language)}:</span>
           </div>
           <p className="font-mono text-xs mt-1">{senderWalletId}</p>
           <p className="text-sm mt-1">
-            Stanje: <span className={hasEnoughBalance ? 'text-green-600' : 'text-destructive'}>
+            {t('balance', language)}: <span className={hasEnoughBalance ? 'text-green-600' : 'text-destructive'}>
               {formatNumber(senderWalletBalance)} LANA
             </span>
           </p>
@@ -232,34 +227,33 @@ export function PaymentForm({
         {!hasEnoughBalance && (
           <Alert variant="destructive">
             <AlertDescription>
-              Nezadostno stanje! Potrebuješ {formatNumber(amount)} LANA, imaš pa {formatNumber(senderWalletBalance)} LANA.
+              {t('insufficientBalance', language, { needed: formatNumber(amount), available: formatNumber(senderWalletBalance) })}
             </AlertDescription>
           </Alert>
         )}
 
         {hasEnoughBalance && (
           <>
-            {/* Private Key Input */}
             <Tabs value={selectedTab} onValueChange={setSelectedTab}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="manual">
                   <Key className="h-4 w-4 mr-2" />
-                  Vnesi ključ
+                  {t('enterKey', language)}
                 </TabsTrigger>
                 <TabsTrigger value="scan">
                   <Scan className="h-4 w-4 mr-2" />
-                  Skeniraj QR
+                  {t('scanQr', language)}
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="manual" className="space-y-3">
                 <div className="space-y-2">
-                  <Label htmlFor="privateKey">Privatni ključ (WIF)</Label>
+                  <Label htmlFor="privateKey">{t('privateKeyWif', language)}</Label>
                   <div className="relative">
                     <Input
                       id="privateKey"
                       type="password"
-                      placeholder="Vnesite privatni ključ"
+                      placeholder={t('enterPrivateKey', language)}
                       value={privateKey}
                       onChange={(e) => setPrivateKey(e.target.value)}
                       className={`pr-10 ${
@@ -277,12 +271,8 @@ export function PaymentForm({
                       <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive" />
                     )}
                   </div>
-                  {validationError && (
-                    <p className="text-xs text-destructive">{validationError}</p>
-                  )}
-                  {isPrivateKeyValid && (
-                    <p className="text-xs text-green-600">✓ Privatni ključ je veljaven</p>
-                  )}
+                  {validationError && <p className="text-xs text-destructive">{validationError}</p>}
+                  {isPrivateKeyValid && <p className="text-xs text-green-600">{t('privateKeyValid', language)}</p>}
                 </div>
               </TabsContent>
 
@@ -290,19 +280,19 @@ export function PaymentForm({
                 {!isScanning ? (
                   <Button onClick={startScanner} className="w-full">
                     <Scan className="h-4 w-4 mr-2" />
-                    Zaženi kamero
+                    {t('startCamera', language)}
                   </Button>
                 ) : (
                   <>
                     <div id="qr-reader-payment" className="w-full rounded-lg overflow-hidden" />
                     <Button onClick={stopScanner} variant="destructive" className="w-full">
-                      Ustavi skeniranje
+                      {t('stopScanning', language)}
                     </Button>
                   </>
                 )}
                 {privateKey && (
                   <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-sm text-muted-foreground">Skeniran ključ:</p>
+                    <p className="text-sm text-muted-foreground">{t('scannedKey', language)}</p>
                     <p className="font-mono text-xs">{'•'.repeat(Math.min(privateKey.length, 40))}</p>
                   </div>
                 )}
@@ -315,10 +305,9 @@ export function PaymentForm({
               </Alert>
             )}
 
-            {/* Action Buttons */}
             <div className="flex gap-2">
               <Button variant="outline" onClick={onCancel} className="flex-1" disabled={isSubmitting}>
-                Prekliči
+                {t('cancel', language)}
               </Button>
               <Button 
                 onClick={handleSubmit} 
@@ -328,12 +317,12 @@ export function PaymentForm({
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Pošiljam...
+                    {t('sending', language)}
                   </>
                 ) : (
                   <>
                     <Send className="h-4 w-4 mr-2" />
-                    Pošlji
+                    {t('send', language)}
                   </>
                 )}
               </Button>
@@ -343,12 +332,12 @@ export function PaymentForm({
 
         {!hasEnoughBalance && (
           <Button variant="outline" onClick={onCancel} className="w-full">
-            Zapri
+            {t('close', language)}
           </Button>
         )}
 
         <p className="text-xs text-muted-foreground text-center">
-          Vaš privatni ključ ni nikoli shranjen in se uporabi samo za podpis transakcije.
+          {t('keyNotStored', language)}
         </p>
       </CardContent>
     </Card>
