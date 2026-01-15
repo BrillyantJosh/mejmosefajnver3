@@ -3,7 +3,7 @@ import { ArrowRight, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useModules } from "@/contexts/ModulesContext";
 import { Button } from "@/components/ui/button";
-export default function Home() {
+export default function Modules() {
   const {
     getEnabledModules,
     modules
