@@ -3,9 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bot, Send, User, Loader2, RefreshCw, Sparkles, ExternalLink } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Bot, Send, User, Loader2, RefreshCw, Sparkles, ExternalLink, Coins } from 'lucide-react';
 import { useAiAdvisorContext } from '@/hooks/useAiAdvisorContext';
 import { useAiAdvisorEvents } from '@/hooks/useAiAdvisorEvents';
+import { useAiUsageThisMonth } from '@/hooks/useAiUsageThisMonth';
 import { RecipientSelector } from '@/components/ai-advisor/RecipientSelector';
 import { PaymentForm } from '@/components/ai-advisor/PaymentForm';
 import { useNostrProfile } from '@/hooks/useNostrProfile';
@@ -101,6 +103,7 @@ export default function AiAdvisor() {
   
   const context = useAiAdvisorContext();
   const { eventsContext, isLoading: eventsLoading } = useAiAdvisorEvents();
+  const { totalLana: aiUsageLana, isLoading: usageLoading } = useAiUsageThisMonth();
   const { parameters } = useSystemParameters();
   const { profile } = useNostrProfile();
   const { session } = useAuth();
@@ -378,12 +381,20 @@ export default function AiAdvisor() {
                 <p className="text-sm text-muted-foreground">{trans.askOrPay}</p>
               </div>
             </div>
-            {messages.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => { setMessages([]); setError(null); }}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                {trans.newQuery}
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {!usageLoading && aiUsageLana > 0 && (
+                <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                  <Coins className="h-3 w-3" />
+                  {aiUsageLana.toFixed(2)} LANA
+                </Badge>
+              )}
+              {messages.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => { setMessages([]); setError(null); }}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  {trans.newQuery}
+                </Button>
+              )}
+            </div>
           </div>
           {(context.isLoading || eventsLoading) && (
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
