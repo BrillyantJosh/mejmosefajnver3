@@ -94,6 +94,49 @@ async function logUsage(
   }
 }
 
+// Patterns that indicate an unsupported or failed query
+const UNSUPPORTED_PATTERNS = [
+  /ne morem|nisem zmožen|ni mogoče|žal ne|tega ne podpiram/i,
+  /cannot|can't|unable to|not able to|don't have|do not have|not supported/i,
+  /keine.*unterstützung|nicht möglich|kann nicht/i,
+  /ne mogu|nije moguće|ne podržavam/i,
+  /nem tudom|nem lehetséges/i,
+  /non posso|non è possibile/i,
+  /no puedo|no es posible/i,
+  /não posso|não é possível/i,
+  /nimam.*podatkov|ni.*informacij|ni.*rezultatov/i,
+  /no.*data|no.*information|no.*results/i,
+];
+
+function isUnsupportedResponse(response: string): boolean {
+  // Check if response matches any unsupported pattern
+  return UNSUPPORTED_PATTERNS.some(pattern => pattern.test(response));
+}
+
+async function logUnsupportedPrompt(
+  nostrHexId: string,
+  prompt: string,
+  aiResponse: string,
+  contextSummary: string
+) {
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    
+    await supabase.from('ai_unsupported_prompts').insert({
+      nostr_hex_id: nostrHexId,
+      prompt: prompt,
+      ai_response: aiResponse.substring(0, 2000), // Limit response length
+      context_summary: contextSummary,
+    });
+    console.log(`Logged unsupported prompt for ${nostrHexId}: "${prompt.substring(0, 50)}..."`);
+  } catch (err) {
+    console.error("Failed to log unsupported prompt:", err);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -129,12 +172,25 @@ serve(async (req) => {
       });
     }
 
-    // Hybrid streaming: forward to client while tracking usage
+    // Get the last user message for potential logging
+    const lastUserMessage = messages.filter((m: any) => m.role === 'user').pop()?.content || '';
+    
+    // Create context summary for logging (limit size)
+    const contextSummary = context ? JSON.stringify({
+      hasWallets: !!context.wallets,
+      walletCount: context.wallets?.count || 0,
+      hasProjects: !!context.userProjects,
+      myProjectsCount: context.userProjects?.projectCount || 0,
+      allProjectsCount: context.userProjects?.totalActiveProjectsCount || 0,
+    }) : '{}';
+
+    // Hybrid streaming: forward to client while tracking usage and full response
     const reader = response.body!.getReader();
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
     
     let usageData: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
+    let fullResponse = ''; // Collect full response for analysis
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -146,7 +202,7 @@ serve(async (req) => {
             // Forward chunk to client
             controller.enqueue(value);
             
-            // Parse for usage data
+            // Parse for usage data and collect response
             const text = decoder.decode(value, { stream: true });
             const lines = text.split('\n');
             
@@ -156,6 +212,11 @@ serve(async (req) => {
                   const json = JSON.parse(line.slice(6));
                   if (json.usage) {
                     usageData = json.usage;
+                  }
+                  // Collect response content
+                  const content = json.choices?.[0]?.delta?.content;
+                  if (content) {
+                    fullResponse += content;
                   }
                 } catch {
                   // Ignore parse errors for partial chunks
@@ -170,6 +231,11 @@ serve(async (req) => {
           if (nostrHexId && usageData) {
             const rate = usdToLanaRate || 270; // Default fallback rate
             await logUsage(nostrHexId, model, usageData, rate);
+          }
+          
+          // Check if response indicates unsupported query and log it
+          if (nostrHexId && fullResponse && isUnsupportedResponse(fullResponse)) {
+            await logUnsupportedPrompt(nostrHexId, lastUserMessage, fullResponse, contextSummary);
           }
         } catch (err) {
           console.error("Stream error:", err);

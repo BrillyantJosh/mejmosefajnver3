@@ -38,6 +38,33 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_unsupported_prompts: {
+        Row: {
+          ai_response: string | null
+          context_summary: string | null
+          created_at: string
+          id: string
+          nostr_hex_id: string
+          prompt: string
+        }
+        Insert: {
+          ai_response?: string | null
+          context_summary?: string | null
+          created_at?: string
+          id?: string
+          nostr_hex_id: string
+          prompt: string
+        }
+        Update: {
+          ai_response?: string | null
+          context_summary?: string | null
+          created_at?: string
+          id?: string
+          nostr_hex_id?: string
+          prompt?: string
+        }
+        Relationships: []
+      }
       ai_usage_logs: {
         Row: {
           completion_tokens: number
