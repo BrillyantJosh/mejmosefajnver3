@@ -199,6 +199,7 @@ export default function AiAdvisor() {
             unpaidLashes: context.unpaidLashes,
             userProjects: userProjectsContext,
             events: eventsContext,
+            recentChats: context.recentChats,
           },
           language: userLanguage,
           nostrHexId,
