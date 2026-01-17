@@ -40,17 +40,21 @@ export interface UnconditionalPaymentsContext {
 export function useAiAdvisorUnconditionalPayments() {
   const { session } = useAuth();
   
-  // Fetch proposals for the current user
+  // Fetch proposals for the current user (with polling for fresh data)
   const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(
     session?.nostrHexId,
-    { poll: false, enabled: !!session?.nostrHexId }
+    { poll: true, pollIntervalMs: 15000, enabled: !!session?.nostrHexId }
   );
   
-  // Fetch payments to check which are already paid
+  // Fetch payments to check which are already paid (with polling)
   const { payments, isLoading: paymentsLoading } = useNostrDonationPayments({
-    poll: false,
+    poll: true,
+    pollIntervalMs: 15000,
     enabled: !!session?.nostrHexId
   });
+
+  // Debug logging
+  console.log(`📋 Unconditional Payments Hook: ${proposals.length} proposals, ${payments.length} payments fetched`);
 
   // Get unique recipient pubkeys for profile fetching
   const recipientPubkeys = useMemo(() => 
