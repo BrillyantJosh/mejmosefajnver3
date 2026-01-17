@@ -188,7 +188,7 @@ export default function AiAdvisor() {
           context: {
             wallets: context.wallets,
             lana8Wonder: context.lana8Wonder,
-            pendingPayments: context.pendingPayments,
+            unconditionalPayments: context.unconditionalPayments,
             unpaidLashes: context.unpaidLashes,
             userProjects: userProjectsContext,
             events: eventsContext,
