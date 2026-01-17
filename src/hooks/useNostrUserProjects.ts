@@ -124,9 +124,10 @@ export const useNostrUserProjects = () => {
         const visibleProjects = parsedProjects.filter(p => !p.isBlocked && p.status !== 'draft');
         setAllProjects(visibleProjects);
 
-        // Filter for user's own projects (owner or participant)
+        // Filter for user's own projects - ONLY if event.pubkey matches user
+        // According to KIND 31234 spec: project ownership is determined by event.pubkey
         const userProjects = parsedProjects.filter(
-          p => p.ownerPubkey === session.nostrHexId || p.participants.includes(session.nostrHexId)
+          p => p.pubkey === session.nostrHexId
         );
         setProjects(userProjects);
 
