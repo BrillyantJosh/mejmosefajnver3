@@ -323,7 +323,7 @@ export function useAiAdvisorContext(): AiAdvisorContext {
     return {
       wallets: walletsContext,
       lana8Wonder: lana8WonderContext,
-      unconditionalPayments: unconditionalPayments.pendingCount > 0 ? unconditionalPayments : null,
+      unconditionalPayments: unconditionalPayments, // Always send context, even if empty
       unpaidLashes: unpaidLashesContext,
       userProjects: userProjectsContext,
       isLoading,
