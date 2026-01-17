@@ -38,6 +38,36 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_usage_logs: {
+        Row: {
+          completion_tokens: number
+          created_at: string
+          id: string
+          model: string
+          nostr_hex_id: string
+          prompt_tokens: number
+          total_tokens: number
+        }
+        Insert: {
+          completion_tokens?: number
+          created_at?: string
+          id?: string
+          model: string
+          nostr_hex_id: string
+          prompt_tokens?: number
+          total_tokens?: number
+        }
+        Update: {
+          completion_tokens?: number
+          created_at?: string
+          id?: string
+          model?: string
+          nostr_hex_id?: string
+          prompt_tokens?: number
+          total_tokens?: number
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           id: string
