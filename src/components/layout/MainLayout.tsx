@@ -27,7 +27,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const fixedMenuItems = [
-  { title: "AI Advisor", icon: Bot, path: "/" },
+  { title: "Enlightened AI", icon: Bot, path: "/" },
   { title: "Modules", icon: Grid, path: "/modules" },
   { title: "Profile", icon: User, path: "/profile" },
   { title: "Settings", icon: Settings, path: "/settings" },
