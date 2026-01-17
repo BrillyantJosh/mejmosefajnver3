@@ -8,6 +8,7 @@ import { useAiAdvisorContext } from '@/hooks/useAiAdvisorContext';
 import { RecipientSelector } from '@/components/ai-advisor/RecipientSelector';
 import { PaymentForm } from '@/components/ai-advisor/PaymentForm';
 import { useNostrProfile } from '@/hooks/useNostrProfile';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { t, getTranslation } from '@/lib/aiAdvisorTranslations';
@@ -44,8 +45,10 @@ export default function AiAdvisor() {
   const context = useAiAdvisorContext();
   const { parameters } = useSystemParameters();
   const { profile } = useNostrProfile();
+  const { session } = useAuth();
   
-  // Get user's language from profile
+  // Get user's nostr_hex_id and language from profile
+  const nostrHexId = session?.nostrHexId || '';
   const userLanguage = profile?.lang || 'en';
   const trans = getTranslation(userLanguage);
   
@@ -110,7 +113,8 @@ export default function AiAdvisor() {
             pendingPayments: context.pendingPayments,
             unpaidLashes: context.unpaidLashes,
           },
-          language: userLanguage, // Pass language to backend
+          language: userLanguage,
+          nostrHexId, // Pass nostrHexId for usage tracking
         }),
       });
 
