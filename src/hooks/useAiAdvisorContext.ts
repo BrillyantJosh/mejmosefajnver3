@@ -287,9 +287,8 @@ export function useAiAdvisorContext(): AiAdvisorContext {
 
     // 100 Million Ideas - user projects context
     // Map all active projects with owner names for AI search
-    // IMPORTANT: Mark which projects belong to the current user
+    // CRITICAL: Mark which projects belong to the current user based on event.pubkey ONLY
     const userPubkey = session?.nostrHexId || '';
-    const userProjectIds = new Set(userProjects.map(p => p.id));
     
     const allActiveProjectsSummary: AllProjectSummary[] = allProjects.map(p => ({
       id: p.id,
@@ -303,8 +302,8 @@ export function useAiAdvisorContext(): AiAdvisorContext {
       percentFunded: p.percentFunded,
       isFullyFunded: p.isFullyFunded,
       donationCount: p.donationCount,
-      // Mark as user's project if owner matches OR it's in userProjects list
-      isMyProject: p.ownerPubkey === userPubkey || userProjectIds.has(p.id),
+      // STRICT: Mark as user's project ONLY if event.pubkey matches current user
+      isMyProject: p.pubkey === userPubkey,
     }));
 
     const userProjectsContext: UserProjectsContext | null = (userProjects.length > 0 || allProjects.length > 0) ? {
