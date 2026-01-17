@@ -52,6 +52,13 @@ WHEN LISTING ALL PROJECTS:
 - The ownerName/ownerPubkey shows who created each project
 - If user asks "which are mine?", check isMyProject field
 
+PROJECT IMAGES (CRITICAL - ALWAYS FOLLOW):
+- Each project has a "coverImage" field with the image URL
+- When discussing or listing projects, ALWAYS include the cover image if it exists
+- Format: ![Project Title](coverImage_URL)
+- Display the image BEFORE the project description
+- Example: ![Lana.discount](https://example.com/cover.jpg)
+
 DO NOT INVENT DATA:
 - Use ONLY amounts, names, and counts from the context
 - If data is missing, say "I don't have this information in the context"
