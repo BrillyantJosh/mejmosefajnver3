@@ -6,6 +6,7 @@ import { useNostrWallets } from './useNostrWallets';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrProfile } from '@/hooks/useNostrProfile';
+import { useNostrUserProjects, UserProjectData, UserProjectDonation } from '@/hooks/useNostrUserProjects';
 import { supabase } from '@/integrations/supabase/client';
 
 interface WalletDetail {
@@ -15,6 +16,49 @@ interface WalletDetail {
   balance: number;
   balanceFiat: number;
   currency: string;
+}
+
+// 100 Million Ideas context types
+export interface ProjectSummary {
+  id: string;
+  title: string;
+  status: 'draft' | 'active';
+  fiatGoal: number;
+  currency: string;
+  totalRaised: number;
+  percentFunded: number;
+  amountRemaining: number;
+  isFullyFunded: boolean;
+  donationCount: number;
+  wallet: string;
+}
+
+export interface ProjectDonationDetail {
+  eventId: string;
+  supporterName: string;
+  supporterPubkey: string;
+  amountFiat: number;
+  amountLana: number;
+  currency: string;
+  txid: string;
+  date: string;
+  message: string;
+}
+
+export interface UserProjectsContext {
+  projectCount: number;
+  totalRaised: number;
+  totalGoal: number;
+  overallPercentFunded: number;
+  totalDonations: number;
+  fullyFundedCount: number;
+  activeCount: number;
+  draftCount: number;
+  projects: ProjectSummary[];
+  // Function to get detailed donations for a project
+  getProjectDonations: (projectId: string) => ProjectDonationDetail[];
+  // Search function
+  searchProjects: (query: string) => ProjectSummary[];
 }
 
 export interface AiAdvisorContext {
@@ -44,6 +88,8 @@ export interface AiAdvisorContext {
   unpaidLashes: {
     count: number;
   } | null;
+  // 100 Million Ideas context
+  userProjects: UserProjectsContext | null;
   isLoading: boolean;
   refetchWalletBalances: () => void;
 }
@@ -73,6 +119,17 @@ export function useAiAdvisorContext(): AiAdvisorContext {
   );
 
   const { unpaidCount, loading: unpaidLashesLoading } = useNostrUnpaidLashes();
+
+  // 100 Million Ideas - user projects
+  const { 
+    projects: userProjects, 
+    allProjects, 
+    stats: projectStats, 
+    isLoading: projectsLoading,
+    searchProjects: searchProjectsFn,
+    getProfileName,
+    profiles
+  } = useNostrUserProjects();
 
   // Get currency and exchange rate
   const currency = profile?.currency || 'USD';
@@ -121,6 +178,42 @@ export function useAiAdvisorContext(): AiAdvisorContext {
       fetchWalletBalances();
     }
   }, [nostrWallets.length, parameters?.electrumServers]);
+
+  // Helper to get donations for a specific project
+  const getProjectDonations = (projectId: string): ProjectDonationDetail[] => {
+    const project = userProjects.find(p => p.id === projectId);
+    if (!project) return [];
+    
+    return project.donations.map(d => ({
+      eventId: d.eventId,
+      supporterName: d.supporterName || `${d.supporterPubkey.slice(0, 12)}...`,
+      supporterPubkey: d.supporterPubkey,
+      amountFiat: d.amountFiat,
+      amountLana: parseFloat(d.amountLanoshis) / 100000000,
+      currency: d.currency,
+      txid: d.txid,
+      date: new Date(d.timestampPaid * 1000).toISOString(),
+      message: d.message,
+    }));
+  };
+
+  // Search projects with profile name matching
+  const searchProjects = (query: string): ProjectSummary[] => {
+    const results = searchProjectsFn(query);
+    return results.map(p => ({
+      id: p.id,
+      title: p.title,
+      status: p.status,
+      fiatGoal: p.fiatGoal,
+      currency: p.currency,
+      totalRaised: p.totalRaised,
+      percentFunded: p.percentFunded,
+      amountRemaining: p.amountRemaining,
+      isFullyFunded: p.isFullyFunded,
+      donationCount: p.donationCount,
+      wallet: p.wallet,
+    }));
+  };
 
   const context = useMemo<AiAdvisorContext>(() => {
     // Build detailed wallet list
@@ -174,18 +267,46 @@ export function useAiAdvisorContext(): AiAdvisorContext {
       count: unpaidCount,
     } : null;
 
+    // 100 Million Ideas - user projects context
+    const userProjectsContext: UserProjectsContext | null = userProjects.length > 0 || projectStats.projectCount > 0 ? {
+      projectCount: projectStats.projectCount,
+      totalRaised: projectStats.totalRaised,
+      totalGoal: projectStats.totalGoal,
+      overallPercentFunded: projectStats.overallPercentFunded,
+      totalDonations: projectStats.totalDonations,
+      fullyFundedCount: projectStats.fullyFundedCount,
+      activeCount: projectStats.activeCount,
+      draftCount: projectStats.draftCount,
+      projects: userProjects.map(p => ({
+        id: p.id,
+        title: p.title,
+        status: p.status,
+        fiatGoal: p.fiatGoal,
+        currency: p.currency,
+        totalRaised: p.totalRaised,
+        percentFunded: p.percentFunded,
+        amountRemaining: p.amountRemaining,
+        isFullyFunded: p.isFullyFunded,
+        donationCount: p.donationCount,
+        wallet: p.wallet,
+      })),
+      getProjectDonations,
+      searchProjects,
+    } : null;
+
     const isLoading = walletsListLoading || balancesLoading || 
-      dashboardData.lana8Wonder.isLoading || proposalsLoading || unpaidLashesLoading;
+      dashboardData.lana8Wonder.isLoading || proposalsLoading || unpaidLashesLoading || projectsLoading;
 
     return {
       wallets: walletsContext,
       lana8Wonder: lana8WonderContext,
       pendingPayments: pendingPaymentsContext,
       unpaidLashes: unpaidLashesContext,
+      userProjects: userProjectsContext,
       isLoading,
       refetchWalletBalances: fetchWalletBalances,
     };
-  }, [nostrWallets, walletBalances, dashboardData, proposals, proposalsLoading, unpaidCount, unpaidLashesLoading, walletsListLoading, balancesLoading, exchangeRate, currency]);
+  }, [nostrWallets, walletBalances, dashboardData, proposals, proposalsLoading, unpaidCount, unpaidLashesLoading, walletsListLoading, balancesLoading, exchangeRate, currency, userProjects, projectStats, projectsLoading]);
 
   return context;
 }
