@@ -397,12 +397,6 @@ export default function AiAdvisor() {
               )}
             </div>
           </div>
-          {(context.isLoading || eventsLoading) && (
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              {trans.loadingData}
-            </p>
-          )}
         </CardHeader>
 
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
