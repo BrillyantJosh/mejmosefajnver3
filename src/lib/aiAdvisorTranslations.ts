@@ -4,7 +4,7 @@ export type Language = 'sl' | 'en' | 'de' | 'hr' | 'sr' | 'bs' | 'mk' | 'bg' | '
 export const translations: Record<string, Record<string, string>> = {
   sl: {
     // AI Advisor
-    aiAdvisor: 'AI Svetovalec',
+    aiAdvisor: 'Enlightened AI',
     askOrPay: 'Vprašaj me ali pošlji plačilo',
     newQuery: 'Nova poizvedba',
     loadingData: 'Nalagam podatke...',
@@ -68,7 +68,7 @@ export const translations: Record<string, Record<string, string>> = {
     paymentCancelled: 'Plačilo preklicano.',
   },
   en: {
-    aiAdvisor: 'AI Advisor',
+    aiAdvisor: 'Enlightened AI',
     askOrPay: 'Ask me or send a payment',
     newQuery: 'New query',
     loadingData: 'Loading data...',
