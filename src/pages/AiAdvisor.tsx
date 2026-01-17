@@ -110,11 +110,14 @@ export default function AiAdvisor() {
         fullyFundedCount: context.userProjects.fullyFundedCount,
         activeCount: context.userProjects.activeCount,
         draftCount: context.userProjects.draftCount,
-        projects: context.userProjects.projects.map(p => ({
+        // User's own projects with donations
+        myProjects: context.userProjects.projects.map(p => ({
           ...p,
-          // Include donations for each project
           donations: context.userProjects?.getProjectDonations(p.id) || [],
         })),
+        // ALL active projects for searching (without detailed donations to save tokens)
+        allActiveProjects: context.userProjects.allActiveProjects,
+        totalActiveProjectsCount: context.userProjects.allActiveProjects.length,
       } : null;
 
       const response = await fetch(CHAT_URL, {
