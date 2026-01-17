@@ -152,6 +152,9 @@ export default function AiAdvisor() {
     const messageContent = overrideInput || input.trim();
     if (!messageContent || isLoading) return;
 
+    // Debug log: check what unconditional payments data we're sending
+    console.log(`🔍 AI Advisor sendMessage: nostrHexId=${nostrHexId?.substring(0, 16)}..., unconditionalPayments.pendingCount=${context.unconditionalPayments?.pendingCount ?? 'N/A'}, pendingPayments.length=${context.unconditionalPayments?.pendingPayments?.length ?? 'N/A'}, context.isLoading=${context.isLoading}`);
+
     const userMessage: Message = { role: 'user', content: messageContent };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
