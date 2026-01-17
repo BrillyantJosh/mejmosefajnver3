@@ -13,6 +13,50 @@ import { cn } from '@/lib/utils';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { t, getTranslation } from '@/lib/aiAdvisorTranslations';
 import { getExchangeRates } from '@/lib/currencyConversion';
+import { getProxiedImageUrl } from '@/lib/imageProxy';
+
+interface MessagePart {
+  type: 'text' | 'image';
+  content: string;
+  alt?: string;
+}
+
+const parseMessageContent = (content: string): MessagePart[] => {
+  const parts: MessagePart[] = [];
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  
+  let lastIndex = 0;
+  let match;
+  
+  while ((match = imageRegex.exec(content)) !== null) {
+    // Add text before image
+    if (match.index > lastIndex) {
+      const text = content.slice(lastIndex, match.index).trim();
+      if (text) {
+        parts.push({ type: 'text', content: text });
+      }
+    }
+    
+    // Add image
+    parts.push({
+      type: 'image',
+      content: match[2], // URL
+      alt: match[1]      // Alt text
+    });
+    
+    lastIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text
+  if (lastIndex < content.length) {
+    const text = content.slice(lastIndex).trim();
+    if (text) {
+      parts.push({ type: 'text', content: text });
+    }
+  }
+  
+  return parts.length > 0 ? parts : [{ type: 'text', content }];
+};
 
 interface Message {
   role: 'user' | 'assistant';
@@ -362,9 +406,27 @@ export default function AiAdvisor() {
                       </div>
                     )}
                     <div className={cn("max-w-[80%] rounded-lg px-4 py-2", message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                      {message.role === 'assistant' && message.content === '' && isLoading && (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                      {message.role === 'assistant' ? (
+                        <div className="space-y-2">
+                          {parseMessageContent(message.content).map((part, idx) => (
+                            part.type === 'image' ? (
+                              <img 
+                                key={idx} 
+                                src={getProxiedImageUrl(part.content)} 
+                                alt={part.alt || 'Project image'} 
+                                className="rounded-lg max-w-full max-h-48 object-cover"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
+                            ) : (
+                              <p key={idx} className="text-sm whitespace-pre-wrap">{part.content}</p>
+                            )
+                          ))}
+                          {message.content === '' && isLoading && (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                       )}
                     </div>
                     {message.role === 'user' && (
