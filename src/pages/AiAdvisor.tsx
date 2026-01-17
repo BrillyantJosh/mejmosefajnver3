@@ -148,10 +148,11 @@ export default function AiAdvisor() {
     return null;
   };
 
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return;
+  const sendMessage = async (overrideInput?: string) => {
+    const messageContent = overrideInput || input.trim();
+    if (!messageContent || isLoading) return;
 
-    const userMessage: Message = { role: 'user', content: input.trim() };
+    const userMessage: Message = { role: 'user', content: messageContent };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
@@ -413,6 +414,28 @@ export default function AiAdvisor() {
                 <p className="text-sm text-muted-foreground mb-6 max-w-md">
                   {trans.askOrSendPayment}
                 </p>
+                
+                {/* Primary quick actions - most common questions */}
+                <div className="flex flex-wrap gap-2 justify-center mb-4 max-w-lg">
+                  <Button 
+                    variant="default" 
+                    size="sm" 
+                    onClick={() => sendMessage(userLanguage === 'sl' ? 'Kaj je novega pri meni?' : 'What\'s new with me?')}
+                    className="text-sm"
+                  >
+                    {userLanguage === 'sl' ? '🔔 Kaj je novega pri meni?' : '🔔 What\'s new with me?'}
+                  </Button>
+                  <Button 
+                    variant="default" 
+                    size="sm" 
+                    onClick={() => sendMessage(userLanguage === 'sl' ? 'Kaj je novega v Lana Svetu?' : 'What\'s new in Lana World?')}
+                    className="text-sm"
+                  >
+                    {userLanguage === 'sl' ? '🌍 Kaj je novega v Lana Svetu?' : '🌍 What\'s new in Lana World?'}
+                  </Button>
+                </div>
+                
+                {/* Secondary suggested questions */}
                 <div className="flex flex-wrap gap-2 justify-center max-w-lg">
                   {suggestedQuestions.map((q, i) => (
                     <Button key={i} variant="outline" size="sm" onClick={() => { setInput(q); textareaRef.current?.focus(); }} className="text-xs">
@@ -490,7 +513,7 @@ export default function AiAdvisor() {
                 rows={1}
                 disabled={isLoading}
               />
-              <Button onClick={sendMessage} disabled={!input.trim() || isLoading} size="icon" className="flex-shrink-0 h-11 w-11">
+              <Button onClick={() => sendMessage()} disabled={!input.trim() || isLoading} size="icon" className="flex-shrink-0 h-11 w-11">
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
