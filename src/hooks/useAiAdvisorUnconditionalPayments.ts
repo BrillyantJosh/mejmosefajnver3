@@ -53,8 +53,7 @@ export function useAiAdvisorUnconditionalPayments() {
     enabled: !!session?.nostrHexId
   });
 
-  // Debug logging
-  console.log(`📋 Unconditional Payments Hook: ${proposals.length} proposals, ${payments.length} payments fetched`);
+  // Debug logging moved to inside processedData useMemo
 
   // Get unique recipient pubkeys for profile fetching
   const recipientPubkeys = useMemo(() => 
@@ -68,9 +67,20 @@ export function useAiAdvisorUnconditionalPayments() {
   const processedData = useMemo(() => {
     const now = Math.floor(Date.now() / 1000);
     
-    // Get paid proposal IDs
-    const paidProposalDTags = new Set(payments.map(p => p.proposalDTag));
-    const paidProposalEventIds = new Set(payments.map(p => p.proposalEventId));
+    // Get list of this user's proposal identifiers (d-tags and event IDs)
+    const userProposalDTags = new Set(proposals.map(p => p.d));
+    const userProposalEventIds = new Set(proposals.map(p => p.eventId));
+    
+    // Filter payments to only those that match user's proposals
+    const relevantPayments = payments.filter(p => 
+      userProposalDTags.has(p.proposalDTag) || userProposalEventIds.has(p.proposalEventId)
+    );
+    
+    // Get paid proposal IDs from relevant payments only
+    const paidProposalDTags = new Set(relevantPayments.map(p => p.proposalDTag));
+    const paidProposalEventIds = new Set(relevantPayments.map(p => p.proposalEventId));
+    
+    console.log(`📋 Unconditional Payments: ${proposals.length} proposals, ${relevantPayments.length} relevant payments (of ${payments.length} total)`);
     
     // Filter for pending (unpaid and not expired)
     const pendingProposals = proposals.filter(p => {
