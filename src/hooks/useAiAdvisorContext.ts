@@ -81,6 +81,37 @@ export interface UserProjectsContext {
   searchProjects: (query: string) => ProjectSummary[];
 }
 
+// Recent activity for "Kaj je novega pri meni?"
+export interface RecentDonation {
+  projectTitle: string;
+  supporterName: string;
+  amountFiat: number;
+  currency: string;
+  date: string;
+}
+
+export interface RecentActivityContext {
+  recentDonationsReceived: RecentDonation[];
+  recentDonationsCount: number;
+  recentDonationsTotalFiat: number;
+  recentDonationsCurrency: string;
+}
+
+// New projects for "Kaj je novega v Lana Svetu?"
+export interface NewProjectSummary {
+  id: string;
+  title: string;
+  shortDesc: string;
+  ownerName?: string;
+  createdAt: string;
+  coverImage?: string;
+}
+
+export interface NewProjectsContext {
+  newProjects: NewProjectSummary[];
+  newProjectsCount: number;
+}
+
 export interface AiAdvisorContext {
   wallets: {
     count: number;
@@ -102,6 +133,10 @@ export interface AiAdvisorContext {
   } | null;
   // 100 Million Ideas context
   userProjects: UserProjectsContext | null;
+  // Recent activity (last 7 days)
+  recentActivity: RecentActivityContext | null;
+  // New projects in ecosystem (last 7 days)
+  newProjects: NewProjectsContext | null;
   isLoading: boolean;
   refetchWalletBalances: () => void;
 }
@@ -317,6 +352,52 @@ export function useAiAdvisorContext(): AiAdvisorContext {
       searchProjects,
     } : null;
 
+    // Calculate recent activity (last 7 days) for "Kaj je novega pri meni?"
+    const oneWeekAgo = Date.now() / 1000 - 7 * 24 * 60 * 60;
+    
+    const recentDonations: RecentDonation[] = [];
+    let recentDonationsTotalFiat = 0;
+    const recentDonationsCurrency = currency;
+    
+    userProjects.forEach(project => {
+      project.donations.forEach(donation => {
+        if (donation.timestampPaid >= oneWeekAgo) {
+          recentDonations.push({
+            projectTitle: project.title,
+            supporterName: donation.supporterName || `${donation.supporterPubkey.slice(0, 8)}...`,
+            amountFiat: donation.amountFiat,
+            currency: donation.currency,
+            date: new Date(donation.timestampPaid * 1000).toLocaleDateString('sl-SI'),
+          });
+          recentDonationsTotalFiat += donation.amountFiat;
+        }
+      });
+    });
+
+    const recentActivityContext: RecentActivityContext | null = recentDonations.length > 0 ? {
+      recentDonationsReceived: recentDonations,
+      recentDonationsCount: recentDonations.length,
+      recentDonationsTotalFiat,
+      recentDonationsCurrency,
+    } : null;
+
+    // Calculate new projects (last 7 days) for "Kaj je novega v Lana Svetu?"
+    const newProjectsThisWeek = allProjects
+      .filter(p => p.createdAt >= oneWeekAgo && !p.isBlocked && p.status !== 'draft')
+      .map(p => ({
+        id: p.id,
+        title: p.title,
+        shortDesc: p.shortDesc,
+        ownerName: getProfileName(p.ownerPubkey),
+        createdAt: new Date(p.createdAt * 1000).toLocaleDateString('sl-SI'),
+        coverImage: p.coverImage,
+      }));
+
+    const newProjectsContext: NewProjectsContext | null = {
+      newProjects: newProjectsThisWeek,
+      newProjectsCount: newProjectsThisWeek.length,
+    };
+
     const isLoading = walletsListLoading || balancesLoading || 
       dashboardData.lana8Wonder.isLoading || unconditionalPaymentsLoading || unpaidLashesLoading || projectsLoading;
 
@@ -326,10 +407,12 @@ export function useAiAdvisorContext(): AiAdvisorContext {
       unconditionalPayments: unconditionalPayments, // Always send context, even if empty
       unpaidLashes: unpaidLashesContext,
       userProjects: userProjectsContext,
+      recentActivity: recentActivityContext,
+      newProjects: newProjectsContext,
       isLoading,
       refetchWalletBalances: fetchWalletBalances,
     };
-  }, [nostrWallets, walletBalances, dashboardData, unconditionalPayments, unconditionalPaymentsLoading, unpaidCount, unpaidLashesLoading, walletsListLoading, balancesLoading, exchangeRate, currency, userProjects, projectStats, projectsLoading]);
+  }, [nostrWallets, walletBalances, dashboardData, unconditionalPayments, unconditionalPaymentsLoading, unpaidCount, unpaidLashesLoading, walletsListLoading, balancesLoading, exchangeRate, currency, userProjects, allProjects, projectStats, projectsLoading, getProfileName]);
 
   return context;
 }
