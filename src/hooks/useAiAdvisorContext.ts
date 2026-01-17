@@ -31,6 +31,7 @@ export interface ProjectSummary {
   isFullyFunded: boolean;
   donationCount: number;
   wallet: string;
+  coverImage?: string;
 }
 
 export interface ProjectDonationDetail {
@@ -59,6 +60,7 @@ export interface AllProjectSummary {
   donationCount: number;
   // Explicitly mark if this is user's own project
   isMyProject: boolean;
+  coverImage?: string;
 }
 
 export interface UserProjectsContext {
@@ -304,6 +306,7 @@ export function useAiAdvisorContext(): AiAdvisorContext {
       donationCount: p.donationCount,
       // STRICT: Mark as user's project ONLY if event.pubkey matches current user
       isMyProject: p.pubkey === userPubkey,
+      coverImage: p.coverImage,
     }));
 
     const userProjectsContext: UserProjectsContext | null = (userProjects.length > 0 || allProjects.length > 0) ? {
@@ -327,6 +330,7 @@ export function useAiAdvisorContext(): AiAdvisorContext {
         isFullyFunded: p.isFullyFunded,
         donationCount: p.donationCount,
         wallet: p.wallet,
+        coverImage: p.coverImage,
       })),
       allActiveProjects: allActiveProjectsSummary,
       getProjectDonations,
