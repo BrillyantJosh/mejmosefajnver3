@@ -3,8 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bot, Send, User, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { Bot, Send, User, Loader2, RefreshCw, Sparkles, ExternalLink } from 'lucide-react';
 import { useAiAdvisorContext } from '@/hooks/useAiAdvisorContext';
+import { useAiAdvisorEvents } from '@/hooks/useAiAdvisorEvents';
 import { RecipientSelector } from '@/components/ai-advisor/RecipientSelector';
 import { PaymentForm } from '@/components/ai-advisor/PaymentForm';
 import { useNostrProfile } from '@/hooks/useNostrProfile';
@@ -16,20 +17,22 @@ import { getExchangeRates } from '@/lib/currencyConversion';
 import { getProxiedImageUrl } from '@/lib/imageProxy';
 
 interface MessagePart {
-  type: 'text' | 'image';
+  type: 'text' | 'image' | 'link';
   content: string;
   alt?: string;
+  url?: string;
 }
 
 const parseMessageContent = (content: string): MessagePart[] => {
   const parts: MessagePart[] = [];
-  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  // Match markdown images ![alt](url) and markdown links [text](url)
+  const combinedRegex = /!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)/g;
   
   let lastIndex = 0;
   let match;
   
-  while ((match = imageRegex.exec(content)) !== null) {
-    // Add text before image
+  while ((match = combinedRegex.exec(content)) !== null) {
+    // Add text before match
     if (match.index > lastIndex) {
       const text = content.slice(lastIndex, match.index).trim();
       if (text) {
@@ -37,12 +40,21 @@ const parseMessageContent = (content: string): MessagePart[] => {
       }
     }
     
-    // Add image
-    parts.push({
-      type: 'image',
-      content: match[2], // URL
-      alt: match[1]      // Alt text
-    });
+    if (match[1] !== undefined || match[2] !== undefined) {
+      // Image: ![alt](url)
+      parts.push({
+        type: 'image',
+        content: match[2],
+        alt: match[1]
+      });
+    } else {
+      // Link: [text](url)
+      parts.push({
+        type: 'link',
+        content: match[3],
+        url: match[4]
+      });
+    }
     
     lastIndex = match.index + match[0].length;
   }
@@ -88,6 +100,7 @@ export default function AiAdvisor() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   const context = useAiAdvisorContext();
+  const { eventsContext, isLoading: eventsLoading } = useAiAdvisorEvents();
   const { parameters } = useSystemParameters();
   const { profile } = useNostrProfile();
   const { session } = useAuth();
@@ -178,6 +191,7 @@ export default function AiAdvisor() {
             pendingPayments: context.pendingPayments,
             unpaidLashes: context.unpaidLashes,
             userProjects: userProjectsContext,
+            events: eventsContext,
           },
           language: userLanguage,
           nostrHexId,
@@ -371,7 +385,7 @@ export default function AiAdvisor() {
               </Button>
             )}
           </div>
-          {context.isLoading && (
+          {(context.isLoading || eventsLoading) && (
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
               <Loader2 className="h-3 w-3 animate-spin" />
               {trans.loadingData}
@@ -413,10 +427,21 @@ export default function AiAdvisor() {
                               <img 
                                 key={idx} 
                                 src={getProxiedImageUrl(part.content)} 
-                                alt={part.alt || 'Project image'} 
+                                alt={part.alt || 'Image'} 
                                 className="rounded-lg max-w-full max-h-48 object-cover"
                                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
                               />
+                            ) : part.type === 'link' ? (
+                              <a 
+                                key={idx}
+                                href={part.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-primary hover:underline text-sm"
+                              >
+                                {part.content}
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
                             ) : (
                               <p key={idx} className="text-sm whitespace-pre-wrap">{part.content}</p>
                             )
