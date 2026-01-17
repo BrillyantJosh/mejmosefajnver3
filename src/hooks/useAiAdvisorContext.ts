@@ -7,6 +7,7 @@ import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrProfile } from '@/hooks/useNostrProfile';
 import { useNostrUserProjects, UserProjectData, UserProjectDonation } from '@/hooks/useNostrUserProjects';
 import { useAiAdvisorUnconditionalPayments, UnconditionalPaymentsContext } from './useAiAdvisorUnconditionalPayments';
+import { useAiAdvisorRecentChats, RecentChatsContext } from './useAiAdvisorRecentChats';
 import { supabase } from '@/integrations/supabase/client';
 
 interface WalletDetail {
@@ -137,6 +138,8 @@ export interface AiAdvisorContext {
   recentActivity: RecentActivityContext | null;
   // New projects in ecosystem (last 7 days)
   newProjects: NewProjectsContext | null;
+  // Recent chat messages (last 7 days)
+  recentChats: RecentChatsContext | null;
   isLoading: boolean;
   refetchWalletBalances: () => void;
 }
@@ -161,6 +164,9 @@ export function useAiAdvisorContext(): AiAdvisorContext {
 
   // Unconditional payments context
   const { unconditionalPayments, isLoading: unconditionalPaymentsLoading } = useAiAdvisorUnconditionalPayments();
+
+  // Recent chats context (last 7 days)
+  const { recentChatsContext, isLoading: recentChatsLoading } = useAiAdvisorRecentChats();
 
   const { unpaidCount, loading: unpaidLashesLoading } = useNostrUnpaidLashes();
 
@@ -399,7 +405,7 @@ export function useAiAdvisorContext(): AiAdvisorContext {
     };
 
     const isLoading = walletsListLoading || balancesLoading || 
-      dashboardData.lana8Wonder.isLoading || unconditionalPaymentsLoading || unpaidLashesLoading || projectsLoading;
+      dashboardData.lana8Wonder.isLoading || unconditionalPaymentsLoading || unpaidLashesLoading || projectsLoading || recentChatsLoading;
 
     return {
       wallets: walletsContext,
@@ -409,10 +415,11 @@ export function useAiAdvisorContext(): AiAdvisorContext {
       userProjects: userProjectsContext,
       recentActivity: recentActivityContext,
       newProjects: newProjectsContext,
+      recentChats: recentChatsContext,
       isLoading,
       refetchWalletBalances: fetchWalletBalances,
     };
-  }, [nostrWallets, walletBalances, dashboardData, unconditionalPayments, unconditionalPaymentsLoading, unpaidCount, unpaidLashesLoading, walletsListLoading, balancesLoading, exchangeRate, currency, userProjects, allProjects, projectStats, projectsLoading, getProfileName]);
+  }, [nostrWallets, walletBalances, dashboardData, unconditionalPayments, unconditionalPaymentsLoading, unpaidCount, unpaidLashesLoading, walletsListLoading, balancesLoading, exchangeRate, currency, userProjects, allProjects, projectStats, projectsLoading, getProfileName, recentChatsContext, recentChatsLoading]);
 
   return context;
 }
