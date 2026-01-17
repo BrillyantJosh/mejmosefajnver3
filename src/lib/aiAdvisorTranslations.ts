@@ -17,6 +17,8 @@ export const translations: Record<string, Record<string, string>> = {
     totalBalance: 'Koliko LANA imam skupaj?',
     payBoris: 'Plačaj Borisu 50 LANA',
     sendFromMain: 'Pošlji Ani 100 LANA iz glavne denarnice',
+    myProjects: 'Pokaži moje projekte',
+    projectDonations: 'Kdo je doniral mojim projektom?',
     
     // Payment Form
     confirmPayment: 'Potrdi plačilo',
@@ -78,6 +80,8 @@ export const translations: Record<string, Record<string, string>> = {
     totalBalance: 'How much LANA do I have in total?',
     payBoris: 'Pay Boris 50 LANA',
     sendFromMain: 'Send Ana 100 LANA from main wallet',
+    myProjects: 'Show my projects',
+    projectDonations: 'Who donated to my projects?',
     
     confirmPayment: 'Confirm payment',
     recipient: 'Recipient',
