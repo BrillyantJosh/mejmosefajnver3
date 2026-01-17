@@ -128,7 +128,8 @@ const App = () => (
                     <MainLayout />
                   </ProtectedRoute>
                 }>
-                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/" element={<AiAdvisor />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/modules" element={<Modules />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/settings" element={<Settings />} />
