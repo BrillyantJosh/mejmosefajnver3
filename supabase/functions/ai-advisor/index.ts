@@ -6,6 +6,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Model pricing per 1 million tokens (USD)
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  "google/gemini-3-flash-preview": { input: 0.10, output: 0.40 },
+  "google/gemini-3-pro-preview": { input: 1.25, output: 5.00 },
+  "google/gemini-2.5-flash": { input: 0.075, output: 0.30 },
+  "google/gemini-2.5-flash-lite": { input: 0.02, output: 0.08 },
+  "google/gemini-2.5-pro": { input: 1.25, output: 5.00 },
+  "openai/gpt-5": { input: 5.00, output: 15.00 },
+  "openai/gpt-5-mini": { input: 0.15, output: 0.60 },
+  "openai/gpt-5-nano": { input: 0.05, output: 0.20 },
+  "openai/gpt-5.2": { input: 5.00, output: 15.00 },
+};
+
+function calculateCostUsd(model: string, promptTokens: number, completionTokens: number): number {
+  const pricing = MODEL_PRICING[model] || { input: 0.10, output: 0.40 };
+  const inputCost = (promptTokens / 1_000_000) * pricing.input;
+  const outputCost = (completionTokens / 1_000_000) * pricing.output;
+  return inputCost + outputCost;
+}
+
 const languagePrompts: Record<string, string> = {
   sl: `Ti si AI svetovalec za Lana ekosistem. Odgovarjaj v SLOVENŠČINI. Ko uporabnik želi plačati, vrni SAMO JSON: {"action":"payment","recipient":"ime","amount":100,"currency":"LANA","sourceWallet":"Main Wallet"}`,
   en: `You are an AI advisor for the Lana ecosystem. Respond in ENGLISH. When user wants to pay, return ONLY JSON: {"action":"payment","recipient":"name","amount":100,"currency":"LANA","sourceWallet":"Main Wallet"}`,
@@ -22,12 +42,20 @@ function getSystemPrompt(lang: string): string {
   return languagePrompts[langCode] || languagePrompts.en;
 }
 
-async function logUsage(nostrHexId: string, model: string, usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number }) {
+async function logUsage(
+  nostrHexId: string, 
+  model: string, 
+  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number },
+  usdToLanaRate: number
+) {
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+    
+    const costUsd = calculateCostUsd(model, usage.prompt_tokens || 0, usage.completion_tokens || 0);
+    const costLana = costUsd * usdToLanaRate;
     
     await supabase.from('ai_usage_logs').insert({
       nostr_hex_id: nostrHexId,
@@ -35,8 +63,10 @@ async function logUsage(nostrHexId: string, model: string, usage: { prompt_token
       prompt_tokens: usage.prompt_tokens || 0,
       completion_tokens: usage.completion_tokens || 0,
       total_tokens: usage.total_tokens || 0,
+      cost_usd: costUsd,
+      cost_lana: costLana,
     });
-    console.log(`Logged usage for ${nostrHexId}: ${usage.total_tokens} tokens`);
+    console.log(`Logged usage for ${nostrHexId}: ${usage.total_tokens} tokens, $${costUsd.toFixed(6)} USD, ${costLana.toFixed(4)} LANA`);
   } catch (err) {
     console.error("Failed to log usage:", err);
   }
@@ -48,7 +78,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, context, language, nostrHexId } = await req.json();
+    const { messages, context, language, nostrHexId, usdToLanaRate } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("AI service is not configured");
 
@@ -116,7 +146,8 @@ serve(async (req) => {
           
           // Log usage after stream ends
           if (nostrHexId && usageData) {
-            await logUsage(nostrHexId, model, usageData);
+            const rate = usdToLanaRate || 270; // Default fallback rate
+            await logUsage(nostrHexId, model, usageData, rate);
           }
         } catch (err) {
           console.error("Stream error:", err);

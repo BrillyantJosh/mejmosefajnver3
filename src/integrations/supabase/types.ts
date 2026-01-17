@@ -41,6 +41,8 @@ export type Database = {
       ai_usage_logs: {
         Row: {
           completion_tokens: number
+          cost_lana: number | null
+          cost_usd: number | null
           created_at: string
           id: string
           model: string
@@ -50,6 +52,8 @@ export type Database = {
         }
         Insert: {
           completion_tokens?: number
+          cost_lana?: number | null
+          cost_usd?: number | null
           created_at?: string
           id?: string
           model: string
@@ -59,6 +63,8 @@ export type Database = {
         }
         Update: {
           completion_tokens?: number
+          cost_lana?: number | null
+          cost_usd?: number | null
           created_at?: string
           id?: string
           model?: string

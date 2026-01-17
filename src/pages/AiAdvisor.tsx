@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { t, getTranslation } from '@/lib/aiAdvisorTranslations';
+import { getExchangeRates } from '@/lib/currencyConversion';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -114,7 +115,8 @@ export default function AiAdvisor() {
             unpaidLashes: context.unpaidLashes,
           },
           language: userLanguage,
-          nostrHexId, // Pass nostrHexId for usage tracking
+          nostrHexId,
+          usdToLanaRate: getExchangeRates()['USD'] || 270,
         }),
       });
 
