@@ -369,8 +369,9 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("AI service is not configured");
 
-    // Debug log: unconditional payments context received
+    // Debug log: context received
     console.log(`📊 AI Advisor context for ${nostrHexId?.substring(0, 16)}...: unconditionalPayments.pendingCount=${context?.unconditionalPayments?.pendingCount ?? 'N/A'}, completedCount=${context?.unconditionalPayments?.completedCount ?? 'N/A'}, pendingPayments.length=${context?.unconditionalPayments?.pendingPayments?.length ?? 'N/A'}`);
+    console.log(`💬 recentChats: totalChats=${context?.recentChats?.totalChats ?? 'N/A'}, totalUnread=${context?.recentChats?.totalUnread ?? 'N/A'}, hasNewMessages=${context?.recentChats?.hasNewMessages ?? 'N/A'}`);
     if (context?.unconditionalPayments?.pendingPayments?.length > 0) {
       const first2 = context.unconditionalPayments.pendingPayments.slice(0, 2).map((p: any) => `${p.service}:${p.dTag?.substring(0,8)}`);
       console.log(`   First payments: ${first2.join(', ')}`);
