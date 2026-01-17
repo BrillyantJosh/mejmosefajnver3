@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -100,6 +100,23 @@ export default function AiAdvisor() {
     let assistantContent = '';
 
     try {
+      // Prepare userProjects context with serializable data
+      const userProjectsContext = context.userProjects ? {
+        projectCount: context.userProjects.projectCount,
+        totalRaised: context.userProjects.totalRaised,
+        totalGoal: context.userProjects.totalGoal,
+        overallPercentFunded: context.userProjects.overallPercentFunded,
+        totalDonations: context.userProjects.totalDonations,
+        fullyFundedCount: context.userProjects.fullyFundedCount,
+        activeCount: context.userProjects.activeCount,
+        draftCount: context.userProjects.draftCount,
+        projects: context.userProjects.projects.map(p => ({
+          ...p,
+          // Include donations for each project
+          donations: context.userProjects?.getProjectDonations(p.id) || [],
+        })),
+      } : null;
+
       const response = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
@@ -113,6 +130,7 @@ export default function AiAdvisor() {
             lana8Wonder: context.lana8Wonder,
             pendingPayments: context.pendingPayments,
             unpaidLashes: context.unpaidLashes,
+            userProjects: userProjectsContext,
           },
           language: userLanguage,
           nostrHexId,
@@ -237,13 +255,21 @@ export default function AiAdvisor() {
     return rate > 0 ? paymentIntent.amount / rate : 0;
   };
 
-  // Localized suggested questions
-  const suggestedQuestions = [
-    trans.showBalances,
-    trans.totalBalance,
-    trans.payBoris,
-    trans.sendFromMain,
-  ];
+  // Localized suggested questions - include project questions if user has projects
+  const suggestedQuestions = useMemo(() => {
+    const baseQuestions = [trans.showBalances, trans.totalBalance];
+    
+    // Add project-related questions if user has projects
+    if (context.userProjects && context.userProjects.projectCount > 0) {
+      baseQuestions.push(trans.myProjects || 'Show my projects');
+      baseQuestions.push(trans.projectDonations || 'Who donated to my projects?');
+    } else {
+      baseQuestions.push(trans.payBoris);
+      baseQuestions.push(trans.sendFromMain);
+    }
+    
+    return baseQuestions;
+  }, [trans, context.userProjects]);
 
   if (showRecipientSelector && paymentIntent) {
     return (
