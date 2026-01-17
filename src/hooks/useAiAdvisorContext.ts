@@ -1,12 +1,12 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useDashboardData } from './useDashboardData';
-import { useNostrDonationProposals } from './useNostrDonationProposals';
 import { useNostrUnpaidLashes } from './useNostrUnpaidLashes';
 import { useNostrWallets } from './useNostrWallets';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrProfile } from '@/hooks/useNostrProfile';
 import { useNostrUserProjects, UserProjectData, UserProjectDonation } from '@/hooks/useNostrUserProjects';
+import { useAiAdvisorUnconditionalPayments, UnconditionalPaymentsContext } from './useAiAdvisorUnconditionalPayments';
 import { supabase } from '@/integrations/supabase/client';
 
 interface WalletDetail {
@@ -96,15 +96,7 @@ export interface AiAdvisorContext {
     cashOutCount: number;
     cashOutAmountFiat: number | null;
   } | null;
-  pendingPayments: {
-    count: number;
-    proposals: Array<{
-      id: string;
-      fiatAmount: string;
-      fiatCurrency: string;
-      lanaAmount: string;
-    }>;
-  } | null;
+  unconditionalPayments: UnconditionalPaymentsContext | null;
   unpaidLashes: {
     count: number;
   } | null;
@@ -132,11 +124,8 @@ export function useAiAdvisorContext(): AiAdvisorContext {
     enableLana8Wonder: true,
   });
 
-  // Pass userPubkey as first argument, options as second
-  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(
-    session?.nostrHexId,
-    { poll: false, enabled: true }
-  );
+  // Unconditional payments context
+  const { unconditionalPayments, isLoading: unconditionalPaymentsLoading } = useAiAdvisorUnconditionalPayments();
 
   const { unpaidCount, loading: unpaidLashesLoading } = useNostrUnpaidLashes();
 
@@ -271,16 +260,7 @@ export function useAiAdvisorContext(): AiAdvisorContext {
       cashOutAmountFiat: dashboardData.lana8Wonder.totalCashOutFiat,
     };
 
-    // Pending payments context
-    const pendingPaymentsContext = proposals.length > 0 ? {
-      count: proposals.length,
-      proposals: proposals.map(p => ({
-        id: p.id,
-        fiatAmount: p.fiatAmount,
-        fiatCurrency: p.fiatCurrency,
-        lanaAmount: p.lanaAmount,
-      })),
-    } : null;
+    // Unconditional payments context is now directly from the hook
 
     // Unpaid lashes context
     const unpaidLashesContext = unpaidCount > 0 ? {
@@ -338,18 +318,18 @@ export function useAiAdvisorContext(): AiAdvisorContext {
     } : null;
 
     const isLoading = walletsListLoading || balancesLoading || 
-      dashboardData.lana8Wonder.isLoading || proposalsLoading || unpaidLashesLoading || projectsLoading;
+      dashboardData.lana8Wonder.isLoading || unconditionalPaymentsLoading || unpaidLashesLoading || projectsLoading;
 
     return {
       wallets: walletsContext,
       lana8Wonder: lana8WonderContext,
-      pendingPayments: pendingPaymentsContext,
+      unconditionalPayments: unconditionalPayments.pendingCount > 0 ? unconditionalPayments : null,
       unpaidLashes: unpaidLashesContext,
       userProjects: userProjectsContext,
       isLoading,
       refetchWalletBalances: fetchWalletBalances,
     };
-  }, [nostrWallets, walletBalances, dashboardData, proposals, proposalsLoading, unpaidCount, unpaidLashesLoading, walletsListLoading, balancesLoading, exchangeRate, currency, userProjects, projectStats, projectsLoading]);
+  }, [nostrWallets, walletBalances, dashboardData, unconditionalPayments, unconditionalPaymentsLoading, unpaidCount, unpaidLashesLoading, walletsListLoading, balancesLoading, exchangeRate, currency, userProjects, projectStats, projectsLoading]);
 
   return context;
 }
