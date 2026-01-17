@@ -57,6 +57,8 @@ export interface AllProjectSummary {
   percentFunded: number;
   isFullyFunded: boolean;
   donationCount: number;
+  // Explicitly mark if this is user's own project
+  isMyProject: boolean;
 }
 
 export interface UserProjectsContext {
@@ -285,6 +287,10 @@ export function useAiAdvisorContext(): AiAdvisorContext {
 
     // 100 Million Ideas - user projects context
     // Map all active projects with owner names for AI search
+    // IMPORTANT: Mark which projects belong to the current user
+    const userPubkey = session?.nostrHexId || '';
+    const userProjectIds = new Set(userProjects.map(p => p.id));
+    
     const allActiveProjectsSummary: AllProjectSummary[] = allProjects.map(p => ({
       id: p.id,
       title: p.title,
@@ -297,6 +303,8 @@ export function useAiAdvisorContext(): AiAdvisorContext {
       percentFunded: p.percentFunded,
       isFullyFunded: p.isFullyFunded,
       donationCount: p.donationCount,
+      // Mark as user's project if owner matches OR it's in userProjects list
+      isMyProject: p.ownerPubkey === userPubkey || userProjectIds.has(p.id),
     }));
 
     const userProjectsContext: UserProjectsContext | null = (userProjects.length > 0 || allProjects.length > 0) ? {
