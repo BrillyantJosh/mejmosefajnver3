@@ -154,6 +154,7 @@ export default function AiAdvisor() {
 
     // Debug log: check what unconditional payments data we're sending
     console.log(`🔍 AI Advisor sendMessage: nostrHexId=${nostrHexId?.substring(0, 16)}..., unconditionalPayments.pendingCount=${context.unconditionalPayments?.pendingCount ?? 'N/A'}, pendingPayments.length=${context.unconditionalPayments?.pendingPayments?.length ?? 'N/A'}, context.isLoading=${context.isLoading}`);
+    console.log(`💬 recentChats: totalChats=${context.recentChats?.totalChats ?? 'N/A'}, totalUnread=${context.recentChats?.totalUnread ?? 'N/A'}, hasNewMessages=${context.recentChats?.hasNewMessages ?? 'N/A'}`);
 
     const userMessage: Message = { role: 'user', content: messageContent };
     setMessages(prev => [...prev, userMessage]);
