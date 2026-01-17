@@ -45,6 +45,20 @@ export interface ProjectDonationDetail {
   message: string;
 }
 
+export interface AllProjectSummary {
+  id: string;
+  title: string;
+  shortDesc: string;
+  ownerName?: string;
+  ownerPubkey: string;
+  fiatGoal: number;
+  currency: string;
+  totalRaised: number;
+  percentFunded: number;
+  isFullyFunded: boolean;
+  donationCount: number;
+}
+
 export interface UserProjectsContext {
   projectCount: number;
   totalRaised: number;
@@ -55,6 +69,8 @@ export interface UserProjectsContext {
   activeCount: number;
   draftCount: number;
   projects: ProjectSummary[];
+  // ALL active projects for searching
+  allActiveProjects: AllProjectSummary[];
   // Function to get detailed donations for a project
   getProjectDonations: (projectId: string) => ProjectDonationDetail[];
   // Search function
@@ -268,7 +284,22 @@ export function useAiAdvisorContext(): AiAdvisorContext {
     } : null;
 
     // 100 Million Ideas - user projects context
-    const userProjectsContext: UserProjectsContext | null = userProjects.length > 0 || projectStats.projectCount > 0 ? {
+    // Map all active projects with owner names for AI search
+    const allActiveProjectsSummary: AllProjectSummary[] = allProjects.map(p => ({
+      id: p.id,
+      title: p.title,
+      shortDesc: p.shortDesc,
+      ownerName: getProfileName(p.ownerPubkey),
+      ownerPubkey: p.ownerPubkey,
+      fiatGoal: p.fiatGoal,
+      currency: p.currency,
+      totalRaised: p.totalRaised,
+      percentFunded: p.percentFunded,
+      isFullyFunded: p.isFullyFunded,
+      donationCount: p.donationCount,
+    }));
+
+    const userProjectsContext: UserProjectsContext | null = (userProjects.length > 0 || allProjects.length > 0) ? {
       projectCount: projectStats.projectCount,
       totalRaised: projectStats.totalRaised,
       totalGoal: projectStats.totalGoal,
@@ -290,6 +321,7 @@ export function useAiAdvisorContext(): AiAdvisorContext {
         donationCount: p.donationCount,
         wallet: p.wallet,
       })),
+      allActiveProjects: allActiveProjectsSummary,
       getProjectDonations,
       searchProjects,
     } : null;
