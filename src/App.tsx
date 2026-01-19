@@ -102,6 +102,7 @@ import Lana8WonderTransfer from "./pages/Lana8WonderTransfer";
 import AiAdvisor from "./pages/AiAdvisor";
 import NotFound from "./pages/NotFound";
 import AdminSettings from "./pages/admin/AdminSettings";
+import TrainAI from "./pages/admin/TrainAI";
 import PublicPost from "./pages/PublicPost";
 import PublicEvent from "./pages/PublicEvent";
 import PublicProposal from "./pages/PublicProposal";
@@ -246,6 +247,22 @@ const App = () => (
                     <Route index element={<Songs />} />
                     <Route path="popular" element={<Popular />} />
                   </Route>
+                  <Route 
+                    path="/admin"
+                    element={
+                      <AdminProtectedRoute>
+                        <TrainAI />
+                      </AdminProtectedRoute>
+                    } 
+                  />
+                  <Route 
+                    path="/admin/train-ai"
+                    element={
+                      <AdminProtectedRoute>
+                        <TrainAI />
+                      </AdminProtectedRoute>
+                    } 
+                  />
                   <Route 
                     path="/admin/settings"
                     element={
