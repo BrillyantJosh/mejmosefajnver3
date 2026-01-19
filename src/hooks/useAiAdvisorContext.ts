@@ -113,7 +113,17 @@ export interface NewProjectsContext {
   newProjectsCount: number;
 }
 
+// User profile context for personalization
+export interface UserProfileContext {
+  name: string | null;
+  displayName: string | null;
+  currency: string;
+  language: string | null;
+}
+
 export interface AiAdvisorContext {
+  // User profile for personalization
+  userProfile: UserProfileContext | null;
   wallets: {
     count: number;
     totalBalance: number;
@@ -407,7 +417,16 @@ export function useAiAdvisorContext(): AiAdvisorContext {
     const isLoading = walletsListLoading || balancesLoading || 
       dashboardData.lana8Wonder.isLoading || unconditionalPaymentsLoading || unpaidLashesLoading || projectsLoading || recentChatsLoading;
 
+    // User profile context for personalization
+    const userProfileContext: UserProfileContext | null = {
+      name: profile?.name || null,
+      displayName: profile?.display_name || null,
+      currency: profile?.currency || 'EUR',
+      language: profile?.language || null,
+    };
+
     return {
+      userProfile: userProfileContext,
       wallets: walletsContext,
       lana8Wonder: lana8WonderContext,
       unconditionalPayments: unconditionalPayments, // Always send context, even if empty
