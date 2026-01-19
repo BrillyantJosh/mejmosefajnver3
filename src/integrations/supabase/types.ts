@@ -38,6 +38,57 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_knowledge: {
+        Row: {
+          body: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          keywords: string[] | null
+          lang: string
+          nostr_event_id: string | null
+          revision: number
+          slug: string
+          status: string
+          summary: string
+          title: string
+          topic: string | null
+          updated_at: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          keywords?: string[] | null
+          lang?: string
+          nostr_event_id?: string | null
+          revision?: number
+          slug: string
+          status?: string
+          summary: string
+          title: string
+          topic?: string | null
+          updated_at?: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          keywords?: string[] | null
+          lang?: string
+          nostr_event_id?: string | null
+          revision?: number
+          slug?: string
+          status?: string
+          summary?: string
+          title?: string
+          topic?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ai_unsupported_prompts: {
         Row: {
           ai_response: string | null
