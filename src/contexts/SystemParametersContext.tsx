@@ -24,6 +24,9 @@ interface TrustedSigners {
   [key: string]: string[];
 }
 
+// Connection state enum for clear distinction
+export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
+
 interface SystemParameters {
   relays: string[];
   relayStatuses: RelayStatus[];
@@ -40,6 +43,7 @@ interface SystemParameters {
 interface SystemParametersContextType {
   parameters: SystemParameters | null;
   isLoading: boolean;
+  connectionState: ConnectionState;
   refetch: () => Promise<void>;
 }
 
@@ -54,6 +58,7 @@ const DEFAULT_RELAYS = [
 export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [parameters, setParameters] = useState<SystemParameters | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
 
   useEffect(() => {
     fetchSystemParameters();
@@ -62,6 +67,8 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
   const fetchSystemParameters = async () => {
     const pool = new SimplePool();
     let connectedCount = 0;
+    
+    setConnectionState('connecting');
 
     try {
       console.log('Fetching KIND 38888 from relays...');
@@ -201,6 +208,9 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
         trustedSigners
       }));
 
+      // Set connected state based on relay count
+      setConnectionState(connectedCount > 0 ? 'connected' : 'disconnected');
+      
     } catch (error) {
       console.error('❌ Error fetching system parameters:', error);
       
@@ -209,6 +219,7 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
       sessionStorage.removeItem('lana_system_parameters');
       console.error('❌ Cannot connect to relays - no cached data will be used');
       setParameters(null);
+      setConnectionState('error');
       
       // Retry after 10 seconds
       console.log('🔄 Retrying connection in 10 seconds...');
@@ -223,7 +234,7 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
   };
 
   return (
-    <SystemParametersContext.Provider value={{ parameters, isLoading, refetch: fetchSystemParameters }}>
+    <SystemParametersContext.Provider value={{ parameters, isLoading, connectionState, refetch: fetchSystemParameters }}>
       {children}
     </SystemParametersContext.Provider>
   );
