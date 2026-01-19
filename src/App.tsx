@@ -101,6 +101,7 @@ import Lana8Wonder from "./pages/Lana8Wonder";
 import Lana8WonderTransfer from "./pages/Lana8WonderTransfer";
 import AiAdvisor from "./pages/AiAdvisor";
 import NotFound from "./pages/NotFound";
+import AdminLayout from "./pages/admin/AdminLayout";
 import AdminSettings from "./pages/admin/AdminSettings";
 import TrainAI from "./pages/admin/TrainAI";
 import PublicPost from "./pages/PublicPost";
@@ -251,26 +252,14 @@ const App = () => (
                     path="/admin"
                     element={
                       <AdminProtectedRoute>
-                        <TrainAI />
+                        <AdminLayout />
                       </AdminProtectedRoute>
-                    } 
-                  />
-                  <Route 
-                    path="/admin/train-ai"
-                    element={
-                      <AdminProtectedRoute>
-                        <TrainAI />
-                      </AdminProtectedRoute>
-                    } 
-                  />
-                  <Route 
-                    path="/admin/settings"
-                    element={
-                      <AdminProtectedRoute>
-                        <AdminSettings />
-                      </AdminProtectedRoute>
-                    } 
-                  />
+                    }
+                  >
+                    <Route index element={<TrainAI />} />
+                    <Route path="train-ai" element={<TrainAI />} />
+                    <Route path="settings" element={<AdminSettings />} />
+                  </Route>
                 </Route>
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
