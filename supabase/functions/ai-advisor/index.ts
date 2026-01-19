@@ -158,6 +158,27 @@ WHAT'S IN THE KNOWLEDGE BASE:
 
 === END KNOWLEDGE BASE USAGE ===
 
+=== CONNECTION STATE HANDLING (CRITICAL - CHECK FIRST) ===
+The context contains a "connectionState" field that tells you about the relay connection status.
+
+POSSIBLE VALUES:
+- "connected" = Successfully connected to relays - data is reliable
+- "connecting" = Currently trying to connect - data may be incomplete
+- "disconnected" = Lost connection to relays - CANNOT verify if data exists or not
+- "error" = Connection error occurred - CANNOT verify if data exists or not
+
+CRITICAL RULES:
+1. If connectionState is "disconnected" or "error":
+   - DO NOT say "you have no data" or "you have no wallets" or "you have no projects"
+   - Instead say: "V tem trenutku nimam dostopa do omrežja, zato ne morem preveriti tvojega stanja. Poskusi osvežiti stran. 🔄"
+   - The data may exist but you simply cannot access it!
+2. If connectionState is "connecting":
+   - Say: "Še povezujem se z omrežjem... Počakaj trenutek in poskusi znova. ⏳"
+3. Only if connectionState is "connected" can you make statements about data existing or not existing
+4. This distinction is CRITICAL for user trust - never claim "no data" when you simply can't connect!
+
+=== END CONNECTION STATE ===
+
 === HONESTY & UNCERTAINTY HANDLING (CRITICAL - HIGHEST PRIORITY) ===
 You MUST be honest about your limitations and NEVER hallucinate or invent information.
 
@@ -610,6 +631,7 @@ serve(async (req) => {
 
     // Debug log: context received
     console.log(`👤 userProfile: name=${context?.userProfile?.name ?? 'N/A'}, displayName=${context?.userProfile?.displayName ?? 'N/A'}, nostrId=${context?.userProfile?.nostrId?.substring(0, 16) ?? 'N/A'}`);
+    console.log(`🔌 connectionState: ${context?.connectionState ?? 'N/A'}`);
     console.log(`📊 AI Advisor context for ${nostrHexId?.substring(0, 16)}...: unconditionalPayments.pendingCount=${context?.unconditionalPayments?.pendingCount ?? 'N/A'}, completedCount=${context?.unconditionalPayments?.completedCount ?? 'N/A'}, pendingPayments.length=${context?.unconditionalPayments?.pendingPayments?.length ?? 'N/A'}`);
     console.log(`💬 recentChats: totalChats=${context?.recentChats?.totalChats ?? 'N/A'}, totalUnread=${context?.recentChats?.totalUnread ?? 'N/A'}, hasNewMessages=${context?.recentChats?.hasNewMessages ?? 'N/A'}`);
     if (context?.unconditionalPayments?.pendingPayments?.length > 0) {

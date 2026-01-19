@@ -1,11 +1,12 @@
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
-import { Wifi, WifiOff } from 'lucide-react';
+import { Wifi, WifiOff, AlertTriangle } from 'lucide-react';
 import { Card } from './ui/card';
 
 export const NostrStatus = () => {
-  const { parameters, isLoading } = useSystemParameters();
+  const { parameters, isLoading, connectionState } = useSystemParameters();
 
-  if (isLoading) {
+  // Show connecting state
+  if (isLoading || connectionState === 'connecting') {
     return (
       <Card className="p-4 mb-6 bg-card/50 backdrop-blur">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -16,15 +17,17 @@ export const NostrStatus = () => {
     );
   }
 
-  if (!parameters) {
+  // Show error/disconnected state - IMPORTANT: This means we don't know the data state
+  if (connectionState === 'error' || connectionState === 'disconnected' || !parameters) {
     return (
       <Card className="p-4 mb-6 bg-destructive/10 backdrop-blur border-destructive">
         <div className="flex items-center gap-2">
           <WifiOff className="h-5 w-5 text-destructive" />
           <div>
-            <div className="font-semibold text-destructive">Failed to Connect to Nostr Network</div>
+            <div className="font-semibold text-destructive">Cannot Connect to Nostr Network</div>
             <p className="text-sm text-muted-foreground mt-1">
-              Cannot connect to relays. Retrying automatically...
+              <AlertTriangle className="h-4 w-4 inline mr-1 text-amber-500" />
+              <strong>Important:</strong> Unable to verify data. Existing data may still exist but cannot be accessed. Retrying automatically...
             </p>
           </div>
         </div>
