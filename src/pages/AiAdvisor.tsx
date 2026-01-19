@@ -319,6 +319,7 @@ export default function AiAdvisor() {
         body: JSON.stringify({
           messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
           context: {
+            userProfile: context.userProfile,
             wallets: context.wallets,
             lana8Wonder: context.lana8Wonder,
             unconditionalPayments: context.unconditionalPayments,
