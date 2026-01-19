@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Bot, Send, User, Loader2, RefreshCw, Sparkles, ExternalLink, Coins } from 'lucide-react';
+import { Bot, Send, User, Loader2, RefreshCw, Sparkles, ExternalLink, Coins, Mic, MicOff } from 'lucide-react';
 import { useAiAdvisorContext } from '@/hooks/useAiAdvisorContext';
 import { useAiAdvisorEvents } from '@/hooks/useAiAdvisorEvents';
 import { useAiUsageThisMonth } from '@/hooks/useAiUsageThisMonth';
@@ -17,6 +17,7 @@ import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { t, getTranslation } from '@/lib/aiAdvisorTranslations';
 import { getExchangeRates } from '@/lib/currencyConversion';
 import { getProxiedImageUrl } from '@/lib/imageProxy';
+import { toast } from 'sonner';
 
 interface MessagePart {
   type: 'text' | 'image' | 'link';
@@ -93,13 +94,39 @@ interface SelectedRecipient {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-advisor`;
 
+// Web Speech API types
+interface SpeechRecognitionEvent {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
 export default function AiAdvisor() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<any>(null);
   
   const context = useAiAdvisorContext();
   const { eventsContext, isLoading: eventsLoading } = useAiAdvisorEvents();
@@ -118,6 +145,104 @@ export default function AiAdvisor() {
   const [selectedRecipient, setSelectedRecipient] = useState<SelectedRecipient | null>(null);
   const [showRecipientSelector, setShowRecipientSelector] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+
+  // Check for Web Speech API support
+  const isSpeechSupported = typeof window !== 'undefined' && 
+    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+
+  // Map user language to speech recognition language
+  const getSpeechLanguage = useCallback((lang: string) => {
+    const langMap: Record<string, string> = {
+      'sl': 'sl-SI',
+      'en': 'en-US',
+      'de': 'de-DE',
+      'hr': 'hr-HR',
+      'hu': 'hu-HU',
+      'it': 'it-IT',
+      'es': 'es-ES',
+      'pt': 'pt-PT',
+    };
+    return langMap[lang] || 'en-US';
+  }, []);
+
+  // Initialize speech recognition
+  const startListening = useCallback(() => {
+    if (!isSpeechSupported) {
+      toast.error(userLanguage === 'sl' ? 'Glasovno prepoznavanje ni podprto v tem brskalniku' : 'Speech recognition not supported in this browser');
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = getSpeechLanguage(userLanguage);
+    
+    recognition.onstart = () => {
+      setIsListening(true);
+      console.log('🎤 Speech recognition started');
+    };
+    
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+      
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+      
+      if (finalTranscript) {
+        setInput(prev => prev + finalTranscript);
+      }
+    };
+    
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+      setIsListening(false);
+      if (event.error === 'not-allowed') {
+        toast.error(userLanguage === 'sl' ? 'Dostop do mikrofona ni dovoljen' : 'Microphone access denied');
+      }
+    };
+    
+    recognition.onend = () => {
+      setIsListening(false);
+      console.log('🎤 Speech recognition ended');
+    };
+    
+    recognitionRef.current = recognition;
+    recognition.start();
+  }, [isSpeechSupported, userLanguage, getSpeechLanguage]);
+
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+  }, []);
+
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  }, [isListening, startListening, stopListening]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -509,11 +634,33 @@ export default function AiAdvisor() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={trans.askPlaceholder}
-                className="resize-none min-h-[40px] sm:min-h-[44px] max-h-24 sm:max-h-32 text-sm"
+                placeholder={isListening 
+                  ? (userLanguage === 'sl' ? '🎤 Govori...' : '🎤 Listening...') 
+                  : trans.askPlaceholder}
+                className={cn(
+                  "resize-none min-h-[40px] sm:min-h-[44px] max-h-24 sm:max-h-32 text-sm",
+                  isListening && "border-primary ring-2 ring-primary/20"
+                )}
                 rows={1}
                 disabled={isLoading}
               />
+              {isSpeechSupported && (
+                <Button 
+                  onClick={toggleListening}
+                  disabled={isLoading}
+                  variant={isListening ? "destructive" : "outline"}
+                  size="icon" 
+                  className={cn(
+                    "flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11 transition-all",
+                    isListening && "animate-pulse"
+                  )}
+                  title={isListening 
+                    ? (userLanguage === 'sl' ? 'Ustavi snemanje' : 'Stop recording') 
+                    : (userLanguage === 'sl' ? 'Začni snemanje' : 'Start recording')}
+                >
+                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </Button>
+              )}
               <Button onClick={() => sendMessage()} disabled={!input.trim() || isLoading} size="icon" className="flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11">
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
