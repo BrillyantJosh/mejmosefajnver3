@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -26,6 +26,16 @@ import lanaalignsImage from '@/assets/lana-aligns-world-module.png';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
+    id: 'aiadvisor',
+    title: 'Enlightened AI',
+    description: 'Your personal AI assistant for managing wallets, payments, and staying updated on Lana World',
+    icon: Bot,
+    path: '/ai-advisor',
+    gradient: 'from-violet-500 to-fuchsia-500',
+    enabled: true,
+    order: 0
+  },
+  {
     id: 'lanapays',
     title: 'LanaPays.Us',
     description: 'Discover merchants accepting LanaCoins payments',
@@ -34,7 +44,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-emerald-500 to-teal-500',
     image: lanapaysImage,
     enabled: true,
-    order: 0
+    order: 1
   },
   {
     id: 'social',
@@ -308,6 +318,7 @@ const SETTINGS_D_TAG = 'app:settings:global:v1';
 // Map lowercase IDs to capitalized for Nostr
 const mapToNostrId = (id: ModuleType): string => {
   const mapping: Record<ModuleType, string> = {
+    'aiadvisor': 'AI Advisor',
     'social': 'Social',
     'chat': 'Chat',
     'wallet': 'Wallet',
@@ -338,6 +349,7 @@ const mapToNostrId = (id: ModuleType): string => {
 // Map capitalized Nostr IDs back to lowercase
 const mapFromNostrId = (id: string): ModuleType | null => {
   const mapping: Record<string, ModuleType> = {
+    'AI Advisor': 'aiadvisor',
     'Social': 'social',
     'Chat': 'chat',
     'Wallet': 'wallet',
