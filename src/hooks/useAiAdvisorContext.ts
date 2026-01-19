@@ -418,11 +418,12 @@ export function useAiAdvisorContext(): AiAdvisorContext {
       dashboardData.lana8Wonder.isLoading || unconditionalPaymentsLoading || unpaidLashesLoading || projectsLoading || recentChatsLoading;
 
     // User profile context for personalization
+    // Use session values as fallback when live profile fetch fails
     const userProfileContext: UserProfileContext | null = {
-      name: profile?.name || null,
-      displayName: profile?.display_name || null,
-      currency: profile?.currency || 'EUR',
-      language: profile?.language || null,
+      name: profile?.name || session?.profileName || null,
+      displayName: profile?.display_name || session?.profileDisplayName || null,
+      currency: profile?.currency || session?.profileCurrency || 'EUR',
+      language: profile?.language || profile?.lang || session?.profileLang || null,
     };
 
     return {

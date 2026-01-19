@@ -17,6 +17,10 @@ interface UserSession {
   nostrPrivateKey: string;
   lanaWalletID?: string; // LanaCoins wallet from KIND 0 profile
   lanoshi2lash?: string; // LASH value in lanoshis from KIND 0 profile
+  profileName?: string; // User name from KIND 0 profile
+  profileDisplayName?: string; // Display name from KIND 0 profile
+  profileLang?: string; // Language from KIND 0 profile
+  profileCurrency?: string; // Currency from KIND 0 profile
   expiresAt: number; // Unix timestamp when session expires
 }
 
@@ -148,6 +152,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const derivedIds = await convertWifToIds(wif);
       let lanaWalletID: string | undefined = undefined;
       let lanoshi2lash: string | undefined = undefined;
+      let profileName: string | undefined = undefined;
+      let profileDisplayName: string | undefined = undefined;
+      let profileLang: string | undefined = undefined;
+      let profileCurrency: string | undefined = undefined;
       
       // Check if user has a KIND 0 profile on relays
       if (relays && relays.length > 0) {
@@ -177,7 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('KIND 0 profile found');
             profileFound = true;
             
-            // Extract lanaWalletID and lanoshi2lash from profile
+            // Extract lanaWalletID, lanoshi2lash, name, display_name, lang, currency from profile
             try {
               const profileContent = JSON.parse(profileEvent.content);
               if (profileContent.lanaWalletID) {
@@ -187,6 +195,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (profileContent.lanoshi2lash) {
                 lanoshi2lash = profileContent.lanoshi2lash;
                 console.log('lanoshi2lash extracted:', profileContent.lanoshi2lash);
+              }
+              // Extract name and display_name for AI personalization
+              if (profileContent.name) {
+                profileName = profileContent.name;
+                console.log('Profile name extracted:', profileContent.name);
+              }
+              if (profileContent.display_name) {
+                profileDisplayName = profileContent.display_name;
+                console.log('Profile display_name extracted:', profileContent.display_name);
+              }
+              // Extract language (could be lang or language field)
+              if (profileContent.lang || profileContent.language) {
+                profileLang = profileContent.lang || profileContent.language;
+                console.log('Profile lang extracted:', profileLang);
+              }
+              // Extract currency
+              if (profileContent.currency) {
+                profileCurrency = profileContent.currency;
+                console.log('Profile currency extracted:', profileContent.currency);
               }
             } catch (e) {
               console.warn('Could not parse profile content:', e);
@@ -230,6 +257,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         nostrPrivateKey: derivedIds.nostrPrivateKey,
         lanaWalletID,
         lanoshi2lash,
+        profileName,
+        profileDisplayName,
+        profileLang,
+        profileCurrency,
         expiresAt
       };
       
