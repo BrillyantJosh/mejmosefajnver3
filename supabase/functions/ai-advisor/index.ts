@@ -592,6 +592,7 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("AI service is not configured");
 
     // Debug log: context received
+    console.log(`👤 userProfile: name=${context?.userProfile?.name ?? 'N/A'}, displayName=${context?.userProfile?.displayName ?? 'N/A'}, nostrId=${context?.userProfile?.nostrId?.substring(0, 16) ?? 'N/A'}`);
     console.log(`📊 AI Advisor context for ${nostrHexId?.substring(0, 16)}...: unconditionalPayments.pendingCount=${context?.unconditionalPayments?.pendingCount ?? 'N/A'}, completedCount=${context?.unconditionalPayments?.completedCount ?? 'N/A'}, pendingPayments.length=${context?.unconditionalPayments?.pendingPayments?.length ?? 'N/A'}`);
     console.log(`💬 recentChats: totalChats=${context?.recentChats?.totalChats ?? 'N/A'}, totalUnread=${context?.recentChats?.totalUnread ?? 'N/A'}, hasNewMessages=${context?.recentChats?.hasNewMessages ?? 'N/A'}`);
     if (context?.unconditionalPayments?.pendingPayments?.length > 0) {
