@@ -151,12 +151,14 @@ export interface AiAdvisorContext {
   // Recent chat messages (last 7 days)
   recentChats: RecentChatsContext | null;
   isLoading: boolean;
+  // Connection state - distinguishes "no data" from "can't connect"
+  connectionState: 'connecting' | 'connected' | 'disconnected' | 'error';
   refetchWalletBalances: () => void;
 }
 
 export function useAiAdvisorContext(): AiAdvisorContext {
   const { session } = useAuth();
-  const { parameters } = useSystemParameters();
+  const { parameters, connectionState } = useSystemParameters();
   const { profile } = useNostrProfile();
   
   // Fetch wallets list
@@ -437,9 +439,10 @@ export function useAiAdvisorContext(): AiAdvisorContext {
       newProjects: newProjectsContext,
       recentChats: recentChatsContext,
       isLoading,
+      connectionState,
       refetchWalletBalances: fetchWalletBalances,
     };
-  }, [nostrWallets, walletBalances, dashboardData, unconditionalPayments, unconditionalPaymentsLoading, unpaidCount, unpaidLashesLoading, walletsListLoading, balancesLoading, exchangeRate, currency, userProjects, allProjects, projectStats, projectsLoading, getProfileName, recentChatsContext, recentChatsLoading]);
+  }, [nostrWallets, walletBalances, dashboardData, unconditionalPayments, unconditionalPaymentsLoading, unpaidCount, unpaidLashesLoading, walletsListLoading, balancesLoading, exchangeRate, currency, userProjects, allProjects, projectStats, projectsLoading, getProfileName, recentChatsContext, recentChatsLoading, connectionState]);
 
   return context;
 }
