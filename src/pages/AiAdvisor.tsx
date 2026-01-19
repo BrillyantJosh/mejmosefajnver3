@@ -374,30 +374,32 @@ export default function AiAdvisor() {
   }
 
   return (
-    <div className="container max-w-4xl mx-auto p-4 h-[calc(100vh-120px)] flex flex-col">
+    <div className="container max-w-4xl mx-auto px-2 sm:px-4 h-[calc(100vh-80px)] sm:h-[calc(100vh-120px)] flex flex-col">
       <Card className="flex-1 flex flex-col overflow-hidden">
-        <CardHeader className="border-b flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full bg-primary/10">
-                <Sparkles className="h-5 w-5 text-primary" />
+        <CardHeader className="border-b flex-shrink-0 py-2 sm:py-4 px-3 sm:px-6">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="p-1.5 sm:p-2 rounded-full bg-primary/10 flex-shrink-0">
+                <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
               </div>
-              <div>
-                <CardTitle className="text-lg">{trans.aiAdvisor}</CardTitle>
-                <p className="text-sm text-muted-foreground">{trans.askOrPay}</p>
+              <div className="min-w-0">
+                <CardTitle className="text-base sm:text-lg truncate">{trans.aiAdvisor}</CardTitle>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">{trans.askOrPay}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               {!usageLoading && aiUsageLana > 0 && (
-                <Badge variant="outline" className="flex items-center gap-1 text-xs">
-                  <Coins className="h-3 w-3" />
-                  {aiUsageLana.toFixed(2)} LANA
+                <Badge variant="outline" className="flex items-center gap-1 text-[10px] sm:text-xs px-1.5 sm:px-2">
+                  <Coins className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                  <span className="hidden xs:inline">{aiUsageLana.toFixed(2)}</span>
+                  <span className="xs:hidden">{aiUsageLana.toFixed(0)}</span>
+                  <span className="hidden sm:inline">LANA</span>
                 </Badge>
               )}
               {messages.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => { setMessages([]); setError(null); }}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  {trans.newQuery}
+                <Button variant="ghost" size="sm" onClick={() => { setMessages([]); setError(null); }} className="h-7 sm:h-8 px-2 sm:px-3">
+                  <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline ml-2">{trans.newQuery}</span>
                 </Button>
               )}
             </div>
@@ -405,22 +407,22 @@ export default function AiAdvisor() {
         </CardHeader>
 
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
-          <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+          <ScrollArea className="flex-1 p-2 sm:p-4" ref={scrollAreaRef}>
             {messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center py-8">
-                <Bot className="h-12 w-12 text-muted-foreground/50 mb-4" />
-                <h3 className="font-medium mb-2">{trans.howCanIHelp}</h3>
-                <p className="text-sm text-muted-foreground mb-6 max-w-md">
+              <div className="h-full flex flex-col items-center justify-center text-center py-4 sm:py-8 px-2">
+                <Bot className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground/50 mb-3 sm:mb-4" />
+                <h3 className="font-medium mb-1 sm:mb-2 text-sm sm:text-base">{trans.howCanIHelp}</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6 max-w-md">
                   {trans.askOrSendPayment}
                 </p>
                 
                 {/* Primary quick actions - most common questions */}
-                <div className="flex flex-wrap gap-2 justify-center mb-4 max-w-lg">
+                <div className="flex flex-col sm:flex-row flex-wrap gap-2 justify-center mb-3 sm:mb-4 w-full max-w-lg">
                   <Button 
                     variant="default" 
                     size="sm" 
                     onClick={() => sendMessage(userLanguage === 'sl' ? 'Kaj je novega pri meni?' : 'What\'s new with me?')}
-                    className="text-sm"
+                    className="text-xs sm:text-sm w-full sm:w-auto"
                   >
                     {userLanguage === 'sl' ? '🔔 Kaj je novega pri meni?' : '🔔 What\'s new with me?'}
                   </Button>
@@ -428,31 +430,31 @@ export default function AiAdvisor() {
                     variant="default" 
                     size="sm" 
                     onClick={() => sendMessage(userLanguage === 'sl' ? 'Kaj je novega v Lana Svetu?' : 'What\'s new in Lana World?')}
-                    className="text-sm"
+                    className="text-xs sm:text-sm w-full sm:w-auto"
                   >
                     {userLanguage === 'sl' ? '🌍 Kaj je novega v Lana Svetu?' : '🌍 What\'s new in Lana World?'}
                   </Button>
                 </div>
                 
                 {/* Secondary suggested questions */}
-                <div className="flex flex-wrap gap-2 justify-center max-w-lg">
+                <div className="flex flex-wrap gap-1.5 sm:gap-2 justify-center max-w-lg">
                   {suggestedQuestions.map((q, i) => (
-                    <Button key={i} variant="outline" size="sm" onClick={() => { setInput(q); textareaRef.current?.focus(); }} className="text-xs">
+                    <Button key={i} variant="outline" size="sm" onClick={() => { setInput(q); textareaRef.current?.focus(); }} className="text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3">
                       {q}
                     </Button>
                   ))}
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {messages.map((message, i) => (
-                  <div key={i} className={cn("flex gap-3", message.role === 'user' ? 'justify-end' : 'justify-start')}>
+                  <div key={i} className={cn("flex gap-2 sm:gap-3", message.role === 'user' ? 'justify-end' : 'justify-start')}>
                     {message.role === 'assistant' && (
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Bot className="h-4 w-4 text-primary" />
+                      <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                       </div>
                     )}
-                    <div className={cn("max-w-[80%] rounded-lg px-4 py-2", message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
+                    <div className={cn("max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4", message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
                       {message.role === 'assistant' ? (
                         <div className="space-y-2">
                           {parseMessageContent(message.content).map((part, idx) => (
@@ -461,7 +463,7 @@ export default function AiAdvisor() {
                                 key={idx} 
                                 src={getProxiedImageUrl(part.content)} 
                                 alt={part.alt || 'Image'} 
-                                className="rounded-lg max-w-full max-h-48 object-cover"
+                                className="rounded-lg max-w-full max-h-36 sm:max-h-48 object-cover"
                                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
                               />
                             ) : part.type === 'link' ? (
@@ -470,26 +472,26 @@ export default function AiAdvisor() {
                                 href={part.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-primary hover:underline text-sm"
+                                className="inline-flex items-center gap-1 text-primary hover:underline text-xs sm:text-sm"
                               >
                                 {part.content}
-                                <ExternalLink className="h-3 w-3" />
+                                <ExternalLink className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                               </a>
                             ) : (
-                              <p key={idx} className="text-sm whitespace-pre-wrap">{part.content}</p>
+                              <p key={idx} className="text-xs sm:text-sm whitespace-pre-wrap">{part.content}</p>
                             )
                           ))}
                           {message.content === '' && isLoading && (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
                           )}
                         </div>
                       ) : (
-                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                        <p className="text-xs sm:text-sm whitespace-pre-wrap">{message.content}</p>
                       )}
                     </div>
                     {message.role === 'user' && (
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                        <User className="h-4 w-4 text-primary-foreground" />
+                      <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-primary flex items-center justify-center">
+                        <User className="h-3 w-3 sm:h-4 sm:w-4 text-primary-foreground" />
                       </div>
                     )}
                   </div>
@@ -498,9 +500,9 @@ export default function AiAdvisor() {
             )}
           </ScrollArea>
 
-          {error && <div className="px-4 py-2 bg-destructive/10 text-destructive text-sm">{error}</div>}
+          {error && <div className="px-3 sm:px-4 py-2 bg-destructive/10 text-destructive text-xs sm:text-sm">{error}</div>}
 
-          <div className="p-4 border-t flex-shrink-0">
+          <div className="p-2 sm:p-4 border-t flex-shrink-0">
             <div className="flex gap-2">
               <Textarea
                 ref={textareaRef}
@@ -508,11 +510,11 @@ export default function AiAdvisor() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={trans.askPlaceholder}
-                className="resize-none min-h-[44px] max-h-32"
+                className="resize-none min-h-[40px] sm:min-h-[44px] max-h-24 sm:max-h-32 text-sm"
                 rows={1}
                 disabled={isLoading}
               />
-              <Button onClick={() => sendMessage()} disabled={!input.trim() || isLoading} size="icon" className="flex-shrink-0 h-11 w-11">
+              <Button onClick={() => sendMessage()} disabled={!input.trim() || isLoading} size="icon" className="flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11">
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
