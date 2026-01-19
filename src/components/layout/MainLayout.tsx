@@ -1,6 +1,7 @@
+// VERSION: 2.1 - Enlightened AI Menu - 2026-01-19
 import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, User, Home, Settings, LogOut, Shield, Heart, Download, Grid, Bot } from "lucide-react";
+import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot } from "lucide-react";
 import logoImage from "@/assets/lana-logo.png";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
