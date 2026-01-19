@@ -1,6 +1,116 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Interface for knowledge entries
+interface KnowledgeEntry {
+  title: string;
+  summary: string;
+  body: string | null;
+  topic: string | null;
+  keywords: string[] | null;
+  lang: string;
+}
+
+// Fetch relevant knowledge from ai_knowledge table
+async function fetchRelevantKnowledge(userQuery: string, language: string): Promise<string> {
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Normalize user query for searching - extract meaningful terms
+    const normalizedQuery = userQuery.toLowerCase()
+      .replace(/[^\w\sčšžćđáéíóúäöüàèìòùâêîôûąęółńśźżæøå]/gi, ' ') // Keep diacritics
+      .split(/\s+/)
+      .filter(term => term.length > 2); // Only terms > 2 chars
+
+    // Map common language codes
+    const langCode = (language?.split('-')[0] || 'sl').toLowerCase();
+
+    // Fetch active knowledge entries in user's language OR English
+    const { data: knowledge, error } = await supabase
+      .from('ai_knowledge')
+      .select('title, summary, body, topic, keywords, lang')
+      .eq('status', 'active')
+      .in('lang', [langCode, 'en'])
+      .order('updated_at', { ascending: false })
+      .limit(50); // Get more to filter
+
+    if (error) {
+      console.error("Error fetching knowledge:", error);
+      return '';
+    }
+
+    if (!knowledge || knowledge.length === 0) {
+      console.log("No knowledge entries found in database");
+      return '';
+    }
+
+    console.log(`📚 Found ${knowledge.length} knowledge entries, searching for: ${normalizedQuery.slice(0, 5).join(', ')}`);
+
+    // Score each knowledge entry by relevance
+    const scoredKnowledge = (knowledge as KnowledgeEntry[]).map(k => {
+      const searchableText = [
+        k.title || '',
+        k.summary || '',
+        k.topic || '',
+        ...(k.keywords || [])
+      ].join(' ').toLowerCase();
+
+      // Count matching terms
+      let score = 0;
+      for (const term of normalizedQuery) {
+        if (searchableText.includes(term)) {
+          score += 1;
+          // Extra points for title/topic matches
+          if ((k.title || '').toLowerCase().includes(term)) score += 2;
+          if ((k.topic || '').toLowerCase().includes(term)) score += 1;
+          // Keyword exact match
+          if (k.keywords?.some(kw => kw.toLowerCase() === term)) score += 3;
+        }
+      }
+
+      // Prefer user's language
+      if (k.lang === langCode) score += 1;
+
+      return { ...k, score };
+    });
+
+    // Filter entries with at least 1 match and sort by score
+    const relevantKnowledge = scoredKnowledge
+      .filter(k => k.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5); // Top 5 most relevant
+
+    if (relevantKnowledge.length === 0) {
+      // If no direct matches, return first 3 general entries as fallback
+      console.log("📚 No keyword matches, using general knowledge fallback");
+      const generalKnowledge = (knowledge as KnowledgeEntry[])
+        .filter(k => k.lang === langCode)
+        .slice(0, 3);
+      
+      if (generalKnowledge.length === 0) {
+        return '';
+      }
+
+      return generalKnowledge.map(k => 
+        `### ${k.title}\n${k.summary}${k.body ? `\n\n${k.body}` : ''}`
+      ).join('\n\n---\n\n');
+    }
+
+    console.log(`📚 Returning ${relevantKnowledge.length} relevant knowledge entries`);
+    
+    // Format knowledge for context
+    return relevantKnowledge.map(k => 
+      `### ${k.title}\n${k.summary}${k.body ? `\n\n${k.body}` : ''}`
+    ).join('\n\n---\n\n');
+  } catch (err) {
+    console.error("Failed to fetch knowledge:", err);
+    return '';
+  }
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -28,11 +138,31 @@ function calculateCostUsd(model: string, promptTokens: number, completionTokens:
 
 const baseSystemPrompt = `You are an AI advisor for the Lana ecosystem - a friendly, fun, and personalized assistant. 
 
+=== KNOWLEDGE BASE USAGE (CRITICAL - CHECK FIRST) ===
+You have access to curated knowledge about the Lana ecosystem in the "LANA KNOWLEDGE BASE" section of your context.
+
+RULES FOR USING KNOWLEDGE BASE:
+1. ALWAYS check the LANA KNOWLEDGE BASE FIRST when answering questions
+2. If knowledge exists about the topic, use it as your PRIMARY and AUTHORITATIVE source
+3. Quote or paraphrase from the knowledge base when relevant
+4. Knowledge base is MORE RELIABLE than your pretraining - always prioritize it
+5. If the knowledge base contains information about a topic, provide that information confidently
+6. When referencing knowledge base content, integrate it naturally into your response
+
+WHAT'S IN THE KNOWLEDGE BASE:
+- Explanations of Lana features and concepts
+- How-to guides for using Lana ecosystem
+- FAQ answers about wallets, payments, projects, events
+- Official policies and procedures
+- Technical explanations in user-friendly language
+
+=== END KNOWLEDGE BASE USAGE ===
+
 === HONESTY & UNCERTAINTY HANDLING (CRITICAL - HIGHEST PRIORITY) ===
 You MUST be honest about your limitations and NEVER hallucinate or invent information.
 
 RULES FOR UNCERTAINTY:
-1. ONLY answer questions about data that EXISTS in the provided context
+1. ONLY answer questions about data that EXISTS in the provided context OR knowledge base
 2. If you are NOT 100% CERTAIN about something, you MUST ask the user for clarification
 3. NEVER invent, guess, or make up information - this is strictly forbidden
 4. If the user asks about something not in your knowledge or context, say: "Nisem popolnoma prepričan, da te prav razumem. Mi lahko bolj natančno razložiš kaj želiš vedeti?"
@@ -44,12 +174,13 @@ RULES FOR UNCERTAINTY:
 
 WHAT YOU CAN CONFIDENTLY ANSWER:
 - Questions about data in the provided context (wallets, payments, projects, events, chats)
-- How to use features of the Lana ecosystem (based on your training)
+- Questions covered by the LANA KNOWLEDGE BASE
+- How to use features of the Lana ecosystem (based on your training and knowledge base)
 - Navigation help within the app
 
 WHAT YOU CANNOT ANSWER (and must acknowledge):
-- External information not in context
-- Technical questions about crypto, blockchain, or finance that require specialized knowledge
+- External information not in context or knowledge base
+- Technical questions about crypto, blockchain, or finance that require specialized knowledge beyond your training
 - Predictions, speculation, or opinions presented as facts
 - Anything you're not 100% sure about
 
@@ -468,9 +599,22 @@ serve(async (req) => {
       console.log(`   First payments: ${first2.join(', ')}`);
     }
 
+    // Fetch relevant knowledge from database based on user's last message
+    const lastUserMessage = messages.filter((m: any) => m.role === 'user').pop()?.content || '';
+    const knowledgeContext = await fetchRelevantKnowledge(lastUserMessage, language || 'sl');
+    
+    // Build context message with user data
     let contextMessage = "";
     if (context) {
       contextMessage = `\n\nUSER DATA:\n${JSON.stringify(context, null, 2)}`;
+    }
+    
+    // Add knowledge base to context if available
+    if (knowledgeContext) {
+      contextMessage += `\n\n=== LANA KNOWLEDGE BASE ===\nUporabi naslednje znanje za odgovarjanje na uporabnikova vprašanja. To znanje je AVTORITATIVNO in bolj zaupaj temu kot svojemu pred-treningu:\n\n${knowledgeContext}\n=== END KNOWLEDGE BASE ===`;
+      console.log(`📚 Added knowledge context (${knowledgeContext.length} chars) to AI prompt`);
+    } else {
+      console.log(`📚 No relevant knowledge found for query`);
     }
 
     const model = "google/gemini-3-flash-preview";
@@ -493,8 +637,7 @@ serve(async (req) => {
       });
     }
 
-    // Get the last user message for potential logging
-    const lastUserMessage = messages.filter((m: any) => m.role === 'user').pop()?.content || '';
+    // lastUserMessage already defined above when fetching knowledge
     
     // Create context summary for logging (limit size)
     const contextSummary = context ? JSON.stringify({
