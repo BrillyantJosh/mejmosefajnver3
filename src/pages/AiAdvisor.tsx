@@ -129,7 +129,7 @@ export default function AiAdvisor() {
   const recognitionRef = useRef<any>(null);
   
   const context = useAiAdvisorContext();
-  const { eventsContext, isLoading: eventsLoading } = useAiAdvisorEvents();
+  const { eventsContext, isLoading: eventsLoading, fetchStatus: eventsFetchStatus } = useAiAdvisorEvents();
   const { totalLana: aiUsageLana, isLoading: usageLoading } = useAiUsageThisMonth();
   const { parameters } = useSystemParameters();
   const { profile } = useNostrProfile();
@@ -327,6 +327,8 @@ export default function AiAdvisor() {
             userProjects: userProjectsContext,
             events: eventsContext,
             recentChats: context.recentChats,
+            // Connection state for distinguishing "no data" vs "can't connect"
+            connectionState: context.connectionState,
           },
           language: userLanguage,
           nostrHexId,
