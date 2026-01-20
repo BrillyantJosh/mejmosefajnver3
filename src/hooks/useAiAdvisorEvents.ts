@@ -35,6 +35,8 @@ export interface AiEventsContext {
   onlineCount: number;
   liveCount: number;
   totalCount: number;
+  // Fetch status to distinguish "no data" from "fetch failed"
+  fetchStatus: 'loading' | 'success' | 'error';
 }
 
 interface ParsedEvent {
@@ -157,11 +159,12 @@ function formatDate(date: Date): string {
   });
 }
 
-export function useAiAdvisorEvents(): { eventsContext: AiEventsContext | null; isLoading: boolean } {
+export function useAiAdvisorEvents(): { eventsContext: AiEventsContext | null; isLoading: boolean; fetchStatus: 'loading' | 'success' | 'error' } {
   const { session } = useAuth();
   const { parameters: systemParameters } = useSystemParameters();
   const [eventsContext, setEventsContext] = useState<AiEventsContext | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchStatus, setFetchStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const fetchStartedRef = useRef(false);
 
   const relays = systemParameters?.relays && systemParameters.relays.length > 0 
@@ -238,11 +241,21 @@ export function useAiAdvisorEvents(): { eventsContext: AiEventsContext | null; i
         onlineCount: onlineEvents.length,
         liveCount: liveEvents.length,
         totalCount: onlineEvents.length + liveEvents.length,
+        fetchStatus: 'success',
       });
+      setFetchStatus('success');
 
     } catch (err) {
       console.error('Error fetching events for AI:', err);
-      setEventsContext(null);
+      setEventsContext({
+        onlineEvents: [],
+        liveEvents: [],
+        onlineCount: 0,
+        liveCount: 0,
+        totalCount: 0,
+        fetchStatus: 'error',
+      });
+      setFetchStatus('error');
     } finally {
       setIsLoading(false);
     }
@@ -261,5 +274,5 @@ export function useAiAdvisorEvents(): { eventsContext: AiEventsContext | null; i
     }
   }, [session]);
 
-  return { eventsContext, isLoading };
+  return { eventsContext, isLoading, fetchStatus };
 }
