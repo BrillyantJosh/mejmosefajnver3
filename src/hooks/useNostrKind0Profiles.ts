@@ -13,6 +13,7 @@ interface Kind0Profile {
   currency?: string;
   lanaWalletID?: string;
   language?: string;
+  created_at?: number; // Unix timestamp when profile was created/updated
 }
 
 export const useNostrKind0Profiles = () => {
@@ -62,6 +63,7 @@ export const useNostrKind0Profiles = () => {
                 currency: content.currency,
                 lanaWalletID: content.lanaWalletID,
                 language: content.language,
+                created_at: event.created_at,
               });
             }
           } catch (e) {
