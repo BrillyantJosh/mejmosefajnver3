@@ -3,8 +3,10 @@ import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Search } from "lucide-react";
+import { Search, Calendar } from "lucide-react";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
+import { format } from "date-fns";
+import { sl } from "date-fns/locale";
 
 export default function Profiles() {
   const { profiles, isLoading } = useNostrKind0Profiles();
@@ -84,6 +86,12 @@ export default function Profiles() {
                       {profile.country && <span>Country: {profile.country}</span>}
                       {profile.currency && <span>Currency: {profile.currency}</span>}
                       {profile.lanaWalletID && <span>💼 Wallet</span>}
+                      {profile.created_at && (
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {format(new Date(profile.created_at * 1000), "d. MMM yyyy", { locale: sl })}
+                        </span>
+                      )}
                     </div>
                     
                     {profile.pubkey && (
