@@ -1,29 +1,15 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSystemParameters } from '@/contexts/SystemParametersContext';
-import { isLashExpired } from '@/lib/lashExpiration';
-
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
+import { supabase } from '@/integrations/supabase/client';
 
 /**
  * Hook to count unpaid LASH payment records (KIND 39991) for the current user
- * Returns the count of payment records with state != "paid"
+ * Uses server-side edge function to bypass Chrome WebSocket limitations
  */
 export function useNostrUnpaidLashes() {
   const { session } = useAuth();
-  const { parameters } = useSystemParameters();
   const [unpaidCount, setUnpaidCount] = useState(0);
   const [loading, setLoading] = useState(false);
-  const pool = useMemo(() => new SimplePool(), []);
-
-  const relays = parameters?.relays && parameters.relays.length > 0 
-    ? parameters.relays 
-    : DEFAULT_RELAYS;
 
   const fetchUnpaidLashes = useCallback(async () => {
     if (!session?.nostrHexId) {
@@ -34,40 +20,32 @@ export function useNostrUnpaidLashes() {
     setLoading(true);
     
     try {
-      // Fetch all payment records (KIND 39991) by this user
-      const paymentRecords = await pool.querySync(relays, {
-        kinds: [39991],
-        authors: [session.nostrHexId],
-        limit: 1000
+      console.log('🔄 Fetching unpaid lashes via edge function');
+      
+      const { data, error } = await supabase.functions.invoke('fetch-unpaid-lashes', {
+        body: { userPubkey: session.nostrHexId }
       });
 
-      // Filter out expired and paid records
-      const unpaidRecords = paymentRecords.filter(event => {
-        if (isLashExpired(event)) return false;
-        const stateTag = event.tags.find(tag => tag[0] === 'state');
-        return stateTag?.[1] !== 'paid';
-      });
-
-      console.log(`📤 Found payment records: ${paymentRecords.length} total, ${unpaidRecords.length} unpaid (non-expired, state != paid)`);
-
-      // Extract UNIQUE lash IDs using Set for deduplication
-      const lashIdsSet = new Set(
-        unpaidRecords
-          .map(event => event.tags.find(tag => tag[0] === 'd')?.[1])
-          .filter(Boolean)
-      );
-      const unpaidCount = lashIdsSet.size;
-
-      console.log('💰 Unpaid LASHes:', unpaidCount);
-
-      setUnpaidCount(unpaidCount);
-      } catch (error) {
-        console.error('❌ Error fetching unpaid lashes:', error);
+      if (error) {
+        console.error('❌ Edge function error:', error);
         setUnpaidCount(0);
-      } finally {
-        setLoading(false);
+        return;
       }
-  }, [session?.nostrHexId, relays, pool]);
+
+      if (data?.success) {
+        console.log('💰 Unpaid LASHes via server:', data.unpaidCount);
+        setUnpaidCount(data.unpaidCount);
+      } else {
+        console.log('⚠️ No unpaid lashes data:', data?.error);
+        setUnpaidCount(0);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching unpaid lashes:', error);
+      setUnpaidCount(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.nostrHexId]);
 
   // Function to manually increment the unpaid count (optimistic update)
   const incrementUnpaidCount = useCallback(() => {
