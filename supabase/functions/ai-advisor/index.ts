@@ -129,6 +129,14 @@ IMPORTANT RULES:
 - Use ONLY data from the provided USER DATA context.
 - Reference specific values, names, and numbers from the context.
 
+CRITICAL CONNECTION RULES:
+- Check the 'connectionState' field in USER DATA. 
+- If connectionState is "error" or "connecting", inform the user that data may be INCOMPLETE due to connection issues with Nostr relays.
+- If isDataLoading is true, inform the user that data is still loading.
+- Do NOT claim data is "zero" or "empty" or that user has "no wallets/projects/events" if connectionState is "error" - instead say you CANNOT ACCESS the data right now.
+- If eventsFetchStatus shows an error, be honest that event data couldn't be retrieved.
+- Always check if arrays are null vs empty - null means couldn't fetch, empty means fetched but nothing there.
+
 You MUST output ONLY valid JSON in the exact structure below.
 No explanations outside JSON.
 
