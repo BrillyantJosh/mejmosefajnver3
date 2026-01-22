@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface NostrProfile {
   // Standard fields
@@ -68,52 +69,81 @@ export const useNostrProfile = () => {
   const relays = parameters?.relays || [];
 
   const fetchProfile = useCallback(async () => {
-    if (!session?.nostrHexId || relays.length === 0) {
+    if (!session?.nostrHexId) {
       setIsLoading(false);
       return;
     }
 
-    const pool = new SimplePool();
-    
     try {
-      console.log('Fetching KIND 0 profile for:', session.nostrHexId);
-      
-      const event = await Promise.race([
-        pool.get(relays, {
-          kinds: [0],
-          authors: [session.nostrHexId],
-          limit: 1
-        }),
-        new Promise<Event | null>((_, reject) => 
-          setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
-        )
-      ]) as Event | null;
+      console.log('📡 Fetching profile from database for:', session.nostrHexId);
 
-      if (event && event.content) {
-        try {
-          const content = JSON.parse(event.content);
-          
-          // Extract tags
-          const langTag = event.tags.find(t => t[0] === 'lang')?.[1];
-          const interestTags = event.tags.filter(t => t[0] === 't').map(t => t[1]);
-          const intimateTags = event.tags.filter(t => t[0] === 'o').map(t => t[1]);
-          
-          setProfile({
-            ...content,
-            lang: langTag,
-            interests: interestTags,
-            intimateInterests: intimateTags
-          });
-          
-          console.log('Profile loaded:', content);
-        } catch (error) {
-          console.error('Failed to parse profile content:', error);
+      // STEP 1: Try to read from database first (server-side cached)
+      const { data: cachedProfile, error } = await supabase
+        .from('nostr_profiles')
+        .select('*')
+        .eq('nostr_hex_id', session.nostrHexId)
+        .single();
+
+      if (cachedProfile && !error) {
+        console.log('✅ Profile loaded from database cache');
+        
+        // Parse raw_metadata to get full profile
+        const rawMetadata = cachedProfile.raw_metadata as Record<string, any> || {};
+        
+        const profileData: NostrProfile = {
+          name: cachedProfile.full_name || rawMetadata.name,
+          display_name: cachedProfile.display_name || rawMetadata.display_name,
+          about: cachedProfile.about || rawMetadata.about,
+          picture: cachedProfile.picture || rawMetadata.picture,
+          lanaWalletID: cachedProfile.lana_wallet_id || rawMetadata.lanaWalletID,
+          ...rawMetadata,
+          // Extract lang from raw_metadata tags if available
+          lang: rawMetadata.lang || session?.profileLang,
+        };
+
+        setProfile(profileData);
+
+        // Check if profile is stale (older than 1 hour) - trigger background refresh
+        const lastFetched = new Date(cachedProfile.last_fetched_at).getTime();
+        const oneHourAgo = Date.now() - (60 * 60 * 1000);
+        
+        if (lastFetched < oneHourAgo) {
+          console.log('⏰ Profile is stale, triggering background refresh...');
+          triggerProfileRefresh(session.nostrHexId);
         }
+
+        setIsLoading(false);
+        return;
+      }
+
+      // STEP 2: Not in database - trigger edge function to fetch from relays
+      console.log('📡 Profile not in database, triggering server-side fetch...');
+      await triggerProfileRefresh(session.nostrHexId);
+
+      // Wait a moment then re-query database
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const { data: refreshedProfile } = await supabase
+        .from('nostr_profiles')
+        .select('*')
+        .eq('nostr_hex_id', session.nostrHexId)
+        .single();
+
+      if (refreshedProfile) {
+        const rawMetadata = refreshedProfile.raw_metadata as Record<string, any> || {};
+        setProfile({
+          name: refreshedProfile.full_name || rawMetadata.name,
+          display_name: refreshedProfile.display_name || rawMetadata.display_name,
+          about: refreshedProfile.about || rawMetadata.about,
+          picture: refreshedProfile.picture || rawMetadata.picture,
+          lanaWalletID: refreshedProfile.lana_wallet_id || rawMetadata.lanaWalletID,
+          ...rawMetadata,
+          lang: rawMetadata.lang || session?.profileLang,
+        });
       } else {
-        // No profile found from relay - use session fallback if available
-        console.log('No profile from relay, checking session fallback...');
+        // STEP 3: Still no data - use session fallback
+        console.log('⚠️ No profile data available, using session fallback');
         if (session?.profileName || session?.profileDisplayName || session?.profileLang) {
-          console.log('Using session fallback for profile');
           setProfile({
             name: session.profileName,
             display_name: session.profileDisplayName,
@@ -124,7 +154,7 @@ export const useNostrProfile = () => {
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
-      // On error, also use session fallback
+      // On error, use session fallback
       if (session?.profileName || session?.profileDisplayName || session?.profileLang) {
         console.log('Using session fallback after error');
         setProfile({
@@ -136,9 +166,24 @@ export const useNostrProfile = () => {
       }
     } finally {
       setIsLoading(false);
-      pool.close(relays);
     }
-  }, [session?.nostrHexId, relays]);
+  }, [session?.nostrHexId, session?.profileName, session?.profileDisplayName, session?.profileLang, session?.profileCurrency]);
+
+  const triggerProfileRefresh = async (pubkey: string) => {
+    try {
+      const { error } = await supabase.functions.invoke('refresh-nostr-profiles', {
+        body: { pubkeys: [pubkey] }
+      });
+      
+      if (error) {
+        console.warn('⚠️ Profile refresh edge function error:', error);
+      } else {
+        console.log('✅ Profile refresh triggered');
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to trigger profile refresh:', error);
+    }
+  };
 
   useEffect(() => {
     fetchProfile();
@@ -254,6 +299,10 @@ export const useNostrProfile = () => {
 
       // Update local state
       setProfile(profileData);
+
+      // Trigger server-side refresh to update database cache
+      await triggerProfileRefresh(session.nostrHexId);
+
       return { success: true };
     } catch (error) {
       console.error('Error publishing profile:', error);

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { SimplePool, Filter, Event } from 'nostr-tools';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 const AUTHORIZED_PUBKEY = '9eb71bf1e9c3189c78800e4c3831c1c1a93ab43b61118818c32e4490891a35b3';
 
@@ -49,189 +49,151 @@ interface SystemParametersContextType {
 
 const SystemParametersContext = createContext<SystemParametersContextType | undefined>(undefined);
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [parameters, setParameters] = useState<SystemParameters | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
 
-  useEffect(() => {
-    fetchSystemParameters();
-  }, []);
-
-  const fetchSystemParameters = async () => {
-    const pool = new SimplePool();
-    let connectedCount = 0;
-    
+  const fetchSystemParameters = useCallback(async () => {
     setConnectionState('connecting');
 
     try {
-      console.log('Fetching KIND 38888 from relays...');
+      console.log('📡 Fetching KIND 38888 from database...');
 
-      const filter: Filter = {
-        kinds: [38888],
-        authors: [AUTHORIZED_PUBKEY],
-        '#d': ['main'],
-        limit: 1
-      };
+      // STEP 1: Try to read from database first
+      const { data, error } = await supabase
+        .from('kind_38888')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
 
-      // Connect to relays and fetch event
-      const event = await Promise.race([
-        pool.get(DEFAULT_RELAYS, filter),
-        new Promise<Event | null>((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 10000)
-        )
-      ]) as Event | null;
-
-      if (!event) {
-        throw new Error('No KIND 38888 event found');
+      if (error) {
+        console.warn('⚠️ Database query error:', error);
+        throw new Error(`Database error: ${error.message}`);
       }
 
-      console.log('KIND 38888 event received:', event);
-
-      // Verify the event is from authorized pubkey
-      if (event.pubkey !== AUTHORIZED_PUBKEY) {
-        throw new Error('Unauthorized pubkey');
+      if (!data) {
+        console.warn('⚠️ No KIND 38888 data in database, triggering sync...');
+        // Trigger edge function to sync from relays
+        await triggerSync();
+        return;
       }
 
-      // Parse tags
-      const relays = event.tags
-        .filter(t => t[0] === 'relay')
-        .map(t => t[1]);
+      // Verify the data is from authorized pubkey
+      if (data.pubkey !== AUTHORIZED_PUBKEY) {
+        throw new Error('Unauthorized pubkey in database');
+      }
 
-      const electrumServers = event.tags
-        .filter(t => t[0] === 'electrum')
-        .map(t => ({ host: t[1], port: t[2] }));
+      console.log('✅ KIND 38888 loaded from database:', data.event_id);
 
-      const fxTags = event.tags.filter(t => t[0] === 'fx');
+      // Parse relays array
+      const relays = Array.isArray(data.relays) 
+        ? data.relays as string[]
+        : [];
+
+      // Parse electrum servers
+      const electrumServers = Array.isArray(data.electrum_servers)
+        ? (data.electrum_servers as any[]).map((s: any) => ({
+            host: s.host || '',
+            port: s.port || ''
+          }))
+        : [];
+
+      // Parse exchange rates
+      const exchangeRatesData = data.exchange_rates as Record<string, number> || {};
       const exchangeRates: ExchangeRates = {
-        EUR: parseFloat(fxTags.find(t => t[1] === 'EUR')?.[2] || '0'),
-        USD: parseFloat(fxTags.find(t => t[1] === 'USD')?.[2] || '0'),
-        GBP: parseFloat(fxTags.find(t => t[1] === 'GBP')?.[2] || '0')
+        EUR: exchangeRatesData.EUR || 0,
+        USD: exchangeRatesData.USD || 0,
+        GBP: exchangeRatesData.GBP || 0
       };
 
-      const split = event.tags.find(t => t[0] === 'split')?.[1] || '';
-      const version = event.tags.find(t => t[0] === 'version')?.[1] || '';
-      const validFrom = event.tags.find(t => t[0] === 'valid_from')?.[1] || '';
+      // Parse trusted signers
+      const trustedSigners = (data.trusted_signers as TrustedSigners) || {};
 
-      // Parse content for trusted_signers
-      let trustedSigners: TrustedSigners = {};
-      try {
-        if (event.content) {
-          const contentData = JSON.parse(event.content);
-          trustedSigners = contentData.trusted_signers || {};
-        }
-      } catch (error) {
-        console.warn('Failed to parse event content for trusted_signers:', error);
-      }
-
-      // Test relay connections with WebSocket (more reliable than event fetching)
-      console.log('Testing relay connections with WebSocket...');
-      const relayStatuses: RelayStatus[] = await Promise.all(
-        relays.map(async (relayUrl) => {
-          const startTime = Date.now();
-          try {
-            return await new Promise<RelayStatus>((resolve) => {
-              const ws = new WebSocket(relayUrl);
-              
-              const timeout = setTimeout(() => {
-                ws.close();
-                console.warn(`❌ Relay ${relayUrl} connection timeout`);
-                resolve({
-                  url: relayUrl,
-                  connected: false
-                });
-              }, 5000);
-
-              ws.onopen = () => {
-                clearTimeout(timeout);
-                const responseTime = Date.now() - startTime;
-                console.log(`✅ Relay ${relayUrl} connected in ${responseTime}ms`);
-                ws.close();
-                resolve({
-                  url: relayUrl,
-                  connected: true,
-                  responseTime
-                });
-              };
-
-              ws.onerror = (error) => {
-                clearTimeout(timeout);
-                console.warn(`❌ Relay ${relayUrl} failed to connect:`, error);
-                resolve({
-                  url: relayUrl,
-                  connected: false
-                });
-              };
-            });
-          } catch (error) {
-            console.warn(`❌ Relay ${relayUrl} connection error:`, error);
-            return {
-              url: relayUrl,
-              connected: false
-            };
-          }
-        })
-      );
-
-      connectedCount = relayStatuses.filter(r => r.connected).length;
-      console.log(`Total connected relays: ${connectedCount}/${relays.length}`);
-
-      setParameters({
-        relays,
-        relayStatuses,
-        electrumServers,
-        exchangeRates,
-        split,
-        version,
-        validFrom,
-        connectedRelays: connectedCount,
-        isLoading: false,
-        trustedSigners
-      });
-
-      // Store in sessionStorage only on success
-      sessionStorage.setItem('lana_system_parameters', JSON.stringify({
-        relays,
-        relayStatuses,
-        electrumServers,
-        exchangeRates,
-        split,
-        version,
-        validFrom,
-        connectedRelays: connectedCount,
-        trustedSigners
+      // Create relay statuses - mark all as connected since we got data from DB
+      // Server-side sync validates relay connectivity
+      const relayStatuses: RelayStatus[] = relays.map(url => ({
+        url,
+        connected: true,
+        responseTime: undefined
       }));
 
-      // Set connected state based on relay count
-      setConnectionState(connectedCount > 0 ? 'connected' : 'disconnected');
-      
+      const systemParams: SystemParameters = {
+        relays,
+        relayStatuses,
+        electrumServers,
+        exchangeRates,
+        split: data.split || '',
+        version: data.version || '',
+        validFrom: data.valid_from ? new Date(data.valid_from * 1000).toISOString() : '',
+        connectedRelays: relays.length,
+        isLoading: false,
+        trustedSigners
+      };
+
+      setParameters(systemParams);
+      setConnectionState('connected');
+
+      // Cache in sessionStorage for immediate access on page refresh
+      sessionStorage.setItem('lana_system_parameters', JSON.stringify(systemParams));
+
+      console.log(`✅ System parameters loaded: ${relays.length} relays, version ${data.version}`);
+
     } catch (error) {
       console.error('❌ Error fetching system parameters:', error);
       
-      // NO FALLBACK - If relays don't work, don't show cached data
-      // Clear any old cached data to prevent stale data from being used
-      sessionStorage.removeItem('lana_system_parameters');
-      console.error('❌ Cannot connect to relays - no cached data will be used');
+      // Try sessionStorage cache as fallback
+      const cached = sessionStorage.getItem('lana_system_parameters');
+      if (cached) {
+        try {
+          const cachedParams = JSON.parse(cached);
+          console.log('📦 Using cached system parameters');
+          setParameters(cachedParams);
+          setConnectionState('connected');
+          return;
+        } catch (e) {
+          console.warn('Failed to parse cached parameters');
+        }
+      }
+
       setParameters(null);
       setConnectionState('error');
       
-      // Retry after 10 seconds
-      console.log('🔄 Retrying connection in 10 seconds...');
+      // Retry after 15 seconds
+      console.log('🔄 Retrying in 15 seconds...');
       setTimeout(() => {
-        console.log('🔄 Retrying connection...');
         fetchSystemParameters();
-      }, 10000);
+      }, 15000);
     } finally {
       setIsLoading(false);
-      pool.close(DEFAULT_RELAYS);
+    }
+  }, []);
+
+  const triggerSync = async () => {
+    try {
+      console.log('🔄 Triggering sync-kind-38888 edge function...');
+      
+      const { data, error } = await supabase.functions.invoke('sync-kind-38888');
+      
+      if (error) {
+        console.error('❌ Sync edge function error:', error);
+        throw error;
+      }
+
+      console.log('✅ Sync completed:', data);
+      
+      // Re-fetch after sync
+      await fetchSystemParameters();
+    } catch (error) {
+      console.error('❌ Failed to trigger sync:', error);
+      setConnectionState('error');
     }
   };
+
+  useEffect(() => {
+    fetchSystemParameters();
+  }, [fetchSystemParameters]);
 
   return (
     <SystemParametersContext.Provider value={{ parameters, isLoading, connectionState, refetch: fetchSystemParameters }}>
