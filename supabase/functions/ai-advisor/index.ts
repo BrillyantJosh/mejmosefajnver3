@@ -257,21 +257,76 @@ function parseJSON<T>(text: string, fallback: T): T {
   }
 }
 
-// ==================== TRIAD EXECUTION ====================
+// ==================== TRIAD EXECUTION WITH STREAMING PROGRESS ====================
 
-async function executeTriad(
+// Progress messages by language
+const PROGRESS_MESSAGES: Record<string, { builder: string; skeptic: string; mediator: string }> = {
+  sl: {
+    builder: "🔨 Pripravljam odgovor...",
+    skeptic: "🔍 Preverjam točnost...",
+    mediator: "⚖️ Sintetiziram končni odgovor...",
+  },
+  en: {
+    builder: "🔨 Preparing response...",
+    skeptic: "🔍 Verifying accuracy...",
+    mediator: "⚖️ Synthesizing final answer...",
+  },
+  de: {
+    builder: "🔨 Antwort vorbereiten...",
+    skeptic: "🔍 Genauigkeit überprüfen...",
+    mediator: "⚖️ Endgültige Antwort synthetisieren...",
+  },
+  hr: {
+    builder: "🔨 Pripremam odgovor...",
+    skeptic: "🔍 Provjeravam točnost...",
+    mediator: "⚖️ Sintetiziram konačni odgovor...",
+  },
+  hu: {
+    builder: "🔨 Válasz előkészítése...",
+    skeptic: "🔍 Pontosság ellenőrzése...",
+    mediator: "⚖️ Végső válasz szintetizálása...",
+  },
+  it: {
+    builder: "🔨 Preparazione risposta...",
+    skeptic: "🔍 Verifica accuratezza...",
+    mediator: "⚖️ Sintesi risposta finale...",
+  },
+  es: {
+    builder: "🔨 Preparando respuesta...",
+    skeptic: "🔍 Verificando precisión...",
+    mediator: "⚖️ Sintetizando respuesta final...",
+  },
+  pt: {
+    builder: "🔨 Preparando resposta...",
+    skeptic: "🔍 Verificando precisão...",
+    mediator: "⚖️ Sintetizando resposta final...",
+  },
+};
+
+function getProgressMessages(lang: string) {
+  const langCode = (lang?.split('-')[0] || 'en').toLowerCase();
+  return PROGRESS_MESSAGES[langCode] || PROGRESS_MESSAGES.en;
+}
+
+interface ProgressCallback {
+  (phase: 'builder' | 'skeptic' | 'mediator'): void;
+}
+
+async function executeTriadWithProgress(
   apiKey: string,
   userQuestion: string,
   contextMessage: string,
-  language: string
+  language: string,
+  onProgress: ProgressCallback
 ): Promise<{ mediator: MediatorResponse; builder: BuilderResponse; skeptic: SkepticResponse; totalUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } }> {
   const langInstruction = getLanguageInstruction(language);
-  const fastModel = "google/gemini-2.5-flash-lite"; // Fast model for Builder & Skeptic
-  const smartModel = "google/gemini-3-flash-preview"; // Better model for Mediator
+  const fastModel = "google/gemini-2.5-flash-lite";
+  const smartModel = "google/gemini-3-flash-preview";
 
   let totalUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
 
   // Step 1: BUILDER
+  onProgress('builder');
   console.log("🔨 BUILDER starting...");
   const builderPrompt = BUILDER_PROMPT + langInstruction + "\n\n" + contextMessage;
   const builderResult = await callAI(apiKey, fastModel, builderPrompt, [{ role: "user", content: userQuestion }]);
@@ -290,6 +345,7 @@ async function executeTriad(
   console.log("🔨 BUILDER done:", builderResponse.answer.substring(0, 100));
 
   // Step 2: SKEPTIC
+  onProgress('skeptic');
   console.log("🔍 SKEPTIC starting...");
   const skepticInput = `USER QUESTION:\n${userQuestion}\n\nBUILDER'S RESPONSE:\n${JSON.stringify(builderResponse, null, 2)}\n\nUSER DATA CONTEXT:\n${contextMessage}`;
   const skepticResult = await callAI(apiKey, fastModel, SKEPTIC_PROMPT, [{ role: "user", content: skepticInput }]);
@@ -306,6 +362,7 @@ async function executeTriad(
   console.log("🔍 SKEPTIC done, found", skepticResponse.claims_to_verify.length, "claims to verify");
 
   // Step 3: MEDIATOR
+  onProgress('mediator');
   console.log("⚖️ MEDIATOR starting...");
   const mediatorInput = `USER QUESTION:\n${userQuestion}\n\nBUILDER JSON:\n${JSON.stringify(builderResponse, null, 2)}\n\nSKEPTIC JSON:\n${JSON.stringify(skepticResponse, null, 2)}\n\nUSER DATA CONTEXT (for reference):\n${contextMessage}`;
   const mediatorPrompt = MEDIATOR_PROMPT + langInstruction;
@@ -315,7 +372,7 @@ async function executeTriad(
   totalUsage.total_tokens += mediatorResult.usage.total_tokens;
 
   const mediatorResponse = parseJSON<MediatorResponse>(mediatorResult.content, {
-    final_answer: builderResponse.answer, // Fallback to builder if mediator fails
+    final_answer: builderResponse.answer,
     confidence: 50,
     what_i_did: builderResponse.steps_taken,
     what_i_did_not_do: builderResponse.unknowns,
@@ -384,52 +441,121 @@ serve(async (req) => {
       contextMessage += `\n\n=== LANA KNOWLEDGE BASE ===\n${knowledgeContext}\n=== END KNOWLEDGE BASE ===`;
     }
 
-    // Execute the triad
-    const { mediator, builder, skeptic, totalUsage } = await executeTriad(
-      LOVABLE_API_KEY,
-      lastUserMessage,
-      contextMessage,
-      language || 'sl'
-    );
-
-    // Log usage
-    if (nostrHexId) {
-      await logUsage(nostrHexId, "triad-system", totalUsage, usdToLanaRate || 270);
-    }
-
-    // Build the final response with triad metadata
-    const triadResult = {
-      type: "triad",
-      final_answer: mediator.final_answer,
-      confidence: mediator.confidence,
-      what_i_did: mediator.what_i_did,
-      what_i_did_not_do: mediator.what_i_did_not_do,
-      next_step: mediator.next_step,
-      // Debug info (optional - can be hidden in UI)
-      _debug: {
-        builder: {
-          answer_preview: builder.answer.substring(0, 200),
-          assumptions: builder.assumptions,
-          risks: builder.risks,
-          questions: builder.questions,
-        },
-        skeptic: {
-          claims_to_verify: skeptic.claims_to_verify,
-          failure_modes: skeptic.failure_modes,
-          missing_info: skeptic.missing_info,
-        },
-      },
-    };
-
-    // Stream the result as SSE for compatibility with existing frontend
+    // Get progress messages in user's language
+    const progressMessages = getProgressMessages(language || 'sl');
     const encoder = new TextEncoder();
+
+    // Create a streaming response with progress updates
     const stream = new ReadableStream({
-      start(controller) {
-        // Send the full response as a single chunk
-        const chunk = `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(triadResult) } }] })}\n\n`;
-        controller.enqueue(encoder.encode(chunk));
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
+      async start(controller) {
+        try {
+          let totalUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+          let builderResponse: BuilderResponse | null = null;
+          let skepticResponse: SkepticResponse | null = null;
+          let mediatorResponse: MediatorResponse | null = null;
+
+          // Helper to send progress update
+          const sendProgress = (message: string) => {
+            const chunk = `data: ${JSON.stringify({ choices: [{ delta: { content: "" } }], progress: message })}\n\n`;
+            controller.enqueue(encoder.encode(chunk));
+          };
+
+          // Step 1: BUILDER
+          sendProgress(progressMessages.builder);
+          console.log("🔨 BUILDER starting...");
+          const langInstruction = getLanguageInstruction(language || 'sl');
+          const fastModel = "google/gemini-2.5-flash-lite";
+          const smartModel = "google/gemini-3-flash-preview";
+          
+          const builderPrompt = BUILDER_PROMPT + langInstruction + "\n\n" + contextMessage;
+          const builderResult = await callAI(LOVABLE_API_KEY, fastModel, builderPrompt, [{ role: "user", content: lastUserMessage }]);
+          totalUsage.prompt_tokens += builderResult.usage.prompt_tokens;
+          totalUsage.completion_tokens += builderResult.usage.completion_tokens;
+          totalUsage.total_tokens += builderResult.usage.total_tokens;
+
+          builderResponse = parseJSON<BuilderResponse>(builderResult.content, {
+            answer: "Ni mi uspelo analizirati vprašanja.",
+            assumptions: [],
+            steps_taken: ["Attempted analysis"],
+            unknowns: ["Analysis failed"],
+            risks: [],
+            questions: [],
+          });
+          console.log("🔨 BUILDER done");
+
+          // Step 2: SKEPTIC
+          sendProgress(progressMessages.skeptic);
+          console.log("🔍 SKEPTIC starting...");
+          const skepticInput = `USER QUESTION:\n${lastUserMessage}\n\nBUILDER'S RESPONSE:\n${JSON.stringify(builderResponse, null, 2)}\n\nUSER DATA CONTEXT:\n${contextMessage}`;
+          const skepticResult = await callAI(LOVABLE_API_KEY, fastModel, SKEPTIC_PROMPT, [{ role: "user", content: skepticInput }]);
+          totalUsage.prompt_tokens += skepticResult.usage.prompt_tokens;
+          totalUsage.completion_tokens += skepticResult.usage.completion_tokens;
+          totalUsage.total_tokens += skepticResult.usage.total_tokens;
+
+          skepticResponse = parseJSON<SkepticResponse>(skepticResult.content, {
+            claims_to_verify: [],
+            failure_modes: [],
+            missing_info: [],
+            recommended_changes: [],
+          });
+          console.log("🔍 SKEPTIC done");
+
+          // Step 3: MEDIATOR
+          sendProgress(progressMessages.mediator);
+          console.log("⚖️ MEDIATOR starting...");
+          const mediatorInput = `USER QUESTION:\n${lastUserMessage}\n\nBUILDER JSON:\n${JSON.stringify(builderResponse, null, 2)}\n\nSKEPTIC JSON:\n${JSON.stringify(skepticResponse, null, 2)}\n\nUSER DATA CONTEXT (for reference):\n${contextMessage}`;
+          const mediatorPrompt = MEDIATOR_PROMPT + langInstruction;
+          const mediatorResult = await callAI(LOVABLE_API_KEY, smartModel, mediatorPrompt, [{ role: "user", content: mediatorInput }]);
+          totalUsage.prompt_tokens += mediatorResult.usage.prompt_tokens;
+          totalUsage.completion_tokens += mediatorResult.usage.completion_tokens;
+          totalUsage.total_tokens += mediatorResult.usage.total_tokens;
+
+          mediatorResponse = parseJSON<MediatorResponse>(mediatorResult.content, {
+            final_answer: builderResponse.answer,
+            confidence: 50,
+            what_i_did: builderResponse.steps_taken,
+            what_i_did_not_do: builderResponse.unknowns,
+            next_step: "Poskusi znova ali postavi bolj specifično vprašanje.",
+          });
+          console.log("⚖️ MEDIATOR done, confidence:", mediatorResponse.confidence);
+
+          // Log usage
+          if (nostrHexId) {
+            await logUsage(nostrHexId, "triad-system", totalUsage, usdToLanaRate || 270);
+          }
+
+          // Build the final response with triad metadata
+          const triadResult = {
+            type: "triad",
+            final_answer: mediatorResponse.final_answer,
+            confidence: mediatorResponse.confidence,
+            what_i_did: mediatorResponse.what_i_did,
+            what_i_did_not_do: mediatorResponse.what_i_did_not_do,
+            next_step: mediatorResponse.next_step,
+            _debug: {
+              builder: {
+                answer_preview: builderResponse.answer.substring(0, 200),
+                assumptions: builderResponse.assumptions,
+                risks: builderResponse.risks,
+                questions: builderResponse.questions,
+              },
+              skeptic: {
+                claims_to_verify: skepticResponse.claims_to_verify,
+                failure_modes: skepticResponse.failure_modes,
+                missing_info: skepticResponse.missing_info,
+              },
+            },
+          };
+
+          // Send final result
+          const finalChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(triadResult) } }] })}\n\n`;
+          controller.enqueue(encoder.encode(finalChunk));
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        } catch (err) {
+          console.error("Triad stream error:", err);
+          controller.error(err);
+        }
       },
     });
 
