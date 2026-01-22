@@ -238,6 +238,7 @@ export default function AiAdvisor() {
   const [selectedRecipient, setSelectedRecipient] = useState<SelectedRecipient | null>(null);
   const [showRecipientSelector, setShowRecipientSelector] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [progressMessage, setProgressMessage] = useState<string | null>(null);
 
   const isSpeechSupported = typeof window !== 'undefined' && 
     ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
@@ -353,6 +354,7 @@ export default function AiAdvisor() {
     setInput('');
     setIsLoading(true);
     setError(null);
+    setProgressMessage(null);
 
     try {
       const userProjectsContext = context.userProjects ? {
@@ -426,6 +428,14 @@ export default function AiAdvisor() {
 
           try {
             const parsed = JSON.parse(jsonStr);
+            
+            // Check for progress message
+            if (parsed.progress) {
+              setProgressMessage(parsed.progress);
+              console.log('📊 Progress:', parsed.progress);
+              continue; // Don't process as content
+            }
+            
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
               assistantContent += content;
@@ -445,6 +455,7 @@ export default function AiAdvisor() {
                       triadData 
                     };
                     console.log('📝 Set message to final_answer:', triadData.final_answer.substring(0, 100));
+                    setProgressMessage(null); // Clear progress when done
                   } else {
                     // Only show raw content if NOT a triad response (fallback for non-triad)
                     // But don't show raw JSON - check if it looks like triad JSON
@@ -679,8 +690,8 @@ export default function AiAdvisor() {
                           {message.content === '' && isLoading && (
                             <div className="flex items-center gap-2">
                               <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
-                              <span className="text-xs text-muted-foreground">
-                                {userLanguage === 'sl' ? '🔨 Analiziram... ⚖️ Preverjam...' : '🔨 Analyzing... ⚖️ Verifying...'}
+                              <span className="text-xs text-muted-foreground animate-pulse">
+                                {progressMessage || (userLanguage === 'sl' ? '🔨 Uporabljam triadno razmišljanje...' : '🔨 Using triad thinking...')}
                               </span>
                             </div>
                           )}
