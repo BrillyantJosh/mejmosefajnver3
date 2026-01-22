@@ -322,11 +322,25 @@ export default function AiAdvisor() {
 
   const parseTriadResponse = (content: string): TriadResponse | null => {
     try {
-      const parsed = JSON.parse(content);
+      // Try to parse directly
+      let parsed = JSON.parse(content);
       if (parsed.type === 'triad' && parsed.final_answer) {
+        console.log('✅ Triad parsed successfully, confidence:', parsed.confidence);
         return parsed as TriadResponse;
       }
-    } catch { /* Not a triad response */ }
+    } catch (e) {
+      // Try to extract JSON from content if wrapped in other text
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*"type"\s*:\s*"triad"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.type === 'triad' && parsed.final_answer) {
+            console.log('✅ Triad extracted and parsed, confidence:', parsed.confidence);
+            return parsed as TriadResponse;
+          }
+        }
+      } catch { /* Still not valid */ }
+    }
     return null;
   };
 
@@ -424,13 +438,23 @@ export default function AiAdvisor() {
                 const lastIndex = newMessages.length - 1;
                 if (newMessages[lastIndex]?.role === 'assistant') {
                   if (triadData) {
+                    // ✅ Use ONLY the final_answer as display content
                     newMessages[lastIndex] = { 
                       role: 'assistant', 
                       content: triadData.final_answer,
                       triadData 
                     };
+                    console.log('📝 Set message to final_answer:', triadData.final_answer.substring(0, 100));
                   } else {
-                    newMessages[lastIndex] = { role: 'assistant', content: assistantContent };
+                    // Only show raw content if NOT a triad response (fallback for non-triad)
+                    // But don't show raw JSON - check if it looks like triad JSON
+                    const looksLikeTriadJson = assistantContent.includes('"type":"triad"') || assistantContent.includes('"final_answer"');
+                    if (looksLikeTriadJson) {
+                      // Still parsing, show loading indicator
+                      newMessages[lastIndex] = { role: 'assistant', content: '' };
+                    } else {
+                      newMessages[lastIndex] = { role: 'assistant', content: assistantContent };
+                    }
                   }
                 }
                 return newMessages;
