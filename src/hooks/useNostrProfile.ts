@@ -109,9 +109,31 @@ export const useNostrProfile = () => {
         } catch (error) {
           console.error('Failed to parse profile content:', error);
         }
+      } else {
+        // No profile found from relay - use session fallback if available
+        console.log('No profile from relay, checking session fallback...');
+        if (session?.profileName || session?.profileDisplayName || session?.profileLang) {
+          console.log('Using session fallback for profile');
+          setProfile({
+            name: session.profileName,
+            display_name: session.profileDisplayName,
+            lang: session.profileLang,
+            currency: session.profileCurrency,
+          });
+        }
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
+      // On error, also use session fallback
+      if (session?.profileName || session?.profileDisplayName || session?.profileLang) {
+        console.log('Using session fallback after error');
+        setProfile({
+          name: session.profileName,
+          display_name: session.profileDisplayName,
+          lang: session.profileLang,
+          currency: session.profileCurrency,
+        });
+      }
     } finally {
       setIsLoading(false);
       pool.close(relays);

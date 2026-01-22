@@ -231,7 +231,9 @@ export default function AiAdvisor() {
   const { session } = useAuth();
   
   const nostrHexId = session?.nostrHexId || '';
-  const userLanguage = profile?.lang || 'en';
+  
+  // Robust language fallback chain: profile > session > context > default 'sl'
+  const userLanguage = profile?.lang || session?.profileLang || context.userProfile?.language || 'sl';
   const trans = getTranslation(userLanguage);
   
   const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null);
@@ -349,6 +351,21 @@ export default function AiAdvisor() {
     const messageContent = overrideInput || input.trim();
     if (!messageContent || isLoading) return;
 
+    // Check if data is still loading - warn user
+    if (context.isLoading || eventsLoading) {
+      toast.info(userLanguage === 'sl' 
+        ? 'Počakaj trenutek, nalagam podatke...' 
+        : 'Please wait, loading data...');
+      return;
+    }
+    
+    // Warn if connection error (but don't block)
+    if (context.connectionState === 'error') {
+      toast.warning(userLanguage === 'sl'
+        ? 'Opozorilo: Težave s povezavo, podatki morda niso posodobljeni.'
+        : 'Warning: Connection issues, data may not be up to date.');
+    }
+
     const userMessage: Message = { role: 'user', content: messageContent };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
@@ -392,6 +409,8 @@ export default function AiAdvisor() {
             events: eventsContext,
             recentChats: context.recentChats,
             connectionState: context.connectionState,
+            isDataLoading: context.isLoading || eventsLoading,
+            eventsFetchStatus: eventsFetchStatus,
           },
           language: userLanguage,
           nostrHexId,
