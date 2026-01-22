@@ -4,9 +4,14 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
-// VERSION: 2.1 - Cache busting build
+// VERSION: 2.2 - Fixed PWA caching - aggressive service worker updates
+const APP_VERSION = '2.2.0';
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(APP_VERSION),
+  },
   build: {
     rollupOptions: {
       output: {
@@ -28,6 +33,10 @@ export default defineConfig(({ mode }) => ({
       includeAssets: ["favicon.png", "icon-192.png", "icon-512.png"],
       manifest: false, // Using external manifest.json
       workbox: {
+        // Force immediate takeover of new service worker
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         // Only precache essential files, not large module images
         globPatterns: ["**/*.{js,css,html,ico,svg,woff2}"],
         // Exclude large images from precaching

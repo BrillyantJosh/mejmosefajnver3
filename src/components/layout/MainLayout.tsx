@@ -1,4 +1,4 @@
-// VERSION: 2.1 - Enlightened AI Menu - 2026-01-19
+// VERSION: 2.2 - PWA Cache Fix + Version Display - 2026-01-22
 import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot } from "lucide-react";
@@ -46,6 +46,27 @@ export default function MainLayout() {
   const lastRefreshRef = useRef<number>(Date.now());
 
   const dynamicModules = getEnabledModules();
+  const appVersion = import.meta.env.VITE_APP_VERSION || 'dev';
+
+  // Version check - clear caches on version mismatch
+  useEffect(() => {
+    const storedVersion = localStorage.getItem('app_version');
+    
+    if (storedVersion !== appVersion) {
+      console.log(`[Version] Mismatch detected: ${storedVersion} -> ${appVersion}`);
+      localStorage.setItem('app_version', appVersion);
+      
+      // Clear service worker caches on version change
+      if (storedVersion && 'caches' in window) {
+        console.log('[Version] Clearing old caches...');
+        caches.keys().then(names => {
+          names.forEach(name => {
+            caches.delete(name);
+          });
+        });
+      }
+    }
+  }, [appVersion]);
 
   // --- PWA install prompt state (shared for banner + header) ---
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
@@ -399,6 +420,11 @@ export default function MainLayout() {
       <main className="container px-4 py-6">
         <Outlet />
       </main>
+
+      {/* Version indicator for debugging */}
+      <div className="fixed bottom-2 right-2 text-[10px] text-muted-foreground/50 pointer-events-none z-50">
+        v{appVersion}
+      </div>
     </div>
   );
 }
