@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Bot, Send, User, Loader2, RefreshCw, Sparkles, ExternalLink, Coins, Mic, MicOff } from 'lucide-react';
+import { Bot, Send, User, Loader2, RefreshCw, Sparkles, ExternalLink, Coins, Mic, MicOff, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, HelpCircle } from 'lucide-react';
 import { useAiAdvisorContext } from '@/hooks/useAiAdvisorContext';
 import { useAiAdvisorEvents } from '@/hooks/useAiAdvisorEvents';
 import { useAiUsageThisMonth } from '@/hooks/useAiUsageThisMonth';
@@ -18,6 +18,7 @@ import { t, getTranslation } from '@/lib/aiAdvisorTranslations';
 import { getExchangeRates } from '@/lib/currencyConversion';
 import { getProxiedImageUrl } from '@/lib/imageProxy';
 import { toast } from 'sonner';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface MessagePart {
   type: 'text' | 'image' | 'link';
@@ -28,54 +29,61 @@ interface MessagePart {
 
 const parseMessageContent = (content: string): MessagePart[] => {
   const parts: MessagePart[] = [];
-  // Match markdown images ![alt](url) and markdown links [text](url)
   const combinedRegex = /!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)/g;
   
   let lastIndex = 0;
   let match;
   
   while ((match = combinedRegex.exec(content)) !== null) {
-    // Add text before match
     if (match.index > lastIndex) {
       const text = content.slice(lastIndex, match.index).trim();
-      if (text) {
-        parts.push({ type: 'text', content: text });
-      }
+      if (text) parts.push({ type: 'text', content: text });
     }
     
     if (match[1] !== undefined || match[2] !== undefined) {
-      // Image: ![alt](url)
-      parts.push({
-        type: 'image',
-        content: match[2],
-        alt: match[1]
-      });
+      parts.push({ type: 'image', content: match[2], alt: match[1] });
     } else {
-      // Link: [text](url)
-      parts.push({
-        type: 'link',
-        content: match[3],
-        url: match[4]
-      });
+      parts.push({ type: 'link', content: match[3], url: match[4] });
     }
     
     lastIndex = match.index + match[0].length;
   }
   
-  // Add remaining text
   if (lastIndex < content.length) {
     const text = content.slice(lastIndex).trim();
-    if (text) {
-      parts.push({ type: 'text', content: text });
-    }
+    if (text) parts.push({ type: 'text', content: text });
   }
   
   return parts.length > 0 ? parts : [{ type: 'text', content }];
 };
 
+// Triad response interface
+interface TriadResponse {
+  type: 'triad';
+  final_answer: string;
+  confidence: number;
+  what_i_did: string[];
+  what_i_did_not_do: string[];
+  next_step: string;
+  _debug?: {
+    builder: {
+      answer_preview: string;
+      assumptions: string[];
+      risks: string[];
+      questions: string[];
+    };
+    skeptic: {
+      claims_to_verify: string[];
+      failure_modes: string[];
+      missing_info: string[];
+    };
+  };
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  triadData?: TriadResponse;
 }
 
 interface PaymentIntent {
@@ -118,6 +126,93 @@ interface SpeechRecognitionAlternative {
   confidence: number;
 }
 
+// Confidence badge component
+function ConfidenceBadge({ confidence }: { confidence: number }) {
+  const variant = confidence >= 80 ? 'default' : confidence >= 50 ? 'secondary' : 'destructive';
+  const icon = confidence >= 80 ? <CheckCircle2 className="h-3 w-3" /> : confidence >= 50 ? <HelpCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />;
+  
+  return (
+    <Badge variant={variant} className="flex items-center gap-1 text-[10px]">
+      {icon}
+      <span>{confidence}%</span>
+    </Badge>
+  );
+}
+
+// Triad debug panel component
+function TriadDebugPanel({ triadData, language }: { triadData: TriadResponse; language: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const isSl = language === 'sl';
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mt-3 border-t pt-2">
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" size="sm" className="w-full justify-between text-xs text-muted-foreground h-7">
+          <span>{isSl ? '🔍 Pokaži razmišljanje AI' : '🔍 Show AI reasoning'}</span>
+          {isOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-3 pt-2">
+        {/* What I did / didn't do */}
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-green-500/10 rounded p-2">
+            <div className="font-medium text-green-600 mb-1">✅ {isSl ? 'Kaj sem naredil' : 'What I did'}</div>
+            <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
+              {triadData.what_i_did.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="bg-orange-500/10 rounded p-2">
+            <div className="font-medium text-orange-600 mb-1">⚠️ {isSl ? 'Česar nisem naredil' : 'What I didn\'t do'}</div>
+            <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
+              {triadData.what_i_did_not_do.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* Next step */}
+        {triadData.next_step && (
+          <div className="bg-blue-500/10 rounded p-2 text-xs">
+            <div className="font-medium text-blue-600 mb-1">💡 {isSl ? 'Naslednji korak' : 'Next step'}</div>
+            <p className="text-muted-foreground">{triadData.next_step}</p>
+          </div>
+        )}
+
+        {/* Debug info from Builder & Skeptic */}
+        {triadData._debug && (
+          <div className="space-y-2 border-t pt-2">
+            <div className="text-[10px] text-muted-foreground font-medium uppercase">{isSl ? 'Notranji proces' : 'Internal Process'}</div>
+            
+            {triadData._debug.builder.risks.length > 0 && (
+              <div className="text-xs">
+                <span className="text-yellow-600">⚡ {isSl ? 'Tveganja' : 'Risks'}:</span>
+                <span className="text-muted-foreground ml-1">{triadData._debug.builder.risks.join(', ')}</span>
+              </div>
+            )}
+            
+            {triadData._debug.skeptic.claims_to_verify.length > 0 && (
+              <div className="text-xs">
+                <span className="text-red-600">🔍 {isSl ? 'Za preveriti' : 'To verify'}:</span>
+                <span className="text-muted-foreground ml-1">{triadData._debug.skeptic.claims_to_verify.join(', ')}</span>
+              </div>
+            )}
+            
+            {triadData._debug.builder.questions.length > 0 && (
+              <div className="text-xs">
+                <span className="text-purple-600">❓ {isSl ? 'Vprašanja' : 'Questions'}:</span>
+                <span className="text-muted-foreground ml-1">{triadData._debug.builder.questions.join(', ')}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 export default function AiAdvisor() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -135,37 +230,26 @@ export default function AiAdvisor() {
   const { profile } = useNostrProfile();
   const { session } = useAuth();
   
-  // Get user's nostr_hex_id and language from profile
   const nostrHexId = session?.nostrHexId || '';
   const userLanguage = profile?.lang || 'en';
   const trans = getTranslation(userLanguage);
   
-  // Payment flow state
   const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null);
   const [selectedRecipient, setSelectedRecipient] = useState<SelectedRecipient | null>(null);
   const [showRecipientSelector, setShowRecipientSelector] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
 
-  // Check for Web Speech API support
   const isSpeechSupported = typeof window !== 'undefined' && 
     ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 
-  // Map user language to speech recognition language
   const getSpeechLanguage = useCallback((lang: string) => {
     const langMap: Record<string, string> = {
-      'sl': 'sl-SI',
-      'en': 'en-US',
-      'de': 'de-DE',
-      'hr': 'hr-HR',
-      'hu': 'hu-HU',
-      'it': 'it-IT',
-      'es': 'es-ES',
-      'pt': 'pt-PT',
+      'sl': 'sl-SI', 'en': 'en-US', 'de': 'de-DE', 'hr': 'hr-HR',
+      'hu': 'hu-HU', 'it': 'it-IT', 'es': 'es-ES', 'pt': 'pt-PT',
     };
     return langMap[lang] || 'en-US';
   }, []);
 
-  // Initialize speech recognition
   const startListening = useCallback(() => {
     if (!isSpeechSupported) {
       toast.error(userLanguage === 'sl' ? 'Glasovno prepoznavanje ni podprto v tem brskalniku' : 'Speech recognition not supported in this browser');
@@ -179,41 +263,21 @@ export default function AiAdvisor() {
     recognition.interimResults = true;
     recognition.lang = getSpeechLanguage(userLanguage);
     
-    recognition.onstart = () => {
-      setIsListening(true);
-      console.log('🎤 Speech recognition started');
-    };
-    
+    recognition.onstart = () => { setIsListening(true); };
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTranscript = '';
-      let interimTranscript = '';
-      
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript;
-        } else {
-          interimTranscript += transcript;
-        }
+        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
       }
-      
-      if (finalTranscript) {
-        setInput(prev => prev + finalTranscript);
-      }
+      if (finalTranscript) setInput(prev => prev + finalTranscript);
     };
-    
     recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
       setIsListening(false);
       if (event.error === 'not-allowed') {
         toast.error(userLanguage === 'sl' ? 'Dostop do mikrofona ni dovoljen' : 'Microphone access denied');
       }
     };
-    
-    recognition.onend = () => {
-      setIsListening(false);
-      console.log('🎤 Speech recognition ended');
-    };
+    recognition.onend = () => { setIsListening(false); };
     
     recognitionRef.current = recognition;
     recognition.start();
@@ -228,28 +292,18 @@ export default function AiAdvisor() {
   }, []);
 
   const toggleListening = useCallback(() => {
-    if (isListening) {
-      stopListening();
-    } else {
-      startListening();
-    }
+    if (isListening) stopListening();
+    else startListening();
   }, [isListening, startListening, stopListening]);
 
-  // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    };
+    return () => { if (recognitionRef.current) recognitionRef.current.stop(); };
   }, []);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      }
+      if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
     }
   }, [messages]);
 
@@ -259,17 +313,20 @@ export default function AiAdvisor() {
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         if (parsed.action === 'payment' && parsed.recipient && parsed.amount) {
-          return {
-            recipient: parsed.recipient,
-            amount: parsed.amount,
-            currency: parsed.currency || 'LANA',
-            sourceWallet: parsed.sourceWallet || 'Main Wallet',
-          };
+          return { recipient: parsed.recipient, amount: parsed.amount, currency: parsed.currency || 'LANA', sourceWallet: parsed.sourceWallet || 'Main Wallet' };
         }
       }
-    } catch (e) {
-      // Not a payment intent
-    }
+    } catch { /* Not a payment intent */ }
+    return null;
+  };
+
+  const parseTriadResponse = (content: string): TriadResponse | null => {
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed.type === 'triad' && parsed.final_answer) {
+        return parsed as TriadResponse;
+      }
+    } catch { /* Not a triad response */ }
     return null;
   };
 
@@ -277,20 +334,13 @@ export default function AiAdvisor() {
     const messageContent = overrideInput || input.trim();
     if (!messageContent || isLoading) return;
 
-    // Debug log: check what unconditional payments data we're sending
-    console.log(`🔍 AI Advisor sendMessage: nostrHexId=${nostrHexId?.substring(0, 16)}..., unconditionalPayments.pendingCount=${context.unconditionalPayments?.pendingCount ?? 'N/A'}, pendingPayments.length=${context.unconditionalPayments?.pendingPayments?.length ?? 'N/A'}, context.isLoading=${context.isLoading}`);
-    console.log(`💬 recentChats: totalChats=${context.recentChats?.totalChats ?? 'N/A'}, totalUnread=${context.recentChats?.totalUnread ?? 'N/A'}, hasNewMessages=${context.recentChats?.hasNewMessages ?? 'N/A'}`);
-
     const userMessage: Message = { role: 'user', content: messageContent };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
     setError(null);
 
-    let assistantContent = '';
-
     try {
-      // Prepare userProjects context with serializable data
       const userProjectsContext = context.userProjects ? {
         projectCount: context.userProjects.projectCount,
         totalRaised: context.userProjects.totalRaised,
@@ -300,12 +350,10 @@ export default function AiAdvisor() {
         fullyFundedCount: context.userProjects.fullyFundedCount,
         activeCount: context.userProjects.activeCount,
         draftCount: context.userProjects.draftCount,
-        // User's own projects with donations
         myProjects: context.userProjects.projects.map(p => ({
           ...p,
           donations: context.userProjects?.getProjectDonations(p.id) || [],
         })),
-        // ALL active projects for searching (without detailed donations to save tokens)
         allActiveProjects: context.userProjects.allActiveProjects,
         totalActiveProjectsCount: context.userProjects.allActiveProjects.length,
       } : null;
@@ -327,7 +375,6 @@ export default function AiAdvisor() {
             userProjects: userProjectsContext,
             events: eventsContext,
             recentChats: context.recentChats,
-            // Connection state for distinguishing "no data" vs "can't connect"
             connectionState: context.connectionState,
           },
           language: userLanguage,
@@ -342,6 +389,7 @@ export default function AiAdvisor() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let textBuffer = '';
+      let assistantContent = '';
 
       setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
@@ -367,11 +415,23 @@ export default function AiAdvisor() {
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
               assistantContent += content;
+              
+              // Try to parse as triad response
+              const triadData = parseTriadResponse(assistantContent);
+              
               setMessages(prev => {
                 const newMessages = [...prev];
                 const lastIndex = newMessages.length - 1;
                 if (newMessages[lastIndex]?.role === 'assistant') {
-                  newMessages[lastIndex] = { role: 'assistant', content: assistantContent };
+                  if (triadData) {
+                    newMessages[lastIndex] = { 
+                      role: 'assistant', 
+                      content: triadData.final_answer,
+                      triadData 
+                    };
+                  } else {
+                    newMessages[lastIndex] = { role: 'assistant', content: assistantContent };
+                  }
                 }
                 return newMessages;
               });
@@ -383,11 +443,14 @@ export default function AiAdvisor() {
         }
       }
 
-      // Check for payment intent
-      const intent = parsePaymentIntent(assistantContent);
-      if (intent) {
-        setPaymentIntent(intent);
-        setShowRecipientSelector(true);
+      // Check for payment intent in final answer
+      const finalMessage = messages[messages.length - 1];
+      if (finalMessage?.triadData?.final_answer) {
+        const intent = parsePaymentIntent(finalMessage.triadData.final_answer);
+        if (intent) {
+          setPaymentIntent(intent);
+          setShowRecipientSelector(true);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get response');
@@ -416,15 +479,9 @@ export default function AiAdvisor() {
     setSelectedRecipient(null);
     
     if (success && txHash) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `${t('txSuccess', userLanguage)}\n\n${t('txHash', userLanguage)}: ${txHash}`,
-      }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: `${t('txSuccess', userLanguage)}\n\n${t('txHash', userLanguage)}: ${txHash}` }]);
     } else if (error) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: t('txError', userLanguage, { error }),
-      }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: t('txError', userLanguage, { error }) }]);
     }
   };
 
@@ -438,9 +495,7 @@ export default function AiAdvisor() {
 
   const getSourceWallet = () => {
     if (!paymentIntent || !context.wallets?.details) return null;
-    const wallet = context.wallets.details.find(
-      w => w.walletType === paymentIntent.sourceWallet || w.walletType === 'Main Wallet'
-    );
+    const wallet = context.wallets.details.find(w => w.walletType === paymentIntent.sourceWallet || w.walletType === 'Main Wallet');
     return wallet || context.wallets.details.find(w => w.walletType === 'Wallet');
   };
 
@@ -453,11 +508,8 @@ export default function AiAdvisor() {
     return rate > 0 ? paymentIntent.amount / rate : 0;
   };
 
-  // Localized suggested questions - include project questions if user has projects
   const suggestedQuestions = useMemo(() => {
     const baseQuestions = [trans.showBalances, trans.totalBalance];
-    
-    // Add project-related questions if user has projects
     if (context.userProjects && context.userProjects.projectCount > 0) {
       baseQuestions.push(trans.myProjects || 'Show my projects');
       baseQuestions.push(trans.projectDonations || 'Who donated to my projects?');
@@ -465,19 +517,13 @@ export default function AiAdvisor() {
       baseQuestions.push(trans.payBoris);
       baseQuestions.push(trans.sendFromMain);
     }
-    
     return baseQuestions;
   }, [trans, context.userProjects]);
 
   if (showRecipientSelector && paymentIntent) {
     return (
       <div className="container max-w-4xl mx-auto p-4">
-        <RecipientSelector
-          searchQuery={paymentIntent.recipient}
-          language={userLanguage}
-          onSelect={handleRecipientSelect}
-          onCancel={handlePaymentCancel}
-        />
+        <RecipientSelector searchQuery={paymentIntent.recipient} language={userLanguage} onSelect={handleRecipientSelect} onCancel={handlePaymentCancel} />
       </div>
     );
   }
@@ -544,27 +590,15 @@ export default function AiAdvisor() {
                   {trans.askOrSendPayment}
                 </p>
                 
-                {/* Primary quick actions - most common questions */}
                 <div className="flex flex-col sm:flex-row flex-wrap gap-2 justify-center mb-3 sm:mb-4 w-full max-w-lg">
-                  <Button 
-                    variant="default" 
-                    size="sm" 
-                    onClick={() => sendMessage(userLanguage === 'sl' ? 'Kaj je novega pri meni?' : 'What\'s new with me?')}
-                    className="text-xs sm:text-sm w-full sm:w-auto"
-                  >
+                  <Button variant="default" size="sm" onClick={() => sendMessage(userLanguage === 'sl' ? 'Kaj je novega pri meni?' : 'What\'s new with me?')} className="text-xs sm:text-sm w-full sm:w-auto">
                     {userLanguage === 'sl' ? '🔔 Kaj je novega pri meni?' : '🔔 What\'s new with me?'}
                   </Button>
-                  <Button 
-                    variant="default" 
-                    size="sm" 
-                    onClick={() => sendMessage(userLanguage === 'sl' ? 'Kaj je novega v Lana Svetu?' : 'What\'s new in Lana World?')}
-                    className="text-xs sm:text-sm w-full sm:w-auto"
-                  >
+                  <Button variant="default" size="sm" onClick={() => sendMessage(userLanguage === 'sl' ? 'Kaj je novega v Lana Svetu?' : 'What\'s new in Lana World?')} className="text-xs sm:text-sm w-full sm:w-auto">
                     {userLanguage === 'sl' ? '🌍 Kaj je novega v Lana Svetu?' : '🌍 What\'s new in Lana World?'}
                   </Button>
                 </div>
                 
-                {/* Secondary suggested questions */}
                 <div className="flex flex-wrap gap-1.5 sm:gap-2 justify-center max-w-lg">
                   {suggestedQuestions.map((q, i) => (
                     <Button key={i} variant="outline" size="sm" onClick={() => { setInput(q); textareaRef.current?.focus(); }} className="text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3">
@@ -585,6 +619,14 @@ export default function AiAdvisor() {
                     <div className={cn("max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4", message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
                       {message.role === 'assistant' ? (
                         <div className="space-y-2">
+                          {/* Confidence badge for triad responses */}
+                          {message.triadData && (
+                            <div className="flex items-center justify-between mb-2">
+                              <ConfidenceBadge confidence={message.triadData.confidence} />
+                            </div>
+                          )}
+                          
+                          {/* Message content */}
                           {parseMessageContent(message.content).map((part, idx) => (
                             part.type === 'image' ? (
                               <img 
@@ -609,8 +651,19 @@ export default function AiAdvisor() {
                               <p key={idx} className="text-xs sm:text-sm whitespace-pre-wrap">{part.content}</p>
                             )
                           ))}
+                          
                           {message.content === '' && isLoading && (
-                            <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+                            <div className="flex items-center gap-2">
+                              <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+                              <span className="text-xs text-muted-foreground">
+                                {userLanguage === 'sl' ? '🔨 Analiziram... ⚖️ Preverjam...' : '🔨 Analyzing... ⚖️ Verifying...'}
+                              </span>
+                            </div>
+                          )}
+                          
+                          {/* Triad debug panel */}
+                          {message.triadData && message.content && (
+                            <TriadDebugPanel triadData={message.triadData} language={userLanguage} />
                           )}
                         </div>
                       ) : (
@@ -637,13 +690,8 @@ export default function AiAdvisor() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={isListening 
-                  ? (userLanguage === 'sl' ? '🎤 Govori...' : '🎤 Listening...') 
-                  : trans.askPlaceholder}
-                className={cn(
-                  "resize-none min-h-[40px] sm:min-h-[44px] max-h-24 sm:max-h-32 text-sm",
-                  isListening && "border-primary ring-2 ring-primary/20"
-                )}
+                placeholder={isListening ? (userLanguage === 'sl' ? '🎤 Govori...' : '🎤 Listening...') : trans.askPlaceholder}
+                className={cn("resize-none min-h-[40px] sm:min-h-[44px] max-h-24 sm:max-h-32 text-sm", isListening && "border-primary ring-2 ring-primary/20")}
                 rows={1}
                 disabled={isLoading}
               />
@@ -653,13 +701,8 @@ export default function AiAdvisor() {
                   disabled={isLoading}
                   variant={isListening ? "destructive" : "outline"}
                   size="icon" 
-                  className={cn(
-                    "flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11 transition-all",
-                    isListening && "animate-pulse"
-                  )}
-                  title={isListening 
-                    ? (userLanguage === 'sl' ? 'Ustavi snemanje' : 'Stop recording') 
-                    : (userLanguage === 'sl' ? 'Začni snemanje' : 'Start recording')}
+                  className={cn("flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11 transition-all", isListening && "animate-pulse")}
+                  title={isListening ? (userLanguage === 'sl' ? 'Ustavi snemanje' : 'Stop recording') : (userLanguage === 'sl' ? 'Začni snemanje' : 'Start recording')}
                 >
                   {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                 </Button>
