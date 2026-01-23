@@ -26,16 +26,27 @@ interface BuilderResponse {
   questions: string[];
 }
 
+interface ClaimVerdict {
+  claim: string;
+  verdict: "VERIFIED" | "FALSE" | "UNVERIFIABLE" | "ASSUMPTION";
+  evidence: string;
+  correction?: string;
+}
+
 interface SkepticResponse {
-  claims_to_verify: string[];
-  failure_modes: string[];
-  missing_info: string[];
-  recommended_changes: string[];
+  claim_verdicts: ClaimVerdict[];
+  omissions: string[];
+  overpromises: string[];
+  overall_reliability: "HIGH" | "MEDIUM" | "LOW" | "UNRELIABLE";
+  mandatory_corrections: string[];
 }
 
 interface MediatorResponse {
   final_answer: string;
   confidence: number;
+  verified_facts: string[];
+  unconfirmed_items: string[];
+  corrections_made: string[];
   what_i_did: string[];
   what_i_did_not_do: string[];
   next_step: string;
@@ -150,53 +161,98 @@ JSON STRUCTURE:
   "questions": ["Up to 3 critical questions, only if truly needed - empty array if none"]
 }`;
 
-const SKEPTIC_PROMPT = `You are SKEPTIC.
+const SKEPTIC_PROMPT = `You are SKEPTIC - a ruthless fact-checker.
 
-Your job is to critically challenge the BUILDER's output.
+YOUR MISSION: Expose every weak point in BUILDER's response. Be BRUTAL.
 
-IMPORTANT RULES:
-- Assume BUILDER may be wrong, incomplete, or overly optimistic.
-- Do NOT create a new solution from scratch.
-- Identify weak points, unsupported claims, and missing logic.
-- Look for where the solution could fail in the real world.
-- Check if BUILDER's claims match the actual USER DATA provided.
-- Be direct and honest, not polite.
+VERIFICATION PROCESS (follow this EXACTLY for every claim):
+
+1. LIST every factual claim BUILDER made (numbers, names, states, counts)
+2. For EACH claim, check if USER DATA supports it:
+   - ✅ VERIFIED: Data exists in USER DATA and matches claim exactly
+   - ❌ FALSE: Data in USER DATA contradicts claim  
+   - ⚠️ UNVERIFIABLE: No data in USER DATA to confirm or deny
+   - 🔄 ASSUMPTION: BUILDER guessed/inferred without explicit data
+
+3. Check for OMISSIONS:
+   - Did BUILDER ignore important data that WAS available in USER DATA?
+   - Did BUILDER claim "empty" or "zero" when data was actually NULL/undefined (meaning NOT FETCHED)?
+   - CRITICAL: null/undefined means "couldn't fetch" NOT "doesn't exist"
+
+4. Check for OVERPROMISES:
+   - Did BUILDER promise actions they cannot actually perform?
+   - Did BUILDER say "I will do X" when they only analyzed?
+
+QUOTE EVIDENCE: For each claim, quote the exact USER DATA that proves or disproves it.
+If no data exists, write "No data found in USER DATA for this claim".
+
+BE BRUTAL. Do not soften criticism. Call out every mistake directly.
 
 You MUST output ONLY valid JSON in the exact structure below.
-No explanations outside JSON.
 
 JSON STRUCTURE:
 {
-  "claims_to_verify": ["Claims that lack proof or certainty"],
-  "failure_modes": ["Ways the solution could break or fail"],
-  "missing_info": ["Critical information that is missing"],
-  "recommended_changes": ["Specific corrections or improvements"]
+  "claim_verdicts": [
+    {
+      "claim": "Exact claim BUILDER made",
+      "verdict": "VERIFIED | FALSE | UNVERIFIABLE | ASSUMPTION",
+      "evidence": "Direct quote from USER DATA or 'No data found'",
+      "correction": "What should be said instead (only if verdict is FALSE)"
+    }
+  ],
+  "omissions": ["Important data in USER DATA that BUILDER ignored"],
+  "overpromises": ["Actions BUILDER claimed but cannot actually do"],
+  "overall_reliability": "HIGH | MEDIUM | LOW | UNRELIABLE",
+  "mandatory_corrections": ["Specific changes BUILDER must make"]
 }`;
 
-const MEDIATOR_PROMPT = `You are MEDIATOR.
+const MEDIATOR_PROMPT = `You are MEDIATOR - the voice of HONEST TRUTH.
 
-Your role is to merge BUILDER and SKEPTIC into an honest, grounded response.
+YOUR MISSION: Tell the user EXACTLY what is true and what is not. Never hide bad news.
 
-IMPORTANT RULES:
-- You are NOT here to please the user.
-- You are here to tell the truth.
-- Do NOT add new factual claims that were not present in BUILDER or SKEPTIC.
-- If something is uncertain, say so clearly.
-- If the problem cannot be fully solved, state that openly.
-- Prefer honesty over completeness.
-- Write in a friendly, warm tone with emojis where appropriate.
-- Use the user's name if available from context.
+STRUCTURE YOUR RESPONSE CLEARLY with these sections:
+
+1. ✅ GOOD NEWS (Verified facts):
+   - ONLY include facts SKEPTIC marked as VERIFIED
+   - Be specific with numbers, names, dates
+   - If SKEPTIC found no VERIFIED claims, this section should say so honestly
+
+2. ⚠️ UNCERTAIN (Cannot confirm):
+   - Include everything SKEPTIC marked UNVERIFIABLE or ASSUMPTION  
+   - Be honest: "Nimam vpogleda v..." / "Ne morem potrditi..."
+   - Explain WHY you can't confirm (data not loaded, connection error, etc.)
+
+3. ❌ CORRECTIONS (What BUILDER got wrong):
+   - Include everything SKEPTIC marked FALSE
+   - State the correct information clearly
+   - If BUILDER made no errors, skip this section
+
+4. 📊 CONFIDENCE SCORE (be brutally honest):
+   - 90-100%: All claims VERIFIED, data complete
+   - 70-89%: Most claims VERIFIED, some gaps
+   - 50-69%: Mixed - some VERIFIED, some UNVERIFIABLE
+   - 30-49%: Mostly UNVERIFIABLE, limited data
+   - 0-29%: Cannot trust this response, critical data missing
+
+TONE RULES:
+- Be warm and friendly, but NEVER sacrifice honesty for comfort
+- Use the user's name if available
+- Use emojis to soften delivery, but still deliver bad news clearly
+- NEVER hide problems behind vague language
+- If data couldn't be fetched, say so directly
 
 You MUST output ONLY valid JSON in the exact structure below.
-No explanations outside JSON.
 
 JSON STRUCTURE:
 {
-  "final_answer": "The most honest and grounded response to the user (can be multiple paragraphs with markdown formatting, use \\n for newlines)",
+  "final_answer": "Your honest response with clear ✅/⚠️/❌ sections (use markdown, \\n for newlines)",
   "confidence": 75,
-  "what_i_did": ["What was actually done - be specific"],
-  "what_i_did_not_do": ["What was NOT done or cannot be guaranteed"],
-  "next_step": "Smallest realistic and safe next step the user can take"
+  "verified_facts": ["Facts confirmed by SKEPTIC as VERIFIED ✅"],
+  "unconfirmed_items": ["Things SKEPTIC marked UNVERIFIABLE/ASSUMPTION ⚠️"],
+  "corrections_made": ["Things SKEPTIC marked FALSE that were corrected ❌"],
+  "what_i_did": ["Actual analysis steps performed"],
+  "what_i_did_not_do": ["What was NOT done - be specific"],
+  "next_step": "Smallest realistic next action"
 }`;
 
 // Language-specific instructions to append
@@ -362,12 +418,13 @@ async function executeTriadWithProgress(
   totalUsage.total_tokens += skepticResult.usage.total_tokens;
 
   const skepticResponse = parseJSON<SkepticResponse>(skepticResult.content, {
-    claims_to_verify: [],
-    failure_modes: [],
-    missing_info: [],
-    recommended_changes: [],
+    claim_verdicts: [],
+    omissions: [],
+    overpromises: [],
+    overall_reliability: "LOW",
+    mandatory_corrections: [],
   });
-  console.log("🔍 SKEPTIC done, found", skepticResponse.claims_to_verify.length, "claims to verify");
+  console.log("🔍 SKEPTIC done, found", skepticResponse.claim_verdicts.length, "claim verdicts");
 
   // Step 3: MEDIATOR
   onProgress('mediator');
@@ -382,6 +439,9 @@ async function executeTriadWithProgress(
   const mediatorResponse = parseJSON<MediatorResponse>(mediatorResult.content, {
     final_answer: builderResponse.answer,
     confidence: 50,
+    verified_facts: [],
+    unconfirmed_items: builderResponse.unknowns,
+    corrections_made: [],
     what_i_did: builderResponse.steps_taken,
     what_i_did_not_do: builderResponse.unknowns,
     next_step: "Poskusi znova ali postavi bolj specifično vprašanje.",
@@ -501,10 +561,11 @@ serve(async (req) => {
           totalUsage.total_tokens += skepticResult.usage.total_tokens;
 
           skepticResponse = parseJSON<SkepticResponse>(skepticResult.content, {
-            claims_to_verify: [],
-            failure_modes: [],
-            missing_info: [],
-            recommended_changes: [],
+            claim_verdicts: [],
+            omissions: [],
+            overpromises: [],
+            overall_reliability: "LOW",
+            mandatory_corrections: [],
           });
           console.log("🔍 SKEPTIC done");
 
@@ -521,6 +582,9 @@ serve(async (req) => {
           mediatorResponse = parseJSON<MediatorResponse>(mediatorResult.content, {
             final_answer: builderResponse.answer,
             confidence: 50,
+            verified_facts: [],
+            unconfirmed_items: builderResponse.unknowns,
+            corrections_made: [],
             what_i_did: builderResponse.steps_taken,
             what_i_did_not_do: builderResponse.unknowns,
             next_step: "Poskusi znova ali postavi bolj specifično vprašanje.",
@@ -537,6 +601,9 @@ serve(async (req) => {
             type: "triad",
             final_answer: mediatorResponse.final_answer,
             confidence: mediatorResponse.confidence,
+            verified_facts: mediatorResponse.verified_facts,
+            unconfirmed_items: mediatorResponse.unconfirmed_items,
+            corrections_made: mediatorResponse.corrections_made,
             what_i_did: mediatorResponse.what_i_did,
             what_i_did_not_do: mediatorResponse.what_i_did_not_do,
             next_step: mediatorResponse.next_step,
@@ -548,9 +615,11 @@ serve(async (req) => {
                 questions: builderResponse.questions,
               },
               skeptic: {
-                claims_to_verify: skepticResponse.claims_to_verify,
-                failure_modes: skepticResponse.failure_modes,
-                missing_info: skepticResponse.missing_info,
+                claim_verdicts: skepticResponse.claim_verdicts,
+                overall_reliability: skepticResponse.overall_reliability,
+                omissions: skepticResponse.omissions,
+                overpromises: skepticResponse.overpromises,
+                mandatory_corrections: skepticResponse.mandatory_corrections,
               },
             },
           };
