@@ -57,21 +57,11 @@ const parseMessageContent = (content: string): MessagePart[] => {
   return parts.length > 0 ? parts : [{ type: 'text', content }];
 };
 
-// Triad response interface - updated for stricter SKEPTIC
-interface ClaimVerdict {
-  claim: string;
-  verdict: "VERIFIED" | "FALSE" | "UNVERIFIABLE" | "ASSUMPTION";
-  evidence: string;
-  correction?: string;
-}
-
+// Triad response interface
 interface TriadResponse {
   type: 'triad';
   final_answer: string;
   confidence: number;
-  verified_facts: string[];
-  unconfirmed_items: string[];
-  corrections_made: string[];
   what_i_did: string[];
   what_i_did_not_do: string[];
   next_step: string;
@@ -83,11 +73,9 @@ interface TriadResponse {
       questions: string[];
     };
     skeptic: {
-      claim_verdicts: ClaimVerdict[];
-      overall_reliability: "HIGH" | "MEDIUM" | "LOW" | "UNRELIABLE";
-      omissions: string[];
-      overpromises: string[];
-      mandatory_corrections: string[];
+      claims_to_verify: string[];
+      failure_modes: string[];
+      missing_info: string[];
     };
   };
 }
@@ -151,42 +139,7 @@ function ConfidenceBadge({ confidence }: { confidence: number }) {
   );
 }
 
-// Reliability badge component
-function ReliabilityBadge({ reliability }: { reliability: "HIGH" | "MEDIUM" | "LOW" | "UNRELIABLE" }) {
-  const config = {
-    HIGH: { variant: 'default' as const, icon: <CheckCircle2 className="h-3 w-3" />, label: 'Zanesljivo' },
-    MEDIUM: { variant: 'secondary' as const, icon: <HelpCircle className="h-3 w-3" />, label: 'Delno zanesljivo' },
-    LOW: { variant: 'outline' as const, icon: <AlertTriangle className="h-3 w-3" />, label: 'Nezanesljivo' },
-    UNRELIABLE: { variant: 'destructive' as const, icon: <AlertTriangle className="h-3 w-3" />, label: 'Neverodostojno' },
-  };
-  const { variant, icon, label } = config[reliability] || config.LOW;
-  
-  return (
-    <Badge variant={variant} className="flex items-center gap-1 text-[10px]">
-      {icon}
-      <span>{label}</span>
-    </Badge>
-  );
-}
-
-// Verdict badge for individual claims
-function VerdictBadge({ verdict }: { verdict: ClaimVerdict['verdict'] }) {
-  const config = {
-    VERIFIED: { color: 'bg-green-500/20 text-green-700 border-green-500/30', icon: '✅' },
-    FALSE: { color: 'bg-red-500/20 text-red-700 border-red-500/30', icon: '❌' },
-    UNVERIFIABLE: { color: 'bg-orange-500/20 text-orange-700 border-orange-500/30', icon: '⚠️' },
-    ASSUMPTION: { color: 'bg-gray-500/20 text-gray-700 border-gray-500/30', icon: '🔄' },
-  };
-  const { color, icon } = config[verdict] || config.UNVERIFIABLE;
-  
-  return (
-    <span className={cn("text-[10px] px-1.5 py-0.5 rounded border", color)}>
-      {icon} {verdict}
-    </span>
-  );
-}
-
-// Triad debug panel component - updated for stricter SKEPTIC
+// Triad debug panel component
 function TriadDebugPanel({ triadData, language }: { triadData: TriadResponse; language: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const isSl = language === 'sl';
@@ -200,89 +153,38 @@ function TriadDebugPanel({ triadData, language }: { triadData: TriadResponse; la
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-3 pt-2">
-        {/* Verified facts / Unconfirmed / Corrections */}
-        <div className="space-y-2">
-          {triadData.verified_facts && triadData.verified_facts.length > 0 && (
-            <div className="bg-green-500/10 rounded p-2 text-xs">
-              <div className="font-medium text-green-600 mb-1">✅ {isSl ? 'Potrjeno' : 'Verified'}</div>
-              <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
-                {triadData.verified_facts.map((item, i) => <li key={i}>{item}</li>)}
-              </ul>
-            </div>
-          )}
-          
-          {triadData.unconfirmed_items && triadData.unconfirmed_items.length > 0 && (
-            <div className="bg-orange-500/10 rounded p-2 text-xs">
-              <div className="font-medium text-orange-600 mb-1">⚠️ {isSl ? 'Nepotrjeno' : 'Unconfirmed'}</div>
-              <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
-                {triadData.unconfirmed_items.map((item, i) => <li key={i}>{item}</li>)}
-              </ul>
-            </div>
-          )}
-          
-          {triadData.corrections_made && triadData.corrections_made.length > 0 && (
-            <div className="bg-red-500/10 rounded p-2 text-xs">
-              <div className="font-medium text-red-600 mb-1">❌ {isSl ? 'Popravljeno' : 'Corrected'}</div>
-              <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
-                {triadData.corrections_made.map((item, i) => <li key={i}>{item}</li>)}
-              </ul>
-            </div>
-          )}
-        </div>
-
         {/* What I did / didn't do */}
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="bg-blue-500/10 rounded p-2">
-            <div className="font-medium text-blue-600 mb-1">📋 {isSl ? 'Kaj sem naredil' : 'What I did'}</div>
+          <div className="bg-green-500/10 rounded p-2">
+            <div className="font-medium text-green-600 mb-1">✅ {isSl ? 'Kaj sem naredil' : 'What I did'}</div>
             <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
-              {triadData.what_i_did.map((item, i) => <li key={i}>{item}</li>)}
+              {triadData.what_i_did.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
             </ul>
           </div>
-          <div className="bg-slate-500/10 rounded p-2">
-            <div className="font-medium text-slate-600 mb-1">🚫 {isSl ? 'Česar nisem naredil' : 'What I didn\'t do'}</div>
+          <div className="bg-orange-500/10 rounded p-2">
+            <div className="font-medium text-orange-600 mb-1">⚠️ {isSl ? 'Česar nisem naredil' : 'What I didn\'t do'}</div>
             <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
-              {triadData.what_i_did_not_do.map((item, i) => <li key={i}>{item}</li>)}
+              {triadData.what_i_did_not_do.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
             </ul>
           </div>
         </div>
 
         {/* Next step */}
         {triadData.next_step && (
-          <div className="bg-purple-500/10 rounded p-2 text-xs">
-            <div className="font-medium text-purple-600 mb-1">💡 {isSl ? 'Naslednji korak' : 'Next step'}</div>
+          <div className="bg-blue-500/10 rounded p-2 text-xs">
+            <div className="font-medium text-blue-600 mb-1">💡 {isSl ? 'Naslednji korak' : 'Next step'}</div>
             <p className="text-muted-foreground">{triadData.next_step}</p>
           </div>
         )}
 
-        {/* Debug info from Builder & Skeptic - Claim Verdicts */}
+        {/* Debug info from Builder & Skeptic */}
         {triadData._debug && (
           <div className="space-y-2 border-t pt-2">
-            <div className="flex items-center justify-between">
-              <div className="text-[10px] text-muted-foreground font-medium uppercase">{isSl ? 'Notranji proces' : 'Internal Process'}</div>
-              {triadData._debug.skeptic.overall_reliability && (
-                <ReliabilityBadge reliability={triadData._debug.skeptic.overall_reliability} />
-              )}
-            </div>
-            
-            {/* Claim verdicts */}
-            {triadData._debug.skeptic.claim_verdicts && triadData._debug.skeptic.claim_verdicts.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-[10px] font-medium text-muted-foreground">{isSl ? 'Preverjanje trditev:' : 'Claim verification:'}</div>
-                <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                  {triadData._debug.skeptic.claim_verdicts.map((cv, i) => (
-                    <div key={i} className="text-[10px] p-1.5 bg-muted/30 rounded">
-                      <div className="flex items-start gap-2">
-                        <VerdictBadge verdict={cv.verdict} />
-                        <span className="text-muted-foreground flex-1">{cv.claim}</span>
-                      </div>
-                      {cv.correction && (
-                        <div className="mt-1 text-red-600 pl-6">→ {cv.correction}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="text-[10px] text-muted-foreground font-medium uppercase">{isSl ? 'Notranji proces' : 'Internal Process'}</div>
             
             {triadData._debug.builder.risks.length > 0 && (
               <div className="text-xs">
@@ -291,17 +193,10 @@ function TriadDebugPanel({ triadData, language }: { triadData: TriadResponse; la
               </div>
             )}
             
-            {triadData._debug.skeptic.omissions && triadData._debug.skeptic.omissions.length > 0 && (
+            {triadData._debug.skeptic.claims_to_verify.length > 0 && (
               <div className="text-xs">
-                <span className="text-orange-600">👁️ {isSl ? 'Spregledano' : 'Omissions'}:</span>
-                <span className="text-muted-foreground ml-1">{triadData._debug.skeptic.omissions.join(', ')}</span>
-              </div>
-            )}
-            
-            {triadData._debug.skeptic.overpromises && triadData._debug.skeptic.overpromises.length > 0 && (
-              <div className="text-xs">
-                <span className="text-red-600">🎭 {isSl ? 'Preveč obljubljeno' : 'Overpromises'}:</span>
-                <span className="text-muted-foreground ml-1">{triadData._debug.skeptic.overpromises.join(', ')}</span>
+                <span className="text-red-600">🔍 {isSl ? 'Za preveriti' : 'To verify'}:</span>
+                <span className="text-muted-foreground ml-1">{triadData._debug.skeptic.claims_to_verify.join(', ')}</span>
               </div>
             )}
             
