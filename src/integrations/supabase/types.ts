@@ -395,6 +395,36 @@ export type Database = {
         }
         Relationships: []
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          nostr_hex_id: string
+          p256dh: string
+          updated_at: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          nostr_hex_id: string
+          p256dh: string
+          updated_at?: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          nostr_hex_id?: string
+          p256dh?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       room_latest_posts: {
         Row: {
           author_pubkey: string
