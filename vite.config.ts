@@ -30,8 +30,9 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.png", "icon-192.png", "icon-512.png"],
+      includeAssets: ["favicon.png", "icon-192.png", "icon-512.png", "custom-sw.js"],
       manifest: false, // Using external manifest.json
+      injectRegister: 'auto',
       workbox: {
         // Force immediate takeover of new service worker
         skipWaiting: true,
@@ -42,6 +43,8 @@ export default defineConfig(({ mode }) => ({
         // Exclude large images from precaching
         globIgnores: ["**/assets/*-module*.png", "**/assets/*-hero*.png", "**/assets/*-bg*.png", "**/assets/*-icon*.png"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB limit
+        // Import custom service worker for push notifications
+        importScripts: ['/custom-sw.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
