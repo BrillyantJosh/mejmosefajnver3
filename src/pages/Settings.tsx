@@ -4,7 +4,7 @@ import { Switch } from "@/components/ui/switch";
 import { useModules } from "@/contexts/ModulesContext";
 import { ArrowUp, ArrowDown, RotateCcw, Save } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { PushNotificationToggle } from "@/components/settings/PushNotificationToggle";
 
 export default function Settings() {
   const { modules, isLoading, hasUnsavedChanges, publishResults, isPublishing, toggleModule, reorderModules, resetToDefaults, getEnabledModules, saveSettings } = useModules();
@@ -236,6 +236,17 @@ export default function Settings() {
                 );
               })
             )}
+          </CardContent>
+        </Card>
+
+        {/* Notifications */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Notifications</CardTitle>
+            <CardDescription>Manage push notifications for messages</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PushNotificationToggle />
           </CardContent>
         </Card>
 
