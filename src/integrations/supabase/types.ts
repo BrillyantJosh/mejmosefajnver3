@@ -251,6 +251,24 @@ export type Database = {
         }
         Relationships: []
       }
+      dm_last_seen: {
+        Row: {
+          last_event_created_at: number
+          nostr_hex_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          last_event_created_at?: number
+          nostr_hex_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          last_event_created_at?: number
+          nostr_hex_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       dm_read_status: {
         Row: {
           conversation_pubkey: string
