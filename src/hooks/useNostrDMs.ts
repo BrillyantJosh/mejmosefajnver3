@@ -647,6 +647,33 @@ export function useNostrDMs() {
           description: 'Message sent locally but failed to reach relays',
           variant: 'destructive'
         });
+      } else {
+        // Send push notification to recipient (fire and forget)
+        try {
+          const senderProfile = cachedProfiles.get(session.nostrHexId);
+          const senderDisplayName = senderProfile?.display_name || senderProfile?.full_name || 'Someone';
+          
+          // Truncate message for preview (max 50 chars)
+          const messagePreview = message.length > 50 ? message.substring(0, 47) + '...' : message;
+          
+          supabase.functions.invoke('send-push-notification', {
+            body: {
+              recipientPubkey,
+              senderDisplayName,
+              messagePreview
+            }
+          }).then(response => {
+            if (response.error) {
+              console.log('📱 Push notification skipped:', response.error.message);
+            } else {
+              console.log('📱 Push notification sent:', response.data);
+            }
+          }).catch(err => {
+            console.log('📱 Push notification failed:', err);
+          });
+        } catch (pushError) {
+          console.log('📱 Push notification error:', pushError);
+        }
       }
     } catch (error) {
       console.error('❌ Error sending message:', error);
