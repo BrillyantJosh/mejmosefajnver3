@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { supabase } from '@/integrations/supabase/client';
 
 const AUTHORITY_PUBKEY = '18a908e89354fb2d142d864bfcbea7a7ed4486c8fb66b746fcebe66ed372115e';
 
@@ -115,38 +116,55 @@ export const useNostrProjects = () => {
     }
 
     const fetchProjects = async () => {
-      const pool = new SimplePool();
       setIsLoading(true);
 
       try {
-        // Fetch all KIND 31234 project events
-        const projectEvents = await pool.querySync(parameters.relays, {
-          kinds: [31234],
-          limit: 100
-        });
+        // Use server-side relay query instead of SimplePool (browser WebSocket fails)
+        // Fetch both KIND 31234 (projects) and KIND 31235 (visibility) in parallel
+        const [projectsResult, visibilityResult] = await Promise.all([
+          supabase.functions.invoke('query-nostr-events', {
+            body: {
+              filter: {
+                kinds: [31234],
+                limit: 100
+              },
+              timeout: 15000
+            }
+          }),
+          supabase.functions.invoke('query-nostr-events', {
+            body: {
+              filter: {
+                kinds: [31235],
+                authors: [AUTHORITY_PUBKEY],
+                limit: 100
+              },
+              timeout: 15000
+            }
+          })
+        ]);
 
+        if (projectsResult.error) {
+          console.error('❌ Server query error (projects):', projectsResult.error);
+          throw new Error(projectsResult.error.message);
+        }
+
+        const projectEvents = projectsResult.data?.events || [];
         console.log(`📦 Fetched ${projectEvents.length} KIND 31234 project events`);
 
-        // Fetch all KIND 31235 visibility events from authority
-        const visibilityEvents = await pool.querySync(parameters.relays, {
-          kinds: [31235],
-          authors: [AUTHORITY_PUBKEY],
-          limit: 100
-        });
-
+        const visibilityEvents = visibilityResult.data?.events || [];
         console.log(`🔐 Fetched ${visibilityEvents.length} KIND 31235 visibility events`);
 
         // Parse projects
         const parsedProjects = projectEvents
-          .map(parseProjectEvent)
-          .filter((p): p is ProjectData => p !== null);
+          .map((e: any) => parseProjectEvent(e as Event))
+          .filter((p: ProjectData | null): p is ProjectData => p !== null);
 
         // Create a map of blocked projects
         const blockedProjects = new Set<string>();
-        visibilityEvents.forEach(event => {
-          const dTag = event.tags.find(t => t[0] === 'd')?.[1];
-          const status = event.tags.find(t => t[0] === 'status')?.[1];
-          
+        visibilityEvents.forEach((event: any) => {
+          const dTag = event.tags.find((t: string[]) => t[0] === 'd')?.[1];
+          const status = event.tags.find((t: string[]) => t[0] === 'status')?.[1];
+
           if (dTag && status === 'blocked') {
             blockedProjects.add(dTag);
           }
@@ -171,7 +189,6 @@ export const useNostrProjects = () => {
         console.error('Error fetching projects:', error);
       } finally {
         setIsLoading(false);
-        pool.close(parameters.relays);
       }
     };
 

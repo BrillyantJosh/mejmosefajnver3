@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNostrDonationProposals } from "@/hooks/useNostrDonationProposals";
-import { useNostrDonationPayments } from "@/hooks/useNostrDonationPayments";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,9 +26,8 @@ export default function Pending() {
   const { session } = useAuth();
   const navigate = useNavigate();
   const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(session?.nostrHexId);
-  const { payments } = useNostrDonationPayments();
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
-  
+
   const [selectedProposals, setSelectedProposals] = useState<Set<string>>(new Set());
   const [customAmounts, setCustomAmounts] = useState<{ [key: string]: number }>({});
   const [selectedWallet, setSelectedWallet] = useState<string>("");
@@ -44,19 +42,8 @@ export default function Pending() {
   const walletAddresses = useMemo(() => wallets.map(w => w.walletId), [wallets]);
   const { balances, isLoading: balancesLoading } = useWalletBalances(walletAddresses);
 
-  // Update proposals with payment status - use useMemo to prevent constant re-renders
-  const proposalsWithStatus = useMemo(() => {
-    return proposals.map(proposal => {
-      const payment = payments.find(p => p.proposalDTag === proposal.d || p.proposalEventId === proposal.eventId);
-      return {
-        ...proposal,
-        isPaid: !!payment,
-        paymentTxId: payment?.txId
-      };
-    });
-  }, [proposals, payments]);
-
-  const pendingProposals = useMemo(() => proposalsWithStatus.filter(p => !p.isPaid), [proposalsWithStatus]);
+  // Server already matches proposals with confirmations (KIND 90901) and sets isPaid
+  const pendingProposals = useMemo(() => proposals.filter(p => !p.isPaid), [proposals]);
 
   // Fetch profiles for all recipient pubkeys
   const recipientPubkeys = useMemo(() => 

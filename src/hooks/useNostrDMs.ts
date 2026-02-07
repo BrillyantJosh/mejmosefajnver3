@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { SimplePool, Event, finalizeEvent, nip04 } from 'nostr-tools';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Event, finalizeEvent, nip04 } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { toast } from '@/hooks/use-toast';
 import { nip04Decrypt as customNip04Decrypt } from '@/lib/nostr-nip04';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,12 +20,8 @@ function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Default fallback relays (only LANA relays)
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
+// Polling interval for new messages (milliseconds)
+const POLL_INTERVAL_MS = 10000;
 
 interface DirectMessage {
   id: string;
@@ -48,26 +43,23 @@ interface Conversation {
 
 export function useNostrDMs() {
   const { session } = useAuth();
-  const { parameters: systemParameters } = useSystemParameters();
   const [conversations, setConversations] = useState<Map<string, Conversation>>(new Map());
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [totalEvents, setTotalEvents] = useState(0);
   const [readStatuses, setReadStatuses] = useState<Map<string, boolean>>(new Map());
-  const pool = useMemo(() => new SimplePool(), []);
-  
-  // Get relays from system parameters or use default
-  const RELAYS = useMemo(() => {
-    if (systemParameters?.relays && systemParameters.relays.length > 0) {
-      console.log('📡 Using relays from KIND 38888:', systemParameters.relays);
-      return systemParameters.relays;
-    }
-    console.log('📡 Using default LANA relays');
-    return DEFAULT_RELAYS;
-  }, [systemParameters?.relays]);
+
+  // Track seen event IDs to avoid re-processing
+  const seenEventIds = useRef<Set<string>>(new Set());
+  // Track the latest event timestamp for incremental polling
+  const latestTimestamp = useRef<number>(0);
+  // Track if initial load is done
+  const initialLoadDone = useRef(false);
+  // Guard against concurrent poll requests
+  const isPolling = useRef(false);
 
   // Get all conversation pubkeys for bulk profile fetching
-  const conversationPubkeys = useMemo(() => 
+  const conversationPubkeys = useMemo(() =>
     Array.from(conversations.keys()),
     [conversations]
   );
@@ -77,27 +69,16 @@ export function useNostrDMs() {
 
   const decryptMessage = useCallback(async (event: Event, theirPubkey: string): Promise<string> => {
     if (!session?.nostrPrivateKey) return '';
-    
-    const privateKeyHex = typeof session.nostrPrivateKey === 'string' 
+
+    const privateKeyHex = typeof session.nostrPrivateKey === 'string'
       ? session.nostrPrivateKey
       : bytesToHex(session.nostrPrivateKey);
-    
-    console.log('🔓 Attempting decrypt:', {
-      eventId: event.id.slice(0, 8),
-      eventAuthor: event.pubkey.slice(0, 8),
-      myPubkey: session.nostrHexId.slice(0, 8),
-      theirPubkey: theirPubkey.slice(0, 8),
-      encryptedPreview: event.content.slice(0, 30) + '...'
-    });
-    
+
     // Try standard nostr-tools NIP-04 first (compatible with DAMUS, Amethyst, etc.)
     try {
       const decrypted = await nip04.decrypt(privateKeyHex, theirPubkey, event.content);
-      console.log('✅ Decrypt success (nostr-tools):', decrypted.slice(0, 20) + '...');
       return decrypted;
     } catch (error1) {
-      console.log('⚠️ Standard NIP-04 failed, trying custom fallback...');
-      
       // Fallback to custom implementation for old messages encrypted with our custom method
       try {
         const decrypted = await customNip04Decrypt(
@@ -105,23 +86,15 @@ export function useNostrDMs() {
           privateKeyHex,
           theirPubkey
         );
-        console.log('✅ Decrypt success (custom fallback):', decrypted.slice(0, 20) + '...');
         return decrypted;
       } catch (error2) {
-        console.error('❌ Both decrypt methods failed:', {
-          standardError: error1 instanceof Error ? error1.message : 'Unknown',
-          customError: error2 instanceof Error ? error2.message : 'Unknown',
-          eventId: event.id.slice(0, 8),
-          eventAuthor: event.pubkey.slice(0, 8),
-          recipientTag: event.tags.find(t => t[0] === 'p')?.[1]?.slice(0, 8),
-          myPubkey: session.nostrHexId.slice(0, 8)
-        });
+        console.error('❌ Both decrypt methods failed for event:', event.id.slice(0, 8));
         return `[Cannot decrypt - wrong key]`;
       }
     }
-  }, [session?.nostrPrivateKey, session?.nostrHexId]);
+  }, [session?.nostrPrivateKey]);
 
-  // Supabase read status functions (KEEP - for dm_read_status table)
+  // Supabase read status functions
   const saveMessageReadStatus = useCallback(async (
     userNostrId: string,
     messageEventId: string,
@@ -129,8 +102,8 @@ export function useNostrDMs() {
     conversationPubkey: string,
     isOwn: boolean
   ) => {
-    if (isOwn) return; // Don't track own messages
-    
+    if (isOwn) return;
+
     try {
       const { error } = await supabase
         .from('dm_read_status')
@@ -146,7 +119,7 @@ export function useNostrDMs() {
           onConflict: 'user_nostr_id,message_event_id',
           ignoreDuplicates: false
         });
-        
+
       if (error) {
         console.error('❌ Error saving read status:', error);
       }
@@ -170,11 +143,9 @@ export function useNostrDMs() {
         .eq('user_nostr_id', userNostrId)
         .eq('conversation_pubkey', conversationPubkey)
         .eq('is_read', false);
-        
+
       if (error) {
         console.error('❌ Error marking messages as read:', error);
-      } else {
-        console.log('✅ Marked messages as read for conversation:', conversationPubkey.slice(0, 8));
       }
     } catch (error) {
       console.error('❌ Exception in markMessagesAsReadInDB:', error);
@@ -187,18 +158,17 @@ export function useNostrDMs() {
         .from('dm_read_status')
         .select('message_event_id, is_read')
         .eq('user_nostr_id', userNostrId);
-        
+
       if (error) {
         console.error('❌ Error loading read statuses:', error);
         return new Map<string, boolean>();
       }
-      
+
       const statusMap = new Map<string, boolean>();
       data?.forEach(status => {
         statusMap.set(status.message_event_id, status.is_read);
       });
-      
-      console.log('📖 Loaded read statuses:', statusMap.size);
+
       return statusMap;
     } catch (error) {
       console.error('❌ Exception in loadReadStatuses:', error);
@@ -216,7 +186,7 @@ export function useNostrDMs() {
         .delete()
         .eq('user_nostr_id', userNostrId)
         .eq('message_event_id', messageEventId);
-        
+
       if (error) {
         console.error('❌ Error deleting read status:', error);
       }
@@ -228,12 +198,12 @@ export function useNostrDMs() {
   // Load read statuses on mount
   useEffect(() => {
     if (!session?.nostrHexId) return;
-    
+
     const loadStatuses = async () => {
       const statuses = await loadReadStatuses(session.nostrHexId);
       setReadStatuses(statuses);
     };
-    
+
     loadStatuses();
   }, [session?.nostrHexId, loadReadStatuses]);
 
@@ -244,40 +214,17 @@ export function useNostrDMs() {
     const recipientPubkey = event.tags.find(tag => tag[0] === 'p')?.[1] || '';
     const otherPubkey = isOwn ? recipientPubkey : event.pubkey;
 
-    if (!otherPubkey) {
-      console.warn('⚠️ No other pubkey found for event:', event.id);
-      return;
-    }
+    if (!otherPubkey) return;
 
     // Check if this message is actually for me
     const isForMe = isOwn || recipientPubkey === session.nostrHexId;
-    if (!isForMe) {
-      console.log('⏭️  Skipping event - not for me:', {
-        eventId: event.id.slice(0, 8),
-        author: event.pubkey.slice(0, 8),
-        recipient: recipientPubkey?.slice(0, 8),
-        myPubkey: session.nostrHexId.slice(0, 8)
-      });
-      return;
-    }
-
-    console.log('📝 Processing message:', {
-      eventId: event.id.slice(0, 8),
-      isOwn,
-      author: event.pubkey.slice(0, 8),
-      recipient: recipientPubkey?.slice(0, 8),
-      otherPubkey: otherPubkey.slice(0, 8)
-    });
+    if (!isForMe) return;
 
     // Check for reply tag
     const replyTag = event.tags.find(
       tag => tag[0] === 'e' && tag[3] === 'reply'
     );
     const replyToId = replyTag ? replyTag[1] : undefined;
-    
-    if (replyToId) {
-      console.log('↩️  Message is a reply to:', replyToId.slice(0, 8));
-    }
 
     const decryptedContent = await decryptMessage(event, otherPubkey);
 
@@ -337,163 +284,127 @@ export function useNostrDMs() {
     });
   }, [session?.nostrHexId, decryptMessage, readStatuses, saveMessageReadStatus]);
 
-  // Load messages ONLY from Nostr relays
+  // Fetch DM events from server endpoint
+  const fetchDMEvents = useCallback(async (since?: number) => {
+    if (!session?.nostrHexId) return [];
+
+    try {
+      const response = await supabase.functions.invoke('fetch-dm-events', {
+        body: {
+          userPubkey: session.nostrHexId,
+          since: since || undefined
+        }
+      });
+
+      if (response.error) {
+        console.error('❌ Error fetching DM events:', response.error);
+        return [];
+      }
+
+      const data = response.data as any;
+      if (!data?.success) {
+        console.error('❌ Server error fetching DM events:', data?.error);
+        return [];
+      }
+
+      return data.events || [];
+    } catch (error) {
+      console.error('❌ Exception fetching DM events:', error);
+      return [];
+    }
+  }, [session?.nostrHexId]);
+
+  // Main effect: initial load + polling
   useEffect(() => {
     if (!session?.nostrHexId || !session?.nostrPrivateKey) {
       setLoading(false);
       return;
     }
 
-    let isSubscribed = true;
-    let cleanupFn: (() => void) | undefined;
+    let isActive = true;
+    let pollTimer: ReturnType<typeof setInterval> | undefined;
 
-    const loadMessages = async () => {
-      console.log('🔌 Loading messages from Nostr relays...');
-      console.log('📍 Your Nostr ID:', session.nostrHexId);
-      console.log('📡 Relays:', RELAYS);
+    const doInitialLoad = async () => {
+      console.log('🔌 Loading DM messages via server relay query...');
       setConnected(true);
       setLoading(true);
 
-      try {
-        // Query historical messages (last 30 days)
-        const thirtyDaysAgo = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
-        
-        console.log('📥 Fetching historical messages...');
-        
-        // Query sent messages
-        const sentFilter = {
-          kinds: [4],
-          authors: [session.nostrHexId],
-          since: thirtyDaysAgo
-        };
-        
-        console.log('🔍 Query sent filter:', sentFilter);
-        
-        const sentPromise = Promise.race([
-          pool.querySync(RELAYS, sentFilter),
-          new Promise<Event[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Query timeout')), 10000)
-          )
-        ]);
+      // Initial load: fetch last 30 days
+      const thirtyDaysAgo = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
+      const events = await fetchDMEvents(thirtyDaysAgo);
 
-        // Query received messages
-        const receivedFilter = {
-          kinds: [4],
-          '#p': [session.nostrHexId],
-          since: thirtyDaysAgo
-        };
-        
-        console.log('🔍 Query received filter:', receivedFilter);
-        
-        const receivedPromise = Promise.race([
-          pool.querySync(RELAYS, receivedFilter),
-          new Promise<Event[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Query timeout')), 10000)
-          )
-        ]);
+      if (!isActive) return;
 
-        const [sentEvents, receivedEvents] = await Promise.all([
-          sentPromise.catch(err => {
-            console.error('❌ Sent query failed:', err);
-            return [];
-          }),
-          receivedPromise.catch(err => {
-            console.error('❌ Received query failed:', err);
-            return [];
-          })
-        ]);
+      console.log(`📨 Received ${events.length} DM events from server`);
 
-        console.log('📨 Sent events:', sentEvents.length);
-        console.log('📨 Received events:', receivedEvents.length);
+      // Process all events
+      for (const event of events) {
+        if (!isActive) break;
+        if (seenEventIds.current.has(event.id)) continue;
+        seenEventIds.current.add(event.id);
+        setTotalEvents(prev => prev + 1);
+        await processMessage(event as Event);
 
-        // Process all historical messages
-        const allEvents = [...sentEvents, ...receivedEvents];
-        console.log('📊 Total events to process:', allEvents.length);
-        
-        for (const event of allEvents) {
-          if (isSubscribed) {
-            setTotalEvents(prev => prev + 1);
-            await processMessage(event);
-          }
+        // Track latest timestamp
+        if (event.created_at > latestTimestamp.current) {
+          latestTimestamp.current = event.created_at;
         }
-
-        // Set loading to false after processing relay messages
-        setLoading(false);
-        console.log('✅ Historical messages loaded from Nostr relays');
-
-        // Subscribe to new messages (real-time)
-        if (!isSubscribed) return;
-        
-        const now = Math.floor(Date.now() / 1000);
-        console.log('🔔 Subscribing to real-time updates from:', new Date(now * 1000).toISOString());
-
-        // Subscribe to new sent messages
-        const sentSub = pool.subscribeMany(
-          RELAYS,
-          [{
-            kinds: [4],
-            authors: [session.nostrHexId],
-            since: now
-          }] as any,
-          {
-            onevent(event) {
-              if (isSubscribed) {
-                console.log('📤 New sent DM:', event.id);
-                setTotalEvents(prev => prev + 1);
-                processMessage(event);
-              }
-            }
-          }
-        );
-
-        // Subscribe to new received messages
-        const receivedSub = pool.subscribeMany(
-          RELAYS,
-          [{
-            kinds: [4],
-            '#p': [session.nostrHexId],
-            since: now
-          }] as any,
-          {
-            onevent(event) {
-              if (isSubscribed) {
-                console.log('📨 New received DM:', event.id);
-                setTotalEvents(prev => prev + 1);
-                processMessage(event);
-              }
-            }
-          }
-        );
-
-        console.log('✅ Subscribed to real-time updates');
-
-        // Set cleanup function
-        cleanupFn = () => {
-          console.log('🔌 Closing subscriptions...');
-          sentSub.close();
-          receivedSub.close();
-        };
-
-      } catch (error) {
-        console.error('❌ Error loading messages:', error);
-        setLoading(false);
       }
+
+      setLoading(false);
+      initialLoadDone.current = true;
+      console.log('✅ Initial DM load complete, starting polling...');
+
+      // Start polling for new messages
+      pollTimer = setInterval(async () => {
+        if (!isActive || isPolling.current) return;
+        isPolling.current = true;
+
+        try {
+          // Poll for events since latest known timestamp (minus small buffer for relay propagation)
+          const sincePoll = latestTimestamp.current > 0
+            ? latestTimestamp.current - 2  // 2 second buffer
+            : Math.floor(Date.now() / 1000) - 60; // fallback: last 60s
+
+          const newEvents = await fetchDMEvents(sincePoll);
+
+          if (!isActive) return;
+
+          let newCount = 0;
+          for (const event of newEvents) {
+            if (!isActive) break;
+            if (seenEventIds.current.has(event.id)) continue;
+            seenEventIds.current.add(event.id);
+            newCount++;
+            setTotalEvents(prev => prev + 1);
+            await processMessage(event as Event);
+
+            if (event.created_at > latestTimestamp.current) {
+              latestTimestamp.current = event.created_at;
+            }
+          }
+
+          if (newCount > 0) {
+            console.log(`📨 ${newCount} new DM event(s) received via polling`);
+          }
+        } finally {
+          isPolling.current = false;
+        }
+      }, POLL_INTERVAL_MS);
     };
 
-    loadMessages();
+    doInitialLoad();
 
     return () => {
-      isSubscribed = false;
+      isActive = false;
       setConnected(false);
-      if (cleanupFn) cleanupFn();
+      if (pollTimer) clearInterval(pollTimer);
     };
-  }, [session?.nostrHexId, session?.nostrPrivateKey, processMessage, pool, RELAYS]);
+  }, [session?.nostrHexId, session?.nostrPrivateKey, processMessage, fetchDMEvents]);
 
   // Supabase Realtime subscription for READ STATUS updates ONLY
   useEffect(() => {
     if (!session?.nostrHexId) return;
-
-    console.log('🔔 Setting up Supabase Realtime subscription for read status...');
 
     // Subscribe to READ STATUS updates
     const readStatusChannel = supabase
@@ -507,52 +418,49 @@ export function useNostrDMs() {
           filter: `user_nostr_id=eq.${session.nostrHexId}`
         },
         (payload) => {
-          console.log('📖 Read status updated from Supabase:', payload);
           const updatedStatus = payload.new as any;
-          
+
           // Update read statuses map
           setReadStatuses(prev => {
             const newMap = new Map(prev);
             newMap.set(updatedStatus.message_event_id, updatedStatus.is_read);
             return newMap;
           });
-          
+
           // Update conversation unread counts
           setConversations(prev => {
             const newConversations = new Map(prev);
             const conversation = newConversations.get(updatedStatus.conversation_pubkey);
-            
+
             if (conversation) {
-              const updatedMessages = conversation.messages.map(msg => 
-                msg.id === updatedStatus.message_event_id 
+              const updatedMessages = conversation.messages.map(msg =>
+                msg.id === updatedStatus.message_event_id
                   ? { ...msg, isRead: updatedStatus.is_read }
                   : msg
               );
-              
+
               const unreadCount = updatedMessages.filter(m => !m.isOwn && !m.isRead).length;
-              
+
               newConversations.set(updatedStatus.conversation_pubkey, {
                 ...conversation,
                 messages: updatedMessages,
                 unreadCount
               });
             }
-            
+
             return newConversations;
           });
         }
       )
       .subscribe();
 
-    console.log('✅ Supabase Realtime subscription active (read status only)');
-
     // Cleanup
     return () => {
-      console.log('🔌 Closing Supabase Realtime subscription...');
       supabase.removeChannel(readStatusChannel);
     };
   }, [session?.nostrHexId]);
 
+  // Send message via server-side relay publish
   const sendMessage = useCallback(async (recipientPubkey: string, message: string, replyToId?: string) => {
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
       toast({
@@ -564,29 +472,25 @@ export function useNostrDMs() {
     }
 
     try {
-      console.log('🔐 Encrypting message to:', recipientPubkey.slice(0, 8) + '...');
-      
-      // Use standard nostr-tools NIP-04 encrypt (compatible with DAMUS, Amethyst, etc.)
-      const privateKeyHex = typeof session.nostrPrivateKey === 'string' 
+      // Use standard nostr-tools NIP-04 encrypt
+      const privateKeyHex = typeof session.nostrPrivateKey === 'string'
         ? session.nostrPrivateKey
         : bytesToHex(session.nostrPrivateKey);
-      
+
       const encrypted = await nip04.encrypt(privateKeyHex, recipientPubkey, message);
 
-      console.log('✍️ Signing event...');
-      const privKeyBytes = typeof session.nostrPrivateKey === 'string' 
+      const privKeyBytes = typeof session.nostrPrivateKey === 'string'
         ? hexToBytes(session.nostrPrivateKey)
         : session.nostrPrivateKey;
-      
+
       // Build tags
       const tags: string[][] = [['p', recipientPubkey]];
-      
+
       // Add reply tag if replying to a message
       if (replyToId) {
         tags.push(['e', replyToId, '', 'reply']);
-        console.log('📧 Adding reply tag to message:', replyToId.slice(0, 8));
       }
-      
+
       const event = finalizeEvent({
         kind: 4,
         content: encrypted,
@@ -594,50 +498,21 @@ export function useNostrDMs() {
         created_at: Math.floor(Date.now() / 1000)
       }, privKeyBytes);
 
-      console.log('📡 Publishing DM to', RELAYS.length, 'relays:', RELAYS);
-      
-      // Publish to each relay individually with detailed logging
-      const publishResults = await Promise.allSettled(
-        RELAYS.map(async (relay) => {
-          try {
-            console.log(`🔄 Publishing to ${relay}...`);
-            const publishPromises = pool.publish([relay], event);
-            
-            // Wait for publish with timeout
-            await Promise.race([
-              publishPromises[0],
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Publish timeout after 8s')), 8000)
-              )
-            ]);
-            
-            console.log(`✅ Successfully published DM to ${relay}`);
-            return { relay, success: true };
-          } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-            console.error(`❌ Failed to publish DM to ${relay}:`, errorMsg);
-            return { relay, success: false, error: errorMsg };
-          }
-        })
-      );
+      console.log('📡 Publishing DM via server...');
 
-      const successResults = publishResults.filter(
-        r => r.status === 'fulfilled' && (r.value as any).success
-      );
-      const failedResults = publishResults.filter(
-        r => r.status === 'rejected' || (r.status === 'fulfilled' && !(r.value as any).success)
-      );
-      
-      const successCount = successResults.length;
-      console.log(`✅ DM published to ${successCount}/${RELAYS.length} relays`);
-      
-      if (failedResults.length > 0) {
-        console.warn('⚠️ Failed relays:', failedResults.map(r => 
-          r.status === 'fulfilled' ? (r.value as any).relay : 'unknown'
-        ));
-      }
-      
-      // Add to local state immediately
+      // Publish via server endpoint
+      const response = await supabase.functions.invoke('publish-dm-event', {
+        body: { event }
+      });
+
+      const data = response.data as any;
+      const successCount = data?.publishedTo || 0;
+      const totalRelays = data?.totalRelays || 0;
+
+      console.log(`✅ DM published to ${successCount}/${totalRelays} relays`);
+
+      // Add to local state immediately (optimistic update)
+      seenEventIds.current.add(event.id);
       await processMessage(event);
 
       // Only show error toast if all relays failed
@@ -652,28 +527,16 @@ export function useNostrDMs() {
         try {
           const senderProfile = cachedProfiles.get(session.nostrHexId);
           const senderDisplayName = senderProfile?.display_name || senderProfile?.full_name || 'Someone';
-          
-          // Truncate message for preview (max 50 chars)
           const messagePreview = message.length > 50 ? message.substring(0, 47) + '...' : message;
-          
+
           supabase.functions.invoke('send-push-notification', {
             body: {
               recipientPubkey,
               senderDisplayName,
               messagePreview
             }
-          }).then(response => {
-            if (response.error) {
-              console.log('📱 Push notification skipped:', response.error.message);
-            } else {
-              console.log('📱 Push notification sent:', response.data);
-            }
-          }).catch(err => {
-            console.log('📱 Push notification failed:', err);
-          });
-        } catch (pushError) {
-          console.log('📱 Push notification error:', pushError);
-        }
+          }).catch(() => {});
+        } catch {}
       }
     } catch (error) {
       console.error('❌ Error sending message:', error);
@@ -683,8 +546,9 @@ export function useNostrDMs() {
         variant: 'destructive'
       });
     }
-  }, [session, pool, processMessage, RELAYS]);
+  }, [session, processMessage, cachedProfiles]);
 
+  // Delete message via server-side relay publish
   const deleteMessage = useCallback(async (messageId: string, conversationPubkey: string) => {
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
       toast({
@@ -696,12 +560,10 @@ export function useNostrDMs() {
     }
 
     try {
-      console.log('🗑️  Deleting message:', messageId.slice(0, 8) + '...');
-      
-      const privKeyBytes = typeof session.nostrPrivateKey === 'string' 
+      const privKeyBytes = typeof session.nostrPrivateKey === 'string'
         ? hexToBytes(session.nostrPrivateKey)
         : session.nostrPrivateKey;
-      
+
       // Create KIND 5 deletion event
       const deletionEvent = finalizeEvent({
         kind: 5,
@@ -710,60 +572,29 @@ export function useNostrDMs() {
         created_at: Math.floor(Date.now() / 1000)
       }, privKeyBytes);
 
-      console.log('📡 Publishing deletion to', RELAYS.length, 'relays:', RELAYS);
-      
-      // Publish deletion event to each relay individually
-      const publishResults = await Promise.allSettled(
-        RELAYS.map(async (relay) => {
-          try {
-            console.log(`🔄 Publishing deletion to ${relay}...`);
-            const publishPromises = pool.publish([relay], deletionEvent);
-            await Promise.race([
-              publishPromises[0],
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Deletion timeout after 8s')), 8000)
-              )
-            ]);
-            
-            console.log(`✅ Successfully published deletion to ${relay}`);
-            return { relay, success: true };
-          } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-            console.error(`❌ Failed to publish deletion to ${relay}:`, errorMsg);
-            return { relay, success: false, error: errorMsg };
-          }
-        })
-      );
+      console.log('📡 Publishing deletion via server...');
 
-      const successResults = publishResults.filter(
-        r => r.status === 'fulfilled' && (r.value as any).success
-      );
-      const failedResults = publishResults.filter(
-        r => r.status === 'rejected' || (r.status === 'fulfilled' && !(r.value as any).success)
-      );
-      
-      const successCount = successResults.length;
-      console.log(`✅ Deletion published to ${successCount}/${RELAYS.length} relays`);
-      
-      if (failedResults.length > 0) {
-        console.warn('⚠️ Failed relays:', failedResults.map(r => 
-          r.status === 'fulfilled' ? (r.value as any).relay : 'unknown'
-        ));
-      }
-      
+      // Publish deletion via server
+      const response = await supabase.functions.invoke('publish-dm-event', {
+        body: { event: deletionEvent }
+      });
+
+      const data = response.data as any;
+      const successCount = data?.publishedTo || 0;
+
       // Delete read status from database
       if (session.nostrHexId) {
         await deleteReadStatus(session.nostrHexId, messageId);
       }
-      
+
       // Remove from local state
       setConversations(prev => {
         const newConversations = new Map(prev);
         const conversation = newConversations.get(conversationPubkey);
-        
+
         if (conversation) {
           const updatedMessages = conversation.messages.filter(m => m.id !== messageId);
-          
+
           if (updatedMessages.length > 0) {
             newConversations.set(conversationPubkey, {
               ...conversation,
@@ -771,11 +602,10 @@ export function useNostrDMs() {
               lastMessage: updatedMessages[updatedMessages.length - 1]
             });
           } else {
-            // Remove conversation if no messages left
             newConversations.delete(conversationPubkey);
           }
         }
-        
+
         return newConversations;
       });
 
@@ -799,32 +629,31 @@ export function useNostrDMs() {
         variant: 'destructive'
       });
     }
-  }, [session, pool, RELAYS, deleteReadStatus]);
+  }, [session, deleteReadStatus]);
 
   const markAsRead = useCallback(async (pubkey: string) => {
     if (!session?.nostrHexId) return;
-    
+
     // Mark messages as read in database
     await markMessagesAsReadInDB(session.nostrHexId, pubkey);
-    
+
     // Update local state
     setConversations(prev => {
       const newConversations = new Map(prev);
       const conversation = newConversations.get(pubkey);
-      
+
       if (conversation) {
-        // Mark all received messages as read
         const updatedMessages = conversation.messages.map(msg => ({
           ...msg,
           isRead: true
         }));
-        
+
         newConversations.set(pubkey, {
           ...conversation,
           messages: updatedMessages,
           unreadCount: 0
         });
-        
+
         // Update read statuses in memory
         const newReadStatuses = new Map(readStatuses);
         conversation.messages.forEach(msg => {
@@ -834,11 +663,9 @@ export function useNostrDMs() {
         });
         setReadStatuses(newReadStatuses);
       }
-      
+
       return newConversations;
     });
-    
-    console.log('✅ Marked conversation as read:', pubkey.slice(0, 8));
   }, [session, readStatuses, markMessagesAsReadInDB]);
 
   return {
@@ -854,6 +681,6 @@ export function useNostrDMs() {
     deleteMessage,
     markAsRead,
     totalEvents,
-    relayCount: RELAYS.length
+    relayCount: 7 // Server handles relay count from KIND 38888
   };
 }

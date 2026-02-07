@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
-import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { supabase } from '@/integrations/supabase/client';
 import { arraysEqual } from '@/lib/arrayComparison';
 
 export interface DonationProposal {
@@ -36,23 +35,13 @@ export const useNostrDonationProposals = (
   options: UseNostrDonationProposalsOptions = {}
 ) => {
   const { poll = true, pollIntervalMs = 10000, enabled = true } = options;
-  const { parameters } = useSystemParameters();
   const [proposals, setProposals] = useState<DonationProposal[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const hasLoadedOnceRef = useRef(false);
   const fetchStartedRef = useRef(false);
-  const relays = parameters?.relays || [];
 
   const fetchProposals = useCallback(async () => {
     if (!enabled) {
-      return;
-    }
-
-    if (relays.length === 0) {
-      if (!hasLoadedOnceRef.current) {
-        setProposals([]);
-        setIsLoading(false);
-      }
       return;
     }
 
@@ -60,79 +49,21 @@ export const useNostrDonationProposals = (
     if (!hasLoadedOnceRef.current) {
       setIsLoading(true);
     }
-    const pool = new SimplePool();
 
     try {
-      console.log('📥 Fetching KIND 90900 donation proposals...');
+      console.log('📥 Fetching KIND 90900 donation proposals via server...');
 
-      const filter: any = {
-        kinds: [90900],
-        limit: 100
-      };
+      const { data, error } = await supabase.functions.invoke('fetch-donation-proposals', {
+        body: { userPubkey }
+      });
 
-      // Filter by payer if userPubkey is provided
-      if (userPubkey) {
-        filter['#p'] = [userPubkey];
-      }
+      if (error) throw error;
 
-      const events = await Promise.race([
-        pool.querySync(relays, filter),
-        new Promise<Event[]>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 15000)
-        )
-      ]) as Event[];
+      if (data?.proposals && data.proposals.length > 0) {
+        console.log(`✅ Found ${data.proposals.length} donation proposals`);
 
-      if (events && events.length > 0) {
-        console.log(`✅ Found ${events.length} donation proposals`);
+        const parsedProposals: DonationProposal[] = data.proposals;
 
-        const parsedProposals: DonationProposal[] = events
-          .map(event => {
-            const dTag = event.tags.find(t => t[0] === 'd')?.[1] || '';
-            
-            // Separate payer and recipient p tags
-            const payerTag = event.tags.find(t => t[0] === 'p' && t[2] === 'payer')?.[1];
-            const recipientTag = event.tags.find(t => t[0] === 'p' && t[2] === 'recipient')?.[1] || '';
-            
-            // If userPubkey filter is requested, verify this user is the payer
-            if (userPubkey && payerTag !== userPubkey) {
-              return null; // Skip this proposal
-            }
-            
-            const walletTag = event.tags.find(t => t[0] === 'wallet')?.[1] || '';
-            const fiatTag = event.tags.find(t => t[0] === 'fiat');
-            const lanaTag = event.tags.find(t => t[0] === 'lana')?.[1] || '';
-            const lanoshiTag = event.tags.find(t => t[0] === 'lanoshi')?.[1] || '';
-            const typeTag = event.tags.find(t => t[0] === 'type')?.[1] || '';
-            const serviceTag = event.tags.find(t => t[0] === 'service')?.[1] || '';
-            const refTag = event.tags.find(t => t[0] === 'ref')?.[1];
-            const expiresTag = event.tags.find(t => t[0] === 'expires')?.[1];
-            const urlTag = event.tags.find(t => t[0] === 'url')?.[1];
-
-            return {
-              id: event.id,
-              d: dTag,
-              payerPubkey: payerTag || '',
-              recipientPubkey: recipientTag,
-              wallet: walletTag,
-              fiatCurrency: fiatTag?.[1] || '',
-              fiatAmount: fiatTag?.[2] || '',
-              lanaAmount: lanaTag,
-              lanoshiAmount: lanoshiTag,
-              type: typeTag,
-              service: serviceTag,
-              ref: refTag,
-              expires: expiresTag ? parseInt(expiresTag) : undefined,
-              url: urlTag,
-              content: event.content,
-              createdAt: event.created_at,
-              eventId: event.id
-            } as DonationProposal;
-          })
-          .filter(p => p !== null) as DonationProposal[];
-
-        // Sort by newest first
-        parsedProposals.sort((a, b) => b.createdAt - a.createdAt);
-        
         // Only update state if data actually changed
         setProposals(prev => arraysEqual(parsedProposals, prev) ? prev : parsedProposals);
       } else {
@@ -152,9 +83,8 @@ export const useNostrDonationProposals = (
         setIsLoading(false);
         hasLoadedOnceRef.current = true;
       }
-      pool.close(relays);
     }
-  }, [enabled, relays.join(','), userPubkey]);
+  }, [enabled, userPubkey]);
 
   useEffect(() => {
     if (!enabled) {

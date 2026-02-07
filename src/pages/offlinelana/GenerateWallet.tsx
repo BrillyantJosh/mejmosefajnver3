@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Copy, Download, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import QRCode from "react-qr-code";
-import { generateRandomPrivateKey, privateKeyToWIF, generatePublicKey, generateLanaAddress } from "@/lib/crypto";
+import { generateRandomPrivateKey, privateKeyToWIF, generateCompressedPublicKey, generateLanaAddress } from "@/lib/crypto";
 
 const GenerateWallet = () => {
   const [privateKeyWIF, setPrivateKeyWIF] = useState("");
@@ -25,9 +25,9 @@ const GenerateWallet = () => {
       // Convert to WIF format
       const wif = await privateKeyToWIF(privateKeyHex);
       
-      // Generate public key (uncompressed)
-      const publicKeyHex = generatePublicKey(privateKeyHex);
-      
+      // Generate compressed public key (matches server-side address derivation)
+      const publicKeyHex = generateCompressedPublicKey(privateKeyHex);
+
       // Generate LanaCoin address
       const address = await generateLanaAddress(publicKeyHex);
       

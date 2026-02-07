@@ -152,11 +152,22 @@ export async function privateKeyToWIF(privateKeyHex: string): Promise<string> {
 export function generatePublicKey(privateKeyHex: string): string {
   const keyPair = ec.keyFromPrivate(privateKeyHex);
   const pubKeyPoint = keyPair.getPublic();
-  
+
   // Return uncompressed format (04 + x + y coordinates)
-  return "04" + 
-         pubKeyPoint.getX().toString(16).padStart(64, '0') + 
+  return "04" +
+         pubKeyPoint.getX().toString(16).padStart(64, '0') +
          pubKeyPoint.getY().toString(16).padStart(64, '0');
+}
+
+// Generate compressed public key from private key (matches server-side format)
+export function generateCompressedPublicKey(privateKeyHex: string): string {
+  const keyPair = ec.keyFromPrivate(privateKeyHex);
+  const pubKeyPoint = keyPair.getPublic();
+
+  // Compressed format: 02 (even y) or 03 (odd y) + x coordinate
+  const yIsEven = pubKeyPoint.getY().isEven();
+  const prefix = yIsEven ? "02" : "03";
+  return prefix + pubKeyPoint.getX().toString(16).padStart(64, '0');
 }
 
 // Generate compressed public key for Nostr (x-only)
@@ -201,23 +212,29 @@ export async function convertWifToIds(wif: string) {
   try {
     // Step 1: Extract private key from WIF
     const privateKeyHex = await wifToPrivateKey(wif);
-    
-    // Step 2: Generate public keys
-    const publicKeyHex = generatePublicKey(privateKeyHex);
+
+    // Step 2: Generate public keys (both formats needed)
+    const uncompressedPublicKeyHex = generatePublicKey(privateKeyHex);
+    const compressedPublicKeyHex = generateCompressedPublicKey(privateKeyHex);
     const nostrHexId = deriveNostrPublicKey(privateKeyHex);
-    
+
     // Step 3: Generate addresses/identifiers
-    const walletId = await generateLanaAddress(publicKeyHex);
+    // Generate BOTH address formats:
+    // - Compressed address matches server-side derivation (for transactions)
+    // - Uncompressed address matches older wallet registrations in KIND 30889 events
+    const walletId = await generateLanaAddress(compressedPublicKeyHex);
+    const walletIdUncompressed = await generateLanaAddress(uncompressedPublicKeyHex);
     const nostrNpubId = hexToNpub(nostrHexId);
-    
+
     return {
       lanaPrivateKey: wif,
       walletId,
+      walletIdUncompressed,
       nostrHexId,
       nostrNpubId,
       nostrPrivateKey: privateKeyHex
     };
-    
+
   } catch (error) {
     throw new Error(`Conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }

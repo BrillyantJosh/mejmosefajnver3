@@ -70,8 +70,6 @@ export default function Profile() {
   const [editingPayment, setEditingPayment] = useState<PaymentMethod | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [avatarApiKey, setAvatarApiKey] = useState<string>("");
-  const [avatarUploadUrl, setAvatarUploadUrl] = useState<string>("");
 
   // Helper function to ensure avatar URL is in correct format
   const formatAvatarUrl = (url: string | undefined, nostrHexId: string): string => {
@@ -159,36 +157,6 @@ export default function Profile() {
     }
   }, [profile, form]);
 
-  // Fetch avatar upload settings
-  useEffect(() => {
-    const fetchAvatarSettings = async () => {
-      try {
-        const [apiKeyResult, urlResult] = await Promise.all([
-          supabase
-            .from('app_settings')
-            .select('value')
-            .eq('key', 'Api_key_noster_picture_profile')
-            .single(),
-          supabase
-            .from('app_settings')
-            .select('value')
-            .eq('key', 'Link_to-post_noster_picture_profile')
-            .single()
-        ]);
-
-        if (apiKeyResult.data?.value) {
-          setAvatarApiKey(apiKeyResult.data.value as string);
-        }
-        if (urlResult.data?.value) {
-          setAvatarUploadUrl(urlResult.data.value as string);
-        }
-      } catch (error) {
-        console.error('Error fetching avatar settings:', error);
-      }
-    };
-
-    fetchAvatarSettings();
-  }, []);
 
   const onSubmit = async (data: ProfileFormData) => {
     const profileData = {
@@ -331,18 +299,43 @@ export default function Profile() {
     });
   };
 
+  const resizeImage = (file: File, maxSize: number): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+        // Scale down to fit within maxSize x maxSize square
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = Math.round((height * maxSize) / width);
+            width = maxSize;
+          } else {
+            width = Math.round((width * maxSize) / height);
+            height = maxSize;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Canvas context failed'));
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => blob ? resolve(blob) : reject(new Error('Blob creation failed')),
+          'image/jpeg',
+          0.85
+        );
+      };
+      img.onerror = () => reject(new Error('Image load failed'));
+      img.src = url;
+    });
+  };
+
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
-    if (!avatarUploadUrl || !avatarApiKey) {
-      toast({
-        title: "Configuration error",
-        description: "Avatar upload settings not loaded",
-        variant: "destructive",
-      });
-      return;
-    }
 
     // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
@@ -375,30 +368,30 @@ export default function Profile() {
     setUploadingAvatar(true);
 
     try {
-      const formData = new FormData();
-      formData.append('nostrHexId', session.nostrHexId);
-      formData.append('image', file);
+      // Resize to 256x256 max for avatar
+      const resizedBlob = await resizeImage(file, 256);
 
-      const response = await fetch(avatarUploadUrl, {
+      const formData = new FormData();
+      formData.append('path', `${session.nostrHexId}/avatar.jpg`);
+      formData.append('file', resizedBlob, 'avatar.jpg');
+
+      const response = await fetch('/api/storage/profile-avatars/upload', {
         method: 'POST',
-        headers: {
-          'x-api-key': avatarApiKey,
-        },
         body: formData,
       });
 
       const result = await response.json();
 
-      if (result.success && result.avatarUrl) {
-        // Ensure URL is in correct format (lanaknows.us)
-        const formattedUrl = formatAvatarUrl(result.avatarUrl, session.nostrHexId);
-        form.setValue('picture', formattedUrl);
+      if (result.data?.publicUrl) {
+        form.setValue('picture', result.data.publicUrl);
         toast({
           title: "Avatar uploaded",
           description: "Your avatar has been uploaded successfully",
         });
+      } else if (result.error) {
+        throw new Error(result.error);
       } else {
-        throw new Error(result.message || 'Upload failed');
+        throw new Error('Upload failed');
       }
     } catch (error) {
       console.error('Avatar upload error:', error);

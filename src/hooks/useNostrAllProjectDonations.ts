@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface AllProjectsDonationSummary {
   totalRaisedFiat: number;
@@ -22,28 +22,40 @@ export const useNostrAllProjectDonations = (visibleProjectIds: string[]) => {
     }
 
     const fetchAllDonations = async () => {
-      const pool = new SimplePool();
       setIsLoading(true);
 
       try {
-        const allDonationEvents = await pool.querySync(parameters.relays, {
-          kinds: [60200],
-          limit: 500
+        // Use server-side relay query instead of SimplePool (browser WebSocket fails)
+        const { data, error } = await supabase.functions.invoke('query-nostr-events', {
+          body: {
+            filter: {
+              kinds: [60200],
+              limit: 500
+            },
+            timeout: 15000
+          }
         });
+
+        if (error) {
+          console.error('❌ Server query error:', error);
+          throw new Error(error.message);
+        }
+
+        const allDonationEvents = data?.events || [];
 
         let totalFiat = 0;
         let count = 0;
 
-        allDonationEvents.forEach(event => {
+        allDonationEvents.forEach((event: any) => {
           // Get the project ID from donation event
-          const projectTag = event.tags.find(t => t[0] === 'project')?.[1];
-          
+          const projectTag = event.tags.find((t: string[]) => t[0] === 'project')?.[1];
+
           // Skip donations for projects not in visible list
           if (!projectTag || !visibleProjectIds.includes(projectTag)) {
             return;
           }
 
-          const amountFiatTag = event.tags.find(t => t[0] === 'amount_fiat')?.[1];
+          const amountFiatTag = event.tags.find((t: string[]) => t[0] === 'amount_fiat')?.[1];
           if (amountFiatTag) {
             const amount = parseFloat(amountFiatTag);
             if (!isNaN(amount)) {
@@ -61,7 +73,6 @@ export const useNostrAllProjectDonations = (visibleProjectIds: string[]) => {
         console.error('Error fetching all donations:', error);
       } finally {
         setIsLoading(false);
-        pool.close(parameters.relays);
       }
     };
 
