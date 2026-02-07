@@ -12,7 +12,7 @@ import { QRScanner } from "@/components/QRScanner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { finalizeEvent, SimplePool } from "nostr-tools";
+import { finalizeEvent } from "nostr-tools";
 
 const DonatePrivateKey = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -28,6 +28,8 @@ const DonatePrivateKey = () => {
   const [showScanner, setShowScanner] = useState(false);
   const [validationError, setValidationError] = useState<string>("");
   const [isValid, setIsValid] = useState(false);
+  // Store the compressed wallet address for server-side transaction
+  const [compressedWalletId, setCompressedWalletId] = useState<string>("");
 
   const project = projects.find(p => p.id === projectId);
   
@@ -60,13 +62,21 @@ const DonatePrivateKey = () => {
 
       try {
         const result = await convertWifToIds(privateKey.trim());
-        
-        if (result.walletId !== selectedWalletId) {
+
+        // Check both compressed and uncompressed addresses
+        // Older wallet registrations (KIND 30889) may use uncompressed addresses
+        const matchesCompressed = result.walletId === selectedWalletId;
+        const matchesUncompressed = result.walletIdUncompressed === selectedWalletId;
+
+        if (!matchesCompressed && !matchesUncompressed) {
           setValidationError("Private key does not match the selected wallet");
           setIsValid(false);
+          setCompressedWalletId("");
         } else {
           setValidationError("");
           setIsValid(true);
+          // Always store the compressed address for server-side transactions
+          setCompressedWalletId(result.walletId);
         }
       } catch (error) {
         setValidationError("Invalid private key format");
@@ -114,6 +124,7 @@ const DonatePrivateKey = () => {
       const lanaAmountLanoshis = Math.floor(lanaAmount * 100000000);
 
       // Step 3: Call send-lana-transaction edge function
+      // Use the original wallet address (from KIND 30889) — server derives pubkey from WIF
       const { data: txData, error: txError } = await supabase.functions.invoke('send-lana-transaction', {
         body: {
           senderAddress: selectedWalletId,
@@ -137,10 +148,7 @@ const DonatePrivateKey = () => {
         description: "Creating donation record...",
       });
 
-      // Step 4: Get private key details for signing
-      const keyDetails = await convertWifToIds(privateKey.trim());
-
-      // Step 5: Create KIND 60200 event
+      // Step 4: Create KIND 60200 event
       const eventTemplate = {
         kind: 60200,
         created_at: Math.floor(Date.now() / 1000),
@@ -148,7 +156,7 @@ const DonatePrivateKey = () => {
           ["service", "lanacrowd"],
           ["project", projectId || ""],
           ["p", session.nostrHexId, "supporter"],
-          ["p", project.pubkey, "project_owner"],
+          ["p", project.ownerPubkey, "project_owner"],
           ["amount_lanoshis", lanaAmountLanoshis.toString()],
           ["amount_fiat", amount.toString()],
           ["currency", project.currency],
@@ -160,7 +168,7 @@ const DonatePrivateKey = () => {
         content: message || `Supporting ${project.title} with ${amount} ${project.currency}`
       };
 
-      // Sign the event
+      // Sign the event with user's Nostr private key
       const signedEvent = finalizeEvent(eventTemplate, hexToBytes(session.nostrPrivateKey));
 
       toast({
@@ -168,96 +176,43 @@ const DonatePrivateKey = () => {
         description: "Publishing to Nostr relays...",
       });
 
-      // Step 6: Broadcast to Nostr relays with proper timeout handling
-      const pool = new SimplePool();
-      const relays = parameters.relays || [];
-      const publishResults: { relay: string; success: boolean; error?: string }[] = [];
-      
-      try {
-        const publishPromises = relays.map(async (relay: string) => {
-          console.log(`🔄 Publishing to ${relay}...`);
-          
-          return new Promise<void>((resolve) => {
-            // Outer timeout: 10s - guards against relay never responding
-            const timeout = setTimeout(() => {
-              publishResults.push({ 
-                relay, 
-                success: false, 
-                error: 'Connection timeout (10s)' 
-              });
-              console.error(`❌ ${relay}: Timeout`);
-              resolve(); // IMPORTANT: resolve, not reject!
-            }, 10000);
+      // Step 5: Broadcast via server-side relay publish (browser WebSocket to relays fails)
+      const { data: publishData, error: publishError } = await supabase.functions.invoke('publish-dm-event', {
+        body: { event: signedEvent }
+      });
 
-            try {
-              // Publish to relay
-              const pubs = pool.publish([relay], signedEvent);
-              
-              // Inner timeout: 8s - guards against publish promise hanging
-              Promise.race([
-                Promise.all(pubs), // Wait for relay confirmation
-                new Promise((_, reject) => 
-                  setTimeout(() => reject(new Error('Publish timeout')), 8000)
-                )
-              ]).then(() => {
-                clearTimeout(timeout);
-                publishResults.push({ relay, success: true });
-                console.log(`✅ ${relay}: Successfully published`);
-                resolve();
-              }).catch((error) => {
-                clearTimeout(timeout);
-                const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-                publishResults.push({ relay, success: false, error: errorMsg });
-                console.error(`❌ ${relay}: ${errorMsg}`);
-                resolve(); // IMPORTANT: resolve, not reject!
-              });
-            } catch (error) {
-              clearTimeout(timeout);
-              const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-              publishResults.push({ relay, success: false, error: errorMsg });
-              console.error(`❌ ${relay}: ${errorMsg}`);
-              resolve(); // IMPORTANT: resolve, not reject!
-            }
-          });
-        });
-        
-        // Wait for ALL relays to complete or timeout
-        await Promise.all(publishPromises);
-        
-        // Summary
-        const successCount = publishResults.filter(r => r.success).length;
-        const failedCount = publishResults.filter(r => !r.success).length;
-        
-        console.log('📊 Publishing summary:', {
-          eventId: signedEvent.id,
-          total: publishResults.length,
-          successful: successCount,
-          failed: failedCount,
-          details: publishResults
-        });
+      const successCount = publishData?.publishedTo || 0;
+      const totalRelays = publishData?.totalRelays || 0;
 
-        // Navigate to result page even if some relays failed
-        const params = new URLSearchParams({
-          success: "true",
-          txHash,
-          projectId: projectId || "",
-          projectTitle: project.title,
-          amount: amount.toString(),
-          currency: project.currency,
-          lanaAmount: lanaAmount.toFixed(8),
-          fee: (txFee / 100000000).toFixed(8),
-          senderAddress: selectedWalletId,
-          recipientAddress: project.wallet,
-          relaysPublished: successCount.toString(),
-          totalRelays: relays.length.toString(),
-          eventId: signedEvent.id
-        });
-
-        navigate(`/100millionideas/donate-result?${params.toString()}`);
-      } finally {
-        // CRITICAL: ALWAYS close pool
-        pool.close(relays);
+      if (publishError) {
+        console.error("Publish error:", publishError);
       }
+
+      console.log('📊 Publishing summary:', {
+        eventId: signedEvent.id,
+        publishedTo: successCount,
+        totalRelays,
+        results: publishData?.results
+      });
+
+      // Navigate to result page even if some relays failed
+      const resultParams = new URLSearchParams({
+        success: "true",
+        txHash,
+        projectId: projectId || "",
+        projectTitle: project.title,
+        amount: amount.toString(),
+        currency: project.currency,
+        lanaAmount: lanaAmount.toFixed(8),
+        fee: (txFee / 100000000).toFixed(8),
+        senderAddress: selectedWalletId,
+        recipientAddress: project.wallet,
+        relaysPublished: successCount.toString(),
+        totalRelays: totalRelays.toString(),
+        eventId: signedEvent.id
+      });
+
+      navigate(`/100millionideas/donate-result?${resultParams.toString()}`);
 
     } catch (error) {
       console.error("Donation error:", error);

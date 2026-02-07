@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface DonationData {
   id: string;
@@ -19,10 +19,10 @@ export interface DonationData {
   message: string;
 }
 
-const parseDonationEvent = (event: Event): DonationData | null => {
+const parseDonationEvent = (event: any): DonationData | null => {
   try {
     const getTag = (tagName: string, role?: string): string | undefined => {
-      const tag = event.tags.find(t => t[0] === tagName && (!role || t[2] === role));
+      const tag = event.tags.find((t: string[]) => t[0] === tagName && (!role || t[2] === role));
       return tag?.[1];
     };
 
@@ -71,53 +71,61 @@ export const useNostrProjectDonations = (projectId: string) => {
 
   useEffect(() => {
     if (!parameters?.relays || !projectId) {
-      console.log('⚠️ useNostrProjectDonations: Missing relays or projectId', { 
-        hasRelays: !!parameters?.relays, 
-        projectId 
+      console.log('⚠️ useNostrProjectDonations: Missing relays or projectId', {
+        hasRelays: !!parameters?.relays,
+        projectId
       });
       setIsLoading(false);
       return;
     }
 
     const fetchDonations = async () => {
-      const pool = new SimplePool();
       setIsLoading(true);
 
       try {
         console.log('🔍 Fetching donations for project:', projectId);
-        console.log('📡 Using relays:', parameters.relays);
-        
-        // Fetch ALL KIND 60200 events and filter manually
-        // because tag filtering in querySync doesn't work reliably
-        const allDonationEvents = await pool.querySync(parameters.relays, {
-          kinds: [60200],
-          limit: 200
+
+        // Use server-side relay query instead of SimplePool (browser WebSocket fails)
+        const { data, error } = await supabase.functions.invoke('query-nostr-events', {
+          body: {
+            filter: {
+              kinds: [60200],
+              limit: 200
+            },
+            timeout: 15000
+          }
         });
 
+        if (error) {
+          console.error('❌ Server query error:', error);
+          throw new Error(error.message);
+        }
+
+        const allDonationEvents = data?.events || [];
         console.log(`💰 Fetched ${allDonationEvents.length} total KIND 60200 events`);
-        
+
         // Filter for this specific project
-        const donationEvents = allDonationEvents.filter(event => {
-          const projectTag = event.tags.find(t => t[0] === 'project')?.[1];
+        const donationEvents = allDonationEvents.filter((event: any) => {
+          const projectTag = event.tags.find((t: string[]) => t[0] === 'project')?.[1];
           return projectTag === projectId;
         });
 
         console.log(`🎯 Filtered to ${donationEvents.length} donations for project ${projectId}`);
-        
+
         if (donationEvents.length > 0) {
           console.log('📝 First donation event:', JSON.stringify(donationEvents[0], null, 2));
         }
 
         const parsedDonations = donationEvents
-          .map((event) => {
+          .map((event: any) => {
             const parsed = parseDonationEvent(event);
             if (!parsed) {
               console.warn('⚠️ Failed to parse donation event:', event);
             }
             return parsed;
           })
-          .filter((d): d is DonationData => d !== null)
-          .sort((a, b) => b.timestampPaid - a.timestampPaid);
+          .filter((d: DonationData | null): d is DonationData => d !== null)
+          .sort((a: DonationData, b: DonationData) => b.timestampPaid - a.timestampPaid);
 
         console.log(`✅ Parsed ${parsedDonations.length} valid donations`);
         if (parsedDonations.length > 0) {
@@ -127,18 +135,17 @@ export const useNostrProjectDonations = (projectId: string) => {
         setDonations(parsedDonations);
 
         // Calculate total raised
-        const total = parsedDonations.reduce((sum, donation) => {
+        const total = parsedDonations.reduce((sum: number, donation: DonationData) => {
           return sum + parseFloat(donation.amountFiat);
         }, 0);
         setTotalRaised(total);
-        
+
         console.log(`💵 Total raised: ${total}`);
 
       } catch (error) {
         console.error('❌ Error fetching project donations:', error);
       } finally {
         setIsLoading(false);
-        pool.close(parameters.relays);
       }
     };
 

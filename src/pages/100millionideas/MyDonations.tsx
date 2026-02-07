@@ -112,15 +112,15 @@ const DonationCard = ({ donation, projectTitle }: DonationCardProps) => {
               <h3 className="font-semibold text-lg text-green-600">{projectTitle}</h3>
               <Badge variant="secondary">{donation.currency}</Badge>
             </div>
-            
+
             <p className="text-sm text-muted-foreground mb-2">
               From: {profile?.display_name || profile?.full_name || donation.supporterPubkey.slice(0, 16) + '...'}
             </p>
-            
+
             {donation.content && (
               <p className="text-sm italic mb-3">"{donation.content}"</p>
             )}
-            
+
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <span>{format(new Date(donation.timestampPaid * 1000), 'dd/MM/yyyy')}</span>
               <a
@@ -133,7 +133,7 @@ const DonationCard = ({ donation, projectTitle }: DonationCardProps) => {
               </a>
             </div>
           </div>
-          
+
           <div className="text-right">
             <p className="text-2xl font-bold text-green-600">
               {parseFloat(donation.amountFiat).toFixed(2)} {donation.currency}

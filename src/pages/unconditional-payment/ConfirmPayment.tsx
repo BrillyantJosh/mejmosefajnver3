@@ -91,7 +91,11 @@ export default function ConfirmPayment() {
         setIsValidating(true);
         const derivedIds = await convertWifToIds(privateKey);
         
-        if (derivedIds.walletId === paymentData.senderWallet) {
+        // Check both compressed and uncompressed addresses
+        const matchesCompressed = derivedIds.walletId === paymentData.senderWallet;
+        const matchesUncompressed = derivedIds.walletIdUncompressed === paymentData.senderWallet;
+
+        if (matchesCompressed || matchesUncompressed) {
           setIsPrivateKeyValid(true);
           setValidationError(null);
         } else {

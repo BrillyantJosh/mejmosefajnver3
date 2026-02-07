@@ -3,7 +3,7 @@ import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
-export interface ReceivedDonation {
+export interface SentDonation {
   id: string;
   projectDTag: string;
   supporterPubkey: string;
@@ -19,10 +19,10 @@ export interface ReceivedDonation {
   createdAt: number;
 }
 
-export const useNostrReceivedDonations = () => {
+export const useNostrSentDonations = () => {
   const { parameters } = useSystemParameters();
   const { session } = useAuth();
-  const [donations, setDonations] = useState<ReceivedDonation[]>([]);
+  const [donations, setDonations] = useState<SentDonation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const relays = parameters?.relays || [];
 
@@ -37,14 +37,14 @@ export const useNostrReceivedDonations = () => {
       setIsLoading(true);
 
       try {
-        console.log('📥 Fetching KIND 60200 donations for project owner:', session.nostrHexId);
+        console.log('📤 Fetching KIND 60200 donations sent by:', session.nostrHexId);
 
-        // Use server-side relay query instead of SimplePool (browser WebSocket fails)
+        // Use server-side relay query — fetch donations authored by the current user
         const { data, error } = await supabase.functions.invoke('query-nostr-events', {
           body: {
             filter: {
               kinds: [60200],
-              '#p': [session.nostrHexId],
+              authors: [session.nostrHexId],
               limit: 100
             },
             timeout: 15000
@@ -59,14 +59,9 @@ export const useNostrReceivedDonations = () => {
         const events = data?.events || [];
 
         if (events && events.length > 0) {
-          console.log(`✅ Found ${events.length} donation events`);
+          console.log(`✅ Found ${events.length} sent donation events`);
 
-          // Filter to only donations where user is project_owner
-          const parsedDonations: ReceivedDonation[] = events
-            .filter((event: any) => {
-              const ownerTag = event.tags.find((t: string[]) => t[0] === 'p' && t[2] === 'project_owner');
-              return ownerTag?.[1] === session.nostrHexId;
-            })
+          const parsedDonations: SentDonation[] = events
             .map((event: any) => {
               const projectTag = event.tags.find((t: string[]) => t[0] === 'project')?.[1] || '';
               const supporterTag = event.tags.find((t: string[]) => t[0] === 'p' && t[2] === 'supporter')?.[1] || '';
@@ -95,15 +90,15 @@ export const useNostrReceivedDonations = () => {
                 createdAt: event.created_at
               };
             })
-            .sort((a: ReceivedDonation, b: ReceivedDonation) => b.timestampPaid - a.timestampPaid);
+            .sort((a: SentDonation, b: SentDonation) => b.timestampPaid - a.timestampPaid);
 
-          console.log(`💚 Filtered ${parsedDonations.length} donations for this project owner`);
+          console.log(`📤 Parsed ${parsedDonations.length} sent donations`);
           setDonations(parsedDonations);
         } else {
           setDonations([]);
         }
       } catch (error) {
-        console.error('❌ Error fetching donations:', error);
+        console.error('❌ Error fetching sent donations:', error);
         setDonations([]);
       } finally {
         setIsLoading(false);

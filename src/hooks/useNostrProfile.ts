@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
+import { finalizeEvent } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -211,17 +211,16 @@ export const useNostrProfile = () => {
     }
 
     setIsPublishing(true);
-    const pool = new SimplePool();
 
     try {
       // Prepare content (exclude tags fields)
       const { interests, intimateInterests, lang, ...content } = profileData;
-      
+
       // Prepare tags
       const tags: string[][] = [
         ['lang', lang]
       ];
-      
+
       if (interests && interests.length > 0) {
         interests.forEach(interest => {
           if (interest.trim()) {
@@ -229,7 +228,7 @@ export const useNostrProfile = () => {
           }
         });
       }
-      
+
       if (intimateInterests && intimateInterests.length > 0) {
         intimateInterests.forEach(interest => {
           if (interest.trim()) {
@@ -253,49 +252,28 @@ export const useNostrProfile = () => {
 
       const signedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
 
-      console.log('Publishing profile to relays:', relays);
+      console.log('📡 Publishing profile via server-side relay publish...');
 
-      // Publish to all relays with timeout
-      try {
-        const publishPromises = pool.publish(relays, signedEvent);
-        
-        // Wait for all relays to respond (or timeout after 10 seconds)
-        const results = await Promise.race([
-          Promise.allSettled(publishPromises),
-          new Promise<any[]>((resolve) => 
-            setTimeout(() => resolve([]), 10000)
-          )
-        ]);
+      // Publish via server-side relay publish (browser WebSocket to relays fails)
+      const { data: publishData, error: publishError } = await supabase.functions.invoke('publish-dm-event', {
+        body: { event: signedEvent }
+      });
 
-        // Count successful publishes
-        const successful = Array.isArray(results) 
-          ? results.filter(r => r.status === 'fulfilled').length 
-          : 0;
-        
-        const failed = Array.isArray(results)
-          ? results.filter(r => r.status === 'rejected').length
-          : 0;
-
-        console.log(`📡 Published to ${successful}/${relays.length} relays (${failed} failed)`);
-        
-        // Log failed relays for debugging
-        if (failed > 0) {
-          results.forEach((result, index) => {
-            if (result.status === 'rejected') {
-              console.warn(`❌ Relay ${relays[index]} failed:`, result.reason);
-            }
-          });
-        }
-
-        if (successful === 0) {
-          throw new Error('Failed to publish to any relay. Check relay connections.');
-        }
-
-        console.log('✅ Profile published successfully');
-      } catch (publishError) {
-        console.error('❌ Publish error:', publishError);
-        throw publishError;
+      if (publishError) {
+        console.error('❌ Server publish error:', publishError);
+        throw new Error(publishError.message || 'Failed to publish profile');
       }
+
+      const successCount = publishData?.publishedTo || 0;
+      const totalRelays = publishData?.totalRelays || 0;
+
+      console.log(`📡 Published to ${successCount}/${totalRelays} relays`);
+
+      if (successCount === 0) {
+        throw new Error('Failed to publish to any relay. Check relay connections.');
+      }
+
+      console.log('✅ Profile published successfully');
 
       // Update local state
       setProfile(profileData);
@@ -306,13 +284,12 @@ export const useNostrProfile = () => {
       return { success: true };
     } catch (error) {
       console.error('Error publishing profile:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     } finally {
       setIsPublishing(false);
-      pool.close(relays);
     }
   };
 

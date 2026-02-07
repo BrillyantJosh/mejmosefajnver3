@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 const AUTHORITY_PUBKEY = '18a908e89354fb2d142d864bfcbea7a7ed4486c8fb66b746fcebe66ed372115e';
 
@@ -64,17 +65,29 @@ export const useNostrUserProjects = () => {
     }
 
     const fetchUserProjects = async () => {
-      const pool = new SimplePool();
       setIsLoading(true);
 
       try {
-        // Fetch all data in parallel
-        const [projectEvents, visibilityEvents, donationEvents, profileEvents] = await Promise.all([
-          pool.querySync(parameters.relays, { kinds: [31234], limit: 200 }),
-          pool.querySync(parameters.relays, { kinds: [31235], authors: [AUTHORITY_PUBKEY], limit: 100 }),
-          pool.querySync(parameters.relays, { kinds: [60200], limit: 500 }),
-          pool.querySync(parameters.relays, { kinds: [0], limit: 500 }),
+        // Fetch all data in parallel using server-side relay queries
+        const [projectRes, visibilityRes, donationRes, profileRes] = await Promise.all([
+          supabase.functions.invoke('query-nostr-events', {
+            body: { filter: { kinds: [31234], limit: 200 }, timeout: 15000 },
+          }),
+          supabase.functions.invoke('query-nostr-events', {
+            body: { filter: { kinds: [31235], authors: [AUTHORITY_PUBKEY], limit: 100 }, timeout: 10000 },
+          }),
+          supabase.functions.invoke('query-nostr-events', {
+            body: { filter: { kinds: [60200], limit: 500 }, timeout: 15000 },
+          }),
+          supabase.functions.invoke('query-nostr-events', {
+            body: { filter: { kinds: [0], limit: 500 }, timeout: 10000 },
+          }),
         ]);
+
+        const projectEvents: Event[] = projectRes.data?.events || [];
+        const visibilityEvents: Event[] = visibilityRes.data?.events || [];
+        const donationEvents: Event[] = donationRes.data?.events || [];
+        const profileEvents: Event[] = profileRes.data?.events || [];
 
         // Parse profiles for name lookups
         const profileMap = new Map<string, Kind0Profile>();
@@ -114,7 +127,7 @@ export const useNostrUserProjects = () => {
 
         // Parse all projects
         const parsedProjects: UserProjectData[] = [];
-        
+
         projectEvents.forEach(event => {
           const parsed = parseProjectWithDonations(event, donationsByProject, blockedProjects, profileMap);
           if (parsed) parsedProjects.push(parsed);
@@ -124,10 +137,10 @@ export const useNostrUserProjects = () => {
         const visibleProjects = parsedProjects.filter(p => !p.isBlocked && p.status !== 'draft');
         setAllProjects(visibleProjects);
 
-        // Filter for user's own projects - ONLY if event.pubkey matches user
-        // According to KIND 31234 spec: project ownership is determined by event.pubkey
+        // Filter for user's own projects - check both event.pubkey and owner p-tag
+        // Projects created on 100million.fun may have a different event signer
         const userProjects = parsedProjects.filter(
-          p => p.pubkey === session.nostrHexId
+          p => p.pubkey === session.nostrHexId || p.ownerPubkey === session.nostrHexId
         );
         setProjects(userProjects);
 
@@ -136,7 +149,6 @@ export const useNostrUserProjects = () => {
         console.error('Error fetching user projects:', error);
       } finally {
         setIsLoading(false);
-        pool.close(parameters.relays);
       }
     };
 
@@ -148,17 +160,15 @@ export const useNostrUserProjects = () => {
     return (query: string) => {
       if (!query.trim()) return allProjects;
       const lowerQuery = query.toLowerCase();
-      
+
       return allProjects.filter(project => {
-        // Search by project title or description
         if (project.title.toLowerCase().includes(lowerQuery)) return true;
         if (project.shortDesc.toLowerCase().includes(lowerQuery)) return true;
-        
-        // Search by owner name
+
         const ownerProfile = profiles.find(p => p.pubkey === project.ownerPubkey);
         if (ownerProfile?.name?.toLowerCase().includes(lowerQuery)) return true;
         if (ownerProfile?.display_name?.toLowerCase().includes(lowerQuery)) return true;
-        
+
         return false;
       });
     };
@@ -178,7 +188,7 @@ export const useNostrUserProjects = () => {
     const fullyFundedCount = projects.filter(p => p.isFullyFunded).length;
     const activeCount = projects.filter(p => p.status === 'active' && !p.isBlocked).length;
     const draftCount = projects.filter(p => p.status === 'draft').length;
-    
+
     return {
       projectCount: projects.length,
       totalRaised,
@@ -191,14 +201,14 @@ export const useNostrUserProjects = () => {
     };
   }, [projects]);
 
-  return { 
-    projects, 
-    allProjects, 
-    stats, 
-    isLoading, 
-    searchProjects, 
+  return {
+    projects,
+    allProjects,
+    stats,
+    isLoading,
+    searchProjects,
     getProfileName,
-    profiles 
+    profiles
   };
 };
 
@@ -256,9 +266,9 @@ function parseProjectWithDonations(
       if (supporterTag && amountFiatTag && txTag) {
         const amountFiat = parseFloat(amountFiatTag) || 0;
         totalRaised += amountFiat;
-        
+
         const supporterProfile = profileMap.get(supporterTag);
-        
+
         donations.push({
           eventId: donationEvent.id,
           supporterPubkey: supporterTag,

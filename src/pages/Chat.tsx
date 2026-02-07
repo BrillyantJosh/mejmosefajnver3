@@ -663,8 +663,8 @@ export default function Chat() {
                           </>
                         )}
                         <div className={`rounded-lg p-3 overflow-hidden break-words max-w-full ${
-                          msg.isOwn 
-                            ? 'bg-primary text-primary-foreground' 
+                          msg.isOwn
+                            ? 'bg-[#8B5CF6] text-white'
                             : 'bg-muted text-foreground'
                         }`}>
                           {msg.replyToId && (() => {
@@ -672,20 +672,20 @@ export default function Chat() {
                             return originalMsg ? (
                               <div 
                                 className={`mb-2 pb-2 border-b cursor-pointer hover:opacity-80 transition-opacity ${
-                                  msg.isOwn ? 'border-primary-foreground/20' : 'border-border'
+                                  msg.isOwn ? 'border-white/20' : 'border-border'
                                 }`}
                                 onClick={() => scrollToMessage(msg.replyToId!)}
                               >
                                 <div className="flex items-center gap-1 mb-1">
                                   <Reply className="h-3 w-3" />
                                   <span className={`text-xs font-medium ${
-                                    msg.isOwn ? 'text-primary-foreground/80' : 'text-muted-foreground'
+                                    msg.isOwn ? 'text-white/80' : 'text-muted-foreground'
                                   }`}>
                                     Reply to {originalMsg.isOwn ? 'You' : getDisplayName(originalMsg.pubkey)}
                                   </span>
                                 </div>
                                 <p className={`text-xs truncate ${
-                                  msg.isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                                  msg.isOwn ? 'text-white/70' : 'text-muted-foreground'
                                 }`}>
                                   {originalMsg.decryptedContent?.slice(0, 50) || 'Message'}...
                                 </p>
@@ -695,7 +695,7 @@ export default function Chat() {
                           {renderMessageContent(msg.decryptedContent || msg.content, msg.isOwn)}
                           <p className={`text-xs mt-1 ${
                             msg.isOwn 
-                              ? 'text-primary-foreground/70' 
+                              ? 'text-white/70'
                               : 'text-muted-foreground'
                           }`}>
                             {formatTime(msg.created_at)}

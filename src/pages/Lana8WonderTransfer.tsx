@@ -68,7 +68,11 @@ export default function Lana8WonderTransfer() {
       try {
         const result = await convertWifToIds(privateKey);
         
-        if (result.walletId === state.sourceWalletId) {
+        // Check both compressed and uncompressed addresses
+        const matchesCompressed = result.walletId === state.sourceWalletId;
+        const matchesUncompressed = result.walletIdUncompressed === state.sourceWalletId;
+
+        if (matchesCompressed || matchesUncompressed) {
           setIsKeyValid(true);
           setKeyError('');
         } else {
