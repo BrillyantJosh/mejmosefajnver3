@@ -404,7 +404,6 @@ export default function AiAdvisor() {
             events: eventsContext,
             recentChats: context.recentChats,
             connectionState: context.connectionState,
-            isDataLoading: context.isLoading || eventsLoading,
             eventsFetchStatus: eventsFetchStatus,
           },
           language: userLanguage,
