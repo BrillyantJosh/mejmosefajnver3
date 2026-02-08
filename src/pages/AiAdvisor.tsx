@@ -403,8 +403,7 @@ export default function AiAdvisor() {
             userProjects: userProjectsContext,
             events: eventsContext,
             recentChats: context.recentChats,
-            connectionState: context.connectionState,
-            eventsFetchStatus: eventsFetchStatus,
+            // connectionState and eventsFetchStatus removed — AI was obsessing about loading state
           },
           language: userLanguage,
           nostrHexId,

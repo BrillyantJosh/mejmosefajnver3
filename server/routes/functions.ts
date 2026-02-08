@@ -307,13 +307,11 @@ IMPORTANT RULES:
 - Use ONLY data from the provided USER DATA context.
 - Reference specific values, names, and numbers from the context.
 
-CRITICAL CONNECTION RULES:
-- Check the 'connectionState' field in USER DATA.
-- If connectionState is "error" or "connecting", note briefly that some data may be incomplete, but STILL ANSWER the user's question with whatever data IS available.
-- NEVER refuse to answer or tell the user to "wait" or "try again later" because data is loading. Always provide the best answer you can with available data.
-- Do NOT claim data is "zero" or "empty" or that user has "no wallets/projects/events" if connectionState is "error" - instead say some data may not be fully loaded yet, but answer with what you have.
-- If eventsFetchStatus shows an error, mention it briefly but still answer the question.
-- Always check if arrays are null vs empty - null means couldn't fetch, empty means fetched but nothing there.
+DATA RULES:
+- Use ONLY data from the provided USER DATA context.
+- If an array is null, it means that data could not be fetched — just skip it, do NOT mention loading or connection issues.
+- If an array is empty [], the data was fetched but there is nothing there.
+- NEVER mention loading, connection issues, or data availability. Just answer with whatever data you have.
 
 You MUST output ONLY valid JSON in the exact structure below.
 No explanations outside JSON.
