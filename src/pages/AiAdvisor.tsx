@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { t, getTranslation } from '@/lib/aiAdvisorTranslations';
 import { getExchangeRates } from '@/lib/currencyConversion';
+import { useAiTaskSSE } from '@/hooks/useAiTaskSSE';
 import { getProxiedImageUrl } from '@/lib/imageProxy';
 import { toast } from 'sonner';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -84,6 +85,8 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   triadData?: TriadResponse;
+  pendingUpdate?: boolean;
+  isUpdate?: boolean;
 }
 
 interface PaymentIntent {
@@ -232,7 +235,8 @@ export default function AiAdvisor() {
   const { session } = useAuth();
   
   const nostrHexId = session?.nostrHexId || '';
-  
+  const { updatedAnswers } = useAiTaskSSE(nostrHexId || null);
+
   // Robust language fallback chain: profile > session > context > default 'sl'
   const userLanguage = profile?.lang || session?.profileLang || context.userProfile?.language || 'sl';
   const trans = getTranslation(userLanguage);
@@ -310,6 +314,26 @@ export default function AiAdvisor() {
       if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
     }
   }, [messages]);
+
+  // Handle async updated answers from SSE
+  useEffect(() => {
+    if (updatedAnswers.length === 0) return;
+
+    const latest = updatedAnswers[updatedAnswers.length - 1];
+    console.log('🔄 Adding updated AI answer to chat:', latest.taskId);
+
+    setMessages(prev => {
+      // Remove pendingUpdate flag from previous messages
+      const cleaned = prev.map(m => m.pendingUpdate ? { ...m, pendingUpdate: false } : m);
+      // Add the updated answer as a new message
+      return [...cleaned, {
+        role: 'assistant' as const,
+        content: latest.answer.final_answer,
+        triadData: latest.answer as any,
+        isUpdate: true,
+      }];
+    });
+  }, [updatedAnswers]);
 
   const parsePaymentIntent = (content: string): PaymentIntent | null => {
     try {
@@ -446,6 +470,20 @@ export default function AiAdvisor() {
               setProgressMessage(parsed.progress);
               console.log('📊 Progress:', parsed.progress);
               continue; // Don't process as content
+            }
+
+            // Check for pending task notification
+            if (parsed.pendingTask) {
+              console.log('📋 Pending task created:', parsed.pendingTask.taskId);
+              setMessages(prev => {
+                const newMessages = [...prev];
+                const lastIdx = newMessages.length - 1;
+                if (newMessages[lastIdx]?.role === 'assistant') {
+                  newMessages[lastIdx] = { ...newMessages[lastIdx], pendingUpdate: true };
+                }
+                return newMessages;
+              });
+              continue;
             }
             
             const content = parsed.choices?.[0]?.delta?.content;
@@ -666,6 +704,12 @@ export default function AiAdvisor() {
                     <div className={cn("max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4", message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
                       {message.role === 'assistant' ? (
                         <div className="space-y-2">
+                          {/* Update badge for async answers */}
+                          {message.isUpdate && (
+                            <Badge variant="outline" className="text-[10px] mb-1 border-green-500 text-green-600">
+                              🔄 {userLanguage === 'sl' ? 'Posodobljen odgovor' : 'Updated answer'}
+                            </Badge>
+                          )}
                           {/* Confidence badge for triad responses */}
                           {message.triadData && (
                             <div className="flex items-center justify-between mb-2">
@@ -711,6 +755,16 @@ export default function AiAdvisor() {
                           {/* Triad debug panel */}
                           {message.triadData && message.content && (
                             <TriadDebugPanel triadData={message.triadData} language={userLanguage} />
+                          )}
+
+                          {/* Pending update indicator */}
+                          {message.pendingUpdate && (
+                            <div className="flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground">
+                              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                              {userLanguage === 'sl'
+                                ? 'Pridobivam dodatne podatke — posodobljen odgovor sledi...'
+                                : 'Fetching additional data — updated answer coming...'}
+                            </div>
                           )}
                         </div>
                       ) : (

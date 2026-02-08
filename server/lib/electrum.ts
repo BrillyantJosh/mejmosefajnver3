@@ -5,7 +5,7 @@ import * as net from 'net';
  * Supports both single calls and batch balance queries over one connection.
  */
 
-interface ElectrumServer {
+export interface ElectrumServer {
   host: string;
   port: number;
 }
