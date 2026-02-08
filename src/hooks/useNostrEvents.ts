@@ -3,12 +3,6 @@ import { SimplePool } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export interface LanaEvent {
   id: string;
   pubkey: string;
@@ -61,9 +55,7 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
   const [error, setError] = useState<string | null>(null);
   const fetchStartedRef = useRef(false);
 
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   const parseEvent = (event: any): LanaEvent | null => {
     try {

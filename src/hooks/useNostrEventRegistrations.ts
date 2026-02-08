@@ -3,12 +3,6 @@ import { SimplePool } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export interface EventRegistration {
   id: string;
   pubkey: string;
@@ -30,9 +24,7 @@ export function useNostrEventRegistrations(eventSlug: string | undefined) {
   const [loading, setLoading] = useState(true);
   const [userRegistration, setUserRegistration] = useState<EventRegistration | null>(null);
 
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   const parseRegistration = (event: any): EventRegistration | null => {
     try {
@@ -139,9 +131,7 @@ export function useNostrEventRegistrationsBatch(eventSlugs: string[]) {
   const [registrationsByEvent, setRegistrationsByEvent] = useState<Record<string, EventRegistration[]>>({});
   const [loading, setLoading] = useState(true);
 
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   const fetchAllRegistrations = useCallback(async () => {
     if (eventSlugs.length === 0) {

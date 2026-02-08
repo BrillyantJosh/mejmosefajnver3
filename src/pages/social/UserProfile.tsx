@@ -18,12 +18,6 @@ import { PostContent } from "@/components/social/PostContent";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 import type { NostrProfile } from "@/hooks/useNostrProfile";
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 interface UserPost {
   id: string;
   content: string;
@@ -47,9 +41,7 @@ export default function UserProfile() {
   const [loading, setLoading] = useState(true);
   const [lashedEvents, setLashedEvents] = useState<Set<string>>(new Set());
 
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   // Fetch profile and posts
   useEffect(() => {

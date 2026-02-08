@@ -3,12 +3,6 @@ import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 /**
  * Hook to track which posts/comments the current user has LASHed
  * Returns a Set of event IDs that have been LASHed by the user
@@ -20,9 +14,7 @@ export function useNostrUserLashes() {
   const [loading, setLoading] = useState(false);
   const pool = useMemo(() => new SimplePool(), []);
 
-  const relays = parameters?.relays && parameters.relays.length > 0 
-    ? parameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   useEffect(() => {
     if (!session?.nostrHexId) return;

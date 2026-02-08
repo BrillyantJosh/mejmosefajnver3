@@ -12,12 +12,6 @@ import { SimplePool, finalizeEvent } from 'nostr-tools';
 import { toast } from 'sonner';
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 interface PostAuthor {
   pubkey: string;
   displayName: string;
@@ -35,9 +29,7 @@ export default function StartOwnProcess() {
   const [postAuthor, setPostAuthor] = useState<PostAuthor | null>(null);
   const [isLoadingAuthor, setIsLoadingAuthor] = useState(true);
 
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   // Fetch post author info
   useEffect(() => {

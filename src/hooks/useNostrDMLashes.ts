@@ -4,12 +4,6 @@ import { SimplePool, type Event } from 'nostr-tools';
 import { supabase } from '@/integrations/supabase/client';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 interface Lasher {
   pubkey: string;
   amount: string;
@@ -36,9 +30,7 @@ export const useNostrDMLashes = (
   const { parameters } = useSystemParameters();
   const [relaySyncing, setRelaySyncing] = useState(false);
 
-  const relays = parameters?.relays && parameters.relays.length > 0 
-    ? parameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   // Step 1: Fast load from Supabase cache
   const { data: dbLashes, isLoading, refetch } = useQuery({

@@ -2,12 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 interface RoomPostCounts {
   [slug: string]: number;
 }
@@ -18,10 +12,7 @@ export const useNostrRoomPostCounts = (roomSlugs: string[]) => {
   const [loading, setLoading] = useState(false);
 
   const RELAYS = useMemo(() => {
-    if (parameters?.relays && parameters.relays.length > 0) {
-      return parameters.relays;
-    }
-    return DEFAULT_RELAYS;
+    return parameters?.relays || [];
   }, [parameters]);
 
   // Memoize the roomSlugs to prevent infinite loops

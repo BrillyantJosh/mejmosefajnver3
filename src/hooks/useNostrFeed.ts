@@ -3,12 +3,6 @@ import { SimplePool, Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrProfilesCacheBulk } from './useNostrProfilesCacheBulk';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export interface NostrPost {
   id: string;
   pubkey: string;
@@ -32,12 +26,7 @@ export function useNostrFeed() {
   const pool = useMemo(() => new SimplePool(), []);
   
   const RELAYS = useMemo(() => {
-    if (systemParameters?.relays && systemParameters.relays.length > 0) {
-      console.log('📡 Using relays from system parameters:', systemParameters.relays);
-      return systemParameters.relays;
-    }
-    console.log('📡 Using default LANA relays');
-    return DEFAULT_RELAYS;
+    return systemParameters?.relays || [];
   }, [systemParameters?.relays]);
 
   // Get all post authors for bulk profile fetching

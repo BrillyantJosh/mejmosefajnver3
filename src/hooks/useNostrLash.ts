@@ -5,12 +5,6 @@ import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { calculateExpiration } from '@/lib/lashExpiration';
 import { supabase } from '@/integrations/supabase/client';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 interface GiveLashParams {
   postId: string;
   recipientPubkey: string;
@@ -25,9 +19,7 @@ export const useNostrLash = () => {
   const { parameters } = useSystemParameters();
   const [isSending, setIsSending] = useState(false);
 
-  const relays = parameters?.relays && parameters.relays.length > 0 
-    ? parameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   /**
    * Give a LASH (like/tip) to a post

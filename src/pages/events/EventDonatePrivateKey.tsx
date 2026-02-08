@@ -23,12 +23,6 @@ interface LocationState {
   isPay: boolean;
 }
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 const EventDonatePrivateKey = () => {
   const { dTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
@@ -36,9 +30,9 @@ const EventDonatePrivateKey = () => {
   const { parameters } = useSystemParameters();
   const { session } = useAuth();
   const { toast } = useToast();
-  
+
   const state = location.state as LocationState | null;
-  
+
   const [privateKey, setPrivateKey] = useState("");
   const [isValidating, setIsValidating] = useState(false);
   const [isPrivateKeyValid, setIsPrivateKeyValid] = useState(false);
@@ -48,9 +42,7 @@ const EventDonatePrivateKey = () => {
 
   const decodedDTag = dTag ? decodeURIComponent(dTag) : '';
 
-  const relays = parameters?.relays && parameters.relays.length > 0 
-    ? parameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   // Validate private key against selected wallet
   useEffect(() => {

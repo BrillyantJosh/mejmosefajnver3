@@ -9,14 +9,13 @@ import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { SimplePool, finalizeEvent, nip44 } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "sonner";
-import { OWN_PROJECT_ID } from "@/lib/ownSupabaseClient";
 import { useLashHistory } from "@/hooks/useLashHistory";
 import { useNostrLash } from "@/hooks/useNostrLash";
 import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { useSupabaseLashCounts } from "@/hooks/useSupabaseLashCounts";
 
-// External Supabase project for OWN audio storage
-const OWN_SUPABASE_URL = `https://${OWN_PROJECT_ID}.supabase.co`;
+// Audio storage: local Express server (not Supabase)
+const OWN_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const DM_AUDIO_BUCKET = "dm-audio";
 
 // Helper to convert hex string to Uint8Array
@@ -302,7 +301,7 @@ export default function Own() {
 
       const audioUrl = path.startsWith("http")
         ? path
-        : `${OWN_SUPABASE_URL}/storage/v1/object/public/${DM_AUDIO_BUCKET}/${path}`;
+        : `${OWN_API_URL}/api/storage/${DM_AUDIO_BUCKET}/${path}`;
 
       console.log("🎵 Audio message detected:", {
         originalText: text.length > 50 ? text.substring(0, 50) + "..." : text,

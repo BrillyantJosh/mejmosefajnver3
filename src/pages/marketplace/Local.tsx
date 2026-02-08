@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNostrMarketOffers } from "@/hooks/useNostrMarketOffers";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 import OfferCard from "@/components/marketplace/OfferCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { MapPin, Navigation } from "lucide-react";
+import { MapPin, Navigation, Globe } from "lucide-react";
 import LocationPicker from "@/components/LocationPicker";
 import { toast } from "sonner";
 
@@ -14,11 +14,11 @@ export default function MarketplaceLocal() {
   const { profile } = useNostrProfile();
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
-  
+
   // User's current location (either from profile or manually set)
   const [userLat, setUserLat] = useState<number | undefined>(profile?.latitude);
   const [userLng, setUserLng] = useState<number | undefined>(profile?.longitude);
-  
+
   // Distance filter (in km)
   const [distance, setDistance] = useState([50]);
 
@@ -29,6 +29,29 @@ export default function MarketplaceLocal() {
       setUserLng(profile.longitude);
     }
   }, [profile]);
+
+  // Auto-detect location on mount if not set from profile
+  useEffect(() => {
+    if (!userLat && !userLng && navigator.geolocation) {
+      setLoadingLocation(true);
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = Math.round(position.coords.latitude * 1e6) / 1e6;
+          const lng = Math.round(position.coords.longitude * 1e6) / 1e6;
+          setUserLat(lat);
+          setUserLng(lng);
+          setLoadingLocation(false);
+          toast.success("Lokacija zaznana", {
+            description: `Koordinate: ${lat}, ${lng}`
+          });
+        },
+        () => {
+          setLoadingLocation(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    }
+  }, []);
 
   // Calculate distance between two coordinates (Haversine formula)
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -43,14 +66,18 @@ export default function MarketplaceLocal() {
     return R * c;
   };
 
-  // Filter offers by distance
-  const localOffers = offers.filter(offer => {
-    if (!userLat || !userLng || !offer.latitude || !offer.longitude) {
-      return false;
-    }
-    const dist = calculateDistance(userLat, userLng, offer.latitude, offer.longitude);
-    return dist <= distance[0];
-  });
+  // Split offers: with geo data vs without
+  const geoOffers = useMemo(() => offers.filter(o => o.latitude && o.longitude), [offers]);
+  const noGeoOffers = useMemo(() => offers.filter(o => !o.latitude || !o.longitude), [offers]);
+
+  // Filter geo offers by distance from user
+  const localOffers = useMemo(() => {
+    if (!userLat || !userLng) return [];
+    return geoOffers.filter(offer => {
+      const dist = calculateDistance(userLat, userLng, offer.latitude!, offer.longitude!);
+      return dist <= distance[0];
+    });
+  }, [geoOffers, userLat, userLng, distance]);
 
   const handleGetCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -163,27 +190,76 @@ export default function MarketplaceLocal() {
             </div>
           ))}
         </div>
-      ) : !userLat || !userLng ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <MapPin className="h-12 w-12 mx-auto mb-4" />
-          <p className="text-lg font-medium mb-2">Set your location</p>
-          <p>To see local offers, please set your current location</p>
-        </div>
-      ) : localOffers.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <p className="text-lg font-medium mb-2">No local offers found</p>
-          <p>Try increasing the distance or check back later</p>
-        </div>
       ) : (
         <>
+          {/* Stats */}
           <div className="text-sm text-muted-foreground">
-            Found {localOffers.length} offer{localOffers.length !== 1 ? 's' : ''} within {distance[0]} km
+            {offers.length} ponudb skupaj
+            {geoOffers.length > 0 && ` • ${geoOffers.length} z lokacijo`}
+            {noGeoOffers.length > 0 && ` • ${noGeoOffers.length} brez lokacije`}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {localOffers.map((offer) => (
-              <OfferCard key={offer.id} offer={offer} />
-            ))}
-          </div>
+
+          {/* Location prompt if not set */}
+          {loadingLocation && (
+            <div className="text-center py-4 text-muted-foreground">
+              <Navigation className="h-6 w-6 mx-auto mb-2 animate-pulse" />
+              <p className="text-sm">Zaznavamo vašo lokacijo...</p>
+            </div>
+          )}
+
+          {!userLat && !userLng && !loadingLocation && (
+            <div className="text-center py-6 text-muted-foreground bg-card rounded-lg border">
+              <MapPin className="h-8 w-8 mx-auto mb-2" />
+              <p className="text-sm font-medium mb-1">Lokacija ni nastavljena</p>
+              <p className="text-xs">Kliknite "Current Location" ali "Pick on Map" za prikaz bližnjih ponudb</p>
+            </div>
+          )}
+
+          {/* Local offers (with geo data, filtered by distance) */}
+          {userLat && userLng && (
+            <>
+              {localOffers.length > 0 ? (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-green-500" />
+                    Ponudbe v bližini ({localOffers.length} v {distance[0]} km)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {localOffers.map((offer) => (
+                      <OfferCard key={offer.id} offer={offer} />
+                    ))}
+                  </div>
+                </div>
+              ) : geoOffers.length > 0 ? (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  Ni ponudb v radiju {distance[0]} km. Poskusite povečati razdaljo.
+                </div>
+              ) : null}
+            </>
+          )}
+
+          {/* Offers without geo data */}
+          {noGeoOffers.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                Ponudbe brez lokacije ({noGeoOffers.length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {noGeoOffers.map((offer) => (
+                  <OfferCard key={offer.id} offer={offer} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* No offers at all */}
+          {offers.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground">
+              <p className="text-lg font-medium mb-2">Ni ponudb</p>
+              <p>Trenutno ni aktivnih ponudb na trgu</p>
+            </div>
+          )}
         </>
       )}
 

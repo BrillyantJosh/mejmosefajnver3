@@ -95,11 +95,7 @@ export function useNostrRoomLatestPosts(roomSlugs: string[]) {
   const { parameters } = useSystemParameters();
 
   const RELAYS = useMemo(() => {
-    return parameters?.relays || [
-      "wss://relay.lanavault.space",
-      "wss://relay.lanacoin-eternity.com",
-      "wss://relay.lanaheartvoice.com"
-    ];
+    return parameters?.relays || [];
   }, [parameters]);
 
   useEffect(() => {

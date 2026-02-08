@@ -15,12 +15,6 @@ import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNostrEventRegistrationsBatch, EventRegistration } from "@/hooks/useNostrEventRegistrations";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 function AttendeeRow({ registration }: { registration: EventRegistration }) {
   const { profile } = useNostrProfileCache(registration.pubkey);
   const displayName = profile?.display_name || profile?.full_name || registration.pubkey.slice(0, 8) + '...';
@@ -158,9 +152,7 @@ export default function MyEvents() {
   const [events, setEvents] = useState<LanaEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   // Get all event slugs for batch registration fetching
   const eventSlugs = events.map(e => e.dTag);

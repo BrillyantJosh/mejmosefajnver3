@@ -31,12 +31,6 @@ import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrUnpaidLashDetails, UnpaidLashDetail } from '@/hooks/useNostrUnpaidLashDetails';
 import { useBatchLashSender } from '@/hooks/useBatchLashSender';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 interface BlockStatus {
   canSend: boolean;
   lastBlock?: number;
@@ -84,9 +78,7 @@ export function UnpaidLashesDrawer({ open, onOpenChange }: UnpaidLashesDrawerPro
     }
   }, [open, setAutoRefreshEnabled, session?.nostrHexId]);
 
-  const relays = parameters?.relays && parameters.relays.length > 0 
-    ? parameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   const checkBlockStatus = async () => {
     if (!session?.nostrHexId) return;

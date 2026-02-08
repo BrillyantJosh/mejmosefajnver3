@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SimplePool, Filter, Event, nip44 } from 'nostr-tools';
+import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
  
 const hexToBytes = (hex: string): Uint8Array => {
@@ -25,31 +26,7 @@ export const useNostrGroupMessages = (
 ) => {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const LANA_RELAYS = [
-    'wss://relay.lanavault.space',
-    'wss://relay.lanacoin-eternity.com',
-    'wss://relay.lanaheartvoice.com',
-    'wss://relay.lovelana.org'
-  ];
-
-  const getRelays = (): string[] => {
-    try {
-      const storedParams = sessionStorage.getItem('lana_system_params');
-      if (storedParams) {
-        const params = JSON.parse(storedParams);
-        if (params.relays && Array.isArray(params.relays) && params.relays.length > 0) {
-          console.log('📡 Using relays from session:', params.relays);
-          return params.relays;
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error parsing stored system params:', error);
-    }
-
-    console.log('📡 Using fallback LANA relays:', LANA_RELAYS);
-    return LANA_RELAYS;
-  };
+  const { parameters } = useSystemParameters();
 
   useEffect(() => {
     console.log('💬 useNostrGroupMessages mounted with:', {
@@ -68,7 +45,7 @@ export const useNostrGroupMessages = (
     setIsLoading(true);
     setMessages([]);
 
-    const relays = getRelays();
+    const relays = parameters?.relays || [];
     if (!relays || relays.length === 0) {
       console.error('❌ useNostrGroupMessages: No relays configured');
       setIsLoading(false);
@@ -177,7 +154,7 @@ export const useNostrGroupMessages = (
       }
       pool.close(relays);
     };
-  }, [processEventId, groupKeyHex]);
+  }, [processEventId, groupKeyHex, parameters]);
 
   return { messages, isLoading };
 };

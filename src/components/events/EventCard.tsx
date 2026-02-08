@@ -14,12 +14,6 @@ import { toast } from "@/hooks/use-toast";
 import { getTimezoneAbbreviation, getUserTimezone, formatTimeInTimezone } from "@/lib/timezones";
 import { useEventCountdown } from "@/hooks/useEventCountdown";
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 interface EventCardProps {
   event: LanaEvent;
   showRegistrationCount?: boolean;
@@ -34,9 +28,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
   
   const { registrations, userRegistration, refetch } = useNostrEventRegistrations(event.dTag);
   
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   const status = getEventStatus(event);
   const countdown = useEventCountdown(event.start);

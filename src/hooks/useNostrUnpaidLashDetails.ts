@@ -4,12 +4,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { isLashExpired } from '@/lib/lashExpiration';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export interface UnpaidLashDetail {
   lashId: string; // "lash:uuid"
   eventId: string; // event ID for deletion
@@ -37,9 +31,7 @@ export const useNostrUnpaidLashDetails = () => {
   
   const ITEMS_PER_PAGE = 20;
 
-  const relays = parameters?.relays && parameters.relays.length > 0 
-    ? parameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   const fetchRecipientProfile = async (pool: SimplePool, pubkey: string) => {
     // Check cache first

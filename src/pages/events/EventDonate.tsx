@@ -19,12 +19,6 @@ interface WalletBalance {
   balance: number;
 }
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 const EventDonate = () => {
   const { dTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
@@ -33,7 +27,7 @@ const EventDonate = () => {
   const { toast } = useToast();
   const { parameters } = useSystemParameters();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
-  
+
   const [event, setEvent] = useState<LanaEvent | null>(null);
   const [eventLoading, setEventLoading] = useState(true);
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
@@ -47,9 +41,7 @@ const EventDonate = () => {
 
   const decodedDTag = dTag ? decodeURIComponent(dTag) : '';
 
-  const relays = parameters?.relays && parameters.relays.length > 0 
-    ? parameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   // Filter out LanaPays.Us and Lana8Wonder wallets
   const availableWallets = wallets.filter(wallet => 

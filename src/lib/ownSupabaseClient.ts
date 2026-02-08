@@ -17,6 +17,11 @@ class OwnStorageBucketClient {
     try {
       const formData = new FormData();
 
+      // IMPORTANT: path MUST be appended BEFORE the file field.
+      // Multer's diskStorage filename callback runs during file processing,
+      // so body fields added after the file won't be available yet.
+      formData.append('path', filePath);
+
       if (file instanceof File) {
         formData.append('file', file);
       } else if (file instanceof Blob) {
@@ -24,8 +29,6 @@ class OwnStorageBucketClient {
       } else if (file instanceof ArrayBuffer) {
         formData.append('file', new Blob([file]), filePath);
       }
-
-      formData.append('path', filePath);
 
       const response = await fetch(`${API_URL}/api/storage/${this.bucket}/upload`, {
         method: 'POST',

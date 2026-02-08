@@ -4,12 +4,6 @@ import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { getProxiedImageUrl } from '@/lib/imageProxy';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 const CACHE_VALIDITY_HOURS = 24;
 
 export interface CachedProfile {
@@ -27,7 +21,7 @@ export const useNostrProfilesCacheBulk = (pubkeys: string[]) => {
   const [profiles, setProfiles] = useState<Map<string, CachedProfile>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
 
-  const relays = parameters?.relays || DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   const fetchProfiles = useCallback(async (hexIds: string[]) => {
     if (hexIds.length === 0) {

@@ -4,12 +4,6 @@ import { useToast } from '@/hooks/use-toast';
 import { SimplePool, finalizeEvent } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 interface UnpaidLash {
   eventId: string;
   lashId: string;
@@ -94,9 +88,7 @@ export const useBatchLashSender = () => {
 
       // Publish Nostr payment updates client-side (LASH Protocol 2.0)
       // Update existing KIND 39991 events with state="paid"
-      const relays = parameters?.relays && parameters.relays.length > 0 
-        ? parameters.relays 
-        : DEFAULT_RELAYS;
+      const relays = parameters?.relays || [];
       
       console.log(`📡 Publishing ${data.recipients.length} Nostr KIND 39991 payment updates to ${relays.length} relays...`);
       const pool = new SimplePool();

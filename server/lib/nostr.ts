@@ -435,12 +435,7 @@ export async function publishEventToRelays(
   return Promise.all(relays.map(relay => publishToRelay(relay)));
 }
 
-/**
- * Get the list of official Lana relays
- */
-export function getLanaRelays(): string[] {
-  return [...LANA_RELAYS];
-}
+// getLanaRelays() removed — relays should come from kind_38888 DB table, not hardcoded
 
 /**
  * Get the authorized pubkey for KIND 38888

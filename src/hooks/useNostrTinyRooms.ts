@@ -28,11 +28,7 @@ export function useNostrTinyRooms(userPubkey?: string) {
       return;
     }
 
-    const RELAYS = parameters?.relays || [
-      "wss://relay.lanavault.space",
-      "wss://relay.lanacoin-eternity.com",
-      "wss://relay.lanaheartvoice.com",
-    ];
+    const RELAYS = parameters?.relays || [];
 
     const pool = new SimplePool();
     

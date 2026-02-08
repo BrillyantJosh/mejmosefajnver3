@@ -5,6 +5,72 @@ const router = Router();
 // Store active SSE connections by user nostr_hex_id
 const sseClients = new Map<string, Set<Response>>();
 
+// Store SSE connections for system parameter updates (heartbeat)
+const systemParamsClients = new Set<Response>();
+
+// =============================================
+// SSE: System Parameters (heartbeat) updates
+// =============================================
+router.get('/system-params', (req: Request, res: Response) => {
+  // Set SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  // Send initial connection event
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  // Register client
+  systemParamsClients.add(res);
+  console.log(`📡 System params SSE client connected (total: ${systemParamsClients.size})`);
+
+  // Keep alive ping every 30 seconds
+  const keepAlive = setInterval(() => {
+    try {
+      res.write(': keepalive\n\n');
+    } catch {
+      clearInterval(keepAlive);
+    }
+  }, 30000);
+
+  // Handle client disconnect
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    systemParamsClients.delete(res);
+    console.log(`📡 System params SSE client disconnected (total: ${systemParamsClients.size})`);
+  });
+});
+
+/**
+ * Notify all connected clients that system parameters have been updated.
+ * Clients should re-fetch from the database.
+ */
+export function emitSystemParametersUpdate(data: any): void {
+  if (systemParamsClients.size === 0) return;
+
+  const payload = JSON.stringify({
+    type: 'system_params_updated',
+    ...data
+  });
+
+  console.log(`📡 Broadcasting system params update to ${systemParamsClients.size} clients`);
+
+  for (const client of systemParamsClients) {
+    try {
+      client.write(`data: ${payload}\n\n`);
+    } catch (err) {
+      systemParamsClients.delete(client);
+    }
+  }
+}
+
+// =============================================
+// SSE: DM Read Status updates
+// =============================================
+
 // SSE endpoint for dm_read_status realtime updates
 router.get('/dm-read-status', (req: Request, res: Response) => {
   const userId = req.query.user as string;

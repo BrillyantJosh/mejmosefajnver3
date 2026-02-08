@@ -30,6 +30,7 @@ export function getDb(): Database.Database {
 export function closeDb(): void {
   if (db) {
     db.close();
+    db = undefined!;
     console.log('SQLite database closed');
   }
 }

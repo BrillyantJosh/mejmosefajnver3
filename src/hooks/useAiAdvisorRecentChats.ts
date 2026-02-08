@@ -6,13 +6,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNostrProfilesCacheBulk } from './useNostrProfilesCacheBulk';
 import { formatDistanceToNow } from 'date-fns';
 
-// Default fallback relays (only LANA relays)
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export interface RecentChatSummary {
   conversationPubkey: string;
   displayName: string;
@@ -43,12 +36,9 @@ export function useAiAdvisorRecentChats() {
   }>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
 
-  // Get relays from system parameters or use default
+  // Get relays from system parameters
   const RELAYS = useMemo(() => {
-    if (systemParameters?.relays && systemParameters.relays.length > 0) {
-      return systemParameters.relays;
-    }
-    return DEFAULT_RELAYS;
+    return systemParameters?.relays || [];
   }, [systemParameters?.relays]);
 
   // Get all conversation pubkeys for bulk profile fetching

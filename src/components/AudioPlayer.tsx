@@ -19,6 +19,7 @@ export function AudioPlayer({ audioUrl }: AudioPlayerProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
 
   const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2];
@@ -43,7 +44,8 @@ export function AudioPlayer({ audioUrl }: AudioPlayerProps) {
 
     const handleError = () => {
       setIsLoading(false);
-      console.error('Error loading audio');
+      setHasError(true);
+      console.error('Error loading audio:', audioUrl);
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -57,7 +59,7 @@ export function AudioPlayer({ audioUrl }: AudioPlayerProps) {
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
-  }, []);
+  }, [audioUrl]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -101,11 +103,11 @@ export function AudioPlayer({ audioUrl }: AudioPlayerProps) {
   return (
     <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg my-1 w-full max-w-full min-w-[280px]">
       {/* Play/Pause Button */}
-      <Button 
-        size="sm" 
+      <Button
+        size="sm"
         variant="ghost"
         onClick={togglePlay}
-        disabled={isLoading}
+        disabled={isLoading || hasError}
         className="flex-shrink-0 h-9 w-9 p-0"
       >
         {isPlaying ? (
@@ -154,9 +156,13 @@ export function AudioPlayer({ audioUrl }: AudioPlayerProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Time Display */}
-      <span className="text-xs text-muted-foreground flex-shrink-0 font-mono whitespace-nowrap min-w-[70px] text-right">
-        {formatTime(currentTime)} / {formatTime(duration)}
+      {/* Time Display / Error */}
+      <span className="text-xs flex-shrink-0 font-mono whitespace-nowrap min-w-[70px] text-right">
+        {hasError ? (
+          <span className="text-destructive">Ni na voljo</span>
+        ) : (
+          <span className="text-muted-foreground">{formatTime(currentTime)} / {formatTime(duration)}</span>
+        )}
       </span>
 
       {/* Hidden Audio Element */}

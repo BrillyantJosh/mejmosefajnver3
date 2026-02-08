@@ -14,12 +14,6 @@ import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNostrEventRegistrations, EventRegistration } from "@/hooks/useNostrEventRegistrations";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 function AttendeeRow({ registration }: { registration: EventRegistration }) {
   const { profile, isLoading } = useNostrProfileCache(registration.pubkey);
   
@@ -64,9 +58,7 @@ export default function EventRegistrations() {
   // Decode the URL-encoded dTag
   const decodedDTag = urlDTag ? decodeURIComponent(urlDTag) : '';
 
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   const { registrations, loading: loadingRegistrations } = useNostrEventRegistrations(event?.dTag || decodedDTag);
 
