@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 import webpush from 'web-push';
 import { getDb } from '../db/connection';
 import { electrumCall, fetchBatchBalances } from '../lib/electrum';
+import { detectMissingFields, createPendingTask } from '../lib/aiTasks';
 import { sendLanaTransaction, sendBatchLanaTransaction } from '../lib/crypto';
 import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays } from '../lib/nostr';
 
@@ -577,6 +578,32 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
     };
 
     sendSSE({ choices: [{ delta: { content: JSON.stringify(triadResult) } }] });
+
+    // Check for missing data and create async task if needed
+    const missingFields = detectMissingFields(context);
+    if (missingFields.length > 0 && nostrHexId) {
+      const taskId = createPendingTask(db, {
+        nostrHexId,
+        question: lastUserMessage,
+        language: langCode,
+        missingFields,
+        partialContext: context,
+        partialAnswer: mediatorResponse.final_answer,
+        usdToLanaRate: usdToLanaRate || 270,
+      });
+
+      sendSSE({
+        choices: [{ delta: { content: '' } }],
+        pendingTask: {
+          taskId,
+          missingFields,
+          message: langCode === 'sl'
+            ? 'Nekateri podatki se še pridobivajo. Ko bodo na voljo, boš dobil posodobljen odgovor.'
+            : 'Some data is still being fetched. You will receive an updated answer when available.',
+        },
+      });
+    }
+
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (error: any) {

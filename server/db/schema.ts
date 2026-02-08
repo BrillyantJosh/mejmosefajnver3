@@ -185,10 +185,30 @@ export function initializeSchema(db: Database.Database): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS ai_pending_tasks (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      nostr_hex_id TEXT NOT NULL,
+      question TEXT NOT NULL,
+      language TEXT NOT NULL DEFAULT 'sl',
+      missing_fields TEXT NOT NULL,
+      partial_context TEXT NOT NULL,
+      partial_answer TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','expired','cancelled')),
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      max_retries INTEGER NOT NULL DEFAULT 5,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT,
+      full_answer TEXT,
+      usd_to_lana_rate REAL DEFAULT 270
+    );
+
     -- =============================================
     -- INDEXES
     -- =============================================
 
+    CREATE INDEX IF NOT EXISTS idx_ai_pending_tasks_status ON ai_pending_tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_ai_pending_tasks_nostr ON ai_pending_tasks(nostr_hex_id);
     CREATE INDEX IF NOT EXISTS idx_ai_knowledge_slug ON ai_knowledge(slug);
     CREATE INDEX IF NOT EXISTS idx_ai_knowledge_status ON ai_knowledge(status);
     CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_nostr_hex_id ON ai_usage_logs(nostr_hex_id);
@@ -218,5 +238,5 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_transaction_history_txid ON transaction_history(txid);
   `);
 
-  console.log('SQLite schema initialized (17 tables + indexes)');
+  console.log('SQLite schema initialized (18 tables + indexes)');
 }

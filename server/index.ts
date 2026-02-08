@@ -9,8 +9,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import dbRoutes from './routes/db';
 import storageRoutes from './routes/storage';
-import sseRoutes, { emitSystemParametersUpdate } from './routes/sse';
+import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks } from './routes/sse';
 import functionsRoutes from './routes/functions';
+import { processPendingTasks, setSSEHandlers } from './lib/aiTasks';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -50,7 +51,7 @@ const db = getDb();
 // KIND 38888 Sync — reusable function + heartbeat
 // =============================================
 
-const HEARTBEAT_INTERVAL = 60 * 60 * 1000; // 1 hour in ms
+const HEARTBEAT_INTERVAL = 60 * 1000; // 1 minute (was 1 hour)
 
 /**
  * Sync KIND 38888 from Lana relays and save to database.
@@ -113,16 +114,33 @@ async function syncKind38888ToDb(): Promise<boolean> {
 })();
 
 // =============================================
-// Heartbeat — sync KIND 38888 every hour
+// Heartbeat — 1 minute interval
+// KIND 38888 sync every 60 heartbeats (= 1 hour)
+// AI pending tasks processed every heartbeat
 // =============================================
+
+// Wire up SSE handlers for async AI task delivery
+setSSEHandlers(emitAiTaskUpdate, isUserConnectedToAiTasks);
+
 let heartbeatCount = 0;
 const heartbeatTimer = setInterval(async () => {
   heartbeatCount++;
-  console.log(`💓 Heartbeat #${heartbeatCount} — syncing KIND 38888...`);
-  await syncKind38888ToDb();
+
+  // KIND 38888 sync every 60 heartbeats (= every hour)
+  if (heartbeatCount % 60 === 0) {
+    console.log(`💓 Heartbeat #${heartbeatCount} — syncing KIND 38888...`);
+    await syncKind38888ToDb();
+  }
+
+  // Process pending AI tasks every heartbeat (every minute)
+  try {
+    await processPendingTasks(db);
+  } catch (err) {
+    console.error('❌ Error processing pending AI tasks:', err);
+  }
 }, HEARTBEAT_INTERVAL);
 
-console.log(`💓 Heartbeat started: KIND 38888 will sync every ${HEARTBEAT_INTERVAL / 60000} minutes`);
+console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute)`);
 
 // =============================================
 // API Routes

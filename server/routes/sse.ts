@@ -147,4 +147,63 @@ export function emitDmReadStatusUpdate(data: any): void {
   }
 }
 
+// =============================================
+// SSE: AI Task Updates (async AI responses)
+// =============================================
+
+const aiTaskClients = new Map<string, Set<Response>>();
+
+router.get('/ai-tasks', (req: Request, res: Response) => {
+  const userId = req.query.user as string;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'Missing user parameter' });
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  if (!aiTaskClients.has(userId)) {
+    aiTaskClients.set(userId, new Set());
+  }
+  aiTaskClients.get(userId)!.add(res);
+
+  console.log(`🧠 AI task SSE client connected for ${userId.slice(0, 8)}... (total: ${aiTaskClients.get(userId)!.size})`);
+
+  const keepAlive = setInterval(() => {
+    try { res.write(': keepalive\n\n'); } catch { clearInterval(keepAlive); }
+  }, 30000);
+
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    const clients = aiTaskClients.get(userId);
+    if (clients) {
+      clients.delete(res);
+      if (clients.size === 0) aiTaskClients.delete(userId);
+    }
+    console.log(`🧠 AI task SSE client disconnected for ${userId.slice(0, 8)}...`);
+  });
+});
+
+export function emitAiTaskUpdate(nostrHexId: string, data: any): void {
+  const clients = aiTaskClients.get(nostrHexId);
+  if (!clients || clients.size === 0) return;
+
+  const payload = JSON.stringify({ type: 'ai_task_update', ...data });
+  for (const client of clients) {
+    try { client.write(`data: ${payload}\n\n`); } catch { clients.delete(client); }
+  }
+}
+
+export function isUserConnectedToAiTasks(nostrHexId: string): boolean {
+  const clients = aiTaskClients.get(nostrHexId);
+  return !!(clients && clients.size > 0);
+}
+
 export default router;
