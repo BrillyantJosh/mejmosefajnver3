@@ -289,95 +289,308 @@ router.post('/cleanup-direct-messages', async (req: Request, res: Response) => {
 // MEDIUM COMPLEXITY FUNCTIONS
 // =============================================
 
-// ai-advisor
+// ==================== TRIAD AI SYSTEM ====================
+// Three-agent dialectical system: BUILDER → SKEPTIC → MEDIATOR
+// Uses Google Gemini API directly
+// =========================================================
+
+const BUILDER_PROMPT = `You are BUILDER.
+
+Your task is to respond to the user's request by proposing a concrete solution.
+
+IMPORTANT RULES:
+- Be helpful but precise.
+- Do NOT pretend you executed actions you did not actually execute.
+- Clearly separate facts, assumptions, and unknowns.
+- Do NOT overpromise or guarantee outcomes.
+- If information is missing, state it explicitly.
+- Use ONLY data from the provided USER DATA context.
+- Reference specific values, names, and numbers from the context.
+
+CRITICAL CONNECTION RULES:
+- Check the 'connectionState' field in USER DATA.
+- If connectionState is "error" or "connecting", inform the user that data may be INCOMPLETE due to connection issues with Nostr relays.
+- If isDataLoading is true, inform the user that data is still loading.
+- Do NOT claim data is "zero" or "empty" or that user has "no wallets/projects/events" if connectionState is "error" - instead say you CANNOT ACCESS the data right now.
+- If eventsFetchStatus shows an error, be honest that event data couldn't be retrieved.
+- Always check if arrays are null vs empty - null means couldn't fetch, empty means fetched but nothing there.
+
+You MUST output ONLY valid JSON in the exact structure below.
+No explanations outside JSON.
+
+JSON STRUCTURE:
+{
+  "answer": "Your proposed solution or response to the user (can be multiple paragraphs, use \\n for newlines)",
+  "assumptions": ["List of assumptions you are making"],
+  "steps_taken": ["Only steps you truly performed (thinking, reasoning, analysis)"],
+  "unknowns": ["What is unclear or not verified"],
+  "risks": ["Potential failure points or risks"],
+  "questions": ["Up to 3 critical questions, only if truly needed - empty array if none"]
+}`;
+
+const SKEPTIC_PROMPT = `You are SKEPTIC.
+
+Your job is to critically challenge the BUILDER's output.
+
+IMPORTANT RULES:
+- Assume BUILDER may be wrong, incomplete, or overly optimistic.
+- Do NOT create a new solution from scratch.
+- Identify weak points, unsupported claims, and missing logic.
+- Look for where the solution could fail in the real world.
+- Check if BUILDER's claims match the actual USER DATA provided.
+- Be direct and honest, not polite.
+
+You MUST output ONLY valid JSON in the exact structure below.
+No explanations outside JSON.
+
+JSON STRUCTURE:
+{
+  "claims_to_verify": ["Claims that lack proof or certainty"],
+  "failure_modes": ["Ways the solution could break or fail"],
+  "missing_info": ["Critical information that is missing"],
+  "recommended_changes": ["Specific corrections or improvements"]
+}`;
+
+const MEDIATOR_PROMPT = `You are MEDIATOR.
+
+Your role is to merge BUILDER and SKEPTIC into an honest, grounded response.
+
+IMPORTANT RULES:
+- You are NOT here to please the user.
+- You are here to tell the truth.
+- Do NOT add new factual claims that were not present in BUILDER or SKEPTIC.
+- If something is uncertain, say so clearly.
+- If the problem cannot be fully solved, state that openly.
+- Prefer honesty over completeness.
+- Write in a friendly, warm tone with emojis where appropriate.
+- Use the user's name if available from context.
+
+You MUST output ONLY valid JSON in the exact structure below.
+No explanations outside JSON.
+
+JSON STRUCTURE:
+{
+  "final_answer": "The most honest and grounded response to the user (can be multiple paragraphs with markdown formatting, use \\n for newlines)",
+  "confidence": 75,
+  "what_i_did": ["What was actually done - be specific"],
+  "what_i_did_not_do": ["What was NOT done or cannot be guaranteed"],
+  "next_step": "Smallest realistic and safe next step the user can take"
+}`;
+
+const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
+  sl: "\n\nIMPORTANT: Respond in SLOVENIAN (slovenščina). Use informal 'ti' form. Be warm and friendly like a good friend.",
+  en: "\n\nIMPORTANT: Respond in ENGLISH. Be warm and friendly.",
+  de: "\n\nIMPORTANT: Respond in GERMAN (Deutsch). Be warm and friendly.",
+  hr: "\n\nIMPORTANT: Respond in CROATIAN (hrvatski). Be warm and friendly.",
+  hu: "\n\nIMPORTANT: Respond in HUNGARIAN (magyar). Be warm and friendly.",
+  it: "\n\nIMPORTANT: Respond in ITALIAN (italiano). Be warm and friendly.",
+  es: "\n\nIMPORTANT: Respond in SPANISH (español). Be warm and friendly.",
+  pt: "\n\nIMPORTANT: Respond in PORTUGUESE (português). Be warm and friendly.",
+};
+
+const PROGRESS_MESSAGES: Record<string, { builder: string; skeptic: string; mediator: string }> = {
+  sl: { builder: "🔨 Pripravljam odgovor...", skeptic: "🔍 Preverjam točnost...", mediator: "⚖️ Sintetiziram končni odgovor..." },
+  en: { builder: "🔨 Preparing response...", skeptic: "🔍 Verifying accuracy...", mediator: "⚖️ Synthesizing final answer..." },
+  de: { builder: "🔨 Antwort vorbereiten...", skeptic: "🔍 Genauigkeit überprüfen...", mediator: "⚖️ Endgültige Antwort synthetisieren..." },
+  hr: { builder: "🔨 Pripremam odgovor...", skeptic: "🔍 Provjeravam točnost...", mediator: "⚖️ Sintetiziram konačni odgovor..." },
+};
+
+function parseTriadJSON<T>(text: string, fallback: T): T {
+  try {
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
+    if (jsonMatch) return JSON.parse(jsonMatch[1].trim());
+    return JSON.parse(text);
+  } catch {
+    console.error("Failed to parse triad JSON:", text.substring(0, 200));
+    return fallback;
+  }
+}
+
+async function callGemini(apiKey: string, model: string, systemPrompt: string, userMessage: string) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${err}`);
+  }
+
+  const data = await response.json() as any;
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const usage = data.usageMetadata || {};
+  return {
+    content: text,
+    usage: {
+      prompt_tokens: usage.promptTokenCount || 0,
+      completion_tokens: usage.candidatesTokenCount || 0,
+      total_tokens: usage.totalTokenCount || 0,
+    },
+  };
+}
+
+// ai-advisor (Triad system with Google Gemini)
 router.post('/ai-advisor', async (req: Request, res: Response) => {
   try {
-    const { message, nostrHexId, lang, conversationHistory } = req.body;
-    if (!message) return res.status(400).json({ error: 'message required' });
+    const { messages: chatMessages, context, language, nostrHexId, usdToLanaRate } = req.body;
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'AI service is not configured. GEMINI_API_KEY missing.' });
+    }
+
+    console.log(`🎯 TRIAD AI request from ${nostrHexId?.substring(0, 16)}...`);
+
+    // Get last user message
+    const lastUserMessage = (chatMessages || []).filter((m: any) => m.role === 'user').pop()?.content || '';
+    if (!lastUserMessage) return res.status(400).json({ error: 'No user message' });
 
     const db = getDb();
+    const langCode = (language?.split('-')[0] || 'sl').toLowerCase();
 
-    // Get knowledge base context
+    // Fetch knowledge base
     const knowledge = db.prepare(`
-      SELECT title, summary, body FROM ai_knowledge
+      SELECT title, summary, body, topic, keywords, lang FROM ai_knowledge
       WHERE status = 'active' AND (lang = ? OR lang = 'en')
       ORDER BY created_at DESC LIMIT 50
-    `).all(lang || 'en');
+    `).all(langCode) as any[];
 
-    // Get API key from app_settings
-    const apiKeySetting = db.prepare(`SELECT value FROM app_settings WHERE key = 'openai_api_key'`).get() as any;
-    const apiKey = apiKeySetting?.value ? JSON.parse(apiKeySetting.value) : process.env.OPENAI_API_KEY;
-
-    if (!apiKey) {
-      return res.json({
-        response: 'AI advisor is not configured. Please set an OpenAI API key.',
-        tokensUsed: 0
-      });
-    }
-
-    // Build knowledge context
-    const knowledgeContext = knowledge.map((k: any) =>
-      `### ${k.title}\n${k.summary}\n${k.body || ''}`
-    ).join('\n\n');
-
-    const systemPrompt = `You are LANA AI Advisor, a helpful assistant for the LanaCoin ecosystem.
-Use the following knowledge base to answer questions:
-
-${knowledgeContext}
-
-Answer in the user's language (${lang || 'en'}). Be helpful, concise, and accurate.`;
-
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      ...(conversationHistory || []),
-      { role: 'user', content: message }
-    ];
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages,
-        max_tokens: 1000,
-        temperature: 0.7
-      })
+    // Score knowledge by relevance
+    const queryTerms = lastUserMessage.toLowerCase().replace(/[^\w\sčšžćđ]/gi, ' ').split(/\s+/).filter((t: string) => t.length > 2);
+    const scoredKnowledge = knowledge.map((k: any) => {
+      const searchable = [k.title || '', k.summary || '', k.topic || '', ...(k.keywords ? JSON.parse(k.keywords) : [])].join(' ').toLowerCase();
+      let score = 0;
+      for (const term of queryTerms) {
+        if (searchable.includes(term)) {
+          score += 1;
+          if ((k.title || '').toLowerCase().includes(term)) score += 2;
+          if ((k.topic || '').toLowerCase().includes(term)) score += 1;
+        }
+      }
+      if (k.lang === langCode) score += 1;
+      return { ...k, score };
     });
 
-    const data = await response.json() as any;
+    const relevant = scoredKnowledge.filter((k: any) => k.score > 0).sort((a: any, b: any) => b.score - a.score).slice(0, 5);
+    const knowledgeText = (relevant.length > 0 ? relevant : knowledge.filter((k: any) => k.lang === langCode).slice(0, 3))
+      .map((k: any) => `### ${k.title}\n${k.summary}${k.body ? `\n\n${k.body}` : ''}`).join('\n\n---\n\n');
 
-    if (data.error) {
-      throw new Error(data.error.message);
-    }
+    // Build context
+    let contextMessage = '';
+    if (context) contextMessage = `USER DATA:\n${JSON.stringify(context, null, 2)}`;
+    if (knowledgeText) contextMessage += `\n\n=== LANA KNOWLEDGE BASE ===\n${knowledgeText}\n=== END KNOWLEDGE BASE ===`;
 
-    const aiResponse = data.choices?.[0]?.message?.content || 'No response';
-    const usage = data.usage || {};
+    const langInstruction = LANGUAGE_INSTRUCTIONS[langCode] || LANGUAGE_INSTRUCTIONS.en;
+    const progressMsgs = PROGRESS_MESSAGES[langCode] || PROGRESS_MESSAGES.en;
+    const fastModel = 'gemini-2.0-flash-lite';
+    const smartModel = 'gemini-2.0-flash';
 
-    // Log usage
+    // Set up SSE streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    const sendSSE = (data: any) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    let totalUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+
+    // Step 1: BUILDER
+    sendSSE({ choices: [{ delta: { content: '' } }], progress: progressMsgs.builder });
+    console.log('🔨 BUILDER starting...');
+    const builderResult = await callGemini(GEMINI_API_KEY, fastModel, BUILDER_PROMPT + langInstruction + '\n\n' + contextMessage, lastUserMessage);
+    totalUsage.prompt_tokens += builderResult.usage.prompt_tokens;
+    totalUsage.completion_tokens += builderResult.usage.completion_tokens;
+    totalUsage.total_tokens += builderResult.usage.total_tokens;
+
+    const builderResponse = parseTriadJSON(builderResult.content, {
+      answer: 'Ni mi uspelo analizirati vprašanja.',
+      assumptions: [], steps_taken: ['Attempted analysis'], unknowns: ['Analysis failed'], risks: [], questions: [],
+    });
+    console.log('🔨 BUILDER done');
+
+    // Step 2: SKEPTIC
+    sendSSE({ choices: [{ delta: { content: '' } }], progress: progressMsgs.skeptic });
+    console.log('🔍 SKEPTIC starting...');
+    const skepticInput = `USER QUESTION:\n${lastUserMessage}\n\nBUILDER'S RESPONSE:\n${JSON.stringify(builderResponse, null, 2)}\n\nUSER DATA CONTEXT:\n${contextMessage}`;
+    const skepticResult = await callGemini(GEMINI_API_KEY, fastModel, SKEPTIC_PROMPT, skepticInput);
+    totalUsage.prompt_tokens += skepticResult.usage.prompt_tokens;
+    totalUsage.completion_tokens += skepticResult.usage.completion_tokens;
+    totalUsage.total_tokens += skepticResult.usage.total_tokens;
+
+    const skepticResponse = parseTriadJSON(skepticResult.content, {
+      claims_to_verify: [], failure_modes: [], missing_info: [], recommended_changes: [],
+    });
+    console.log('🔍 SKEPTIC done');
+
+    // Step 3: MEDIATOR
+    sendSSE({ choices: [{ delta: { content: '' } }], progress: progressMsgs.mediator });
+    console.log('⚖️ MEDIATOR starting...');
+    const mediatorInput = `USER QUESTION:\n${lastUserMessage}\n\nBUILDER JSON:\n${JSON.stringify(builderResponse, null, 2)}\n\nSKEPTIC JSON:\n${JSON.stringify(skepticResponse, null, 2)}\n\nUSER DATA CONTEXT (for reference):\n${contextMessage}`;
+    const mediatorResult = await callGemini(GEMINI_API_KEY, smartModel, MEDIATOR_PROMPT + langInstruction, mediatorInput);
+    totalUsage.prompt_tokens += mediatorResult.usage.prompt_tokens;
+    totalUsage.completion_tokens += mediatorResult.usage.completion_tokens;
+    totalUsage.total_tokens += mediatorResult.usage.total_tokens;
+
+    const mediatorResponse = parseTriadJSON(mediatorResult.content, {
+      final_answer: builderResponse.answer,
+      confidence: 50,
+      what_i_did: builderResponse.steps_taken,
+      what_i_did_not_do: builderResponse.unknowns,
+      next_step: 'Poskusi znova ali postavi bolj specifično vprašanje.',
+    });
+    console.log('⚖️ MEDIATOR done, confidence:', mediatorResponse.confidence);
+
+    // Log usage to SQLite
     if (nostrHexId) {
-      db.prepare(`
-        INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
-        VALUES (lower(hex(randomblob(16))), ?, 'gpt-4o-mini', ?, ?, ?, ?, ?)
-      `).run(
-        nostrHexId,
-        usage.prompt_tokens || 0,
-        usage.completion_tokens || 0,
-        usage.total_tokens || 0,
-        ((usage.prompt_tokens || 0) * 0.00000015 + (usage.completion_tokens || 0) * 0.0000006),
-        0 // cost_lana calculated elsewhere
-      );
+      try {
+        const costUsd = (totalUsage.prompt_tokens / 1_000_000) * 0.02 + (totalUsage.completion_tokens / 1_000_000) * 0.08;
+        const costLana = costUsd * (usdToLanaRate || 270);
+        db.prepare(`
+          INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
+          VALUES (lower(hex(randomblob(16))), ?, 'triad-gemini', ?, ?, ?, ?, ?)
+        `).run(nostrHexId, totalUsage.prompt_tokens, totalUsage.completion_tokens, totalUsage.total_tokens, costUsd, costLana);
+        console.log(`📊 Logged triad usage: ${totalUsage.total_tokens} tokens, $${costUsd.toFixed(6)} USD`);
+      } catch (err) {
+        console.error('Failed to log AI usage:', err);
+      }
     }
 
-    return res.json({
-      response: aiResponse,
-      tokensUsed: usage.total_tokens || 0
-    });
+    // Send final triad result
+    const triadResult = {
+      type: 'triad',
+      final_answer: mediatorResponse.final_answer,
+      confidence: mediatorResponse.confidence,
+      what_i_did: mediatorResponse.what_i_did,
+      what_i_did_not_do: mediatorResponse.what_i_did_not_do,
+      next_step: mediatorResponse.next_step,
+      _debug: {
+        builder: { answer_preview: builderResponse.answer.substring(0, 200), assumptions: builderResponse.assumptions, risks: builderResponse.risks, questions: builderResponse.questions },
+        skeptic: { claims_to_verify: skepticResponse.claims_to_verify, failure_modes: skepticResponse.failure_modes, missing_info: skepticResponse.missing_info },
+      },
+    };
+
+    sendSSE({ choices: [{ delta: { content: JSON.stringify(triadResult) } }] });
+    res.write('data: [DONE]\n\n');
+    res.end();
   } catch (error: any) {
-    console.error('AI Advisor error:', error);
-    return res.status(500).json({ error: error.message });
+    console.error('AI Advisor Triad error:', error);
+    // If headers already sent (SSE started), send error via SSE
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } else {
+      return res.status(500).json({ error: error.message });
+    }
   }
 });
 

@@ -16,6 +16,7 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - API_URL=https://new.mejmosefajn.org
+      - GEMINI_API_KEY=AIzaSyBXDZ3-dKGai1u0yTBxgvYJxjp6vSDubxg
     networks:
       - webproxy
 

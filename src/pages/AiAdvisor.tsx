@@ -100,7 +100,8 @@ interface SelectedRecipient {
   walletType: string;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-advisor`;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const CHAT_URL = `${API_URL}/api/functions/ai-advisor`;
 
 // Web Speech API types
 interface SpeechRecognitionEvent {
@@ -395,7 +396,6 @@ export default function AiAdvisor() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({
           messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content })),
