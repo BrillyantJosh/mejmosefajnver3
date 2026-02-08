@@ -273,7 +273,7 @@ const BatchFunding = () => {
       setProcessingStatus("Fetching mentor settings...");
       const [{ data: appNameData }, { data: mentorSettingData }] = await Promise.all([
         supabase.from('app_settings').select('value').eq('key', 'app_name').single(),
-        supabase.from('app_settings').select('value').eq('key', 'default_mentor_hex_id').maybeSingle()
+        supabase.from('app_settings').select('value').eq('key', 'mentor_100million_ideas').maybeSingle()
       ]);
 
       const serviceName = appNameData?.value || 'LanaCrowd';
