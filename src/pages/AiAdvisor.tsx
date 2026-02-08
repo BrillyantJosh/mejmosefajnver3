@@ -335,6 +335,18 @@ export default function AiAdvisor() {
     });
   }, [updatedAnswers]);
 
+  // Auto-clear pendingUpdate spinner after 5 minutes (safety net if SSE update never arrives)
+  useEffect(() => {
+    const hasPending = messages.some(m => m.pendingUpdate);
+    if (!hasPending) return;
+
+    const timeout = setTimeout(() => {
+      setMessages(prev => prev.map(m => m.pendingUpdate ? { ...m, pendingUpdate: false } : m));
+    }, 5 * 60 * 1000);
+
+    return () => clearTimeout(timeout);
+  }, [messages]);
+
   const parsePaymentIntent = (content: string): PaymentIntent | null => {
     try {
       const jsonMatch = content.match(/\{[^}]*"action"\s*:\s*"payment"[^}]*\}/);
