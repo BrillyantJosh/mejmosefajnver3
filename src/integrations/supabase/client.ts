@@ -228,6 +228,9 @@ class StorageBucketClient {
   async upload(filePath: string, file: File | Blob | ArrayBuffer, options?: any): Promise<{ data: any; error: any }> {
     try {
       const formData = new FormData();
+      // path MUST be appended BEFORE file — multer processes file during streaming
+      // and req.body.path won't be available if appended after the file field
+      formData.append('path', filePath);
 
       if (file instanceof File) {
         formData.append('file', file);
@@ -236,8 +239,6 @@ class StorageBucketClient {
       } else if (file instanceof ArrayBuffer) {
         formData.append('file', new Blob([file]), filePath);
       }
-
-      formData.append('path', filePath);
 
       const response = await fetch(`${API_URL}/api/storage/${this.bucket}/upload`, {
         method: 'POST',
