@@ -314,6 +314,13 @@ DATA RULES:
 - If an array is empty [], the data was fetched but there is nothing there.
 - NEVER mention loading, connection issues, or data availability. Just answer with whatever data you have.
 
+CURRENCY RULES:
+- "balanceLana" values are in LANA cryptocurrency (NOT EUR/USD/fiat!).
+- "balanceFiat" values are in the user's fiat currency (shown in "fiatCurrency" field, e.g. EUR, USD).
+- ALWAYS specify "LANA" or the fiat currency when mentioning amounts. Format: "350452 LANA (2803 EUR)".
+- NEVER say "350452 EUR" when the value is in LANA — that would be a massive error.
+- "totalBalanceLana" = total LANA across all wallets. "totalBalanceFiat" = same amount in fiat.
+
 You MUST output ONLY valid JSON in the exact structure below.
 No explanations outside JSON.
 

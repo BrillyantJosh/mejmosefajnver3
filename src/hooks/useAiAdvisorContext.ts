@@ -14,9 +14,9 @@ interface WalletDetail {
   walletId: string;
   walletType: string;
   note?: string;
-  balance: number;
+  balanceLana: number;
   balanceFiat: number;
-  currency: string;
+  fiatCurrency: string;
 }
 
 // 100 Million Ideas context types
@@ -126,9 +126,9 @@ export interface AiAdvisorContext {
   userProfile: UserProfileContext | null;
   wallets: {
     count: number;
-    totalBalance: number;
+    totalBalanceLana: number;
     totalBalanceFiat: number | null;
-    currency: string;
+    fiatCurrency: string;
     details: WalletDetail[];
   } | null;
   lana8Wonder: {
@@ -285,22 +285,22 @@ export function useAiAdvisorContext(): AiAdvisorContext {
         walletId: wallet.walletId,
         walletType: wallet.walletType,
         note: wallet.note,
-        balance,
+        balanceLana: balance,
         balanceFiat: balance * exchangeRate,
-        currency,
+        fiatCurrency: currency,
       };
     });
 
     // Calculate totals
-    const totalBalance = walletDetails.reduce((sum, w) => sum + w.balance, 0);
-    const totalBalanceFiat = totalBalance * exchangeRate;
+    const totalBalanceLana = walletDetails.reduce((sum, w) => sum + w.balanceLana, 0);
+    const totalBalanceFiat = totalBalanceLana * exchangeRate;
 
     // Wallets context with details
     const walletsContext = nostrWallets.length > 0 ? {
       count: nostrWallets.length,
-      totalBalance,
+      totalBalanceLana,
       totalBalanceFiat,
-      currency,
+      fiatCurrency: currency,
       details: walletDetails,
     } : null;
 
