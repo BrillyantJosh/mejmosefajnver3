@@ -1,10 +1,10 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { AppSettings, ThemeColors } from "@/types/admin";
 import { toast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
-import { createSignedAdminAuthEvent } from "@/lib/nostrSigning";
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface AdminContextType {
   isAdmin: boolean;
@@ -29,18 +29,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
   const checkAdminStatus = async (nostrHexId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('admin_users')
-        .select('nostr_hex_id')
-        .eq('nostr_hex_id', nostrHexId)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error checking admin status:', error);
-        return false;
-      }
-
-      return !!data;
+      const res = await fetch(`${API_URL}/api/db/admin_users?nostr_hex_id=eq.${nostrHexId}&select=nostr_hex_id`);
+      if (!res.ok) return false;
+      const data = await res.json();
+      return Array.isArray(data) && data.length > 0;
     } catch (error) {
       console.error('Error in checkAdminStatus:', error);
       return false;
@@ -49,27 +41,18 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
   const loadAppSettings = async () => {
     try {
-      const { data: nameData } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'app_name')
-        .maybeSingle();
+      const res = await fetch(`${API_URL}/api/db/app_settings?select=key,value`);
+      const rows: { key: string; value: string }[] = res.ok ? await res.json() : [];
 
-      const { data: colorsData } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'theme_colors')
-        .maybeSingle();
-
-      const { data: roomsData } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'default_rooms')
-        .maybeSingle();
+      const getValue = (key: string) => {
+        const row = rows.find(r => r.key === key);
+        if (!row) return undefined;
+        try { return JSON.parse(row.value); } catch { return row.value; }
+      };
 
       setAppSettings({
-        app_name: (nameData?.value as string) || "Nostr App",
-        theme_colors: (colorsData?.value as unknown as ThemeColors) || {
+        app_name: (getValue('app_name') as string) || "Nostr App",
+        theme_colors: (getValue('theme_colors') as ThemeColors) || {
           primary: "263 70% 50%",
           primary_foreground: "0 0% 100%",
           secondary: "240 5% 96%",
@@ -79,36 +62,25 @@ export function AdminProvider({ children }: { children: ReactNode }) {
           background: "0 0% 100%",
           foreground: "240 10% 15%",
         },
-        default_rooms: (roomsData?.value as unknown as string[]) || ["general"],
+        default_rooms: (getValue('default_rooms') as string[]) || ["general"],
       });
     } catch (error) {
       console.error('Error loading app settings:', error);
     }
   };
 
-  const invokeSignedSettingsUpdate = async (key: string, value: unknown) => {
-    if (!session?.nostrHexId || !session?.nostrPrivateKey) {
-      throw new Error('Not authenticated');
-    }
-
-    // Create a signed Nostr event to prove identity
-    const signedEvent = await createSignedAdminAuthEvent(
-      session.nostrPrivateKey,
-      session.nostrHexId,
-      'update-app-settings',
-      key
-    );
-
-    const { data, error } = await supabase.functions.invoke('update-app-settings', {
-      body: {
-        signedEvent,
-        key,
-        value
-      }
+  const invokeSettingsUpdate = async (key: string, value: unknown) => {
+    const res = await fetch(`${API_URL}/api/functions/update-app-settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: [{ key, value }] }),
     });
 
-    if (error) throw error;
-    return data;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(err.error || 'Failed to update settings');
+    }
+    return res.json();
   };
 
   const updateAppName = async (name: string) => {
@@ -122,7 +94,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      await invokeSignedSettingsUpdate('app_name', name);
+      await invokeSettingsUpdate('app_name', name);
       setAppSettings(prev => prev ? { ...prev, app_name: name } : null);
       toast({ title: "Success", description: "App name updated successfully" });
     } catch (error) {
@@ -146,7 +118,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      await invokeSignedSettingsUpdate('theme_colors', colors);
+      await invokeSettingsUpdate('theme_colors', colors);
       setAppSettings(prev => prev ? { ...prev, theme_colors: colors } : null);
       toast({ title: "Success", description: "Theme colors updated successfully" });
     } catch (error) {
@@ -170,7 +142,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      await invokeSignedSettingsUpdate('default_rooms', rooms);
+      await invokeSettingsUpdate('default_rooms', rooms);
       setAppSettings(prev => prev ? { ...prev, default_rooms: rooms } : null);
       toast({ title: "Success", description: "Default rooms updated successfully" });
     } catch (error) {
