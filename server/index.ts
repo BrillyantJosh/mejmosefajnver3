@@ -22,6 +22,7 @@ app.use(cors({
     'http://localhost:8080',   // Vite dev server (custom port)
     'http://localhost:4173',   // Vite preview
     'http://localhost:3001',   // Self
+    'https://new.mejmosefajn.org',  // Production
   ],
   credentials: true,
 }));

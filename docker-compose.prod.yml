@@ -1,0 +1,23 @@
+services:
+  web:
+    build: .
+    container_name: mejmosefajn-web
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "3001"
+    volumes:
+      - ./data:/app/data
+      - ./server/uploads:/app/server/uploads
+    environment:
+      - VIRTUAL_HOST=new.mejmosefajn.org
+      - VIRTUAL_PORT=3001
+      - LETSENCRYPT_HOST=new.mejmosefajn.org
+      - NODE_ENV=production
+      - PORT=3001
+    networks:
+      - webproxy
+
+networks:
+  webproxy:
+    external: true
