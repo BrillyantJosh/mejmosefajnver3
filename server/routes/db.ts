@@ -36,7 +36,7 @@ function buildWhereClause(query: Record<string, any>, table: string): { where: s
     const value = String(rawValue);
 
     // Skip non-filter params
-    if (key === 'order' || key === 'limit' || key === 'select' || key === 'upsert' ||
+    if (key === 'order' || key === 'limit' || key === 'offset' || key === 'select' || key === 'upsert' ||
         key === 'single' || key === 'maybeSingle' || key === 'count' ||
         key === 'onConflict' || key === 'ignoreDuplicates') continue;
 
@@ -120,9 +120,12 @@ function buildWhereClause(query: Record<string, any>, table: string): { where: s
     orderBy = ` ORDER BY ${orderParts.join(', ')}`;
   }
 
-  // Handle limit
+  // Handle limit and offset
   if (query.limit) {
     limit = ` LIMIT ${parseInt(query.limit, 10)}`;
+    if (query.offset) {
+      limit += ` OFFSET ${parseInt(query.offset, 10)}`;
+    }
   }
 
   // Handle select
@@ -184,6 +187,32 @@ function processRows(rows: any[], table: string): any[] {
   result = parseJsonColumns(result, table);
   return result;
 }
+
+// GET /api/db/_schema/tables - List all tables with row counts and column info
+router.get('/_schema/tables', (_req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const tables = Array.from(ALLOWED_TABLES).sort().map(table => {
+      const countRow = db.prepare(`SELECT COUNT(*) as count FROM "${table}"`).get() as any;
+      const columns = db.prepare(`PRAGMA table_info("${table}")`).all() as any[];
+      return {
+        name: table,
+        rowCount: countRow.count,
+        columns: columns.map(c => ({
+          name: c.name,
+          type: c.type,
+          notnull: !!c.notnull,
+          pk: !!c.pk,
+          dflt_value: c.dflt_value,
+        })),
+      };
+    });
+    return res.json(tables);
+  } catch (error: any) {
+    console.error('Schema tables error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
 
 // GET /api/db/:table - SELECT
 router.get('/:table', (req: Request, res: Response) => {

@@ -71,6 +71,7 @@ import MyDonations from "./pages/100millionideas/MyDonations";
 import CreateProject from "./pages/100millionideas/CreateProject";
 import MyProjects from "./pages/100millionideas/MyProjects";
 import EditProject from "./pages/100millionideas/EditProject";
+import BatchFunding from "./pages/100millionideas/BatchFunding";
 import OfflineLanaLayout from "./pages/offlinelana/OfflineLanaLayout";
 import GenerateWallet from "./pages/offlinelana/GenerateWallet";
 import OfflineWallets from "./pages/offlinelana/OfflineWallets";
@@ -106,6 +107,7 @@ import AiAdvisor from "./pages/AiAdvisor";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminSettings from "./pages/admin/AdminSettings";
+import DatabaseBrowser from "./pages/admin/DatabaseBrowser";
 import TrainAI from "./pages/admin/TrainAI";
 import PublicPost from "./pages/PublicPost";
 import PublicEvent from "./pages/PublicEvent";
@@ -210,6 +212,7 @@ const App = () => (
           <Route path="create-project" element={<CreateProject />} />
           <Route path="my-projects" element={<MyProjects />} />
           <Route path="edit-project/:projectId" element={<EditProject />} />
+          <Route path="batch-funding" element={<BatchFunding />} />
         </Route>
         <Route path="/offline-lana" element={<OfflineLanaLayout />}>
           <Route index element={<Navigate to="/offline-lana/generate" replace />} />
@@ -264,6 +267,7 @@ const App = () => (
                   >
                     <Route index element={<TrainAI />} />
                     <Route path="train-ai" element={<TrainAI />} />
+                    <Route path="database" element={<DatabaseBrowser />} />
                     <Route path="settings" element={<AdminSettings />} />
                   </Route>
                 </Route>

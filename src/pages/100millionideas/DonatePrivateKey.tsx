@@ -111,24 +111,49 @@ const DonatePrivateKey = () => {
         description: "Creating transaction...",
       });
 
-      // Step 1: Get service name from app_settings
-      const { data: appNameData } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'app_name')
-        .single();
-      
+      // Step 1: Get service name and mentor hex ID from app_settings
+      const [{ data: appNameData }, { data: mentorSettingData }] = await Promise.all([
+        supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'app_name')
+          .single(),
+        supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'default_mentor_hex_id')
+          .maybeSingle()
+      ]);
+
       const serviceName = appNameData?.value || 'LanaCrowd';
+      const mentorHexId = mentorSettingData?.value as string || '';
+      let mentorWallet = '';
+
+      // Step 1b: Fetch mentor's wallet address from their profile
+      if (mentorHexId) {
+        const { data: mentorProfile } = await supabase
+          .from('nostr_profiles')
+          .select('lana_wallet_id')
+          .eq('nostr_hex_id', mentorHexId)
+          .maybeSingle();
+
+        if (mentorProfile?.lana_wallet_id) {
+          mentorWallet = mentorProfile.lana_wallet_id;
+        }
+      }
 
       // Step 2: Convert FIAT amount to lanoshis
       const lanaAmountLanoshis = Math.floor(lanaAmount * 100000000);
 
       // Step 3: Call send-lana-transaction edge function
       // Use the original wallet address (from KIND 30889) — server derives pubkey from WIF
+      const hasMentorSplit = !!mentorWallet;
       const { data: txData, error: txError } = await supabase.functions.invoke('send-lana-transaction', {
         body: {
           senderAddress: selectedWalletId,
           recipientAddress: project.wallet,
+          mentorAddress: hasMentorSplit ? mentorWallet : undefined,
+          mentorPercent: hasMentorSplit ? 10 : undefined,
           amount: lanaAmountLanoshis / 100000000, // Convert back to LANA
           privateKey: privateKey.trim(),
           emptyWallet: false,
@@ -148,52 +173,111 @@ const DonatePrivateKey = () => {
         description: "Creating donation record...",
       });
 
-      // Step 4: Create KIND 60200 event
-      const eventTemplate = {
+      // Step 4: Create KIND 60200 events
+      // Calculate amounts for project and mentor
+      const projectLanoshis = hasMentorSplit
+        ? Math.floor(lanaAmountLanoshis * 0.90)
+        : lanaAmountLanoshis;
+      const mentorLanoshis = hasMentorSplit
+        ? lanaAmountLanoshis - projectLanoshis
+        : 0;
+
+      const nowTs = Math.floor(Date.now() / 1000);
+
+      // Event 1: Project donation (95% or 100%)
+      const projectEventTemplate = {
         kind: 60200,
-        created_at: Math.floor(Date.now() / 1000),
+        created_at: nowTs,
         tags: [
           ["service", "lanacrowd"],
           ["project", projectId || ""],
           ["p", session.nostrHexId, "supporter"],
           ["p", project.ownerPubkey, "project_owner"],
-          ["amount_lanoshis", lanaAmountLanoshis.toString()],
-          ["amount_fiat", amount.toString()],
+          ["amount_lanoshis", projectLanoshis.toString()],
+          ["amount_fiat", hasMentorSplit
+            ? (parseFloat(amount) * 0.90).toFixed(2)
+            : amount.toString()],
           ["currency", project.currency],
           ["from_wallet", selectedWalletId],
           ["to_wallet", project.wallet],
           ["tx", txHash],
-          ["timestamp_paid", Math.floor(Date.now() / 1000).toString()]
+          ["type", "donation"],
+          ["timestamp_paid", nowTs.toString()]
         ],
         content: message || `Supporting ${project.title} with ${amount} ${project.currency}`
       };
 
-      // Sign the event with user's Nostr private key
-      const signedEvent = finalizeEvent(eventTemplate, hexToBytes(session.nostrPrivateKey));
+      // Sign the project donation event
+      const signedProjectEvent = finalizeEvent(projectEventTemplate, hexToBytes(session.nostrPrivateKey));
 
       toast({
-        title: "Broadcasting Event",
+        title: "Broadcasting Events",
         description: "Publishing to Nostr relays...",
       });
 
-      // Step 5: Broadcast via server-side relay publish (browser WebSocket to relays fails)
+      // Publish project donation event
       const { data: publishData, error: publishError } = await supabase.functions.invoke('publish-dm-event', {
-        body: { event: signedEvent }
+        body: { event: signedProjectEvent }
       });
 
-      const successCount = publishData?.publishedTo || 0;
-      const totalRelays = publishData?.totalRelays || 0;
+      let successCount = publishData?.publishedTo || 0;
+      let totalRelays = publishData?.totalRelays || 0;
 
       if (publishError) {
-        console.error("Publish error:", publishError);
+        console.error("Publish error (project event):", publishError);
       }
 
-      console.log('📊 Publishing summary:', {
-        eventId: signedEvent.id,
+      console.log('📊 Project donation event:', {
+        eventId: signedProjectEvent.id,
         publishedTo: successCount,
         totalRelays,
-        results: publishData?.results
+        projectLanoshis
       });
+
+      // Event 2: Mentor fee (5%) — only if mentor split is active
+      let signedMentorEvent: any = null;
+      if (hasMentorSplit && mentorLanoshis > 0 && mentorHexId) {
+        const mentorEventTemplate = {
+          kind: 60200,
+          created_at: nowTs,
+          tags: [
+            ["service", "lanacrowd"],
+            ["project", projectId || ""],
+            ["p", session.nostrHexId, "supporter"],
+            ["p", mentorHexId, "mentor"],
+            ["amount_lanoshis", mentorLanoshis.toString()],
+            ["amount_fiat", (parseFloat(amount) * 0.10).toFixed(2)],
+            ["currency", project.currency],
+            ["from_wallet", selectedWalletId],
+            ["to_wallet", mentorWallet],
+            ["tx", txHash],
+            ["type", "mentor_fee"],
+            ["timestamp_paid", nowTs.toString()]
+          ],
+          content: `Mentor fee for ${project.title}`
+        };
+
+        signedMentorEvent = finalizeEvent(mentorEventTemplate, hexToBytes(session.nostrPrivateKey));
+
+        const { data: mentorPublishData, error: mentorPublishError } = await supabase.functions.invoke('publish-dm-event', {
+          body: { event: signedMentorEvent }
+        });
+
+        if (mentorPublishError) {
+          console.error("Publish error (mentor event):", mentorPublishError);
+        }
+
+        console.log('📊 Mentor fee event:', {
+          eventId: signedMentorEvent.id,
+          publishedTo: mentorPublishData?.publishedTo || 0,
+          mentorLanoshis,
+          mentorWallet
+        });
+
+        // Update counts with mentor event results
+        successCount = Math.max(successCount, mentorPublishData?.publishedTo || 0);
+        totalRelays = Math.max(totalRelays, mentorPublishData?.totalRelays || 0);
+      }
 
       // Navigate to result page even if some relays failed
       const resultParams = new URLSearchParams({
@@ -209,7 +293,12 @@ const DonatePrivateKey = () => {
         recipientAddress: project.wallet,
         relaysPublished: successCount.toString(),
         totalRelays: totalRelays.toString(),
-        eventId: signedEvent.id
+        eventId: signedProjectEvent.id,
+        ...(hasMentorSplit && {
+          mentorAddress: mentorWallet,
+          mentorAmount: (mentorLanoshis / 100000000).toFixed(8),
+          mentorEventId: signedMentorEvent?.id || '',
+        })
       });
 
       navigate(`/100millionideas/donate-result?${resultParams.toString()}`);

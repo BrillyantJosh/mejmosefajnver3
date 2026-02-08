@@ -1,18 +1,30 @@
 import { useNostrProjects } from "@/hooks/useNostrProjects";
 import ProjectCard from "@/components/100millionideas/ProjectCard";
 import ProjectsSummaryBar from "@/components/100millionideas/ProjectsSummaryBar";
-import { Loader2 } from "lucide-react";
+import { Loader2, Layers } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 const Projects = () => {
   const { projects, isLoading } = useNostrProjects();
+  const navigate = useNavigate();
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Projects</h1>
-        <p className="text-muted-foreground mt-2">
-          Browse and discover innovative projects on LanaCrowd
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Projects</h1>
+          <p className="text-muted-foreground mt-2">
+            Browse and discover innovative projects on LanaCrowd
+          </p>
+        </div>
+        <Button
+          onClick={() => navigate('/100millionideas/batch-funding')}
+          className="bg-green-600 hover:bg-green-700 text-white"
+        >
+          <Layers className="h-4 w-4 mr-2" />
+          Batch Funding
+        </Button>
       </div>
 
       <ProjectsSummaryBar />

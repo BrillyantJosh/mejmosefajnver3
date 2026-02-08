@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 import webpush from 'web-push';
 import { getDb } from '../db/connection';
 import { electrumCall, fetchBatchBalances } from '../lib/electrum';
-import { sendLanaTransaction } from '../lib/crypto';
+import { sendLanaTransaction, sendBatchLanaTransaction } from '../lib/crypto';
 import { fetchKind38888, getLanaRelays, fetchUserWallets, queryEventsFromRelays, publishEventToRelays } from '../lib/nostr';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1173,6 +1173,17 @@ router.post('/send-lana-transaction', async (req: Request, res: Response) => {
     return res.json(result);
   } catch (error: any) {
     console.error('Transaction error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// send-batch-lana-transaction (multiple recipients in one TX)
+router.post('/send-batch-lana-transaction', async (req: Request, res: Response) => {
+  try {
+    const result = await sendBatchLanaTransaction(req.body);
+    return res.json(result);
+  } catch (error: any) {
+    console.error('Batch transaction error:', error);
     return res.status(500).json({ success: false, error: error.message });
   }
 });

@@ -1,9 +1,10 @@
 import { Outlet, NavLink, useLocation } from "react-router-dom";
-import { Brain, Settings, Shield } from "lucide-react";
+import { Brain, Database, Settings, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const adminNavItems = [
   { title: "Train AI", path: "/admin/train-ai", icon: Brain },
+  { title: "Database", path: "/admin/database", icon: Database },
   { title: "Settings", path: "/admin/settings", icon: Settings },
 ];
 
