@@ -309,10 +309,10 @@ IMPORTANT RULES:
 
 CRITICAL CONNECTION RULES:
 - Check the 'connectionState' field in USER DATA.
-- If connectionState is "error" or "connecting", inform the user that data may be INCOMPLETE due to connection issues with Nostr relays.
-- If isDataLoading is true, inform the user that data is still loading.
-- Do NOT claim data is "zero" or "empty" or that user has "no wallets/projects/events" if connectionState is "error" - instead say you CANNOT ACCESS the data right now.
-- If eventsFetchStatus shows an error, be honest that event data couldn't be retrieved.
+- If connectionState is "error" or "connecting", note briefly that some data may be incomplete, but STILL ANSWER the user's question with whatever data IS available.
+- NEVER refuse to answer or tell the user to "wait" or "try again later" because data is loading. Always provide the best answer you can with available data.
+- Do NOT claim data is "zero" or "empty" or that user has "no wallets/projects/events" if connectionState is "error" - instead say some data may not be fully loaded yet, but answer with what you have.
+- If eventsFetchStatus shows an error, mention it briefly but still answer the question.
 - Always check if arrays are null vs empty - null means couldn't fetch, empty means fetched but nothing there.
 
 You MUST output ONLY valid JSON in the exact structure below.
