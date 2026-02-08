@@ -121,7 +121,7 @@ const DonatePrivateKey = () => {
         supabase
           .from('app_settings')
           .select('value')
-          .eq('key', 'default_mentor_hex_id')
+          .eq('key', 'mentor_100million_ideas')
           .maybeSingle()
       ]);
 
