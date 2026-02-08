@@ -352,15 +352,10 @@ export default function AiAdvisor() {
     const messageContent = overrideInput || input.trim();
     if (!messageContent || isLoading) return;
 
-    // Check if data is still loading - warn user
+    // Warn if data still loading or connection issues (but don't block)
     if (context.isLoading || eventsLoading) {
-      toast.info(userLanguage === 'sl' 
-        ? 'Počakaj trenutek, nalagam podatke...' 
-        : 'Please wait, loading data...');
-      return;
+      console.log('⚠️ AI Advisor: sending with partial data (still loading)');
     }
-    
-    // Warn if connection error (but don't block)
     if (context.connectionState === 'error') {
       toast.warning(userLanguage === 'sl'
         ? 'Opozorilo: Težave s povezavo, podatki morda niso posodobljeni.'
