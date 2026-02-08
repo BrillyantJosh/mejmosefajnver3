@@ -163,8 +163,8 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
       const fileName = `${session.nostrHexId}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
 
       const formData = new FormData();
-      formData.append("file", resizedBlob, fileName);
       formData.append("path", fileName);
+      formData.append("file", resizedBlob, fileName);
 
       const response = await fetch(`${API_URL}/api/storage/project-images/upload`, {
         method: "POST",

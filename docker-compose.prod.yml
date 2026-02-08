@@ -15,6 +15,7 @@ services:
       - LETSENCRYPT_HOST=new.mejmosefajn.org
       - NODE_ENV=production
       - PORT=3001
+      - API_URL=https://new.mejmosefajn.org
     networks:
       - webproxy
 
