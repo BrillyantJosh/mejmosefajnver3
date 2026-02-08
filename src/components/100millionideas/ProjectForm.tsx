@@ -52,7 +52,7 @@ interface ProjectFormProps {
   onSubmitSuccess: () => void;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 export default function ProjectForm({ mode, initialData, onSubmitSuccess }: ProjectFormProps) {
   const { session } = useAuth();

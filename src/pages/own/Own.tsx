@@ -15,7 +15,7 @@ import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { useSupabaseLashCounts } from "@/hooks/useSupabaseLashCounts";
 
 // Audio storage: local Express server (not Supabase)
-const OWN_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const OWN_API_URL = import.meta.env.VITE_API_URL ?? '';
 const DM_AUDIO_BUCKET = "dm-audio";
 
 // Helper to convert hex string to Uint8Array

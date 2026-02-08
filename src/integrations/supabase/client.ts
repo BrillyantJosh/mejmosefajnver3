@@ -8,7 +8,7 @@
  * Instead of Supabase, calls go to our Express.js backend.
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 // =============================================
 // Query Builder - mimics supabase.from(table)

@@ -21,7 +21,7 @@ export function useAiTaskSSE(nostrHexId: string | null) {
   useEffect(() => {
     if (!nostrHexId) return;
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const API_URL = import.meta.env.VITE_API_URL ?? '';
     const url = `${API_URL}/api/sse/ai-tasks?user=${nostrHexId}`;
 
     console.log('🧠 Connecting to AI task SSE:', url);
