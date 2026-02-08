@@ -4,7 +4,7 @@
  * Now uses the same Express.js backend with dm-audio bucket.
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 class OwnStorageBucketClient {
   private bucket: string;

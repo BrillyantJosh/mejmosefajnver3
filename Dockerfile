@@ -22,8 +22,8 @@ COPY tailwind.config.ts ./
 COPY postcss.config.js ./
 COPY components.json ./
 
-# Build frontend with production API URL
-ENV VITE_API_URL="https://new.mejmosefajn.org"
+# Build frontend — no VITE_API_URL means API calls use relative URLs (same origin)
+# This allows the app to work on any domain without rebuilding
 RUN npx vite build
 
 # Create data directory for SQLite

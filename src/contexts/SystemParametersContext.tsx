@@ -200,7 +200,7 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
   // When the server syncs new KIND 38888 data, re-fetch automatically
   // =============================================
   useEffect(() => {
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const API_URL = import.meta.env.VITE_API_URL ?? '';
     const url = `${API_URL}/api/sse/system-params`;
 
     let eventSource: EventSource | null = null;
