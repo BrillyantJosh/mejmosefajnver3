@@ -11,7 +11,7 @@ import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
-import { fiatToLana, getUserCurrency, formatCurrency, formatLana, lanaToLanoshi } from "@/lib/currencyConversion";
+import { fiatToLana, lanaToFiat, getUserCurrency, formatCurrency, formatLana, lanaToLanoshi } from "@/lib/currencyConversion";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { Calendar, ExternalLink, Wallet } from "lucide-react";
@@ -67,7 +67,7 @@ export default function Pending() {
     return sum + originalAmount;
   }, 0);
 
-  const totalInUserCurrency = formatCurrency(totalLana / 250, userCurrency); // Simplified conversion
+  const totalInUserCurrency = formatCurrency(lanaToFiat(totalLana, userCurrency), userCurrency);
 
   // Get selected wallet balance
   const selectedWalletBalance = selectedWallet ? (balances.get(selectedWallet) || 0) : 0;
@@ -219,7 +219,7 @@ export default function Pending() {
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="text-lg font-semibold">{proposal.service}</h3>
                         <span className="text-sm text-muted-foreground">
-                          {formatCurrency(parseFloat(proposal.fiatAmount), proposal.fiatCurrency)}
+                          {formatCurrency(lanaToFiat(originalLana, userCurrency), userCurrency)}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground mb-2">{proposal.content}</p>

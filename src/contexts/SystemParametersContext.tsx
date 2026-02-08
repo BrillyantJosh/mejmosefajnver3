@@ -195,6 +195,57 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
     fetchSystemParameters();
   }, [fetchSystemParameters]);
 
+  // =============================================
+  // SSE: Listen for heartbeat system parameter updates
+  // When the server syncs new KIND 38888 data, re-fetch automatically
+  // =============================================
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const url = `${API_URL}/api/sse/system-params`;
+
+    let eventSource: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const connect = () => {
+      try {
+        eventSource = new EventSource(url);
+
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'system_params_updated') {
+              console.log(`💓 Heartbeat: system parameters updated (version ${data.version}, ${data.relayCount} relays)`);
+              // Re-fetch from database to get updated data
+              fetchSystemParameters();
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        };
+
+        eventSource.onerror = () => {
+          console.warn('📡 System params SSE connection error, reconnecting in 30s...');
+          eventSource?.close();
+          eventSource = null;
+          // Reconnect after 30 seconds
+          reconnectTimer = setTimeout(connect, 30000);
+        };
+
+        console.log('📡 Connected to system params SSE heartbeat');
+      } catch (err) {
+        console.warn('📡 Failed to connect to system params SSE:', err);
+        reconnectTimer = setTimeout(connect, 30000);
+      }
+    };
+
+    connect();
+
+    return () => {
+      eventSource?.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
+  }, [fetchSystemParameters]);
+
   return (
     <SystemParametersContext.Provider value={{ parameters, isLoading, connectionState, refetch: fetchSystemParameters }}>
       {children}

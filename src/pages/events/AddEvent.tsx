@@ -15,12 +15,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { COMMON_TIMEZONES, DEFAULT_TIMEZONE, getTimezoneOffset } from "@/lib/timezones";
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 const EVENT_TYPES = [
   { value: 'governance', label: 'Governance' },
   { value: 'awareness', label: 'Awareness' },
@@ -83,9 +77,7 @@ export default function AddEvent() {
   const [fiatValue, setFiatValue] = useState("");
   const [attachments, setAttachments] = useState<string[]>([""]);
   
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   const handleCoverSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

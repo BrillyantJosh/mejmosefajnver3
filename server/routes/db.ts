@@ -297,7 +297,8 @@ router.post('/:table', (req: Request, res: Response) => {
         const colList = columns.map(c => `"${c}"`).join(', ');
 
         let sql: string;
-        const conflictCol = upsertColumn || onConflict;
+        // upsert=true is a boolean flag, not a column name — use onConflict for the actual conflict columns
+        const conflictCol = (upsertColumn && upsertColumn !== 'true') ? upsertColumn : onConflict;
 
         if (conflictCol) {
           // UPSERT

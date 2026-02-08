@@ -11,12 +11,27 @@ import webpush from 'web-push';
 import { getDb } from '../db/connection';
 import { electrumCall, fetchBatchBalances } from '../lib/electrum';
 import { sendLanaTransaction, sendBatchLanaTransaction } from '../lib/crypto';
-import { fetchKind38888, getLanaRelays, fetchUserWallets, queryEventsFromRelays, publishEventToRelays } from '../lib/nostr';
+import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays } from '../lib/nostr';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = Router();
+
+/**
+ * Get relays from kind_38888 DB table (no hardcoded fallback)
+ */
+function getRelaysFromDb(): string[] {
+  const db = getDb();
+  const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+  if (row) {
+    try {
+      const parsed = JSON.parse(row.relays);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {}
+  }
+  return [];
+}
 
 // =============================================
 // SYNC KIND 38888 FROM LANA RELAYS (SERVER-SIDE!)
@@ -94,7 +109,7 @@ router.post('/sync-kind-38888', async (req: Request, res: Response) => {
  */
 router.get('/lana-relays', (req: Request, res: Response) => {
   return res.json({
-    relays: getLanaRelays()
+    relays: getRelaysFromDb()
   });
 });
 
@@ -450,7 +465,7 @@ router.post('/refresh-nostr-profiles', async (req: Request, res: Response) => {
     const db = getDb();
     const params = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
 
-    let relays: string[] = getLanaRelays();
+    let relays: string[] = getRelaysFromDb();
     if (params) {
       try {
         const parsedRelays = JSON.parse(params.relays);
@@ -562,7 +577,7 @@ router.post('/query-nostr-events', async (req: Request, res: Response) => {
     const db = getDb();
     const params = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
 
-    let relays: string[] = getLanaRelays();
+    let relays: string[] = getRelaysFromDb();
     if (params) {
       try {
         const parsedRelays = JSON.parse(params.relays);
@@ -645,7 +660,7 @@ router.post('/fetch-user-wallets', async (req: Request, res: Response) => {
     const db = getDb();
     const params = db.prepare('SELECT relays, trusted_signers FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
 
-    let relays: string[] = getLanaRelays();
+    let relays: string[] = getRelaysFromDb();
     let trustedSigners: string[] = [];
 
     if (params) {
@@ -850,7 +865,7 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
       relays = typeof row.relays === 'string' ? JSON.parse(row.relays) : row.relays;
     }
     if (relays.length === 0) {
-      relays = getLanaRelays();
+      relays = getRelaysFromDb();
     }
 
     // Build filter for proposals
@@ -992,7 +1007,7 @@ router.post('/fetch-donation-payments', async (req: Request, res: Response) => {
       relays = typeof row.relays === 'string' ? JSON.parse(row.relays) : row.relays;
     }
     if (relays.length === 0) {
-      relays = getLanaRelays();
+      relays = getRelaysFromDb();
     }
 
     const events = await queryEventsFromRelays(relays, {
@@ -1062,7 +1077,7 @@ router.post('/fetch-dm-events', async (req: Request, res: Response) => {
       relays = typeof row.relays === 'string' ? JSON.parse(row.relays) : row.relays;
     }
     if (relays.length === 0) {
-      relays = getLanaRelays();
+      relays = getRelaysFromDb();
     }
 
     // Build filters for sent and received messages
@@ -1143,7 +1158,7 @@ router.post('/publish-dm-event', async (req: Request, res: Response) => {
       relays = typeof row.relays === 'string' ? JSON.parse(row.relays) : row.relays;
     }
     if (relays.length === 0) {
-      relays = getLanaRelays();
+      relays = getRelaysFromDb();
     }
 
     console.log(`📤 Publishing KIND ${event.kind} event to ${relays.length} relays...`);
@@ -1167,9 +1182,16 @@ router.post('/publish-dm-event', async (req: Request, res: Response) => {
 
 // send-lana-transaction (uses shared crypto lib)
 router.post('/send-lana-transaction', async (req: Request, res: Response) => {
+  console.log('📋 send-lana-transaction:', {
+    senderAddress: req.body.senderAddress,
+    recipientAddress: req.body.recipientAddress,
+    amount: req.body.amount,
+    hasKey: !!req.body.privateKey,
+    servers: req.body.electrumServers?.length || 0
+  });
   try {
-    // sendLanaTransaction imported at top of file
     const result = await sendLanaTransaction(req.body);
+    console.log('📋 send-lana-transaction result:', { success: result.success, error: result.error, txHash: result.txHash });
     return res.json(result);
   } catch (error: any) {
     console.error('Transaction error:', error);
@@ -1188,12 +1210,43 @@ router.post('/send-batch-lana-transaction', async (req: Request, res: Response) 
   }
 });
 
-// send-unconditional-payment
+// send-unconditional-payment (multi-recipient format)
 router.post('/send-unconditional-payment', async (req: Request, res: Response) => {
   try {
-    // sendLanaTransaction imported at top of file
-    const result = await sendLanaTransaction(req.body);
-    return res.json(result);
+    const { sender_address, recipients, private_key, electrum_servers } = req.body;
+
+    if (!sender_address || !recipients || !private_key || recipients.length === 0) {
+      return res.status(400).json({ success: false, error: 'Missing required parameters' });
+    }
+
+    // Convert amounts from LANA to satoshis (same as Supabase edge function)
+    const recipientsInSatoshis = recipients.map((r: any) => {
+      if (!r.address || typeof r.amount !== 'number') {
+        throw new Error('Invalid recipient format: must have address and amount');
+      }
+      return { address: r.address, amount: Math.round(r.amount * 100000000) };
+    });
+
+    console.log(`📦 Unconditional payment: ${recipientsInSatoshis.length} outputs from ${sender_address}`);
+    recipientsInSatoshis.forEach((r: any, i: number) => {
+      console.log(`  ${i + 1}. ${r.address}: ${(r.amount / 100000000).toFixed(8)} LANA`);
+    });
+
+    const result = await sendBatchLanaTransaction({
+      senderAddress: sender_address,
+      recipients: recipientsInSatoshis,
+      privateKey: private_key,
+      electrumServers: electrum_servers
+    });
+
+    // Map txHash to txid for frontend compatibility
+    return res.json({
+      success: result.success,
+      txid: result.txHash,
+      totalAmount: result.totalAmount,
+      fee: result.fee,
+      error: result.error
+    });
   } catch (error: any) {
     console.error('Unconditional payment error:', error);
     return res.status(500).json({ success: false, error: error.message });

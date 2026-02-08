@@ -3,12 +3,6 @@ import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export interface ReceivedLash {
   lashId: string;
   senderPubkey: string;
@@ -34,9 +28,7 @@ export function useNostrReceivedLashes() {
   const profileCache = useRef<Map<string, any>>(new Map());
   const postCache = useRef<Map<string, any>>(new Map());
 
-  const relays = parameters?.relays && parameters.relays.length > 0 
-    ? parameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   useEffect(() => {
     if (!session?.nostrHexId) {

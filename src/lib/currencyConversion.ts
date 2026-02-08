@@ -4,23 +4,57 @@ export interface ExchangeRates {
   [currency: string]: number; // Rate to LANA
 }
 
-// Get exchange rates from session storage (stored by system parameters)
+// Get exchange rates from system parameters (KIND 38888 via sessionStorage)
+// KIND 38888 stores LANA-to-fiat rates (e.g. EUR: 0.008 means 1 LANA = 0.008 EUR)
+// This function converts them to fiat-to-LANA rates (e.g. EUR: 125 means 1 EUR = 125 LANA)
 export const getExchangeRates = (): ExchangeRates => {
   try {
-    const ratesJson = sessionStorage.getItem('exchangeRates');
-    if (ratesJson) {
-      return JSON.parse(ratesJson);
+    // Read from system parameters cached by SystemParametersContext
+    const systemParamsJson = sessionStorage.getItem('lana_system_parameters');
+    if (systemParamsJson) {
+      const systemParams = JSON.parse(systemParamsJson);
+      const lanaToFiatRates = systemParams.exchangeRates;
+      if (lanaToFiatRates && typeof lanaToFiatRates === 'object') {
+        const fiatToLanaRates: ExchangeRates = {};
+        for (const [currency, rate] of Object.entries(lanaToFiatRates)) {
+          const numRate = Number(rate);
+          if (numRate > 0) {
+            fiatToLanaRates[currency] = 1 / numRate; // Invert: LANA-to-fiat → fiat-to-LANA
+          }
+        }
+        if (Object.keys(fiatToLanaRates).length > 0) {
+          return fiatToLanaRates;
+        }
+      }
     }
   } catch (error) {
-    console.error('Failed to parse exchange rates:', error);
+    console.error('Failed to parse exchange rates from system parameters:', error);
   }
-  
-  // Default fallback rates (1 EUR = 250 LANA)
+
+  // Default fallback rates (1 EUR = 125 LANA based on 1 LANA = 0.008 EUR)
   return {
-    'EUR': 250,
-    'USD': 270,
-    'GBP': 290
+    'EUR': 125,
+    'USD': 125,
+    'GBP': 125
   };
+};
+
+// Get LANA-to-fiat rates directly from system parameters
+// Returns rates like EUR: 0.008 (1 LANA = 0.008 EUR)
+export const getLanaToFiatRates = (): ExchangeRates => {
+  try {
+    const systemParamsJson = sessionStorage.getItem('lana_system_parameters');
+    if (systemParamsJson) {
+      const systemParams = JSON.parse(systemParamsJson);
+      const rates = systemParams.exchangeRates;
+      if (rates && typeof rates === 'object') {
+        return rates as ExchangeRates;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to parse LANA-to-fiat rates:', error);
+  }
+  return { 'EUR': 0.008, 'USD': 0.008, 'GBP': 0.008 };
 };
 
 // Get user's local currency from session

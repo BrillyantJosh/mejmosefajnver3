@@ -9,21 +9,11 @@ import { PostContent } from "@/components/social/PostContent";
 import { PostReplies } from "@/components/social/PostReplies";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 
-// Lana-specific relays where posts are stored
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com',
-  'wss://relay.lovelana.org'
-];
-
 export default function PublicPost() {
   const { eventId } = useParams<{ eventId: string }>();
   const { parameters } = useSystemParameters();
-  
-  const relays = parameters?.relays && parameters.relays.length > 0
-    ? parameters.relays
-    : DEFAULT_RELAYS;
+
+  const relays = parameters?.relays || [];
 
   const { post, profile, loading, error } = useNostrPost(eventId || '', relays);
 

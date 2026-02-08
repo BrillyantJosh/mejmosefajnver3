@@ -127,9 +127,10 @@ export default function Lana8WonderTransfer() {
       } else {
         throw new Error(data?.error || 'Transaction failed');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Transfer error:', error);
-      toast.error(error instanceof Error ? error.message : 'Transfer failed');
+      const msg = error instanceof Error ? error.message : (error?.message || error?.error || 'Transfer failed');
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }

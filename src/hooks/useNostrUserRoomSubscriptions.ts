@@ -2,12 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 interface RoomSubscription {
   slug: string;
   status: 'active' | 'muted' | 'left';
@@ -26,10 +20,7 @@ export const useNostrUserRoomSubscriptions = ({ userPubkey, userPrivateKey }: Us
   const [updating, setUpdating] = useState(false);
 
   const RELAYS = useMemo(() => {
-    if (parameters?.relays && parameters.relays.length > 0) {
-      return parameters.relays;
-    }
-    return DEFAULT_RELAYS;
+    return parameters?.relays || [];
   }, [parameters]);
 
   const fetchSubscriptions = useCallback(async () => {

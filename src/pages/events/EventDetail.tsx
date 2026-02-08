@@ -17,12 +17,6 @@ import { useNostrEventRegistrations } from "@/hooks/useNostrEventRegistrations";
 import { toast } from "@/hooks/use-toast";
 import { formatTimeInTimezone, getTimezoneAbbreviation, getUserTimezone } from "@/lib/timezones";
 import { useEventCountdown } from "@/hooks/useEventCountdown";
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export default function EventDetail() {
   const { dTag: urlDTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
@@ -36,13 +30,11 @@ export default function EventDetail() {
   const decodedDTag = urlDTag ? decodeURIComponent(urlDTag) : '';
 
   const { registrations, userRegistration, refetch: refetchRegistrations } = useNostrEventRegistrations(event?.dTag || decodedDTag);
-  
+
   // Countdown hook - must be called unconditionally (before any early returns)
   const countdown = useEventCountdown(event?.start || new Date());
 
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   const handleShare = async () => {
     // Use dTag for stable URL

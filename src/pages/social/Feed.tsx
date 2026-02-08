@@ -24,12 +24,6 @@ import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { useAdmin } from "@/contexts/AdminContext";
 import { useNavigate } from "react-router-dom";
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 interface FeedProps {
   roomFilter?: string;
 }
@@ -66,9 +60,7 @@ export default function Feed({ roomFilter }: FeedProps = {}) {
       .map(room => `30150:${room.admin}:${room.slug}`);
   }, [tinyRooms]);
 
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   // Fetch user's lashed events from Supabase when posts change
   useEffect(() => {

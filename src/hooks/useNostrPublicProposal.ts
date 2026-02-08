@@ -1,12 +1,7 @@
 import { useState, useEffect } from 'react';
 import { SimplePool, Filter, Event } from 'nostr-tools';
+import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { AwarenessProposal } from './useNostrAwarenessProposals';
-
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com',
-];
 
 function parseProposalFromEvent(event: Event): AwarenessProposal | null {
   try {
@@ -54,6 +49,7 @@ function parseProposalFromEvent(event: Event): AwarenessProposal | null {
 }
 
 export function useNostrPublicProposal(dTag: string, systemRelays?: string[]) {
+  const { parameters } = useSystemParameters();
   const [proposal, setProposal] = useState<AwarenessProposal | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +61,7 @@ export function useNostrPublicProposal(dTag: string, systemRelays?: string[]) {
       return;
     }
 
-    const relays = systemRelays && systemRelays.length > 0 ? systemRelays : DEFAULT_RELAYS;
+    const relays = systemRelays && systemRelays.length > 0 ? systemRelays : (parameters?.relays || []);
     const pool = new SimplePool();
     let isMounted = true;
     let foundProposal = false;

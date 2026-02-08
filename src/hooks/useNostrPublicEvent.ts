@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { SimplePool } from "nostr-tools";
+import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { LanaEvent } from "./useNostrEvents";
 
 interface NostrProfile {
@@ -9,19 +10,14 @@ interface NostrProfile {
   about?: string;
 }
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
+  const { parameters } = useSystemParameters();
   const [event, setEvent] = useState<LanaEvent | null>(null);
   const [profile, setProfile] = useState<NostrProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const relays = systemRelays && systemRelays.length > 0 ? systemRelays : DEFAULT_RELAYS;
+  const relays = systemRelays && systemRelays.length > 0 ? systemRelays : (parameters?.relays || []);
 
   useEffect(() => {
     if (!dTag) {

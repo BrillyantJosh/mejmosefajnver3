@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import dbRoutes from './routes/db';
 import storageRoutes from './routes/storage';
-import sseRoutes from './routes/sse';
+import sseRoutes, { emitSystemParametersUpdate } from './routes/sse';
 import functionsRoutes from './routes/functions';
 
 const app = express();
@@ -46,15 +46,20 @@ console.log('Initializing SQLite database...');
 const db = getDb();
 
 // =============================================
-// Auto-sync KIND 38888 from Lana relays on startup
-// This ensures we always have fresh system parameters
+// KIND 38888 Sync — reusable function + heartbeat
 // =============================================
-(async () => {
+
+const HEARTBEAT_INTERVAL = 60 * 60 * 1000; // 1 hour in ms
+
+/**
+ * Sync KIND 38888 from Lana relays and save to database.
+ * Called on startup and then every hour via heartbeat.
+ * Returns true if sync was successful.
+ */
+async function syncKind38888ToDb(): Promise<boolean> {
   try {
-    console.log('🔄 Auto-syncing KIND 38888 from Lana relays...');
     const data = await fetchKind38888();
     if (data) {
-      // Delete old entries and insert fresh data
       db.prepare('DELETE FROM kind_38888').run();
       db.prepare(`
         INSERT INTO kind_38888 (
@@ -75,16 +80,48 @@ const db = getDb();
         JSON.stringify(data.trusted_signers),
         data.raw_event
       );
-      console.log(`✅ KIND 38888 synced on startup: version ${data.version}, ${data.relays.length} relays`);
+      console.log(`✅ KIND 38888 synced: version ${data.version}, ${data.relays.length} relays`);
       console.log(`📡 Relays: ${data.relays.join(', ')}`);
+
+      // Notify connected SSE clients about the update
+      emitSystemParametersUpdate({
+        event_id: data.event_id,
+        version: data.version,
+        relayCount: data.relays.length,
+        syncedAt: Date.now()
+      });
+
+      return true;
     } else {
-      console.warn('⚠️ Could not fetch KIND 38888 from relays, using seed data as fallback');
+      console.warn('⚠️ Could not fetch KIND 38888 from relays');
+      return false;
     }
   } catch (error) {
-    console.error('❌ Auto-sync KIND 38888 failed:', error);
+    console.error('❌ KIND 38888 sync failed:', error);
+    return false;
+  }
+}
+
+// Auto-sync on startup
+(async () => {
+  console.log('🔄 Auto-syncing KIND 38888 from Lana relays...');
+  const ok = await syncKind38888ToDb();
+  if (!ok) {
     console.warn('⚠️ Using seed data as fallback');
   }
 })();
+
+// =============================================
+// Heartbeat — sync KIND 38888 every hour
+// =============================================
+let heartbeatCount = 0;
+const heartbeatTimer = setInterval(async () => {
+  heartbeatCount++;
+  console.log(`💓 Heartbeat #${heartbeatCount} — syncing KIND 38888...`);
+  await syncKind38888ToDb();
+}, HEARTBEAT_INTERVAL);
+
+console.log(`💓 Heartbeat started: KIND 38888 will sync every ${HEARTBEAT_INTERVAL / 60000} minutes`);
 
 // =============================================
 // API Routes
@@ -139,12 +176,14 @@ app.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
+  clearInterval(heartbeatTimer);
   closeDb();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.log('\nShutting down...');
+  clearInterval(heartbeatTimer);
   closeDb();
   process.exit(0);
 });

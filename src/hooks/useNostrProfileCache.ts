@@ -3,12 +3,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com',
-];
-
 const CACHE_VALIDITY_HOURS = 24;
 
 export interface CachedProfile {
@@ -27,7 +21,7 @@ export const useNostrProfileCache = (pubkey: string | null) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const relays = parameters?.relays || DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   const fetchFromNostr = useCallback(async (hexId: string): Promise<CachedProfile | null> => {
     const pool = new SimplePool();

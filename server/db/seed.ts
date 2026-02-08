@@ -12,10 +12,9 @@ export function seedData(db: Database.Database): void {
     `);
 
     const walletTypes = [
-      ['LANA Core Wallet', 'Official LANA desktop wallet', 1],
-      ['LANA Mobile Wallet', 'Mobile wallet for iOS and Android', 2],
-      ['LANA Web Wallet', 'Browser-based wallet', 3],
-      ['LANA Paper Wallet', 'Offline paper wallet for cold storage', 4],
+      ['Wallet', 'Custom wallet type', 0],
+      ['Knights', 'A special Wallet for Knights', 9],
+      ['LanaPays.Us', 'LanaPays.Us', 10],
     ];
 
     const insertMany = db.transaction((types: any[]) => {
@@ -40,6 +39,7 @@ export function seedData(db: Database.Database): void {
       ['app_name', JSON.stringify('MejMoSeFajn')],
       ['theme_colors', JSON.stringify({ primary: '#8B5CF6', secondary: '#D946EF' })],
       ['default_rooms', JSON.stringify([])],
+      ['mentor_unconditional_payment', JSON.stringify('LW233aTYYuSxMd6vJreSpbdg91197mKrGZ')],
     ];
 
     const insertMany = db.transaction((settings: any[]) => {
@@ -53,7 +53,9 @@ export function seedData(db: Database.Database): void {
   }
 
   // Seed kind_38888 system parameters if empty
-  // NOTE: These are placeholder values - the real values should be synced from Lana relays!
+  // NOTE: These are bootstrap/fallback values only — they will be overwritten by the first
+  // successful fetchKind38888() sync on server startup. Hardcoded here as a last resort
+  // so getRelaysFromDb() has something to return if the initial sync fails.
   const kind38888Count = db.prepare('SELECT COUNT(*) as count FROM kind_38888').get() as any;
   if (kind38888Count.count === 0) {
     // Official Lana relays - ONLY these should be used!

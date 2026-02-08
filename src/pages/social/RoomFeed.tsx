@@ -19,12 +19,6 @@ import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { useLashHistory } from "@/hooks/useLashHistory";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export default function RoomFeed() {
   const { roomSlug } = useParams<{ roomSlug: string }>();
   const navigate = useNavigate();
@@ -40,9 +34,7 @@ export default function RoomFeed() {
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [lashedEvents, setLashedEvents] = useState<Set<string>>(new Set());
 
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   // Fetch user's lashed events
   useEffect(() => {

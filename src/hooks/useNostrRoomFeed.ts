@@ -3,12 +3,6 @@ import { SimplePool, Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrProfilesCacheBulk } from './useNostrProfilesCacheBulk';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export interface NostrRoomPost {
   id: string;
   pubkey: string;
@@ -31,10 +25,7 @@ export function useNostrRoomFeed(roomSlug: string | undefined) {
   const pool = useMemo(() => new SimplePool(), []);
   
   const RELAYS = useMemo(() => {
-    if (systemParameters?.relays && systemParameters.relays.length > 0) {
-      return systemParameters.relays;
-    }
-    return DEFAULT_RELAYS;
+    return systemParameters?.relays || [];
   }, [systemParameters?.relays]);
 
   // Get all post authors for bulk profile fetching

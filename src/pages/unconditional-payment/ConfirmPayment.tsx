@@ -39,12 +39,6 @@ interface PaymentData {
   totalLana: number;
 }
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export default function ConfirmPayment() {
   const navigate = useNavigate();
   const { session } = useAuth();
@@ -57,9 +51,7 @@ export default function ConfirmPayment() {
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const relays = parameters?.relays && parameters.relays.length > 0 
-    ? parameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   useEffect(() => {
     // Load payment data from session storage
@@ -155,12 +147,40 @@ export default function ConfirmPayment() {
 
     try {
       console.log('🚀 Processing unconditional payment...');
-      
-      // Prepare recipients in the format expected by the edge function
-      const recipients = recipientSummary.map(r => ({
-        address: r.wallet,
-        amount: r.amount // in LANA
-      }));
+
+      // Fetch fee wallet for service fee (10%)
+      const { data: feeWalletSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'mentor_unconditional_payment')
+        .maybeSingle();
+
+      let feeWallet = '';
+      if (feeWalletSetting?.value) {
+        const raw = feeWalletSetting.value as string;
+        feeWallet = raw.startsWith('"') ? JSON.parse(raw) : raw;
+        console.log('💰 Fee wallet loaded:', feeWallet);
+      }
+      const hasFeeWallet = !!feeWallet;
+
+      // Build recipients with 90/10 split (90% to recipient, 10% service fee)
+      const recipients: { address: string; amount: number }[] = [];
+      let totalFeeLanoshis = 0;
+
+      for (const r of recipientSummary) {
+        const totalLanoshis = Math.floor(r.amount * 100000000);
+        const feeLanoshis = hasFeeWallet ? Math.floor(totalLanoshis * 0.10) : 0;
+        const recipientLanoshis = totalLanoshis - feeLanoshis;
+
+        recipients.push({ address: r.wallet, amount: recipientLanoshis / 100000000 });
+        totalFeeLanoshis += feeLanoshis;
+      }
+
+      // Single aggregated fee output (only if total fee exceeds dust threshold)
+      if (hasFeeWallet && totalFeeLanoshis > 546) {
+        recipients.push({ address: feeWallet, amount: totalFeeLanoshis / 100000000 });
+        console.log(`📊 Service fee: ${totalFeeLanoshis} lanoshis (${(totalFeeLanoshis / 100000000).toFixed(8)} LANA) to ${feeWallet}`);
+      }
 
       // Get Electrum servers from session storage or use defaults
       const storedServers = sessionStorage.getItem('electrumServers');
@@ -206,23 +226,39 @@ export default function ConfirmPayment() {
 
       for (const proposal of paymentData.selectedProposals) {
         try {
-          // Create KIND 90901 event
+          // Create KIND 90901 event (publish only the recipient's 90% share)
+          const netLanoshis = hasFeeWallet
+            ? Math.floor(proposal.lanoshiAmount * 0.90)
+            : proposal.lanoshiAmount;
+          const netLana = netLanoshis / 100000000;
+
+          // Build tags - only include 'p' tag if recipientPubkey is a valid 64-char hex string
+          // Relays reject events with invalid p-tag sizes ("unexpected size for fixed-size tag: p")
+          const isValidHexPubkey = (pk: string) => /^[0-9a-f]{64}$/i.test(pk);
+          const tags: string[][] = [
+            ['proposal', proposal.proposalDTag],
+            ['from_wallet', paymentData.senderWallet],
+            ['to_wallet', proposal.recipientWallet],
+            ['amount_lana', netLana.toString()],
+            ['amount_lanoshi', netLanoshis.toString()],
+            ['tx', data.txid],
+            ['service', proposal.service],
+            ['timestamp_paid', Math.floor(Date.now() / 1000).toString()],
+            ['e', proposal.proposalId, '', 'proposal'],
+            ['type', 'unconditional_payment_confirmation']
+          ];
+
+          // Only add p-tag if pubkey is valid 64-char hex (NIP-01 requirement)
+          if (proposal.recipientPubkey && isValidHexPubkey(proposal.recipientPubkey)) {
+            tags.splice(1, 0, ['p', proposal.recipientPubkey]);
+          } else {
+            console.warn(`⚠️ Skipping invalid p-tag for proposal ${proposal.proposalDTag}: "${proposal.recipientPubkey}" (length: ${proposal.recipientPubkey?.length || 0})`);
+          }
+
           const eventTemplate = {
             kind: 90901,
             created_at: Math.floor(Date.now() / 1000),
-            tags: [
-              ['proposal', proposal.proposalDTag],
-              ['p', proposal.recipientPubkey],
-              ['from_wallet', paymentData.senderWallet],
-              ['to_wallet', proposal.recipientWallet],
-              ['amount_lana', proposal.lanaAmount.toString()],
-              ['amount_lanoshi', proposal.lanoshiAmount.toString()],
-              ['tx', data.txid],
-              ['service', proposal.service],
-              ['timestamp_paid', Math.floor(Date.now() / 1000).toString()],
-              ['e', proposal.proposalId, '', 'proposal'],
-              ['type', 'unconditional_payment_confirmation']
-            ],
+            tags,
             content: `Unconditional payment successfully received for proposal ${proposal.proposalDTag}.`,
             pubkey: session.nostrHexId
           };
@@ -235,43 +271,79 @@ export default function ConfirmPayment() {
 
           console.log(`📡 Publishing KIND 90901 for proposal ${proposal.proposalDTag}...`);
 
-          // Publish to all relays
-          const publishPromises = pool.publish(relays, signedEvent);
+          // Publish to each relay individually (DonationProposalDialog pattern with for-await)
+          const publishPromises = relays.map((relay: string) => {
+            return new Promise<void>((resolve) => {
+              // Outer timeout: 10s - guards against relay never responding
+              const timeout = setTimeout(() => {
+                relayResults.push({
+                  proposalId: proposal.proposalDTag,
+                  relay,
+                  success: false,
+                  error: 'Connection timeout (10s)'
+                });
+                console.error(`❌ ${relay}: Timeout for ${proposal.proposalDTag}`);
+                resolve();
+              }, 10000);
 
-          // Track each relay result
-          const trackedPromises = publishPromises.map((promise, idx) => {
-            const relay = relays[idx];
-            return promise
-              .then(() => {
-                console.log(`✅ KIND 90901 published to ${relay}`);
-                relayResults.push({ proposalId: proposal.proposalDTag, relay, success: true });
-                return { relay, success: true };
-              })
-              .catch((err) => {
-                console.error(`❌ Failed to publish to ${relay}:`, err);
-                const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-                relayResults.push({ proposalId: proposal.proposalDTag, relay, success: false, error: errorMsg });
-                return { relay, success: false, error: err };
-              });
+              try {
+                // Publish to SINGLE relay
+                const pubs = pool.publish([relay], signedEvent);
+
+                // Use for-await to consume the async iterable (proven pattern)
+                Promise.race([
+                  (async () => {
+                    for await (const pub of pubs) {
+                      // At least one relay accepted
+                      break;
+                    }
+                  })(),
+                  new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Publish timeout (8s)')), 8000)
+                  )
+                ]).then(() => {
+                  clearTimeout(timeout);
+                  relayResults.push({
+                    proposalId: proposal.proposalDTag,
+                    relay,
+                    success: true
+                  });
+                  console.log(`✅ ${relay}: KIND 90901 published for ${proposal.proposalDTag}`);
+                  resolve();
+                }).catch((error) => {
+                  clearTimeout(timeout);
+                  relayResults.push({
+                    proposalId: proposal.proposalDTag,
+                    relay,
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                  });
+                  console.error(`❌ ${relay}: ${error instanceof Error ? error.message : 'Unknown error'} for ${proposal.proposalDTag}`);
+                  resolve();
+                });
+              } catch (error: any) {
+                clearTimeout(timeout);
+                relayResults.push({
+                  proposalId: proposal.proposalDTag,
+                  relay,
+                  success: false,
+                  error: error.message || 'Unknown error'
+                });
+                console.error(`❌ ${relay}: ${error.message} for ${proposal.proposalDTag}`);
+                resolve();
+              }
+            });
           });
 
-          // Wait for publishing with timeout
-          try {
-            await Promise.race([
-              Promise.all(trackedPromises),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Publish timeout')), 10000)
-              )
-            ]);
-          } catch (error) {
-            console.warn('⚠️ Publish timeout for proposal:', proposal.proposalDTag);
-          }
+          // Wait for all relays to complete or timeout
+          await Promise.all(publishPromises);
 
         } catch (error) {
           console.error(`❌ Error creating KIND 90901 for proposal ${proposal.proposalDTag}:`, error);
         }
       }
 
+      // Close pool only after ALL proposals published to ALL relays
       pool.close(relays);
 
       // Store result data for result page

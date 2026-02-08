@@ -3,12 +3,6 @@ import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { isLashExpired } from '@/lib/lashExpiration';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 /**
  * Hook to fetch and count LASH events (KIND 39991) for posts
  * Returns a Map of postId -> lashCount
@@ -24,9 +18,7 @@ export function useNostrLashCounts(postIds: string[]) {
   const [loading, setLoading] = useState(false);
   const pool = useMemo(() => new SimplePool(), []);
 
-  const relays = parameters?.relays && parameters.relays.length > 0 
-    ? parameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = parameters?.relays || [];
 
   useEffect(() => {
     if (postIds.length === 0) {

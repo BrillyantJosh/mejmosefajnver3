@@ -3,12 +3,6 @@ import { SimplePool } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
-const DEFAULT_RELAYS = [
-  'wss://relay.lanavault.space',
-  'wss://relay.lanacoin-eternity.com',
-  'wss://relay.lanaheartvoice.com'
-];
-
 export interface AiEventSummary {
   id: string;
   dTag: string;
@@ -167,9 +161,7 @@ export function useAiAdvisorEvents(): { eventsContext: AiEventsContext | null; i
   const [fetchStatus, setFetchStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const fetchStartedRef = useRef(false);
 
-  const relays = systemParameters?.relays && systemParameters.relays.length > 0 
-    ? systemParameters.relays 
-    : DEFAULT_RELAYS;
+  const relays = systemParameters?.relays || [];
 
   const fetchEvents = useCallback(async () => {
     if (!session) {
