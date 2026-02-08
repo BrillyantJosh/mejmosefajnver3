@@ -22,7 +22,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
-  const { session } = useAuth();
+  const { session, isLoading: authLoading } = useAuth();
 
   // Apply theme whenever settings change
   useTheme(appSettings?.theme_colors || null);
@@ -184,23 +184,20 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Don't run admin check until auth has finished loading
+    if (authLoading) return;
+
     const initAdmin = async () => {
-      console.log('🔄 [AdminContext] initAdmin triggered');
-      console.log('📦 [AdminContext] session:', session);
-      
       setLoading(true);
-      
+
       // Load app settings first (public data)
       await loadAppSettings();
 
       // Check admin status based on Nostr hex ID
       if (session?.nostrHexId) {
-        console.log('🔍 [AdminContext] Checking admin for nostrHexId:', session.nostrHexId);
         const adminStatus = await checkAdminStatus(session.nostrHexId);
-        console.log('✅ [AdminContext] Admin status result:', adminStatus);
         setIsAdmin(adminStatus);
       } else {
-        console.log('❌ [AdminContext] No session, resetting admin status');
         setIsAdmin(false);
       }
 
@@ -208,7 +205,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     };
 
     initAdmin();
-  }, [session]); // Changed from [session?.nostrHexId] to [session] to trigger on re-login
+  }, [session, authLoading]);
 
   return (
     <AdminContext.Provider

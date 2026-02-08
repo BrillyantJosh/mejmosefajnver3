@@ -9,8 +9,9 @@ interface ProtectedRouteProps {
 
 export const AdminProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { isAdmin, loading } = useAdmin();
+  const { isLoading: authLoading } = useAuth();
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">

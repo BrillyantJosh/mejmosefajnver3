@@ -448,40 +448,71 @@ interface Recipient {
 }
 
 class UTXOSelector {
-  private utxos: UTXO[];
+  static MAX_INPUTS = 20;
+  static DUST_THRESHOLD = 500000; // 0.005 LANA = 500,000 satoshis
 
-  constructor(utxos: UTXO[]) {
-    // Sort by value descending for optimal selection
-    this.utxos = [...utxos].sort((a, b) => b.value - a.value);
-  }
+  static selectUTXOs(utxos: UTXO[], totalNeeded: number): { selected: UTXO[]; totalValue: number } {
+    if (!utxos || utxos.length === 0) {
+      throw new Error('No UTXOs available for selection');
+    }
 
-  select(targetAmount: number, fee: number): { selected: UTXO[]; change: number } {
-    const totalNeeded = targetAmount + fee;
-    const selected: UTXO[] = [];
+    console.log(`🔍 UTXO Selection: Need ${totalNeeded} satoshis from ${utxos.length} UTXOs`);
+    const totalAvailable = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
+    console.log(`💰 Total available: ${totalAvailable} satoshis (${(totalAvailable / 100000000).toFixed(8)} LANA)`);
+
+    if (totalAvailable < totalNeeded) {
+      throw new Error(
+        `Insufficient total UTXO value: ${totalAvailable} < ${totalNeeded} satoshis. ` +
+        `Available: ${(totalAvailable / 100000000).toFixed(8)} LANA, ` +
+        `Needed: ${(totalNeeded / 100000000).toFixed(8)} LANA`
+      );
+    }
+
+    // Sort by value (largest first)
+    const sortedUTXOs = [...utxos].sort((a, b) => b.value - a.value);
+
+    // Filter out dust UTXOs
+    const nonDustUtxos = sortedUTXOs.filter(u => u.value >= this.DUST_THRESHOLD);
+    if (nonDustUtxos.length < sortedUTXOs.length) {
+      console.log(`⚠️ Filtered out ${sortedUTXOs.length - nonDustUtxos.length} dust UTXOs`);
+    }
+
+    const workingSet = nonDustUtxos.length > 0 ? nonDustUtxos : sortedUTXOs;
+
+    // Add UTXOs one by one until we have enough
+    const selectedUTXOs: UTXO[] = [];
     let totalSelected = 0;
 
-    for (const utxo of this.utxos) {
-      selected.push(utxo);
-      totalSelected += utxo.value;
+    for (let i = 0; i < workingSet.length && selectedUTXOs.length < this.MAX_INPUTS; i++) {
+      selectedUTXOs.push(workingSet[i]);
+      totalSelected += workingSet[i].value;
 
       if (totalSelected >= totalNeeded) {
-        break;
+        console.log(`✅ Selected ${selectedUTXOs.length} UTXOs: ${(totalSelected / 100000000).toFixed(8)} LANA`);
+        return { selected: selectedUTXOs, totalValue: totalSelected };
       }
     }
 
-    if (totalSelected < totalNeeded) {
-      throw new Error(`Insufficient funds: need ${totalNeeded}, have ${totalSelected}`);
+    // If still insufficient, try including dust
+    if (nonDustUtxos.length !== sortedUTXOs.length) {
+      console.log('⚠️ Including dust UTXOs to meet target...');
+      for (const utxo of sortedUTXOs) {
+        if (selectedUTXOs.some(s => s.tx_hash === utxo.tx_hash && s.tx_pos === utxo.tx_pos)) continue;
+        if (selectedUTXOs.length >= this.MAX_INPUTS) break;
+
+        selectedUTXOs.push(utxo);
+        totalSelected += utxo.value;
+
+        if (totalSelected >= totalNeeded) {
+          return { selected: selectedUTXOs, totalValue: totalSelected };
+        }
+      }
     }
 
-    const change = totalSelected - totalNeeded;
-    return { selected, change };
-  }
-
-  selectAll(): { selected: UTXO[]; total: number } {
-    return {
-      selected: this.utxos,
-      total: this.utxos.reduce((sum, utxo) => sum + utxo.value, 0)
-    };
+    throw new Error(
+      `Cannot build transaction: Need ${(totalNeeded / 100000000).toFixed(8)} LANA but ` +
+      `only ${(totalSelected / 100000000).toFixed(8)} LANA available in ${selectedUTXOs.length} UTXOs`
+    );
   }
 }
 
@@ -559,219 +590,214 @@ export interface BuildTxResult {
 }
 
 export async function buildSignedTx(
-  utxos: UTXO[],
+  selectedUTXOs: UTXO[],
   wifPrivateKey: string,
   recipients: Recipient[],
   fee: number,
   changeAddress: string,
   servers: Array<{ host: string; port: number }>
 ): Promise<BuildTxResult> {
-  console.log(`🔨 Building transaction with ${utxos.length} available UTXOs...`);
+  console.log(`🔨 Building transaction with ${selectedUTXOs.length} pre-selected UTXOs...`);
+  console.log(`📊 Recipients: ${recipients.length} outputs`);
 
-  // Normalize and decode private key
-  const normalizedKey = normalizeWif(wifPrivateKey);
-  const privateKeyBytes = base58CheckDecode(normalizedKey);
-  const privateKeyHex = uint8ArrayToHex(privateKeyBytes.slice(1, 33));
+  try {
+    if (!selectedUTXOs || selectedUTXOs.length === 0) throw new Error('No UTXOs provided');
+    if (recipients.length === 0) throw new Error('No recipients provided');
 
-  // Always use UNCOMPRESSED public key (same as working Deno edge function)
-  const publicKey = privateKeyToUncompressedPublicKey(privateKeyHex);
+    const totalAmount = recipients.reduce((sum, r) => sum + r.amount, 0);
+    const totalValue = selectedUTXOs.reduce((sum, utxo) => sum + utxo.value, 0);
 
-  console.log(`🔑 Public key derived (uncompressed, ${publicKey.length} bytes): ${uint8ArrayToHex(publicKey).substring(0, 16)}...`);
+    console.log(`💰 Total input: ${totalValue}, Output: ${totalAmount}, Fee: ${fee}, Change: ${totalValue - totalAmount - fee}`);
 
-  // Calculate total output amount
-  const totalOutput = recipients.reduce((sum, r) => sum + r.amount, 0);
+    // Normalize and decode private key
+    const normalizedKey = normalizeWif(wifPrivateKey);
+    const privateKeyBytes = base58CheckDecode(normalizedKey);
+    const privateKeyHex = uint8ArrayToHex(privateKeyBytes.slice(1, 33));
 
-  // Select UTXOs
-  const selector = new UTXOSelector(utxos);
-  const { selected: selectedUTXOs, change } = selector.select(totalOutput, fee);
+    // Always use UNCOMPRESSED public key (same as working Deno edge function)
+    const publicKey = privateKeyToUncompressedPublicKey(privateKeyHex);
 
-  console.log(`📦 Selected ${selectedUTXOs.length} UTXOs, total: ${selectedUTXOs.reduce((s, u) => s + u.value, 0)}`);
-  console.log(`💰 Output: ${totalOutput}, Fee: ${fee}, Change: ${change}`);
+    console.log(`🔑 Public key derived (uncompressed, ${publicKey.length} bytes)`);
 
-  // Build outputs
-  const outputs: Uint8Array[] = [];
+    // Build recipient outputs
+    const outputs: Uint8Array[] = [];
+    for (const recipient of recipients) {
+      const decoded = base58CheckDecode(recipient.address);
+      const pubKeyHash = decoded.slice(1);
 
-  for (const recipient of recipients) {
-    const decoded = base58CheckDecode(recipient.address);
-    const pubKeyHash = decoded.slice(1); // Remove version byte
+      const scriptPubKey = new Uint8Array([
+        0x76, 0xa9, 0x14, ...pubKeyHash, 0x88, 0xac
+      ]);
 
-    // P2PKH script: OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
-    const scriptPubKey = new Uint8Array([
-      0x76, // OP_DUP
-      0xa9, // OP_HASH160
-      0x14, // Push 20 bytes
-      ...pubKeyHash,
-      0x88, // OP_EQUALVERIFY
-      0xac  // OP_CHECKSIG
-    ]);
+      const valueBytes = new Uint8Array(8);
+      new DataView(valueBytes.buffer).setBigUint64(0, BigInt(recipient.amount), true);
 
-    outputs.push(new Uint8Array([
-      ...littleEndian64(BigInt(recipient.amount)),
-      scriptPubKey.length,
-      ...scriptPubKey
-    ]));
-  }
-
-  // Add change output if needed
-  if (change > 546) { // Dust threshold
-    const decoded = base58CheckDecode(changeAddress);
-    const pubKeyHash = decoded.slice(1);
-
-    const scriptPubKey = new Uint8Array([
-      0x76, 0xa9, 0x14,
-      ...pubKeyHash,
-      0x88, 0xac
-    ]);
-
-    outputs.push(new Uint8Array([
-      ...littleEndian64(BigInt(change)),
-      scriptPubKey.length,
-      ...scriptPubKey
-    ]));
-  }
-
-  const outputCount = outputs.length;
-  const allOutputs = new Uint8Array(outputs.reduce((t, o) => t + o.length, 0));
-  let outOffset = 0;
-  for (const output of outputs) {
-    allOutputs.set(output, outOffset);
-    outOffset += output.length;
-  }
-
-  // Transaction components
-  const version = littleEndian32(1);
-  const nTime = littleEndian32(Math.floor(Date.now() / 1000));
-  const locktime = littleEndian32(0);
-  const hashType = littleEndian32(1); // SIGHASH_ALL
-
-  // Prepare input data
-  const inputData: Array<{
-    txid: Uint8Array;
-    voutBytes: Uint8Array;
-    scriptPubkey: Uint8Array;
-  }> = [];
-
-  for (const utxo of selectedUTXOs) {
-    // Reverse txid (little-endian)
-    const txidBytes = hexToUint8Array(utxo.tx_hash);
-    const txidReversed = new Uint8Array(txidBytes.length);
-    for (let i = 0; i < txidBytes.length; i++) {
-      txidReversed[i] = txidBytes[txidBytes.length - 1 - i];
+      outputs.push(new Uint8Array([
+        ...valueBytes,
+        ...encodeVarint(scriptPubKey.length),
+        ...scriptPubKey
+      ]));
+      console.log(`📤 Output ${outputs.length}: ${recipient.address} = ${(recipient.amount / 100000000).toFixed(8)} LANA`);
     }
 
-    const scriptPubkey = await parseScriptPubkeyFromRawTx(utxo.tx_hash, utxo.tx_pos, servers);
+    // Add change output if needed
+    const changeAmount = totalValue - totalAmount - fee;
+    let outputCount = recipients.length;
 
-    inputData.push({
-      txid: txidReversed,
-      voutBytes: littleEndian32(utxo.tx_pos),
-      scriptPubkey
-    });
-  }
+    if (changeAmount > 1000) {
+      const decoded = base58CheckDecode(changeAddress);
+      const pubKeyHash = decoded.slice(1);
 
-  // Sign each input
-  const signedInputs: Uint8Array[] = [];
+      const scriptPubKey = new Uint8Array([
+        0x76, 0xa9, 0x14, ...pubKeyHash, 0x88, 0xac
+      ]);
 
-  for (let currentIndex = 0; currentIndex < selectedUTXOs.length; currentIndex++) {
-    console.log(`✍️ Signing input ${currentIndex + 1}/${selectedUTXOs.length}...`);
+      const valueBytes = new Uint8Array(8);
+      new DataView(valueBytes.buffer).setBigUint64(0, BigInt(changeAmount), true);
 
-    // Build preimage for this input
-    const preimageInputs: Uint8Array[] = [];
+      outputs.push(new Uint8Array([
+        ...valueBytes,
+        ...encodeVarint(scriptPubKey.length),
+        ...scriptPubKey
+      ]));
+      outputCount++;
+      console.log(`✅ Change output: ${(changeAmount / 100000000).toFixed(8)} LANA`);
+    } else if (changeAmount > 0) {
+      console.log(`⚠️ Change too small (${changeAmount}), adding to fee`);
+    }
 
-    for (let i = 0; i < inputData.length; i++) {
-      const { txid, voutBytes, scriptPubkey } = inputData[i];
+    const allOutputs = new Uint8Array(outputs.reduce((t, o) => t + o.length, 0));
+    let outOffset = 0;
+    for (const output of outputs) {
+      allOutputs.set(output, outOffset);
+      outOffset += output.length;
+    }
 
-      if (i === currentIndex) {
-        // Current input uses scriptPubkey
+    // Transaction components
+    const version = littleEndian32(1);
+    const nTime = littleEndian32(Math.floor(Date.now() / 1000));
+    const locktime = littleEndian32(0);
+    const hashType = littleEndian32(1); // SIGHASH_ALL
+
+    // Fetch all scriptPubkeys first
+    const scriptPubkeys: Uint8Array[] = [];
+    for (let i = 0; i < selectedUTXOs.length; i++) {
+      const utxo = selectedUTXOs[i];
+      console.log(`🔍 Fetching scriptPubKey ${i + 1}/${selectedUTXOs.length}: ${utxo.tx_hash}:${utxo.tx_pos}`);
+      const scriptPubkey = await parseScriptPubkeyFromRawTx(utxo.tx_hash, utxo.tx_pos, servers);
+      scriptPubkeys.push(scriptPubkey);
+    }
+
+    // Prepare input txid/vout data
+    const inputMeta: Array<{ txid: Uint8Array; vout: Uint8Array }> = [];
+    for (const utxo of selectedUTXOs) {
+      const txidBytes = hexToUint8Array(utxo.tx_hash);
+      const txidReversed = new Uint8Array(txidBytes.length);
+      for (let i = 0; i < txidBytes.length; i++) {
+        txidReversed[i] = txidBytes[txidBytes.length - 1 - i];
+      }
+      inputMeta.push({
+        txid: txidReversed,
+        vout: littleEndian32(utxo.tx_pos)
+      });
+    }
+
+    // Sign each input
+    const signedInputs: Uint8Array[] = [];
+
+    for (let currentIndex = 0; currentIndex < selectedUTXOs.length; currentIndex++) {
+      console.log(`✍️ Signing input ${currentIndex + 1}/${selectedUTXOs.length}...`);
+
+      // Build ALL inputs for preimage (SIGHASH_ALL)
+      const preimageInputs: Uint8Array[] = [];
+      for (let j = 0; j < selectedUTXOs.length; j++) {
+        const { txid, vout } = inputMeta[j];
+        // Only input i gets its scriptPubKey, others get empty script
+        const scriptForJ = (j === currentIndex) ? scriptPubkeys[j] : new Uint8Array(0);
+
         preimageInputs.push(new Uint8Array([
           ...txid,
-          ...voutBytes,
-          ...encodeVarint(scriptPubkey.length),
-          ...scriptPubkey,
-          0xff, 0xff, 0xff, 0xff // sequence
-        ]));
-      } else {
-        // Other inputs use empty script
-        preimageInputs.push(new Uint8Array([
-          ...txid,
-          ...voutBytes,
-          0x00, // empty script length
+          ...vout,
+          ...encodeVarint(scriptForJ.length),
+          ...scriptForJ,
           0xff, 0xff, 0xff, 0xff // sequence
         ]));
       }
+
+      // Concatenate all preimage inputs
+      const allPreimageInputs = preimageInputs.reduce((acc, cur) => {
+        const out = new Uint8Array(acc.length + cur.length);
+        out.set(acc);
+        out.set(cur, acc.length);
+        return out;
+      }, new Uint8Array(0));
+
+      // Build preimage with varint counts
+      const preimage = new Uint8Array([
+        ...version,
+        ...nTime,
+        ...encodeVarint(selectedUTXOs.length),
+        ...allPreimageInputs,
+        ...encodeVarint(outputCount),
+        ...allOutputs,
+        ...locktime,
+        ...hashType
+      ]);
+
+      const sighash = sha256d(preimage);
+      const signature = signECDSA(privateKeyHex, sighash);
+      const signatureWithHashType = new Uint8Array([...signature, 0x01]);
+      const scriptSig = new Uint8Array([
+        ...pushData(signatureWithHashType),
+        ...pushData(publicKey)
+      ]);
+
+      const { txid, vout } = inputMeta[currentIndex];
+      const signedInput = new Uint8Array([
+        ...txid,
+        ...vout,
+        ...encodeVarint(scriptSig.length),
+        ...scriptSig,
+        0xff, 0xff, 0xff, 0xff
+      ]);
+
+      signedInputs.push(signedInput);
+      console.log(`✅ Input ${currentIndex + 1} signed`);
     }
 
-    // Combine all preimage inputs
-    const allPreimageInputs = new Uint8Array(
-      preimageInputs.reduce((total, input) => total + input.length, 0)
-    );
-    let preimageOffset = 0;
-    for (const input of preimageInputs) {
-      allPreimageInputs.set(input, preimageOffset);
-      preimageOffset += input.length;
+    console.log(`✅✅✅ ALL ${selectedUTXOs.length} inputs signed!`);
+
+    // Build final transaction
+    const allInputs = new Uint8Array(signedInputs.reduce((t, i) => t + i.length, 0));
+    let inputOffset = 0;
+    for (const input of signedInputs) {
+      allInputs.set(input, inputOffset);
+      inputOffset += input.length;
     }
 
-    // Build complete preimage
-    const preimage = new Uint8Array([
+    const finalTx = new Uint8Array([
       ...version,
       ...nTime,
-      selectedUTXOs.length,
-      ...allPreimageInputs,
-      outputCount,
+      ...encodeVarint(selectedUTXOs.length),
+      ...allInputs,
+      ...encodeVarint(outputCount),
       ...allOutputs,
-      ...locktime,
-      ...hashType
+      ...locktime
     ]);
 
-    // Sign this input
-    const sighash = sha256d(preimage);
-    const signature = signECDSA(privateKeyHex, sighash);
-    const signatureWithHashType = new Uint8Array([...signature, 0x01]);
-    const scriptSig = new Uint8Array([
-      ...pushData(signatureWithHashType),
-      ...pushData(publicKey)
-    ]);
+    const finalTxHex = uint8ArrayToHex(finalTx);
+    console.log(`✅ Transaction built: ${finalTxHex.length / 2} bytes, ${selectedUTXOs.length} inputs, ${outputCount} outputs`);
 
-    // Build the signed input
-    const { txid, voutBytes } = inputData[currentIndex];
-    const signedInput = new Uint8Array([
-      ...txid,
-      ...voutBytes,
-      ...encodeVarint(scriptSig.length),
-      ...scriptSig,
-      0xff, 0xff, 0xff, 0xff
-    ]);
-
-    signedInputs.push(signedInput);
-    console.log(`✅ Input ${currentIndex + 1} signed successfully`);
+    return {
+      txHex: finalTxHex,
+      inputCount: selectedUTXOs.length,
+      outputCount,
+      selectedUTXOs
+    };
+  } catch (error) {
+    console.error('❌ Transaction building error:', error);
+    throw error;
   }
-
-  // Build final transaction
-  const allInputs = new Uint8Array(signedInputs.reduce((t, i) => t + i.length, 0));
-  let inputOffset = 0;
-  for (const input of signedInputs) {
-    allInputs.set(input, inputOffset);
-    inputOffset += input.length;
-  }
-
-  const finalTx = new Uint8Array([
-    ...version,
-    ...nTime,
-    selectedUTXOs.length,
-    ...allInputs,
-    outputCount,
-    ...allOutputs,
-    ...locktime
-  ]);
-
-  const finalTxHex = uint8ArrayToHex(finalTx);
-  console.log(`✅ Transaction built: ${finalTxHex.length / 2} bytes, ${selectedUTXOs.length} inputs, ${outputCount} outputs`);
-
-  return {
-    txHex: finalTxHex,
-    inputCount: selectedUTXOs.length,
-    outputCount,
-    selectedUTXOs
-  };
 }
 
 // ==============================================
@@ -781,6 +807,8 @@ export async function buildSignedTx(
 export interface SendLanaParams {
   senderAddress: string;
   recipientAddress: string;
+  mentorAddress?: string;
+  mentorPercent?: number;
   amount?: number;
   privateKey: string;
   emptyWallet?: boolean;
@@ -791,6 +819,8 @@ export interface SendLanaResult {
   success: boolean;
   txHash?: string;
   amount?: number;
+  projectAmount?: number;
+  mentorAmount?: number;
   fee?: number;
   error?: string;
 }
@@ -799,6 +829,8 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
   const {
     senderAddress,
     recipientAddress,
+    mentorAddress,
+    mentorPercent,
     amount,
     privateKey,
     emptyWallet = false,
@@ -871,8 +903,7 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
       const totalBalance = utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0);
       console.log(`💰 Total balance: ${totalBalance} satoshis`);
 
-      // Calculate dynamic fee
-      const estimatedInputCount = Math.min(utxos.length, 500);
+      const estimatedInputCount = Math.min(utxos.length, UTXOSelector.MAX_INPUTS);
       const outputCount = 1;
       fee = (estimatedInputCount * 180 + outputCount * 34 + 10) * 100;
 
@@ -886,18 +917,63 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
     } else {
       amountSatoshis = Math.floor(amount! * 100000000);
 
-      // Calculate dynamic fee
-      const estimatedInputCount = Math.min(5, utxos.length);
-      const outputCount = 2;
-      fee = (estimatedInputCount * 180 + outputCount * 34 + 10) * 100;
+      // Check if we need mentor split
+      const hasMentorSplit = mentorAddress && mentorPercent && mentorPercent > 0;
+      const mentorAmountSatoshis = hasMentorSplit
+        ? Math.floor(amountSatoshis * mentorPercent / 100)
+        : 0;
+      const projectAmountSatoshis = amountSatoshis - mentorAmountSatoshis;
 
-      recipients = [{ address: recipientAddress, amount: amountSatoshis }];
-      console.log(`💰 Normal mode: sending ${amountSatoshis} satoshis`);
+      if (hasMentorSplit && mentorAmountSatoshis > 546) {
+        recipients = [
+          { address: recipientAddress, amount: projectAmountSatoshis },
+          { address: mentorAddress, amount: mentorAmountSatoshis }
+        ];
+        console.log(`💰 Split mode: ${projectAmountSatoshis} to project, ${mentorAmountSatoshis} to mentor (${mentorPercent}%)`);
+      } else {
+        recipients = [{ address: recipientAddress, amount: amountSatoshis }];
+        console.log(`💰 Normal mode: sending ${amountSatoshis} satoshis`);
+      }
     }
 
-    // Build and sign transaction
-    const { txHex: signedTx, selectedUTXOs } = await buildSignedTx(
-      utxos,
+    // UTXO selection with iterative fee recalculation (like working Deno version)
+    const totalAmountSatoshis = recipients.reduce((sum, r) => sum + r.amount, 0);
+    const actualOutputCount = recipients.length + 1; // + change output
+
+    // Step 1: Initial selection
+    let selection = UTXOSelector.selectUTXOs(utxos, totalAmountSatoshis);
+    let selectedUTXOs = selection.selected;
+    let totalSelected = selection.totalValue;
+
+    // Step 2: Calculate fee based on actual number of selected UTXOs
+    let baseFee = (selectedUTXOs.length * 180 + actualOutputCount * 34 + 10) * 100;
+    fee = Math.floor(baseFee * 1.5); // 50% safety buffer
+
+    console.log(`💸 Fee: ${fee} satoshis (base: ${baseFee}, 1.5x buffer) for ${selectedUTXOs.length} inputs, ${actualOutputCount} outputs`);
+
+    // Step 3: Iteratively add more UTXOs if needed
+    let iterations = 0;
+    while (totalSelected < totalAmountSatoshis + fee && selectedUTXOs.length < utxos.length && iterations < 10) {
+      iterations++;
+      console.log(`🔄 Iteration ${iterations}: Need ${totalAmountSatoshis + fee}, have ${totalSelected}`);
+
+      selection = UTXOSelector.selectUTXOs(utxos, totalAmountSatoshis + fee);
+      selectedUTXOs = selection.selected;
+      totalSelected = selection.totalValue;
+
+      baseFee = (selectedUTXOs.length * 180 + actualOutputCount * 34 + 10) * 100;
+      fee = Math.floor(baseFee * 1.5);
+    }
+
+    if (totalSelected < totalAmountSatoshis + fee) {
+      throw new Error(`Insufficient funds: need ${totalAmountSatoshis + fee} satoshis, have ${totalSelected}`);
+    }
+
+    console.log(`✅ Final: ${selectedUTXOs.length} UTXOs, total: ${totalSelected}, amount: ${totalAmountSatoshis}, fee: ${fee}`);
+
+    // Build and sign transaction with pre-selected UTXOs
+    const { txHex: signedTx } = await buildSignedTx(
+      selectedUTXOs,
       privateKey,
       recipients,
       fee,
@@ -940,14 +1016,190 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
 
     console.log('✅ Transaction broadcast successful:', txHash);
 
+    // Calculate actual split amounts for response
+    const hasMentorSplit = mentorAddress && mentorPercent && mentorPercent > 0;
+    const actualMentorAmount = hasMentorSplit
+      ? Math.floor(amountSatoshis * mentorPercent / 100)
+      : 0;
+    const actualProjectAmount = amountSatoshis - actualMentorAmount;
+
     return {
       success: true,
       txHash,
       amount: amountSatoshis,
+      projectAmount: actualMentorAmount > 546 ? actualProjectAmount : amountSatoshis,
+      mentorAmount: actualMentorAmount > 546 ? actualMentorAmount : 0,
       fee
     };
   } catch (error) {
     console.error('❌ Transaction error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
+// ==============================================
+// Batch Transaction Function (Multiple Recipients)
+// ==============================================
+
+export interface SendBatchLanaParams {
+  senderAddress: string;
+  recipients: Recipient[]; // [{address, amount}] — amounts in satoshis
+  privateKey: string;
+  electrumServers?: Array<{ host: string; port: number }>;
+}
+
+export interface SendBatchLanaResult {
+  success: boolean;
+  txHash?: string;
+  totalAmount?: number;
+  fee?: number;
+  error?: string;
+}
+
+export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Promise<SendBatchLanaResult> {
+  const { senderAddress, recipients, privateKey, electrumServers } = params;
+
+  console.log('🚀 Starting BATCH LANA transaction...');
+  console.log(`📋 Sender: ${senderAddress}`);
+  console.log(`📋 Recipients: ${recipients.length} outputs`);
+
+  try {
+    if (!senderAddress || !privateKey || !recipients || recipients.length === 0) {
+      throw new Error('Missing required parameters');
+    }
+
+    // Validate private key matches sender address
+    const normalizedKey = normalizeWif(privateKey);
+    const privateKeyBytes = base58CheckDecode(normalizedKey);
+    const privateKeyHex = uint8ArrayToHex(privateKeyBytes.slice(1, 33));
+    const generatedPubKey = privateKeyToUncompressedPublicKey(privateKeyHex);
+    const expectedAddress = publicKeyToAddress(generatedPubKey);
+
+    if (expectedAddress !== senderAddress) {
+      const compressedPubKey = privateKeyToPublicKey(privateKeyHex);
+      const compressedAddress = publicKeyToAddress(compressedPubKey);
+      if (compressedAddress !== senderAddress) {
+        throw new Error(
+          `Private key does not match sender address. Expected: ${expectedAddress} or ${compressedAddress}, Got: ${senderAddress}`
+        );
+      }
+    }
+    console.log('✅ Private key validation passed');
+
+    // Validate all recipient addresses
+    for (const r of recipients) {
+      if (!r.address || r.amount <= 0) {
+        throw new Error(`Invalid recipient: ${r.address} amount=${r.amount}`);
+      }
+      // Validate base58 checksum
+      base58CheckDecode(r.address);
+    }
+
+    const servers = electrumServers && electrumServers.length > 0
+      ? electrumServers
+      : [
+          { host: 'electrum1.lanacoin.com', port: 5097 },
+          { host: 'electrum2.lanacoin.com', port: 5097 },
+          { host: 'electrum3.lanacoin.com', port: 5097 }
+        ];
+
+    // Fetch UTXOs
+    const utxos = await electrumCall('blockchain.address.listunspent', [senderAddress], servers);
+    if (!utxos || utxos.length === 0) {
+      throw new Error('No UTXOs available');
+    }
+    console.log(`📦 Found ${utxos.length} UTXOs`);
+
+    const totalAmountSatoshis = recipients.reduce((sum, r) => sum + r.amount, 0);
+    console.log(`💰 Total to send: ${totalAmountSatoshis} satoshis (${(totalAmountSatoshis / 100000000).toFixed(8)} LANA) across ${recipients.length} outputs`);
+
+    recipients.forEach((r, i) => {
+      console.log(`  ${i + 1}. ${r.address}: ${(r.amount / 100000000).toFixed(8)} LANA`);
+    });
+
+    // Iterative UTXO selection + fee calculation
+    const actualOutputCount = recipients.length + 1; // + change
+
+    let selection = UTXOSelector.selectUTXOs(utxos, totalAmountSatoshis);
+    let selectedUTXOs = selection.selected;
+    let totalSelected = selection.totalValue;
+
+    let baseFee = (selectedUTXOs.length * 180 + actualOutputCount * 34 + 10) * 100;
+    let fee = Math.floor(baseFee * 1.5);
+
+    console.log(`💸 Fee: ${fee} satoshis for ${selectedUTXOs.length} inputs, ${actualOutputCount} outputs`);
+
+    let iterations = 0;
+    while (totalSelected < totalAmountSatoshis + fee && selectedUTXOs.length < utxos.length && iterations < 10) {
+      iterations++;
+      selection = UTXOSelector.selectUTXOs(utxos, totalAmountSatoshis + fee);
+      selectedUTXOs = selection.selected;
+      totalSelected = selection.totalValue;
+      baseFee = (selectedUTXOs.length * 180 + actualOutputCount * 34 + 10) * 100;
+      fee = Math.floor(baseFee * 1.5);
+    }
+
+    if (totalSelected < totalAmountSatoshis + fee) {
+      throw new Error(`Insufficient funds: need ${totalAmountSatoshis + fee} satoshis, have ${totalSelected}`);
+    }
+
+    console.log(`✅ Final: ${selectedUTXOs.length} UTXOs, total: ${totalSelected}, amount: ${totalAmountSatoshis}, fee: ${fee}`);
+
+    // Build and sign transaction
+    const { txHex: signedTx } = await buildSignedTx(
+      selectedUTXOs,
+      privateKey,
+      recipients,
+      fee,
+      senderAddress,
+      servers
+    );
+    console.log('✍️ Batch transaction signed successfully');
+
+    // Broadcast
+    console.log('🚀 Broadcasting batch transaction...');
+    const broadcastResult = await electrumCall(
+      'blockchain.transaction.broadcast',
+      [signedTx],
+      servers,
+      45000
+    );
+
+    if (!broadcastResult) {
+      throw new Error('Transaction broadcast failed - no result');
+    }
+
+    const resultStr = typeof broadcastResult === 'string' ? broadcastResult : String(broadcastResult);
+
+    if (
+      resultStr.includes('TX rejected') ||
+      resultStr.includes('error') ||
+      resultStr.includes('Error') ||
+      resultStr.includes('failed') ||
+      resultStr.includes('Failed') ||
+      resultStr.includes('-22')
+    ) {
+      throw new Error(`Transaction broadcast failed: ${resultStr}`);
+    }
+
+    const txHash = resultStr.trim();
+    if (!/^[a-fA-F0-9]{64}$/.test(txHash)) {
+      throw new Error(`Invalid transaction ID format: ${txHash}`);
+    }
+
+    console.log('✅ Batch transaction broadcast successful:', txHash);
+
+    return {
+      success: true,
+      txHash,
+      totalAmount: totalAmountSatoshis,
+      fee
+    };
+  } catch (error) {
+    console.error('❌ Batch transaction error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
