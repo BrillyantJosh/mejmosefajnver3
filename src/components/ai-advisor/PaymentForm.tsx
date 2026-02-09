@@ -60,8 +60,13 @@ export function PaymentForm({
       setIsValidating(true);
       try {
         const derivedIds = await convertWifToIds(privateKey.trim());
-        
-        if (derivedIds.walletId !== senderWalletId) {
+
+        // Check both compressed and uncompressed addresses
+        // (older wallet registrations via KIND 30889 may use uncompressed addresses)
+        const matchesCompressed = derivedIds.walletId === senderWalletId;
+        const matchesUncompressed = derivedIds.walletIdUncompressed === senderWalletId;
+
+        if (!matchesCompressed && !matchesUncompressed) {
           setIsPrivateKeyValid(false);
           setValidationError(t('privateKeyMismatch', language, { walletId: derivedIds.walletId.slice(0, 8) }));
         } else {
