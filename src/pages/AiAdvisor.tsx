@@ -63,6 +63,12 @@ interface TriadResponse {
   type: 'triad';
   final_answer: string;
   confidence: number;
+  payment_intent?: {
+    action: string;
+    recipient: string;
+    amount: number;
+    currency: string;
+  } | null;
   what_i_did: string[];
   what_i_did_not_do: string[];
   next_step: string;
@@ -548,13 +554,28 @@ export default function AiAdvisor() {
         if (streamDone) break;
       }
 
-      // Check for payment intent in final answer (use assistantContent, not stale React state)
+      // Check for payment intent (use assistantContent, not stale React state)
       const triadCheck = parseTriadResponse(assistantContent);
       if (triadCheck?.final_answer) {
-        const intent = parsePaymentIntent(triadCheck.final_answer);
-        if (intent) {
-          setPaymentIntent(intent);
+        // Try structured payment_intent first (reliable — no JSON-in-JSON escaping issues)
+        const structuredIntent = triadCheck.payment_intent;
+        if (structuredIntent && structuredIntent.action === 'payment' && structuredIntent.recipient && structuredIntent.amount) {
+          console.log('💰 Payment intent detected (structured):', structuredIntent);
+          setPaymentIntent({
+            recipient: structuredIntent.recipient,
+            amount: structuredIntent.amount,
+            currency: structuredIntent.currency || 'LANA',
+            sourceWallet: 'Main Wallet',
+          });
           setShowRecipientSelector(true);
+        } else {
+          // Fallback: try regex on final_answer text (for backward compatibility)
+          const intent = parsePaymentIntent(triadCheck.final_answer);
+          if (intent) {
+            console.log('💰 Payment intent detected (regex fallback):', intent);
+            setPaymentIntent(intent);
+            setShowRecipientSelector(true);
+          }
         }
       }
     } catch (err) {

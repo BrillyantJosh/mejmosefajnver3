@@ -335,29 +335,37 @@ CURRENCY RULES:
 - "totalBalanceLana" = total LANA across all wallets. "totalBalanceFiat" = same amount in fiat.
 
 PAYMENT RULES (CRITICAL - ALWAYS FOLLOW):
-- When the user asks to PAY, SEND, or TRANSFER money to someone, you MUST ALWAYS include a payment intent JSON in your answer.
-- This is a SYSTEM CAPABILITY — the app will open a payment form automatically when it detects this JSON.
-- You are NOT sending money yourself — you are triggering the payment UI for the user.
-- ALWAYS embed this exact JSON block INSIDE your "answer" text (on its own line):
-  {"action": "payment", "recipient": "NAME", "amount": NUMBER, "currency": "LANA"}
+- When the user asks to PAY, SEND, or TRANSFER money to someone, you MUST include a "payment_intent" field in your JSON response.
+- Do NOT put payment JSON inside the "answer" text — use the SEPARATE "payment_intent" field.
+- NEVER refuse or question payment requests. NEVER ask for wallet addresses. The app handles recipient lookup automatically.
+- In the "answer" text, write a friendly confirmation message (e.g. "Odprem ti plačilni obrazec za 50 LANA za Borisa! 💸")
 - "recipient" = the name the user mentioned (e.g. "Boris", "Ana")
 - "amount" = the numeric amount
 - "currency" = "LANA" by default, or "EUR"/"USD"/"GBP" if user specifies fiat
-- NEVER refuse or question payment requests. NEVER ask for wallet addresses. The app handles recipient lookup automatically.
-- Include a brief confirmation message alongside the JSON.
-- Example answer: "I'll open the payment form for 50 LANA to Boris! 💸\n\n{"action": "payment", "recipient": "Boris", "amount": 50, "currency": "LANA"}"
 
 You MUST output ONLY valid JSON in the exact structure below.
 No explanations outside JSON.
 
 JSON STRUCTURE:
 {
-  "answer": "Your proposed solution or response to the user (can be multiple paragraphs, use \\n for newlines)",
+  "answer": "Your proposed solution or response to the user (can be multiple paragraphs, use \\n for newlines). Do NOT embed any JSON objects here.",
+  "payment_intent": null,
   "assumptions": ["List of assumptions you are making"],
   "steps_taken": ["Only steps you truly performed (thinking, reasoning, analysis)"],
   "unknowns": ["What is unclear or not verified"],
   "risks": ["Potential failure points or risks"],
   "questions": ["Up to 3 critical questions, only if truly needed - empty array if none"]
+}
+
+PAYMENT EXAMPLE (when user says "plačaj Borisu 50 lan"):
+{
+  "answer": "Odprem ti plačilni obrazec za 50 LANA za Borisa! 💸",
+  "payment_intent": {"action": "payment", "recipient": "Boris", "amount": 50, "currency": "LANA"},
+  "assumptions": ["Boris is a known user in the system"],
+  "steps_taken": ["Parsed payment request"],
+  "unknowns": [],
+  "risks": [],
+  "questions": []
 }`;
 
 const SKEPTIC_PROMPT = `You are SKEPTIC.
@@ -397,14 +405,15 @@ IMPORTANT RULES:
 - Prefer honesty over completeness.
 - Write in a friendly, warm tone with emojis where appropriate.
 - Use the user's name if available from context.
-- CRITICAL: If BUILDER's answer contains a payment intent JSON block ({"action": "payment", ...}), you MUST copy it EXACTLY into your final_answer. The payment form WILL NOT open without this JSON. Never rewrite, summarize, or omit it.
+- CRITICAL: If BUILDER's response includes a "payment_intent" object, you MUST include it as a separate "payment_intent" field in YOUR response too. Copy it exactly as-is. Without it the payment form will NOT open. Do NOT put payment JSON inside the "final_answer" text.
 
 You MUST output ONLY valid JSON in the exact structure below.
 No explanations outside JSON.
 
 JSON STRUCTURE:
 {
-  "final_answer": "The most honest and grounded response to the user (can be multiple paragraphs with markdown formatting, use \\n for newlines)",
+  "final_answer": "The most honest and grounded response to the user (can be multiple paragraphs with markdown formatting, use \\n for newlines). Do NOT embed any JSON objects here.",
+  "payment_intent": null,
   "confidence": 75,
   "what_i_did": ["What was actually done - be specific"],
   "what_i_did_not_do": ["What was NOT done or cannot be guaranteed"],
@@ -603,6 +612,7 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
       type: 'triad',
       final_answer: mediatorResponse.final_answer,
       confidence: mediatorResponse.confidence,
+      payment_intent: mediatorResponse.payment_intent || builderResponse.payment_intent || null,
       what_i_did: mediatorResponse.what_i_did,
       what_i_did_not_do: mediatorResponse.what_i_did_not_do,
       next_step: mediatorResponse.next_step,
