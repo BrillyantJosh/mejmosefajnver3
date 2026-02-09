@@ -40,6 +40,7 @@ export function seedData(db: Database.Database): void {
       ['theme_colors', JSON.stringify({ primary: '#8B5CF6', secondary: '#D946EF' })],
       ['default_rooms', JSON.stringify([])],
       ['mentor_unconditional_payment', JSON.stringify('LW233aTYYuSxMd6vJreSpbdg91197mKrGZ')],
+      ['inspiration_max_allowed_amount', JSON.stringify(200)],
     ];
 
     const insertMany = db.transaction((settings: any[]) => {
@@ -50,6 +51,17 @@ export function seedData(db: Database.Database): void {
 
     insertMany(defaultSettings);
     console.log('Seeded app_settings with default values');
+  }
+
+  // Ensure inspiration_max_allowed_amount always exists (for existing databases)
+  const maxAmountExists = db.prepare(
+    "SELECT COUNT(*) as count FROM app_settings WHERE key = 'inspiration_max_allowed_amount'"
+  ).get() as any;
+  if (maxAmountExists.count === 0) {
+    db.prepare(
+      "INSERT INTO app_settings (id, key, value) VALUES (lower(hex(randomblob(16))), 'inspiration_max_allowed_amount', ?)"
+    ).run(JSON.stringify(200));
+    console.log('Seeded inspiration_max_allowed_amount = 200');
   }
 
   // Seed kind_38888 system parameters if empty

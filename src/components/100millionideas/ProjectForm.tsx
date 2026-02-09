@@ -15,13 +15,6 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 
-const PROJECT_TYPES = [
-  { value: "Inspiration", label: "Inspiration" },
-  { value: "Enhancement", label: "Enhancement" },
-  { value: "Agreement", label: "Agreement" },
-  { value: "Awareness", label: "Awareness" },
-];
-
 const CURRENCIES = [
   { value: "EUR", label: "EUR" },
   { value: "USD", label: "USD" },
@@ -71,7 +64,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
   const [fiatGoal, setFiatGoal] = useState(initialData?.fiatGoal || "");
   const [currency, setCurrency] = useState(initialData?.currency || "EUR");
   const [wallet, setWallet] = useState(initialData?.wallet || "");
-  const [projectType, setProjectType] = useState(initialData?.projectType || "Inspiration");
+  const [projectType] = useState("Inspiration"); // Always "Inspiration" — locked
   const [status, setStatus] = useState<"draft" | "active">(initialData?.status || "draft");
   const [responsibilityStatement, setResponsibilityStatement] = useState(
     initialData?.responsibilityStatement || "I unconditionally accept full self-responsibility for this project and all related actions in the Lana Reality."
@@ -97,6 +90,25 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
   // Status
   const [publishing, setPublishing] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // Max allowed funding amount from app_settings
+  const [maxAllowedAmount, setMaxAllowedAmount] = useState(200);
+
+  useEffect(() => {
+    const fetchMaxAmount = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/db/app_settings?key=eq.inspiration_max_allowed_amount&select=key,value`);
+        const rows = await res.json();
+        if (rows?.[0]?.value) {
+          const val = typeof rows[0].value === 'number' ? rows[0].value : parseInt(rows[0].value, 10);
+          if (val > 0) setMaxAllowedAmount(val);
+        }
+      } catch (e) {
+        console.error('Failed to load max amount setting:', e);
+      }
+    };
+    fetchMaxAmount();
+  }, []);
 
   // Lock status to active if project has donations
   const hasDonations = initialData?.hasDonations || false;
@@ -278,6 +290,10 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
       toast({ title: "Error", description: "Funding goal must be greater than 0", variant: "destructive" });
       return;
     }
+    if (parseFloat(fiatGoal) > maxAllowedAmount) {
+      toast({ title: "Error", description: `Funding goal cannot exceed ${maxAllowedAmount} ${currency}`, variant: "destructive" });
+      return;
+    }
     if (!wallet) {
       toast({ title: "Error", description: "Please select a wallet", variant: "destructive" });
       return;
@@ -431,18 +447,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
 
           <div className="space-y-2">
             <Label htmlFor="projectType">Project Type *</Label>
-            <Select value={projectType} onValueChange={setProjectType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PROJECT_TYPES.map((pt) => (
-                  <SelectItem key={pt.value} value={pt.value}>
-                    {pt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input value="Inspiration" disabled className="bg-muted" />
           </div>
         </CardContent>
       </Card>
@@ -461,10 +466,14 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
                 type="number"
                 step="0.01"
                 min="0.01"
+                max={maxAllowedAmount}
                 value={fiatGoal}
                 onChange={(e) => setFiatGoal(e.target.value)}
-                placeholder="1000.00"
+                placeholder="100.00"
               />
+              <p className="text-xs text-muted-foreground">
+                Maximum: {maxAllowedAmount} {currency}
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="currency">Currency *</Label>
