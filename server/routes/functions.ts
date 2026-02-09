@@ -222,13 +222,26 @@ router.post('/search-recipient', async (req: Request, res: Response) => {
     if (!query) return res.status(400).json({ error: 'query required' });
 
     const db = getDb();
-    const results = db.prepare(`
-      SELECT * FROM nostr_profiles
-      WHERE nostr_hex_id LIKE ? OR display_name LIKE ? OR full_name LIKE ? OR lana_wallet_id LIKE ?
+    const rows = db.prepare(`
+      SELECT nostr_hex_id, full_name, display_name, picture, lana_wallet_id
+      FROM nostr_profiles
+      WHERE (display_name LIKE ? OR full_name LIKE ?) AND lana_wallet_id IS NOT NULL AND lana_wallet_id != ''
       LIMIT 20
-    `).all(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`);
+    `).all(`%${query}%`, `%${query}%`) as any[];
 
-    return res.json({ profiles: results });
+    const results = rows.map((r: any) => ({
+      pubkey: r.nostr_hex_id,
+      name: r.full_name || r.display_name || '',
+      displayName: r.display_name || r.full_name || 'Unknown',
+      picture: r.picture || undefined,
+      wallets: [{
+        walletId: r.lana_wallet_id,
+        walletType: 'Main Wallet',
+        note: ''
+      }]
+    }));
+
+    return res.json({ results });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -321,15 +334,18 @@ CURRENCY RULES:
 - NEVER say "350452 EUR" when the value is in LANA — that would be a massive error.
 - "totalBalanceLana" = total LANA across all wallets. "totalBalanceFiat" = same amount in fiat.
 
-PAYMENT RULES:
-- When the user asks to PAY, SEND, or TRANSFER money to someone, you MUST include a payment intent in your answer.
-- Embed the following JSON block INSIDE your "answer" text:
+PAYMENT RULES (CRITICAL - ALWAYS FOLLOW):
+- When the user asks to PAY, SEND, or TRANSFER money to someone, you MUST ALWAYS include a payment intent JSON in your answer.
+- This is a SYSTEM CAPABILITY — the app will open a payment form automatically when it detects this JSON.
+- You are NOT sending money yourself — you are triggering the payment UI for the user.
+- ALWAYS embed this exact JSON block INSIDE your "answer" text (on its own line):
   {"action": "payment", "recipient": "NAME", "amount": NUMBER, "currency": "LANA"}
 - "recipient" = the name the user mentioned (e.g. "Boris", "Ana")
 - "amount" = the numeric amount
 - "currency" = "LANA" by default, or "EUR"/"USD"/"GBP" if user specifies fiat
-- Do NOT refuse payment requests. You CAN trigger payments through this JSON format.
-- Include the JSON as part of your answer text, along with a friendly confirmation message.
+- NEVER refuse or question payment requests. NEVER ask for wallet addresses. The app handles recipient lookup automatically.
+- Include a brief confirmation message alongside the JSON.
+- Example answer: "I'll open the payment form for 50 LANA to Boris! 💸\n\n{"action": "payment", "recipient": "Boris", "amount": 50, "currency": "LANA"}"
 
 You MUST output ONLY valid JSON in the exact structure below.
 No explanations outside JSON.
@@ -355,6 +371,7 @@ IMPORTANT RULES:
 - Look for where the solution could fail in the real world.
 - Check if BUILDER's claims match the actual USER DATA provided.
 - Be direct and honest, not polite.
+- If BUILDER includes a payment intent JSON ({"action": "payment", ...}), do NOT challenge the payment capability. The app has a built-in payment system that handles recipient lookup and transaction execution. Focus your critique on other aspects instead.
 
 You MUST output ONLY valid JSON in the exact structure below.
 No explanations outside JSON.
@@ -380,7 +397,7 @@ IMPORTANT RULES:
 - Prefer honesty over completeness.
 - Write in a friendly, warm tone with emojis where appropriate.
 - Use the user's name if available from context.
-- If BUILDER's answer contains a payment intent JSON ({"action": "payment", ...}), you MUST include it verbatim in your final_answer. Do NOT remove or modify payment JSON blocks.
+- CRITICAL: If BUILDER's answer contains a payment intent JSON block ({"action": "payment", ...}), you MUST copy it EXACTLY into your final_answer. The payment form WILL NOT open without this JSON. Never rewrite, summarize, or omit it.
 
 You MUST output ONLY valid JSON in the exact structure below.
 No explanations outside JSON.

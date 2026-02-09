@@ -58,7 +58,7 @@ export function RecipientSelector({ searchQuery, language, onSelect, onCancel }:
     try {
       const { data, error: searchError } = await supabase.functions.invoke('search-recipient', {
         body: {
-          searchQuery: query.trim(),
+          query: query.trim(),
           relays: parameters?.relays || [],
         },
       });
