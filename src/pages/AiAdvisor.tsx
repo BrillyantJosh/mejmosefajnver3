@@ -620,9 +620,16 @@ export default function AiAdvisor() {
   };
 
   const getSourceWallet = () => {
-    if (!paymentIntent || !context.wallets?.details) return null;
-    const wallet = context.wallets.details.find(w => w.walletType === paymentIntent.sourceWallet || w.walletType === 'Main Wallet');
-    return wallet || context.wallets.details.find(w => w.walletType === 'Wallet');
+    if (!paymentIntent || !context.wallets?.details || context.wallets.details.length === 0) return null;
+    // Priority: paymentIntent.sourceWallet → 'Main Wallet' → 'Wallet' → any sendable → first
+    const EXCLUDED_TYPES = ['Lana8Wonder', 'Knights'];
+    return (
+      context.wallets.details.find(w => w.walletType === paymentIntent.sourceWallet) ||
+      context.wallets.details.find(w => w.walletType === 'Main Wallet') ||
+      context.wallets.details.find(w => w.walletType === 'Wallet') ||
+      context.wallets.details.find(w => !EXCLUDED_TYPES.includes(w.walletType)) ||
+      context.wallets.details[0]
+    );
   };
 
   const sourceWallet = getSourceWallet();
@@ -663,12 +670,31 @@ export default function AiAdvisor() {
           recipientWalletType={selectedRecipient.walletType}
           amount={getLanaAmount()}
           senderWalletId={sourceWallet.walletId}
-          senderWalletBalance={sourceWallet.balance}
-          currency={context.wallets?.currency || 'EUR'}
+          senderWalletBalance={sourceWallet.balanceLana}
+          currency={context.wallets?.fiatCurrency || 'EUR'}
           language={userLanguage}
           onComplete={handlePaymentComplete}
           onCancel={handlePaymentCancel}
         />
+      </div>
+    );
+  }
+
+  if (showPaymentForm && paymentIntent && selectedRecipient && !sourceWallet) {
+    return (
+      <div className="container max-w-4xl mx-auto p-4">
+        <Card className="w-full max-w-md mx-auto">
+          <CardContent className="p-6 text-center space-y-4">
+            <p className="text-muted-foreground">
+              {userLanguage === 'sl'
+                ? 'Nimate registrirane denarnice za pošiljanje. Najprej registrirajte denarnico.'
+                : 'No wallets available for sending. Please register a wallet first.'}
+            </p>
+            <Button variant="outline" onClick={handlePaymentCancel}>
+              {userLanguage === 'sl' ? 'Prekliči' : 'Cancel'}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
