@@ -26,11 +26,11 @@ export default function InstallPromptBanner({
         type="button"
         onClick={onOpenHelp}
         className="flex items-center gap-2 min-w-0 flex-1 text-left"
-        aria-label="Navodila za namestitev aplikacije"
+        aria-label="App installation instructions"
       >
         <Smartphone className="h-4 w-4 flex-shrink-0" />
         <span className="text-sm truncate">
-          {isIOS ? "Namestitev na iPhone: tapni za navodila" : "Namesti aplikacijo"}
+          {isIOS ? "Install on iPhone: tap for instructions" : "Install app"}
         </span>
       </button>
 
@@ -42,7 +42,7 @@ export default function InstallPromptBanner({
             onClick={onInstall}
             className="h-7 px-2 text-xs"
           >
-            Namesti
+            Install
           </Button>
         )}
         <Button
@@ -50,7 +50,7 @@ export default function InstallPromptBanner({
           variant="ghost"
           onClick={onDismiss}
           className="h-7 w-7 p-0 hover:bg-primary-foreground/20"
-          aria-label="Zapri"
+          aria-label="Close"
         >
           <X className="h-4 w-4" />
         </Button>

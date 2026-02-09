@@ -1,7 +1,7 @@
 {
-  "name": "My Lana Realm",
-  "short_name": "My Lana Realm",
-  "description": "Local Economy Powered by Kindness - New Reality",
+  "name": "Lana",
+  "short_name": "Lana",
+  "description": "Local Economy Powered by Kindness — Your gateway to the Lana cryptocurrency ecosystem.",
   "version": "2.1.0",
   "start_url": "/",
   "display": "standalone",
