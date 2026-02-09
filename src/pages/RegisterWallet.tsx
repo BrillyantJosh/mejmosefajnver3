@@ -161,7 +161,7 @@ export default function RegisterWallet() {
       }
 
       if (!result?.success) {
-        throw new Error(result?.message || 'Failed to register wallet');
+        throw new Error(result?.error || result?.message || 'Failed to register wallet');
       }
 
       // Success - navigate to result page
