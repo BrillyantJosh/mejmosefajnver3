@@ -607,7 +607,7 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
       what_i_did_not_do: mediatorResponse.what_i_did_not_do,
       next_step: mediatorResponse.next_step,
       _debug: {
-        builder: { answer_preview: builderResponse.answer.substring(0, 200), assumptions: builderResponse.assumptions, risks: builderResponse.risks, questions: builderResponse.questions },
+        builder: { answer_preview: (builderResponse.answer || '').substring(0, 200), assumptions: builderResponse.assumptions, risks: builderResponse.risks, questions: builderResponse.questions },
         skeptic: { claims_to_verify: skepticResponse.claims_to_verify, failure_modes: skepticResponse.failure_modes, missing_info: skepticResponse.missing_info },
       },
     };
