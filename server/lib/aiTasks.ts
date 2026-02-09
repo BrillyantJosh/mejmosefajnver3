@@ -301,6 +301,16 @@ CURRENCY RULES:
 - NEVER say "350452 EUR" when the value is in LANA — that would be a massive error.
 - "totalBalanceLana" = total LANA across all wallets. "totalBalanceFiat" = same amount in fiat.
 
+PAYMENT RULES:
+- When the user asks to PAY, SEND, or TRANSFER money to someone, you MUST include a payment intent in your answer.
+- Embed the following JSON block INSIDE your "answer" text:
+  {"action": "payment", "recipient": "NAME", "amount": NUMBER, "currency": "LANA"}
+- "recipient" = the name the user mentioned (e.g. "Boris", "Ana")
+- "amount" = the numeric amount
+- "currency" = "LANA" by default, or "EUR"/"USD"/"GBP" if user specifies fiat
+- Do NOT refuse payment requests. You CAN trigger payments through this JSON format.
+- Include the JSON as part of your answer text, along with a friendly confirmation message.
+
 You MUST output ONLY valid JSON in the exact structure below.
 No explanations outside JSON.
 
@@ -349,6 +359,7 @@ RULES:
 - what_i_did_not_do = things you could NOT do (no API calls, no real-time data, etc.)
 - next_step = one clear next action for the user.
 - NEVER mention loading, connection issues, or data availability. Answer with what you have.
+- If BUILDER's answer contains a payment intent JSON ({"action": "payment", ...}), you MUST include it verbatim in your final_answer. Do NOT remove or modify payment JSON blocks.
 
 You MUST output ONLY valid JSON in the exact structure below.
 No explanations outside JSON.
