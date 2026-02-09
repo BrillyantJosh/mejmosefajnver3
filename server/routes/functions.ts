@@ -1591,7 +1591,7 @@ router.post('/register-virgin-wallet', async (req: Request, res: Response) => {
     if (result.success) {
       console.log(`✅ Wallet registration successful: ${result.message || 'OK'}`);
     } else {
-      console.warn(`⚠️ Wallet registration failed: ${result.message || 'Unknown error'}`);
+      console.warn(`⚠️ Wallet registration failed: ${result.error || result.message || 'Unknown error'}`);
     }
 
     return res.status(response.status).json(result);
