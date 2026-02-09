@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -86,6 +86,15 @@ export function RecipientSelector({ searchQuery, language, onSelect, onCancel }:
       handleSearch();
     }
   };
+
+  // Auto-search on mount if a search query was provided
+  const hasAutoSearched = useRef(false);
+  useEffect(() => {
+    if (!hasAutoSearched.current && searchQuery && searchQuery.trim().length >= 2) {
+      hasAutoSearched.current = true;
+      handleSearch();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Card className="w-full max-w-md mx-auto">
