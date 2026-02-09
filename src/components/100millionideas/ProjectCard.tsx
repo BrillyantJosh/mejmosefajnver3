@@ -13,6 +13,14 @@ interface ProjectCardProps {
   project: ProjectData;
 }
 
+// Map what_type enum values to readable labels
+const WHAT_TYPE_LABELS: Record<string, string> = {
+  'IamAllowingMyself': 'I am Allowing Myself',
+  'EmbraceEnough': 'Embracing Enough',
+  'DigitalBeing': 'Digital Being',
+  'ProductOrService': 'Product Or Service',
+};
+
 const ProjectCard = ({ project }: ProjectCardProps) => {
   const { profile } = useNostrProfileCache(project.ownerPubkey);
   const { donations, totalRaised, isLoading } = useNostrProjectDonations(project.id);
@@ -55,6 +63,13 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
             <Badge className="bg-green-500 text-white">Funded ✓</Badge>
           )}
         </div>
+
+        {/* What Type Badge */}
+        {project.whatType && WHAT_TYPE_LABELS[project.whatType] && (
+          <Badge variant="outline" className="text-xs font-medium border-indigo-300 text-indigo-600 bg-indigo-50 dark:bg-indigo-950 dark:text-indigo-300">
+            {WHAT_TYPE_LABELS[project.whatType]}
+          </Badge>
+        )}
 
         {/* Short Description */}
         <p className="text-muted-foreground">
