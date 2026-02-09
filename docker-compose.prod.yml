@@ -10,9 +10,9 @@ services:
       - ./data:/app/data
       - ./server/uploads:/app/server/uploads
     environment:
-      - VIRTUAL_HOST=new.mejmosefajn.org,app.mejmosefajn.org,app.lanaloves.us
+      - VIRTUAL_HOST=new.mejmosefajn.org,app.mejmosefajn.org,new.lanalovesexeter.com,app.lanaloves.us
       - VIRTUAL_PORT=3001
-      - LETSENCRYPT_HOST=new.mejmosefajn.org,app.mejmosefajn.org,app.lanaloves.us
+      - LETSENCRYPT_HOST=new.mejmosefajn.org,app.mejmosefajn.org,new.lanalovesexeter.com,app.lanaloves.us
       - NODE_ENV=production
       - PORT=3001
       - GEMINI_API_KEY=AIzaSyBXDZ3-dKGai1u0yTBxgvYJxjp6vSDubxg
