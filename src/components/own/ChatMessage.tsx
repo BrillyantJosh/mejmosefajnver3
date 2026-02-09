@@ -50,7 +50,7 @@ export default function ChatMessage({
         isLashing && "opacity-50 cursor-not-allowed",
         !canLash && !isCurrentUser && "cursor-not-allowed"
       )}
-      title={isCurrentUser ? `${lashCount} LASH` : (isLashed ? "Že LASHano" : "Pošlji LASH")}
+      title={isCurrentUser ? `${lashCount} LASH` : (isLashed ? "Already LASHed" : "Send LASH")}
     >
       <Heart 
         className={cn(

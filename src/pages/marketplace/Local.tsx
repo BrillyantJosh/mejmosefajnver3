@@ -41,8 +41,8 @@ export default function MarketplaceLocal() {
           setUserLat(lat);
           setUserLng(lng);
           setLoadingLocation(false);
-          toast.success("Lokacija zaznana", {
-            description: `Koordinate: ${lat}, ${lng}`
+          toast.success("Location detected", {
+            description: `Coordinates: ${lat}, ${lng}`
           });
         },
         () => {
@@ -194,24 +194,24 @@ export default function MarketplaceLocal() {
         <>
           {/* Stats */}
           <div className="text-sm text-muted-foreground">
-            {offers.length} ponudb skupaj
-            {geoOffers.length > 0 && ` • ${geoOffers.length} z lokacijo`}
-            {noGeoOffers.length > 0 && ` • ${noGeoOffers.length} brez lokacije`}
+            {offers.length} offers total
+            {geoOffers.length > 0 && ` • ${geoOffers.length} with location`}
+            {noGeoOffers.length > 0 && ` • ${noGeoOffers.length} without location`}
           </div>
 
           {/* Location prompt if not set */}
           {loadingLocation && (
             <div className="text-center py-4 text-muted-foreground">
               <Navigation className="h-6 w-6 mx-auto mb-2 animate-pulse" />
-              <p className="text-sm">Zaznavamo vašo lokacijo...</p>
+              <p className="text-sm">Detecting your location...</p>
             </div>
           )}
 
           {!userLat && !userLng && !loadingLocation && (
             <div className="text-center py-6 text-muted-foreground bg-card rounded-lg border">
               <MapPin className="h-8 w-8 mx-auto mb-2" />
-              <p className="text-sm font-medium mb-1">Lokacija ni nastavljena</p>
-              <p className="text-xs">Kliknite "Current Location" ali "Pick on Map" za prikaz bližnjih ponudb</p>
+              <p className="text-sm font-medium mb-1">Location not set</p>
+              <p className="text-xs">Click "Current Location" or "Pick on Map" to see nearby offers</p>
             </div>
           )}
 
@@ -222,7 +222,7 @@ export default function MarketplaceLocal() {
                 <div className="space-y-3">
                   <h3 className="font-semibold text-sm flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-green-500" />
-                    Ponudbe v bližini ({localOffers.length} v {distance[0]} km)
+                    Nearby offers ({localOffers.length} within {distance[0]} km)
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {localOffers.map((offer) => (
@@ -232,7 +232,7 @@ export default function MarketplaceLocal() {
                 </div>
               ) : geoOffers.length > 0 ? (
                 <div className="text-center py-4 text-muted-foreground text-sm">
-                  Ni ponudb v radiju {distance[0]} km. Poskusite povečati razdaljo.
+                  No offers within {distance[0]} km. Try increasing the distance.
                 </div>
               ) : null}
             </>
@@ -243,7 +243,7 @@ export default function MarketplaceLocal() {
             <div className="space-y-3">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <Globe className="h-4 w-4 text-muted-foreground" />
-                Ponudbe brez lokacije ({noGeoOffers.length})
+                Offers without location ({noGeoOffers.length})
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {noGeoOffers.map((offer) => (
@@ -256,8 +256,8 @@ export default function MarketplaceLocal() {
           {/* No offers at all */}
           {offers.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
-              <p className="text-lg font-medium mb-2">Ni ponudb</p>
-              <p>Trenutno ni aktivnih ponudb na trgu</p>
+              <p className="text-lg font-medium mb-2">No offers</p>
+              <p>There are currently no active offers on the marketplace</p>
             </div>
           )}
         </>

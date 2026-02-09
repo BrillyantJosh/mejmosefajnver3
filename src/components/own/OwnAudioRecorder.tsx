@@ -93,10 +93,10 @@ export default function OwnAudioRecorder({
 
       mediaRecorder.start();
       setIsRecording(true);
-      toast.info("Snemanje zvoka...");
+      toast.info("Recording audio...");
     } catch (error) {
       console.error('Error accessing microphone:', error);
-      toast.error("Napaka pri dostopu do mikrofona");
+      toast.error("Error accessing microphone");
     }
   };
 
@@ -109,13 +109,13 @@ export default function OwnAudioRecorder({
 
   const uploadAudio = async () => {
     if (!audioBlobRef.current) {
-      toast.error("Ni posnetka za nalaganje");
+      toast.error("No recording to upload");
       return;
     }
 
     const maxSize = 50 * 1024 * 1024; // 50MB - supports ~15+ min recordings
     if (audioBlobRef.current.size > maxSize) {
-      toast.error("Posnetek je prevelik (max 50MB / ~15 min)");
+      toast.error("Recording too large (max 50MB / ~15 min)");
       return;
     }
 
@@ -152,7 +152,7 @@ export default function OwnAudioRecorder({
 
       if (uploadError) {
         console.error("Upload error:", uploadError);
-        toast.error(`Napaka pri nalaganju: ${uploadError.message}`);
+        toast.error(`Upload error: ${uploadError.message}`);
         return;
       }
 
@@ -161,10 +161,10 @@ export default function OwnAudioRecorder({
       
       // Cleanup
       handleDiscardPreview();
-      toast.success("Posnetek poslan");
+      toast.success("Recording sent");
     } catch (error) {
       console.error('Error uploading audio:', error);
-      toast.error("Napaka pri pošiljanju posnetka");
+      toast.error("Error sending recording");
     } finally {
       setIsUploading(false);
     }
@@ -172,7 +172,7 @@ export default function OwnAudioRecorder({
 
   const handleCancel = () => {
     stopRecording();
-    toast.info("Snemanje preklicano");
+    toast.info("Recording cancelled");
   };
 
   const handleDiscardPreview = () => {
@@ -281,7 +281,7 @@ export default function OwnAudioRecorder({
             className="h-8"
           >
             <X className="h-4 w-4 mr-1" />
-            Zavrzi
+            Discard
           </Button>
           <Button
             size="sm"
@@ -290,7 +290,7 @@ export default function OwnAudioRecorder({
             className="h-8"
           >
             <Send className="h-4 w-4 mr-1" />
-            Pošlji
+            Send
           </Button>
         </div>
       </div>
@@ -308,14 +308,14 @@ export default function OwnAudioRecorder({
           className="gap-2"
         >
           <Square className="h-4 w-4 fill-current" />
-          Ustavi
+          Stop
         </Button>
         <Button
           size={compact ? "sm" : "default"}
           variant="ghost"
           onClick={handleCancel}
         >
-          Prekliči
+          Cancel
         </Button>
       </div>
     );
