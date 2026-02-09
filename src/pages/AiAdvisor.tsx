@@ -454,6 +454,7 @@ export default function AiAdvisor() {
       const decoder = new TextDecoder();
       let textBuffer = '';
       let assistantContent = '';
+      let streamDone = false;
 
       setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
@@ -472,11 +473,17 @@ export default function AiAdvisor() {
           if (!line.startsWith('data: ')) continue;
 
           const jsonStr = line.slice(6).trim();
-          if (jsonStr === '[DONE]') break;
+          if (jsonStr === '[DONE]') { streamDone = true; break; }
 
           try {
             const parsed = JSON.parse(jsonStr);
-            
+
+            // Check for server error
+            if (parsed.error) {
+              console.error('🚨 SSE error from server:', parsed.error);
+              throw new Error(parsed.error);
+            }
+
             // Check for progress message
             if (parsed.progress) {
               setProgressMessage(parsed.progress);
@@ -538,6 +545,7 @@ export default function AiAdvisor() {
             break;
           }
         }
+        if (streamDone) break;
       }
 
       // Check for payment intent in final answer (use assistantContent, not stale React state)
