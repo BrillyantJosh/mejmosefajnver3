@@ -18,6 +18,7 @@ export interface ProjectData {
   wallet: string;
   responsibilityStatement: string;
   projectType: string;
+  whatType?: string;
   status: 'draft' | 'active';
   ownerPubkey: string;
   participants: string[];
@@ -49,6 +50,7 @@ const parseProjectEvent = (event: Event): ProjectData | null => {
     const wallet = getTag('wallet');
     const responsibilityStatement = getTag('responsibility_statement');
     const projectType = getTag('project_type');
+    const whatType = getTag('what_type');
     const status = getTag('status') as 'draft' | 'active' | undefined;
 
     if (!title || !shortDesc || !fiatGoal || !currency || !wallet) {
@@ -89,6 +91,7 @@ const parseProjectEvent = (event: Event): ProjectData | null => {
       wallet,
       responsibilityStatement: responsibilityStatement || '',
       projectType: projectType || 'Inspiration',
+      whatType: whatType || undefined,
       status: status || 'active',
       ownerPubkey,
       participants,

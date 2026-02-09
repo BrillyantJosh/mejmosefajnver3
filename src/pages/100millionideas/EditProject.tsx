@@ -109,6 +109,7 @@ export default function EditProject() {
           wallet: getTag("wallet") || "",
           responsibilityStatement: getTag("responsibility_statement") || "",
           projectType: getTag("project_type") || "Inspiration",
+          whatType: getTag("what_type") || "",
           status: (getTag("status") as "draft" | "active") || "active",
           coverImage,
           galleryImages,

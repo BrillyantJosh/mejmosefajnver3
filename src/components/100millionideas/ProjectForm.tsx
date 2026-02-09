@@ -15,6 +15,13 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 
+const WHAT_TYPES = [
+  { value: "IamAllowingMyself", label: "I am Allowing Myself" },
+  { value: "EmbraceEnough", label: "Embracing Enough" },
+  { value: "DigitalBeing", label: "Digital Being" },
+  { value: "ProductOrService", label: "Product Or Service" },
+];
+
 const CURRENCIES = [
   { value: "EUR", label: "EUR" },
   { value: "USD", label: "USD" },
@@ -31,6 +38,7 @@ export interface ProjectFormInitialData {
   wallet: string;
   responsibilityStatement: string;
   projectType: string;
+  whatType?: string;
   status: "draft" | "active";
   coverImage?: string;
   galleryImages: string[];
@@ -65,6 +73,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
   const [currency, setCurrency] = useState(initialData?.currency || "EUR");
   const [wallet, setWallet] = useState(initialData?.wallet || "");
   const [projectType] = useState("Inspiration"); // Always "Inspiration" — locked
+  const [whatType, setWhatType] = useState(initialData?.whatType || "");
   const [status, setStatus] = useState<"draft" | "active">(initialData?.status || "draft");
   const [responsibilityStatement, setResponsibilityStatement] = useState(
     initialData?.responsibilityStatement || "I unconditionally accept full self-responsibility for this project and all related actions in the Lana Reality."
@@ -342,6 +351,11 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
         ["timestamp_created", String(Math.floor(Date.now() / 1000))],
       ];
 
+      // Add what_type if selected
+      if (whatType) {
+        tags.push(["what_type", whatType]);
+      }
+
       // Add cover image
       if (finalCoverUrl) {
         tags.push(["img", finalCoverUrl, "cover"]);
@@ -448,6 +462,22 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
           <div className="space-y-2">
             <Label htmlFor="projectType">Project Type *</Label>
             <Input value="Inspiration" disabled className="bg-muted" />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="whatType">What is Project all About?</Label>
+            <Select value={whatType} onValueChange={setWhatType}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select what this project is about..." />
+              </SelectTrigger>
+              <SelectContent>
+                {WHAT_TYPES.map((wt) => (
+                  <SelectItem key={wt.value} value={wt.value}>
+                    {wt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
