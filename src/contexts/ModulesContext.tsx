@@ -287,6 +287,17 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     image: lanaalignsImage,
     enabled: true,
     order: 22
+  },
+  {
+    id: 'registrar',
+    title: 'Registrar',
+    description: 'Register and manage your Lana wallets via LanaWatch',
+    icon: Search,
+    path: '/registrar',
+    gradient: 'from-indigo-500 to-blue-600',
+    externalUrl: 'https://www.lanawatch.us',
+    enabled: false,
+    order: 23
   }
 ];
 
@@ -341,7 +352,8 @@ const mapToNostrId = (id: ModuleType): string => {
     '100millionideas': '100 Million Ideas',
     'lanaknights': 'Lana Knights',
     'lanaevents': 'Lana Events',
-    'lanaalignsworld': 'Lana Aligns World'
+    'lanaalignsworld': 'Lana Aligns World',
+    'registrar': 'Registrar'
   };
   return mapping[id] || id;
 };
@@ -372,7 +384,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     '100 Million Ideas': '100millionideas',
     'Lana Knights': 'lanaknights',
     'Lana Events': 'lanaevents',
-    'Lana Aligns World': 'lanaalignsworld'
+    'Lana Aligns World': 'lanaalignsworld',
+    'Registrar': 'registrar'
   };
   return mapping[id] || null;
 };
