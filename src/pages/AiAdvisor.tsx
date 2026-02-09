@@ -540,10 +540,10 @@ export default function AiAdvisor() {
         }
       }
 
-      // Check for payment intent in final answer
-      const finalMessage = messages[messages.length - 1];
-      if (finalMessage?.triadData?.final_answer) {
-        const intent = parsePaymentIntent(finalMessage.triadData.final_answer);
+      // Check for payment intent in final answer (use assistantContent, not stale React state)
+      const triadCheck = parseTriadResponse(assistantContent);
+      if (triadCheck?.final_answer) {
+        const intent = parsePaymentIntent(triadCheck.final_answer);
         if (intent) {
           setPaymentIntent(intent);
           setShowRecipientSelector(true);
