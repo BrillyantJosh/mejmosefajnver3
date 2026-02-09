@@ -1558,4 +1558,47 @@ router.post('/send-lash-batch', async (req: Request, res: Response) => {
   }
 });
 
+// =============================================
+// REGISTER VIRGIN WALLET (proxy to lanawatch.us)
+// =============================================
+router.post('/register-virgin-wallet', async (req: Request, res: Response) => {
+  try {
+    const { nostr_id_hex, wallets } = req.body;
+    if (!nostr_id_hex || !wallets?.length) {
+      return res.status(400).json({ success: false, error: 'nostr_id_hex and wallets required' });
+    }
+
+    const apiKey = process.env.LANAWATCH_API_KEY;
+    if (!apiKey) {
+      console.error('LANAWATCH_API_KEY not configured in environment');
+      return res.status(500).json({ success: false, error: 'LANAWATCH_API_KEY not configured' });
+    }
+
+    console.log(`📝 Registering ${wallets.length} virgin wallet(s) for ${nostr_id_hex.slice(0, 8)}...`);
+
+    const response = await fetch('https://laluxmwarlejdwyboudz.supabase.co/functions/v1/register-virgin-wallets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        method: 'register_virgin_wallets_for_existing_user',
+        api_key: apiKey,
+        data: { nostr_id_hex, wallets }
+      }),
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      console.log(`✅ Wallet registration successful: ${result.message || 'OK'}`);
+    } else {
+      console.warn(`⚠️ Wallet registration failed: ${result.message || 'Unknown error'}`);
+    }
+
+    return res.status(response.status).json(result);
+  } catch (error: any) {
+    console.error('Register virgin wallet error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;

@@ -142,32 +142,26 @@ export default function RegisterWallet() {
     setIsValidating(true);
 
     try {
-      // Call Lana Registry API to register the wallet
-      const response = await fetch('https://pnhrbebgneacgcatuxdq.supabase.co/functions/v1/external-api', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          method: 'register_virgin_wallets_for_existing_user',
-          api_key: 'ak_4mh3c7k5mx4ibskeufyv8p',
-          data: {
-            nostr_id_hex: session.nostrHexId,
-            wallets: [
-              {
-                wallet_id: walletId,
-                wallet_type: walletType,
-                notes: note || undefined,
-              }
-            ]
-          }
-        }),
+      // Call server-side proxy to register wallet via lanawatch.us API
+      const { data: result, error: invokeError } = await supabase.functions.invoke('register-virgin-wallet', {
+        body: {
+          nostr_id_hex: session.nostrHexId,
+          wallets: [
+            {
+              wallet_id: walletId,
+              wallet_type: walletType,
+              notes: note || undefined,
+            }
+          ]
+        }
       });
 
-      const result = await response.json();
+      if (invokeError) {
+        throw new Error(invokeError.message || 'Failed to register wallet');
+      }
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || 'Failed to register wallet');
+      if (!result?.success) {
+        throw new Error(result?.message || 'Failed to register wallet');
       }
 
       // Success - navigate to result page
