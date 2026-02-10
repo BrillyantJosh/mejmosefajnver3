@@ -72,8 +72,7 @@ router.post('/:bucket/upload', upload.single('file'), (req: Request, res: Respon
   }
 
   const filePath = req.file.filename;
-  const apiUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 3001}`;
-  const publicUrl = `${apiUrl}/api/storage/${bucket}/${filePath}`;
+  const publicUrl = `/api/storage/${bucket}/${filePath}`;
 
   return res.json({
     data: {
@@ -93,10 +92,9 @@ router.get('/:bucket/public/:filename', (req: Request, res: Response) => {
     return res.status(400).json({ error: `Invalid bucket: ${bucket}` });
   }
 
-  const apiUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 3001}`;
   return res.json({
     data: {
-      publicUrl: `${apiUrl}/api/storage/${bucket}/${filename}`
+      publicUrl: `/api/storage/${bucket}/${filename}`
     }
   });
 });

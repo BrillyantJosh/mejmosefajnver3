@@ -5,7 +5,16 @@
  */
 export function getProxiedImageUrl(originalUrl: string | undefined, cacheBuster?: string | number): string | undefined {
   if (!originalUrl) return undefined;
-  
+
+  // Handle local server storage URLs (both absolute and relative)
+  if (originalUrl.includes('/api/storage/')) {
+    if (cacheBuster) {
+      const separator = originalUrl.includes('?') ? '&' : '?';
+      return `${originalUrl}${separator}t=${cacheBuster}`;
+    }
+    return originalUrl;
+  }
+
   // Transform lanaknows.us URLs to direct Supabase storage URLs
   if (originalUrl.includes('lanaknows.us')) {
     // Extract hex ID from URL (last segment after /)
