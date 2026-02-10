@@ -73,13 +73,14 @@ interface TriadResponse {
   what_i_did_not_do: string[];
   next_step: string;
   _debug?: {
-    builder: {
+    mode?: string;
+    builder?: {
       answer_preview: string;
       assumptions: string[];
       risks: string[];
       questions: string[];
     };
-    skeptic: {
+    skeptic?: {
       claims_to_verify: string[];
       failure_modes: string[];
       missing_info: string[];
@@ -191,26 +192,26 @@ function TriadDebugPanel({ triadData, language }: { triadData: TriadResponse; la
           </div>
         )}
 
-        {/* Debug info from Builder & Skeptic */}
-        {triadData._debug && (
+        {/* Debug info from Builder & Skeptic (only in triad mode) */}
+        {triadData._debug?.builder && triadData._debug?.skeptic && (
           <div className="space-y-2 border-t pt-2">
             <div className="text-[10px] text-muted-foreground font-medium uppercase">{isSl ? 'Notranji proces' : 'Internal Process'}</div>
-            
-            {triadData._debug.builder.risks.length > 0 && (
+
+            {triadData._debug.builder.risks?.length > 0 && (
               <div className="text-xs">
                 <span className="text-yellow-600">⚡ {isSl ? 'Tveganja' : 'Risks'}:</span>
                 <span className="text-muted-foreground ml-1">{triadData._debug.builder.risks.join(', ')}</span>
               </div>
             )}
-            
-            {triadData._debug.skeptic.claims_to_verify.length > 0 && (
+
+            {triadData._debug.skeptic.claims_to_verify?.length > 0 && (
               <div className="text-xs">
                 <span className="text-red-600">🔍 {isSl ? 'Za preveriti' : 'To verify'}:</span>
                 <span className="text-muted-foreground ml-1">{triadData._debug.skeptic.claims_to_verify.join(', ')}</span>
               </div>
             )}
-            
-            {triadData._debug.builder.questions.length > 0 && (
+
+            {triadData._debug.builder.questions?.length > 0 && (
               <div className="text-xs">
                 <span className="text-purple-600">❓ {isSl ? 'Vprašanja' : 'Questions'}:</span>
                 <span className="text-muted-foreground ml-1">{triadData._debug.builder.questions.join(', ')}</span>
