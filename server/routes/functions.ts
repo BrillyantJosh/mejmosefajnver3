@@ -802,6 +802,28 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
       }
     }
 
+    // Save unanswered questions for learning (confidence < 70)
+    if (finalResult.confidence < 70 && nostrHexId) {
+      try {
+        db.prepare(`
+          INSERT INTO ai_unsupported_prompts (id, nostr_hex_id, prompt, ai_response, context_summary, created_at)
+          VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'))
+        `).run(
+          nostrHexId,
+          lastUserMessage,
+          finalResult.final_answer || '',
+          `confidence: ${finalResult.confidence}, mode: ${mode}`
+        );
+        console.log(`📝 Saved unanswered question (confidence ${finalResult.confidence}): "${lastUserMessage.substring(0, 80)}"`);
+      } catch (err) {
+        console.error('Failed to save unanswered question:', err);
+      }
+
+      finalResult.learning_notice = langCode === 'sl'
+        ? '📝 Zabeležil sem si to vprašanje. Naslednjič bom znal bolje odgovoriti!'
+        : '📝 I noted this question. Next time I will know how to answer better!';
+    }
+
     // Send final result
     sendSSE({ choices: [{ delta: { content: JSON.stringify(finalResult) } }] });
 
