@@ -236,6 +236,18 @@ export default function AiAdvisor() {
   
   const context = useAiAdvisorContext();
   const { eventsContext, isLoading: eventsLoading, fetchStatus: eventsFetchStatus } = useAiAdvisorEvents();
+
+  // Track when data is ready (loaded OR timeout after 10s)
+  const [dataTimedOut, setDataTimedOut] = useState(false);
+  const contextStillLoading = (context.isLoading || eventsLoading) && !dataTimedOut;
+  useEffect(() => {
+    if (!context.isLoading && !eventsLoading) {
+      setDataTimedOut(false); // reset if data finishes loading
+      return;
+    }
+    const timer = setTimeout(() => setDataTimedOut(true), 10000);
+    return () => clearTimeout(timer);
+  }, [context.isLoading, eventsLoading]);
   const { totalLana: aiUsageLana, isLoading: usageLoading } = useAiUsageThisMonth();
   const { parameters } = useSystemParameters();
   const { profile } = useNostrProfile();
@@ -396,7 +408,8 @@ export default function AiAdvisor() {
     if (!messageContent || isLoading) return;
 
     // BLOCK if data still loading (don't send partial/empty data to AI)
-    if (context.isLoading || eventsLoading) {
+    // But allow after 10s timeout (dataTimedOut) to prevent permanent block
+    if (contextStillLoading) {
       toast.info(userLanguage === 'sl'
         ? 'Podatki se še nalagajo, počakaj trenutek...'
         : 'Data is still loading, please wait a moment...');
@@ -857,7 +870,7 @@ export default function AiAdvisor() {
           {error && <div className="px-3 sm:px-4 py-2 bg-destructive/10 text-destructive text-xs sm:text-sm">{error}</div>}
 
           <div className="p-2 sm:p-4 border-t flex-shrink-0">
-            {(context.isLoading || eventsLoading) && (
+            {contextStillLoading && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground px-2 pb-2">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 {userLanguage === 'sl' ? 'Nalagam podatke...' : 'Loading data...'}
@@ -886,7 +899,7 @@ export default function AiAdvisor() {
                   {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                 </Button>
               )}
-              <Button onClick={() => sendMessage()} disabled={!input.trim() || isLoading || context.isLoading || eventsLoading} size="icon" className="flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11">
+              <Button onClick={() => sendMessage()} disabled={!input.trim() || isLoading || contextStillLoading} size="icon" className="flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11">
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
