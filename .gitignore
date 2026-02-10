@@ -30,3 +30,8 @@ data/*.db-wal
 
 # Uploaded files
 server/uploads/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
