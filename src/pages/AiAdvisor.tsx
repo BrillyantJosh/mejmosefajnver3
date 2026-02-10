@@ -395,9 +395,12 @@ export default function AiAdvisor() {
     const messageContent = overrideInput || input.trim();
     if (!messageContent || isLoading) return;
 
-    // Warn if data still loading or connection issues (but don't block)
+    // BLOCK if data still loading (don't send partial/empty data to AI)
     if (context.isLoading || eventsLoading) {
-      console.log('⚠️ AI Advisor: sending with partial data (still loading)');
+      toast.info(userLanguage === 'sl'
+        ? 'Podatki se še nalagajo, počakaj trenutek...'
+        : 'Data is still loading, please wait a moment...');
+      return;
     }
     if (context.connectionState === 'error') {
       toast.warning(userLanguage === 'sl'
@@ -853,6 +856,12 @@ export default function AiAdvisor() {
           {error && <div className="px-3 sm:px-4 py-2 bg-destructive/10 text-destructive text-xs sm:text-sm">{error}</div>}
 
           <div className="p-2 sm:p-4 border-t flex-shrink-0">
+            {(context.isLoading || eventsLoading) && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground px-2 pb-2">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {userLanguage === 'sl' ? 'Nalagam podatke...' : 'Loading data...'}
+              </div>
+            )}
             <div className="flex gap-2">
               <Textarea
                 ref={textareaRef}
@@ -865,18 +874,18 @@ export default function AiAdvisor() {
                 disabled={isLoading}
               />
               {isSpeechSupported && (
-                <Button 
+                <Button
                   onClick={toggleListening}
                   disabled={isLoading}
                   variant={isListening ? "destructive" : "outline"}
-                  size="icon" 
+                  size="icon"
                   className={cn("flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11 transition-all", isListening && "animate-pulse")}
                   title={isListening ? (userLanguage === 'sl' ? 'Ustavi snemanje' : 'Stop recording') : (userLanguage === 'sl' ? 'Začni snemanje' : 'Start recording')}
                 >
                   {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                 </Button>
               )}
-              <Button onClick={() => sendMessage()} disabled={!input.trim() || isLoading} size="icon" className="flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11">
+              <Button onClick={() => sendMessage()} disabled={!input.trim() || isLoading || context.isLoading || eventsLoading} size="icon" className="flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11">
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
