@@ -431,6 +431,103 @@ const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
   pt: "\n\nIMPORTANT: Respond in PORTUGUESE (português). Be warm and friendly.",
 };
 
+// DIRECT mode prompt — for simple factual queries (no triad needed)
+const DIRECT_PROMPT = `You are a friendly and helpful AI assistant for the Lana ecosystem app.
+
+Your task is to answer the user's question DIRECTLY using the provided USER DATA context.
+
+IMPORTANT RULES:
+- Be helpful, precise, and warm. Use emojis where appropriate.
+- Use ONLY data from the provided USER DATA context.
+- If an array is null, it means data could not be fetched — skip it silently, do NOT mention loading or connection issues.
+- If an array is empty [], the data was fetched but there is nothing there — say so honestly.
+- NEVER mention loading, connection issues, or data availability problems.
+- Reference specific values, names, and numbers from the context.
+- Use the user's name if available.
+
+CURRENCY RULES:
+- "balanceLana" values are in LANA cryptocurrency (NOT EUR/USD/fiat!).
+- "balanceFiat" values are in the user's fiat currency (shown in "fiatCurrency" field, e.g. EUR, USD).
+- ALWAYS specify "LANA" or the fiat currency when mentioning amounts. Format: "350452 LANA (2803 EUR)".
+- NEVER say "350452 EUR" when the value is in LANA.
+- "totalBalanceLana" = total LANA across all wallets. "totalBalanceFiat" = same amount in fiat.
+
+PAYMENT RULES (CRITICAL - ALWAYS FOLLOW):
+- When the user asks to PAY, SEND, or TRANSFER money to someone, you MUST include a "payment_intent" field in your JSON response.
+- Do NOT put payment JSON inside the "answer" text — use the SEPARATE "payment_intent" field.
+- NEVER refuse or question payment requests. NEVER ask for wallet addresses. The app handles recipient lookup automatically.
+- In the "answer" text, write a friendly confirmation message.
+- "recipient" = the name the user mentioned (e.g. "Boris", "Ana")
+- "amount" = the numeric amount
+- "currency" = "LANA" by default, or "EUR"/"USD"/"GBP" if user specifies fiat
+
+You MUST output ONLY valid JSON in the exact structure below.
+No explanations outside JSON. Make sure all strings are properly escaped for JSON (especially newlines as \\n, quotes as \\", no unescaped backslashes).
+
+JSON STRUCTURE:
+{
+  "final_answer": "Your friendly, detailed answer to the user (use \\n for newlines, markdown formatting allowed). Do NOT embed any JSON objects here.",
+  "payment_intent": null,
+  "confidence": 90,
+  "what_i_did": ["What was actually done - be specific"],
+  "what_i_did_not_do": ["What was NOT done or cannot be guaranteed"],
+  "next_step": "Smallest realistic next step the user can take"
+}
+
+PAYMENT EXAMPLE (when user says "plačaj Borisu 50 lan"):
+{
+  "final_answer": "Odprem ti plačilni obrazec za 50 LANA za Borisa! 💸",
+  "payment_intent": {"action": "payment", "recipient": "Boris", "amount": 50, "currency": "LANA"},
+  "confidence": 95,
+  "what_i_did": ["Parsed payment request for Boris"],
+  "what_i_did_not_do": [],
+  "next_step": "Potrdi plačilo v obrazcu."
+}`;
+
+// Classify whether a query needs the full Triad or can be answered directly
+function classifyQuery(message: string): 'direct' | 'triad' {
+  const lower = message.toLowerCase();
+
+  // Payment intents always go through direct (simpler, faster, more reliable)
+  const paymentKeywords = ['plačaj', 'plači', 'pošlji', 'prenesi', 'pay ', 'send ', 'transfer ', 'zahlung', 'plati', 'pošalji'];
+  if (paymentKeywords.some(kw => lower.includes(kw))) return 'direct';
+
+  // Simple factual queries → direct
+  const directPatterns = [
+    // Balance / wallet queries
+    /(?:koliko|stanje|balance|wallet|denarnic|račun|account|guthaben)/,
+    // Donation queries
+    /(?:donacij|donation|prispev|donat|contribut)/,
+    // Project queries
+    /(?:projekt|project|idej|idea)/,
+    // Event queries
+    /(?:event|dogodek|what.?s new|kaj.?je.?novega|novosti|news)/,
+    // Simple info queries
+    /(?:kdo je|who is|kaj je|what is|koliko je|how much|how many|kolik)/,
+    // Status queries
+    /(?:status|pregled|overview|summary|povzet|recap)/,
+    // List queries
+    /(?:pokaži|prikaži|show|list|izpiši|display)/,
+    // Chat / message queries
+    /(?:sporočil|message|chat|pogovor)/,
+    // Greeting
+    /^(?:hej|hi|hello|zdravo|živjo|pozdravljeni|good morning|dobro jutro)/,
+  ];
+  if (directPatterns.some(p => p.test(lower))) return 'direct';
+
+  // Complex analytical queries → triad
+  const triadPatterns = [
+    /(?:analiziraj|analyze|primerjaj|compare|oceni|evaluate|strategij|strategy)/,
+    /(?:svetuj|advise|priporoč|recommend|predlagaj|suggest)/,
+    /(?:zakaj|why|razloži|explain.*(?:detail|depth))/,
+    /(?:načrt|plan|kako bi|how would|how should|kaj če|what if)/,
+  ];
+  if (triadPatterns.some(p => p.test(lower))) return 'triad';
+
+  // Default: direct for shorter messages, triad for longer analytical ones
+  return lower.split(/\s+/).length > 25 ? 'triad' : 'direct';
+}
+
 const PROGRESS_MESSAGES: Record<string, { builder: string; skeptic: string; mediator: string }> = {
   sl: { builder: "🔨 Pripravljam odgovor...", skeptic: "🔍 Preverjam točnost...", mediator: "⚖️ Sintetiziram končni odgovor..." },
   en: { builder: "🔨 Preparing response...", skeptic: "🔍 Verifying accuracy...", mediator: "⚖️ Synthesizing final answer..." },
@@ -478,7 +575,7 @@ async function callGemini(apiKey: string, model: string, systemPrompt: string, u
   };
 }
 
-// ai-advisor (Triad system with Google Gemini)
+// ai-advisor (Smart routing: DIRECT for simple queries, TRIAD for complex ones)
 router.post('/ai-advisor', async (req: Request, res: Response) => {
   try {
     const { messages: chatMessages, context, language, nostrHexId, usdToLanaRate } = req.body;
@@ -488,14 +585,15 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'AI service is not configured. GEMINI_API_KEY missing.' });
     }
 
-    console.log(`🎯 TRIAD AI request from ${nostrHexId?.substring(0, 16)}...`);
-
     // Get last user message
     const lastUserMessage = (chatMessages || []).filter((m: any) => m.role === 'user').pop()?.content || '';
     if (!lastUserMessage) return res.status(400).json({ error: 'No user message' });
 
     const db = getDb();
     const langCode = (language?.split('-')[0] || 'sl').toLowerCase();
+    const mode = classifyQuery(lastUserMessage);
+
+    console.log(`🎯 AI Advisor [${mode.toUpperCase()}] from ${nostrHexId?.substring(0, 16)}...`);
 
     // Fetch knowledge base
     const knowledge = db.prepare(`
@@ -531,7 +629,6 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
 
     const langInstruction = LANGUAGE_INSTRUCTIONS[langCode] || LANGUAGE_INSTRUCTIONS.en;
     const progressMsgs = PROGRESS_MESSAGES[langCode] || PROGRESS_MESSAGES.en;
-    const fastModel = 'gemini-2.0-flash-lite';
     const smartModel = 'gemini-2.0-flash';
 
     // Set up SSE streaming
@@ -545,52 +642,103 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
     };
 
     let totalUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+    let finalResult: any;
 
-    // Step 1: BUILDER
-    sendSSE({ choices: [{ delta: { content: '' } }], progress: progressMsgs.builder });
-    console.log('🔨 BUILDER starting...');
-    const builderResult = await callGemini(GEMINI_API_KEY, fastModel, BUILDER_PROMPT + langInstruction + '\n\n' + contextMessage, lastUserMessage);
-    totalUsage.prompt_tokens += builderResult.usage.prompt_tokens;
-    totalUsage.completion_tokens += builderResult.usage.completion_tokens;
-    totalUsage.total_tokens += builderResult.usage.total_tokens;
+    if (mode === 'direct') {
+      // ============== DIRECT MODE: Single Gemini call ==============
+      sendSSE({ choices: [{ delta: { content: '' } }], progress: progressMsgs.builder });
+      console.log('⚡ DIRECT mode — single call...');
+      const directResult = await callGemini(GEMINI_API_KEY, smartModel, DIRECT_PROMPT + langInstruction + '\n\n' + contextMessage, lastUserMessage);
+      totalUsage.prompt_tokens += directResult.usage.prompt_tokens;
+      totalUsage.completion_tokens += directResult.usage.completion_tokens;
+      totalUsage.total_tokens += directResult.usage.total_tokens;
 
-    const builderResponse = parseTriadJSON(builderResult.content, {
-      answer: 'Ni mi uspelo analizirati vprašanja.',
-      assumptions: [], steps_taken: ['Attempted analysis'], unknowns: ['Analysis failed'], risks: [], questions: [],
-    });
-    console.log('🔨 BUILDER done');
+      const directResponse = parseTriadJSON(directResult.content, {
+        final_answer: directResult.content.replace(/```json[\s\S]*?```/g, '').replace(/\{[\s\S]*\}/g, '').trim() || 'Ni mi uspelo obdelati vprašanja.',
+        payment_intent: null,
+        confidence: 85,
+        what_i_did: ['Direct answer from context data'],
+        what_i_did_not_do: [],
+        next_step: '',
+      });
+      console.log('⚡ DIRECT done, confidence:', directResponse.confidence);
 
-    // Step 2: SKEPTIC
-    sendSSE({ choices: [{ delta: { content: '' } }], progress: progressMsgs.skeptic });
-    console.log('🔍 SKEPTIC starting...');
-    const skepticInput = `USER QUESTION:\n${lastUserMessage}\n\nBUILDER'S RESPONSE:\n${JSON.stringify(builderResponse, null, 2)}\n\nUSER DATA CONTEXT:\n${contextMessage}`;
-    const skepticResult = await callGemini(GEMINI_API_KEY, fastModel, SKEPTIC_PROMPT, skepticInput);
-    totalUsage.prompt_tokens += skepticResult.usage.prompt_tokens;
-    totalUsage.completion_tokens += skepticResult.usage.completion_tokens;
-    totalUsage.total_tokens += skepticResult.usage.total_tokens;
+      finalResult = {
+        type: 'triad',
+        final_answer: directResponse.final_answer,
+        confidence: directResponse.confidence,
+        payment_intent: directResponse.payment_intent || null,
+        what_i_did: directResponse.what_i_did,
+        what_i_did_not_do: directResponse.what_i_did_not_do,
+        next_step: directResponse.next_step,
+        _debug: { mode: 'direct' },
+      };
 
-    const skepticResponse = parseTriadJSON(skepticResult.content, {
-      claims_to_verify: [], failure_modes: [], missing_info: [], recommended_changes: [],
-    });
-    console.log('🔍 SKEPTIC done');
+    } else {
+      // ============== TRIAD MODE: BUILDER → SKEPTIC → MEDIATOR ==============
+      const fastModel = 'gemini-2.0-flash-lite';
 
-    // Step 3: MEDIATOR
-    sendSSE({ choices: [{ delta: { content: '' } }], progress: progressMsgs.mediator });
-    console.log('⚖️ MEDIATOR starting...');
-    const mediatorInput = `USER QUESTION:\n${lastUserMessage}\n\nBUILDER JSON:\n${JSON.stringify(builderResponse, null, 2)}\n\nSKEPTIC JSON:\n${JSON.stringify(skepticResponse, null, 2)}\n\nUSER DATA CONTEXT (for reference):\n${contextMessage}`;
-    const mediatorResult = await callGemini(GEMINI_API_KEY, smartModel, MEDIATOR_PROMPT + langInstruction, mediatorInput);
-    totalUsage.prompt_tokens += mediatorResult.usage.prompt_tokens;
-    totalUsage.completion_tokens += mediatorResult.usage.completion_tokens;
-    totalUsage.total_tokens += mediatorResult.usage.total_tokens;
+      // Step 1: BUILDER
+      sendSSE({ choices: [{ delta: { content: '' } }], progress: progressMsgs.builder });
+      console.log('🔨 BUILDER starting...');
+      const builderResult = await callGemini(GEMINI_API_KEY, fastModel, BUILDER_PROMPT + langInstruction + '\n\n' + contextMessage, lastUserMessage);
+      totalUsage.prompt_tokens += builderResult.usage.prompt_tokens;
+      totalUsage.completion_tokens += builderResult.usage.completion_tokens;
+      totalUsage.total_tokens += builderResult.usage.total_tokens;
 
-    const mediatorResponse = parseTriadJSON(mediatorResult.content, {
-      final_answer: builderResponse.answer,
-      confidence: 50,
-      what_i_did: builderResponse.steps_taken,
-      what_i_did_not_do: builderResponse.unknowns,
-      next_step: 'Poskusi znova ali postavi bolj specifično vprašanje.',
-    });
-    console.log('⚖️ MEDIATOR done, confidence:', mediatorResponse.confidence);
+      const builderResponse = parseTriadJSON(builderResult.content, {
+        answer: 'Ni mi uspelo analizirati vprašanja.',
+        assumptions: [], steps_taken: ['Attempted analysis'], unknowns: ['Analysis failed'], risks: [], questions: [],
+      });
+      console.log('🔨 BUILDER done');
+
+      // Step 2: SKEPTIC
+      sendSSE({ choices: [{ delta: { content: '' } }], progress: progressMsgs.skeptic });
+      console.log('🔍 SKEPTIC starting...');
+      const skepticInput = `USER QUESTION:\n${lastUserMessage}\n\nBUILDER'S RESPONSE:\n${JSON.stringify(builderResponse, null, 2)}\n\nUSER DATA CONTEXT:\n${contextMessage}`;
+      const skepticResult = await callGemini(GEMINI_API_KEY, fastModel, SKEPTIC_PROMPT, skepticInput);
+      totalUsage.prompt_tokens += skepticResult.usage.prompt_tokens;
+      totalUsage.completion_tokens += skepticResult.usage.completion_tokens;
+      totalUsage.total_tokens += skepticResult.usage.total_tokens;
+
+      const skepticResponse = parseTriadJSON(skepticResult.content, {
+        claims_to_verify: [], failure_modes: [], missing_info: [], recommended_changes: [],
+      });
+      console.log('🔍 SKEPTIC done');
+
+      // Step 3: MEDIATOR
+      sendSSE({ choices: [{ delta: { content: '' } }], progress: progressMsgs.mediator });
+      console.log('⚖️ MEDIATOR starting...');
+      const mediatorInput = `USER QUESTION:\n${lastUserMessage}\n\nBUILDER JSON:\n${JSON.stringify(builderResponse, null, 2)}\n\nSKEPTIC JSON:\n${JSON.stringify(skepticResponse, null, 2)}\n\nUSER DATA CONTEXT (for reference):\n${contextMessage}`;
+      const mediatorResult = await callGemini(GEMINI_API_KEY, smartModel, MEDIATOR_PROMPT + langInstruction, mediatorInput);
+      totalUsage.prompt_tokens += mediatorResult.usage.prompt_tokens;
+      totalUsage.completion_tokens += mediatorResult.usage.completion_tokens;
+      totalUsage.total_tokens += mediatorResult.usage.total_tokens;
+
+      const mediatorResponse = parseTriadJSON(mediatorResult.content, {
+        final_answer: builderResponse.answer,
+        confidence: 50,
+        what_i_did: builderResponse.steps_taken,
+        what_i_did_not_do: builderResponse.unknowns,
+        next_step: 'Poskusi znova ali postavi bolj specifično vprašanje.',
+      });
+      console.log('⚖️ MEDIATOR done, confidence:', mediatorResponse.confidence);
+
+      finalResult = {
+        type: 'triad',
+        final_answer: mediatorResponse.final_answer,
+        confidence: mediatorResponse.confidence,
+        payment_intent: mediatorResponse.payment_intent || builderResponse.payment_intent || null,
+        what_i_did: mediatorResponse.what_i_did,
+        what_i_did_not_do: mediatorResponse.what_i_did_not_do,
+        next_step: mediatorResponse.next_step,
+        _debug: {
+          mode: 'triad',
+          builder: { answer_preview: (builderResponse.answer || '').substring(0, 200), assumptions: builderResponse.assumptions, risks: builderResponse.risks, questions: builderResponse.questions },
+          skeptic: { claims_to_verify: skepticResponse.claims_to_verify, failure_modes: skepticResponse.failure_modes, missing_info: skepticResponse.missing_info },
+        },
+      };
+    }
 
     // Log usage to SQLite
     if (nostrHexId) {
@@ -599,30 +747,16 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
         const costLana = costUsd * (usdToLanaRate || 270);
         db.prepare(`
           INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
-          VALUES (lower(hex(randomblob(16))), ?, 'triad-gemini', ?, ?, ?, ?, ?)
-        `).run(nostrHexId, totalUsage.prompt_tokens, totalUsage.completion_tokens, totalUsage.total_tokens, costUsd, costLana);
-        console.log(`📊 Logged triad usage: ${totalUsage.total_tokens} tokens, $${costUsd.toFixed(6)} USD`);
+          VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)
+        `).run(nostrHexId, mode === 'direct' ? 'direct-gemini' : 'triad-gemini', totalUsage.prompt_tokens, totalUsage.completion_tokens, totalUsage.total_tokens, costUsd, costLana);
+        console.log(`📊 Logged ${mode} usage: ${totalUsage.total_tokens} tokens, $${costUsd.toFixed(6)} USD`);
       } catch (err) {
         console.error('Failed to log AI usage:', err);
       }
     }
 
-    // Send final triad result
-    const triadResult = {
-      type: 'triad',
-      final_answer: mediatorResponse.final_answer,
-      confidence: mediatorResponse.confidence,
-      payment_intent: mediatorResponse.payment_intent || builderResponse.payment_intent || null,
-      what_i_did: mediatorResponse.what_i_did,
-      what_i_did_not_do: mediatorResponse.what_i_did_not_do,
-      next_step: mediatorResponse.next_step,
-      _debug: {
-        builder: { answer_preview: (builderResponse.answer || '').substring(0, 200), assumptions: builderResponse.assumptions, risks: builderResponse.risks, questions: builderResponse.questions },
-        skeptic: { claims_to_verify: skepticResponse.claims_to_verify, failure_modes: skepticResponse.failure_modes, missing_info: skepticResponse.missing_info },
-      },
-    };
-
-    sendSSE({ choices: [{ delta: { content: JSON.stringify(triadResult) } }] });
+    // Send final result
+    sendSSE({ choices: [{ delta: { content: JSON.stringify(finalResult) } }] });
 
     // Check for missing data and create async task if needed
     const missingFields = detectMissingFields(context);
@@ -633,7 +767,7 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
         language: langCode,
         missingFields,
         partialContext: context,
-        partialAnswer: mediatorResponse.final_answer,
+        partialAnswer: finalResult.final_answer,
         usdToLanaRate: usdToLanaRate || 270,
       });
 
@@ -652,7 +786,7 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (error: any) {
-    console.error('AI Advisor Triad error:', error);
+    console.error('AI Advisor error:', error);
     // If headers already sent (SSE started), send error via SSE
     if (res.headersSent) {
       res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
