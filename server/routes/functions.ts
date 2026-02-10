@@ -327,14 +327,24 @@ DATA RULES:
 - If an array is empty [], the data was fetched but there is nothing there.
 - NEVER mention loading, connection issues, or data availability. Just answer with whatever data you have.
 
+ECOSYSTEM TERMINOLOGY:
+- "Lana Svet" (Lana World) = the entire Lana ecosystem — ALL projects, ALL events, ALL users, ALL activity. NOT just the current user's data.
+- When user asks about "Lana Svet" or "what's new in Lana world", report on: allActiveProjects (all projects from all users), events, newProjects (new projects this week).
+- "pri meni" / "about me" = the CURRENT USER's personal data only (wallets, my projects, my donations, my messages).
+
 OVERVIEW / BROAD QUESTION RULES:
 - When the user asks a broad question like "what's new", "kaj je novega", "overview", "how are things", "what's happening", or any general status query:
-  * You MUST scan EVERY section of USER DATA: wallets, projects, donations, events, messages, unconditionalPayments, unpaidLashes, recentChats, lana8Wonder
+  * You MUST scan EVERY section of USER DATA: wallets, projects, donations, events, messages, unconditionalPayments, unpaidLashes, recentChats, lana8Wonder, recentActivity, newProjects
   * Summarize what you find in EACH section that has data
   * Mention specific numbers: wallet balances, number of projects, donation amounts, unread messages, upcoming events
   * Structure your answer with clear sections or bullet points
   * Do NOT say "I couldn't determine" or "I don't have info" if the data IS in the context — USE IT
   * If a section is null (not fetched), skip it silently. If empty [], mention there's nothing there briefly.
+- When the user asks about "Lana Svet" / ecosystem / world:
+  * Focus on allActiveProjects (show project names, owners, funding %)
+  * Show newProjects (projects created this week)
+  * Show events (upcoming, happening now)
+  * Show community stats (total projects, total users contributing)
 
 CURRENCY RULES:
 - "balanceLana" values are in LANA cryptocurrency (NOT EUR/USD/fiat!).
@@ -461,13 +471,20 @@ IMPORTANT RULES:
 - Use the user's name if available.
 - Give COMPREHENSIVE answers with real data, not vague summaries.
 
+ECOSYSTEM TERMINOLOGY:
+- "Lana Svet" (Lana World) = the entire Lana ecosystem — ALL projects, ALL events, ALL users.
+- When user asks about "Lana Svet", report on: allActiveProjects, events, newProjects.
+- "pri meni" / "about me" = the CURRENT USER's data only.
+
 OVERVIEW / BROAD QUESTION RULES:
 - When the user asks a broad question ("what's new", "kaj je novega", "overview", "how are things"):
-  * Scan EVERY section of USER DATA: wallets, projects, donations, events, messages, unconditionalPayments, unpaidLashes, recentChats, lana8Wonder
+  * Scan EVERY section of USER DATA: wallets, projects, donations, events, messages, unconditionalPayments, unpaidLashes, recentChats, lana8Wonder, recentActivity, newProjects
   * Summarize what you find in EACH section that has data
   * Mention specific numbers and names
   * Use clear structure (sections or bullet points)
   * Never say "I couldn't determine" if data exists in the context
+- When asked about "Lana Svet" / ecosystem:
+  * Focus on allActiveProjects (names, owners, funding %), newProjects, events
 
 CURRENCY RULES:
 - "balanceLana" values are in LANA cryptocurrency (NOT EUR/USD/fiat!).

@@ -448,8 +448,9 @@ export default function AiAdvisor() {
             unpaidLashes: context.unpaidLashes,
             userProjects: userProjectsContext,
             events: eventsContext,
+            recentActivity: context.recentActivity,
+            newProjects: context.newProjects,
             recentChats: context.recentChats,
-            // connectionState and eventsFetchStatus removed — AI was obsessing about loading state
           },
           language: userLanguage,
           nostrHexId,
