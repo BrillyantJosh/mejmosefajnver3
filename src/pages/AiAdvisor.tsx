@@ -72,6 +72,7 @@ interface TriadResponse {
   what_i_did: string[];
   what_i_did_not_do: string[];
   next_step: string;
+  learning_notice?: string;
   _debug?: {
     mode?: string;
     builder?: {
@@ -840,6 +841,13 @@ export default function AiAdvisor() {
                           {/* Triad debug panel */}
                           {message.triadData && message.content && (
                             <TriadDebugPanel triadData={message.triadData} language={userLanguage} />
+                          )}
+
+                          {/* Learning notice for low-confidence answers */}
+                          {message.triadData?.learning_notice && (
+                            <p className="text-xs text-muted-foreground mt-2 italic">
+                              {message.triadData.learning_notice}
+                            </p>
                           )}
 
                           {/* Pending update indicator */}
