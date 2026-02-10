@@ -73,18 +73,27 @@ export default function Profile() {
 
   // Helper function to ensure avatar URL is in correct format
   const formatAvatarUrl = (url: string | undefined, nostrHexId: string): string => {
-    // Return empty string if no URL is provided
     if (!url) return '';
-    
+
     // If it's already a lanaknows.us URL, return it as is
     if (url.includes('lanaknows.us')) return url;
-    
+
     // If it's a Supabase URL, convert to lanaknows.us format
     if (url.includes('supabase.co')) {
       return `https://lanaknows.us/${nostrHexId}`;
     }
-    
-    // Return the original URL for all other cases (including external URLs)
+
+    // If it's a local server storage URL (relative or absolute), return as-is
+    if (url.includes('/api/storage/')) return url;
+
+    // If it's a localhost URL, strip localhost and make relative
+    if (url.includes('localhost')) {
+      try {
+        const parsed = new URL(url);
+        return parsed.pathname;
+      } catch { return url; }
+    }
+
     return url;
   };
 
@@ -383,7 +392,11 @@ export default function Profile() {
       const result = await response.json();
 
       if (result.data?.publicUrl) {
-        form.setValue('picture', result.data.publicUrl);
+        // Convert relative URL to absolute so it works when published to Nostr
+        const absoluteUrl = result.data.publicUrl.startsWith('/')
+          ? `${window.location.origin}${result.data.publicUrl}`
+          : result.data.publicUrl;
+        form.setValue('picture', absoluteUrl);
         toast({
           title: "Avatar uploaded",
           description: "Your avatar has been uploaded successfully",
