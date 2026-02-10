@@ -431,19 +431,24 @@ const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
   pt: "\n\nIMPORTANT: Respond in PORTUGUESE (português). Be warm and friendly.",
 };
 
-// DIRECT mode prompt — for simple factual queries (no triad needed)
+// DIRECT mode prompt — for specific factual queries (no triad needed)
 const DIRECT_PROMPT = `You are a friendly and helpful AI assistant for the Lana ecosystem app.
 
-Your task is to answer the user's question DIRECTLY using the provided USER DATA context.
+Your task is to answer the user's SPECIFIC question using the provided USER DATA context.
 
 IMPORTANT RULES:
 - Be helpful, precise, and warm. Use emojis where appropriate.
 - Use ONLY data from the provided USER DATA context.
+- THOROUGHLY examine ALL relevant sections of USER DATA before answering.
+- For wallet questions: check ALL wallets, their balances, types, and totals.
+- For donation questions: check ALL donation data, amounts, senders, recipients.
+- For project questions: check ALL projects, their funding status, goals, backers.
 - If an array is null, it means data could not be fetched — skip it silently, do NOT mention loading or connection issues.
 - If an array is empty [], the data was fetched but there is nothing there — say so honestly.
 - NEVER mention loading, connection issues, or data availability problems.
-- Reference specific values, names, and numbers from the context.
+- Reference specific values, names, and numbers from the context — be DETAILED.
 - Use the user's name if available.
+- Give COMPREHENSIVE answers with real data, not vague summaries.
 
 CURRENCY RULES:
 - "balanceLana" values are in LANA cryptocurrency (NOT EUR/USD/fiat!).
@@ -492,40 +497,46 @@ function classifyQuery(message: string): 'direct' | 'triad' {
   const paymentKeywords = ['plačaj', 'plači', 'pošlji', 'prenesi', 'pay ', 'send ', 'transfer ', 'zahlung', 'plati', 'pošalji'];
   if (paymentKeywords.some(kw => lower.includes(kw))) return 'direct';
 
-  // Simple factual queries → direct
-  const directPatterns = [
-    // Balance / wallet queries
-    /(?:koliko|stanje|balance|wallet|denarnic|račun|account|guthaben)/,
-    // Donation queries
-    /(?:donacij|donation|prispev|donat|contribut)/,
-    // Project queries
-    /(?:projekt|project|idej|idea)/,
-    // Event queries
-    /(?:event|dogodek|what.?s new|kaj.?je.?novega|novosti|news)/,
-    // Simple info queries
-    /(?:kdo je|who is|kaj je|what is|koliko je|how much|how many|kolik)/,
-    // Status queries
-    /(?:status|pregled|overview|summary|povzet|recap)/,
-    // List queries
-    /(?:pokaži|prikaži|show|list|izpiši|display)/,
-    // Chat / message queries
-    /(?:sporočil|message|chat|pogovor)/,
-    // Greeting
-    /^(?:hej|hi|hello|zdravo|živjo|pozdravljeni|good morning|dobro jutro)/,
-  ];
-  if (directPatterns.some(p => p.test(lower))) return 'direct';
-
-  // Complex analytical queries → triad
+  // Broad/overview questions need TRIAD (must examine ALL context thoroughly)
   const triadPatterns = [
+    // "What's new" / general overview — needs to check everything
+    /(?:kaj.?je.?novega|what.?s new|novosti|news|pregled|overview|summary|povzet|recap|poročilo|report)/,
+    // "What's happening" / general status
+    /(?:kaj.?se.?dogaja|what.?s happening|what.?s going on|kako.?je|how.?are things)/,
+    // Broad questions about "me" / "my stuff"
+    /(?:kaj.*pri meni|what.*about me|moj.*status|my.*status|vse o meni|everything about)/,
+    // Analytical / advisory
     /(?:analiziraj|analyze|primerjaj|compare|oceni|evaluate|strategij|strategy)/,
     /(?:svetuj|advise|priporoč|recommend|predlagaj|suggest)/,
     /(?:zakaj|why|razloži|explain.*(?:detail|depth))/,
     /(?:načrt|plan|kako bi|how would|how should|kaj če|what if)/,
+    // Greetings (often followed by implicit "tell me everything")
+    /^(?:hej|hi|hello|zdravo|živjo|pozdravljeni|good morning|dobro jutro)/,
   ];
   if (triadPatterns.some(p => p.test(lower))) return 'triad';
 
-  // Default: direct for shorter messages, triad for longer analytical ones
-  return lower.split(/\s+/).length > 25 ? 'triad' : 'direct';
+  // Specific factual queries → direct (faster, single call)
+  const directPatterns = [
+    // Specific balance / wallet queries
+    /(?:koliko.*(?:imam|lana|denarnic|na račun)|stanje|balance|wallet|denarnic|račun|account|guthaben)/,
+    // Specific donation queries
+    /(?:donacij|donation|prispev|donat|contribut)/,
+    // Specific project queries
+    /(?:projekt|project|idej|idea)/,
+    // Specific event queries
+    /(?:event|dogodek)/,
+    // Simple info queries
+    /(?:kdo je|who is|kaj je|what is|koliko je|how much|how many|kolik)/,
+    // List queries
+    /(?:pokaži|prikaži|show|list|izpiši|display)/,
+    // Specific chat / message queries
+    /(?:sporočil|message|chat|pogovor)/,
+  ];
+  if (directPatterns.some(p => p.test(lower))) return 'direct';
+
+  // Default: shorter messages → triad (safer, more thorough), very short specific → direct
+  const wordCount = lower.split(/\s+/).length;
+  return wordCount <= 4 ? 'triad' : 'direct';
 }
 
 const PROGRESS_MESSAGES: Record<string, { builder: string; skeptic: string; mediator: string }> = {
