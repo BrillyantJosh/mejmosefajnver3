@@ -298,6 +298,16 @@ export function normalizeAddress(address: string): string {
   return address.replace(/[\s\u200B-\u200D\uFEFF\r\n\t]/g, '').trim();
 }
 
+export function isValidLanaAddress(address: string): boolean {
+  try {
+    const decoded = base58CheckDecode(address, true);
+    // LANA address payload must be exactly 21 bytes (1 version byte + 20 byte hash160)
+    return decoded.length === 21;
+  } catch {
+    return false;
+  }
+}
+
 // ==============================================
 // ECDSA Signing
 // ==============================================
@@ -630,6 +640,9 @@ export async function buildSignedTx(
     const outputs: Uint8Array[] = [];
     for (const recipient of recipients) {
       const decoded = base58CheckDecode(recipient.address, true); // Skip checksum for addresses (match Deno behavior)
+      if (decoded.length !== 21) {
+        throw new Error(`Invalid address "${recipient.address}": decoded payload is ${decoded.length} bytes (expected 21)`);
+      }
       const pubKeyHash = decoded.slice(1);
 
       const scriptPubKey = new Uint8Array([
@@ -929,8 +942,12 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
     } else {
       amountSatoshis = Math.floor(amount! * 100000000);
 
-      // Check if we need mentor split
-      const hasMentorSplit = mentorAddress && mentorPercent && mentorPercent > 0;
+      // Check if we need mentor split — validate mentor address first
+      const mentorAddressValid = mentorAddress && isValidLanaAddress(mentorAddress);
+      if (mentorAddress && !mentorAddressValid) {
+        console.warn(`⚠️ Invalid mentor address (skipping split): "${mentorAddress}" (len=${mentorAddress.length})`);
+      }
+      const hasMentorSplit = mentorAddressValid && mentorPercent && mentorPercent > 0;
       const mentorAmountSatoshis = hasMentorSplit
         ? Math.floor(amountSatoshis * mentorPercent / 100)
         : 0;
@@ -939,7 +956,7 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
       if (hasMentorSplit && mentorAmountSatoshis > 546) {
         recipients = [
           { address: recipientAddress, amount: projectAmountSatoshis },
-          { address: mentorAddress, amount: mentorAmountSatoshis }
+          { address: mentorAddress!, amount: mentorAmountSatoshis }
         ];
         console.log(`💰 Split mode: ${projectAmountSatoshis} to project, ${mentorAmountSatoshis} to mentor (${mentorPercent}%)`);
       } else {
