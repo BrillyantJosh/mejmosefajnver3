@@ -14,6 +14,7 @@ import Dashboard from "./pages/Dashboard";
 import Modules from "./pages/Modules";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
+import VideoInstructions from "./pages/VideoInstructions";
 import SocialLayout from "./pages/social/SocialLayout";
 import Feed from "./pages/social/Feed";
 import SocialHome from "./pages/social/Home";
@@ -140,6 +141,7 @@ const App = () => (
                   <Route path="/modules" element={<Modules />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/video-instructions" element={<VideoInstructions />} />
                   <Route path="/social" element={<SocialLayout />}>
                     <Route index element={<Navigate to="/social/home" replace />} />
                     <Route path="feed" element={<Feed />} />
