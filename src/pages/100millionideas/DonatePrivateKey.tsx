@@ -221,51 +221,6 @@ const DonatePrivateKey = () => {
         projectLanoshis
       });
 
-      // Event 2: Mentor fee (5%) — only if mentor split is active
-      let signedMentorEvent: any = null;
-      if (hasMentorSplit && mentorLanoshis > 0 && mentorHexId) {
-        const mentorEventTemplate = {
-          kind: 60200,
-          created_at: nowTs,
-          tags: [
-            ["service", "lanacrowd"],
-            ["project", projectId || ""],
-            ["p", session.nostrHexId, "supporter"],
-            ["p", mentorHexId, "mentor"],
-            ["amount_lanoshis", mentorLanoshis.toString()],
-            ["amount_fiat", (parseFloat(amount) * 0.10).toFixed(2)],
-            ["currency", project.currency],
-            ["from_wallet", selectedWalletId],
-            ["to_wallet", mentorWallet],
-            ["tx", txHash],
-            ["type", "mentor_fee"],
-            ["timestamp_paid", nowTs.toString()]
-          ],
-          content: `Mentor fee for ${project.title}`
-        };
-
-        signedMentorEvent = finalizeEvent(mentorEventTemplate, hexToBytes(session.nostrPrivateKey));
-
-        const { data: mentorPublishData, error: mentorPublishError } = await supabase.functions.invoke('publish-dm-event', {
-          body: { event: signedMentorEvent }
-        });
-
-        if (mentorPublishError) {
-          console.error("Publish error (mentor event):", mentorPublishError);
-        }
-
-        console.log('📊 Mentor fee event:', {
-          eventId: signedMentorEvent.id,
-          publishedTo: mentorPublishData?.publishedTo || 0,
-          mentorLanoshis,
-          mentorWallet
-        });
-
-        // Update counts with mentor event results
-        successCount = Math.max(successCount, mentorPublishData?.publishedTo || 0);
-        totalRelays = Math.max(totalRelays, mentorPublishData?.totalRelays || 0);
-      }
-
       // Navigate to result page even if some relays failed
       const resultParams = new URLSearchParams({
         success: "true",
@@ -284,7 +239,6 @@ const DonatePrivateKey = () => {
         ...(hasMentorSplit && {
           mentorAddress: mentorWallet,
           mentorAmount: (mentorLanoshis / 100000000).toFixed(8),
-          mentorEventId: signedMentorEvent?.id || '',
         })
       });
 
