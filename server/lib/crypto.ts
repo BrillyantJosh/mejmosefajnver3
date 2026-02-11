@@ -90,7 +90,7 @@ export function base58CheckDecode(address: string): Uint8Array {
 
   for (let i = 0; i < 4; i++) {
     if (checksum[i] !== hash[i]) {
-      throw new Error('Invalid checksum');
+      throw new Error(`Invalid checksum for: "${address.substring(0, 20)}..." (len=${address.length}, codes=${[...address].slice(0,5).map(c=>c.charCodeAt(0))})`);
     }
   }
 
@@ -287,8 +287,13 @@ export function publicKeyToAddress(publicKey: Uint8Array): string {
 }
 
 export function normalizeWif(wif: string): string {
-  // Remove any whitespace
-  return wif.trim();
+  // Remove whitespace and invisible Unicode characters (zero-width spaces, etc.)
+  return wif.replace(/[\s\u200B-\u200D\uFEFF\r\n\t]/g, '').trim();
+}
+
+export function normalizeAddress(address: string): string {
+  // Remove whitespace and invisible Unicode characters (zero-width spaces, etc.)
+  return address.replace(/[\s\u200B-\u200D\uFEFF\r\n\t]/g, '').trim();
 }
 
 // ==============================================
@@ -827,15 +832,20 @@ export interface SendLanaResult {
 
 export async function sendLanaTransaction(params: SendLanaParams): Promise<SendLanaResult> {
   const {
-    senderAddress,
-    recipientAddress,
-    mentorAddress,
+    senderAddress: rawSenderAddress,
+    recipientAddress: rawRecipientAddress,
+    mentorAddress: rawMentorAddress,
     mentorPercent,
     amount,
     privateKey,
     emptyWallet = false,
     electrumServers
   } = params;
+
+  // Normalize addresses to strip invisible Unicode characters
+  const senderAddress = normalizeAddress(rawSenderAddress || '');
+  const recipientAddress = normalizeAddress(rawRecipientAddress || '');
+  const mentorAddress = rawMentorAddress ? normalizeAddress(rawMentorAddress) : undefined;
 
   console.log('🚀 Starting LANA transaction...');
   console.log(`📋 Sender: ${senderAddress}`);
@@ -1060,7 +1070,14 @@ export interface SendBatchLanaResult {
 }
 
 export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Promise<SendBatchLanaResult> {
-  const { senderAddress, recipients, privateKey, electrumServers } = params;
+  const { senderAddress: rawSenderAddress, recipients: rawRecipients, privateKey, electrumServers } = params;
+
+  // Normalize addresses to strip invisible Unicode characters
+  const senderAddress = normalizeAddress(rawSenderAddress || '');
+  const recipients = rawRecipients.map(r => ({
+    ...r,
+    address: normalizeAddress(r.address)
+  }));
 
   console.log('🚀 Starting BATCH LANA transaction...');
   console.log(`📋 Sender: ${senderAddress}`);
