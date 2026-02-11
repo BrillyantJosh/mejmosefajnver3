@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -298,6 +298,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     externalUrl: 'https://www.lanawatch.us',
     enabled: false,
     order: 23
+  },
+  {
+    id: 'tax',
+    title: 'TAX',
+    description: 'Tax reports for Lana to FIAT exchange by country',
+    icon: Landmark,
+    path: '/tax',
+    gradient: 'from-amber-500 to-orange-500',
+    enabled: true,
+    order: 24
   }
 ];
 
@@ -353,7 +363,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'lanaknights': 'Lana Knights',
     'lanaevents': 'Lana Events',
     'lanaalignsworld': 'Lana Aligns World',
-    'registrar': 'Registrar'
+    'registrar': 'Registrar',
+    'tax': 'TAX'
   };
   return mapping[id] || id;
 };
@@ -385,7 +396,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Lana Knights': 'lanaknights',
     'Lana Events': 'lanaevents',
     'Lana Aligns World': 'lanaalignsworld',
-    'Registrar': 'registrar'
+    'Registrar': 'registrar',
+    'TAX': 'tax'
   };
   return mapping[id] || null;
 };
