@@ -1671,6 +1671,8 @@ router.post('/send-lana-transaction', async (req: Request, res: Response) => {
   console.log('📋 send-lana-transaction:', {
     senderAddress: req.body.senderAddress,
     recipientAddress: req.body.recipientAddress,
+    mentorAddress: req.body.mentorAddress,
+    mentorPercent: req.body.mentorPercent,
     amount: req.body.amount,
     hasKey: !!req.body.privateKey,
     servers: req.body.electrumServers?.length || 0
