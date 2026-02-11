@@ -1,7 +1,7 @@
 // VERSION: 2.2 - PWA Cache Fix + Version Display - 2026-01-22
 import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot, ExternalLink } from "lucide-react";
+import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot, ExternalLink, PlayCircle } from "lucide-react";
 import logoImage from "@/assets/lana-logo.png";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +31,6 @@ const fixedMenuItems = [
   { title: "Enlightened AI", icon: Bot, path: "/" },
   { title: "Modules", icon: Grid, path: "/modules" },
   { title: "Profile", icon: User, path: "/profile" },
-  { title: "What Is Lana?", icon: ExternalLink, path: "https://www.whatislana.com", externalUrl: true },
   { title: "Settings", icon: Settings, path: "/settings" },
 ];
 
@@ -259,22 +258,30 @@ export default function MainLayout() {
                 {/* Fixed Menu Items */}
                 {fixedMenuItems.map((item) => (
                   <DropdownMenuItem key={item.path} asChild>
-                    {item.externalUrl ? (
-                      <a href={item.path} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 cursor-pointer">
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </a>
-                    ) : (
-                      <Link to={item.path} className="flex items-center gap-2 cursor-pointer">
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    )}
+                    <Link to={item.path} className="flex items-center gap-2 cursor-pointer">
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                   <LogOut className="h-4 w-4 mr-2" />
                   <span>Logout</span>
+                </DropdownMenuItem>
+
+                {/* Info & Help Links */}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <a href="https://www.whatislana.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 cursor-pointer">
+                    <ExternalLink className="h-4 w-4" />
+                    <span>What Is Lana?</span>
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/video-instructions" className="flex items-center gap-2 cursor-pointer">
+                    <PlayCircle className="h-4 w-4" />
+                    <span>Video Instructions</span>
+                  </Link>
                 </DropdownMenuItem>
 
                 {/* Separator */}
@@ -343,33 +350,19 @@ export default function MainLayout() {
             <nav className="container px-4 py-4 space-y-2">
               {/* Fixed Menu Items */}
               {fixedMenuItems.map((item) => (
-                item.externalUrl ? (
-                  <a
-                    key={item.path}
-                    href={item.path}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-secondary/50"
-                  >
-                    <item.icon className="h-5 w-5" />
-                    <span>{item.title}</span>
-                  </a>
-                ) : (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                      location.pathname === item.path
-                        ? "bg-secondary text-primary font-medium"
-                        : "hover:bg-secondary/50"
-                    }`}
-                  >
-                    <item.icon className="h-5 w-5" />
-                    <span>{item.title}</span>
-                  </Link>
-                )
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                    location.pathname === item.path
+                      ? "bg-secondary text-primary font-medium"
+                      : "hover:bg-secondary/50"
+                  }`}
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span>{item.title}</span>
+                </Link>
               ))}
 
               <button
@@ -382,6 +375,31 @@ export default function MainLayout() {
                 <LogOut className="h-5 w-5" />
                 <span>Logout</span>
               </button>
+
+              {/* Info & Help Links */}
+              <div className="border-t my-2" />
+              <a
+                href="https://www.whatislana.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-secondary/50"
+              >
+                <ExternalLink className="h-5 w-5" />
+                <span>What Is Lana?</span>
+              </a>
+              <Link
+                to="/video-instructions"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  location.pathname === "/video-instructions"
+                    ? "bg-secondary text-primary font-medium"
+                    : "hover:bg-secondary/50"
+                }`}
+              >
+                <PlayCircle className="h-5 w-5" />
+                <span>Video Instructions</span>
+              </Link>
 
               {/* Separator */}
               {dynamicModules.length > 0 && <div className="border-t my-2" />}
