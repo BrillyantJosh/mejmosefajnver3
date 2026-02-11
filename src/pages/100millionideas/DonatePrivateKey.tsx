@@ -126,21 +126,8 @@ const DonatePrivateKey = () => {
       ]);
 
       const serviceName = appNameData?.value || 'LanaCrowd';
-      const mentorHexId = mentorSettingData?.value as string || '';
-      let mentorWallet = '';
-
-      // Step 1b: Fetch mentor's wallet address from their profile
-      if (mentorHexId) {
-        const { data: mentorProfile } = await supabase
-          .from('nostr_profiles')
-          .select('lana_wallet_id')
-          .eq('nostr_hex_id', mentorHexId)
-          .maybeSingle();
-
-        if (mentorProfile?.lana_wallet_id) {
-          mentorWallet = mentorProfile.lana_wallet_id;
-        }
-      }
+      // mentor_100million_ideas now stores wallet address directly
+      const mentorWallet = mentorSettingData?.value as string || '';
 
       // Step 2: Convert FIAT amount to lanoshis
       const lanaAmountLanoshis = Math.floor(lanaAmount * 100000000);
