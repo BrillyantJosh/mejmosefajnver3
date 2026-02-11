@@ -79,18 +79,20 @@ export function base58Decode(str: string): Uint8Array {
   return result;
 }
 
-export function base58CheckDecode(address: string): Uint8Array {
+export function base58CheckDecode(address: string, skipChecksum = false): Uint8Array {
   const decoded = base58Decode(address);
   if (decoded.length < 5) throw new Error('Address too short');
 
   const payload = decoded.slice(0, -4);
-  const checksum = decoded.slice(-4);
 
-  const hash = sha256(sha256(payload));
+  if (!skipChecksum) {
+    const checksum = decoded.slice(-4);
+    const hash = sha256(sha256(payload));
 
-  for (let i = 0; i < 4; i++) {
-    if (checksum[i] !== hash[i]) {
-      throw new Error(`Invalid checksum for: "${address.substring(0, 20)}..." (len=${address.length}, codes=${[...address].slice(0,5).map(c=>c.charCodeAt(0))})`);
+    for (let i = 0; i < 4; i++) {
+      if (checksum[i] !== hash[i]) {
+        throw new Error(`Invalid checksum for: "${address.substring(0, 20)}..." (len=${address.length})`);
+      }
     }
   }
 
@@ -627,7 +629,7 @@ export async function buildSignedTx(
     // Build recipient outputs
     const outputs: Uint8Array[] = [];
     for (const recipient of recipients) {
-      const decoded = base58CheckDecode(recipient.address);
+      const decoded = base58CheckDecode(recipient.address, true); // Skip checksum for addresses (match Deno behavior)
       const pubKeyHash = decoded.slice(1);
 
       const scriptPubKey = new Uint8Array([
@@ -650,7 +652,7 @@ export async function buildSignedTx(
     let outputCount = recipients.length;
 
     if (changeAmount > 1000) {
-      const decoded = base58CheckDecode(changeAddress);
+      const decoded = base58CheckDecode(changeAddress, true); // Skip checksum for addresses (match Deno behavior)
       const pubKeyHash = decoded.slice(1);
 
       const scriptPubKey = new Uint8Array([
@@ -1111,8 +1113,8 @@ export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Pro
       if (!r.address || r.amount <= 0) {
         throw new Error(`Invalid recipient: ${r.address} amount=${r.amount}`);
       }
-      // Validate base58 checksum
-      base58CheckDecode(r.address);
+      // Validate base58 format (skip checksum to match Deno behavior)
+      base58CheckDecode(r.address, true);
     }
 
     const servers = electrumServers && electrumServers.length > 0
