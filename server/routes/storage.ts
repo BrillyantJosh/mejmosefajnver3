@@ -115,16 +115,11 @@ function serveFile(bucket: string, relativePath: string, res: Response) {
   return res.sendFile(filePath);
 }
 
-// GET /api/storage/:bucket/:subdir/:filename - Serve file in subdirectory
-router.get('/:bucket/:subdir/:filename', (req: Request, res: Response) => {
-  const { bucket, subdir, filename } = req.params;
-  return serveFile(bucket, `${subdir}/${filename}`, res);
-});
-
-// GET /api/storage/:bucket/:filename - Serve file (flat path)
-router.get('/:bucket/:filename', (req: Request, res: Response) => {
-  const { bucket, filename } = req.params;
-  return serveFile(bucket, filename, res);
+// GET /api/storage/:bucket/* - Serve file (supports any subdirectory depth)
+router.get('/:bucket/*', (req: Request, res: Response) => {
+  const { bucket } = req.params;
+  const filePath = req.params[0]; // Everything after /:bucket/
+  return serveFile(bucket, filePath, res);
 });
 
 // DELETE /api/storage/:bucket/:filename - Delete file
