@@ -389,6 +389,11 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
       // Call callback if provided
       onPostCreated?.();
 
+      // Dispatch event so Feed can refresh after a short delay (let relay propagate)
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('post-created'));
+      }, 2000);
+
       // Close connections after a delay
       setTimeout(() => pool.close(relays), 1000);
     } catch (error) {
