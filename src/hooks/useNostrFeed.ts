@@ -343,7 +343,7 @@ export function useNostrFeed(customRelays?: string[]) {
       if (pollInterval) clearInterval(pollInterval);
       pool.close(RELAYS);
     };
-  }, [RELAYS, pool]);
+  }, [RELAYS, pool, refreshCounter]);
 
   // Merge posts with profiles and reply counts
   const postsWithProfiles = useMemo(() => {
@@ -367,15 +367,20 @@ export function useNostrFeed(customRelays?: string[]) {
   // Check if there are more posts to load
   const hasMore = visiblePosts < posts.length;
   
+  // Retry/refresh counter to force useEffect re-trigger
+  const [refreshCounter, setRefreshCounter] = useState(0);
+
   // Retry function that can be called from UI
   const retry = useCallback(() => {
     console.log('🔄 Manual retry triggered');
     setRetryCount(0);
     setError(null);
     setReady(false);
+    setLoading(true);
     setPosts([]);
     setReplyCounts(new Map());
-    // The useEffect will trigger loadFeed when ready changes
+    setVisiblePosts(10);
+    setRefreshCounter(prev => prev + 1); // Force useEffect re-trigger
   }, []);
 
   // Log relay status for diagnostics

@@ -66,6 +66,16 @@ export default function Feed() {
 
   const relays = allRelays;
 
+  // Refresh feed when a new post is created
+  useEffect(() => {
+    const handlePostCreated = () => {
+      console.log('📝 New post created, refreshing feed...');
+      retry();
+    };
+    window.addEventListener('post-created', handlePostCreated);
+    return () => window.removeEventListener('post-created', handlePostCreated);
+  }, [retry]);
+
   // Fetch user's lashed events from Supabase when posts change
   useEffect(() => {
     const loadLashedEvents = async () => {
