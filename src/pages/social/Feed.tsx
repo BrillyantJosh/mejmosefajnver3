@@ -29,6 +29,7 @@ export default function Feed() {
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [lashedEvents, setLashedEvents] = useState<Set<string>>(new Set());
   const [relayPanelOpen, setRelayPanelOpen] = useState(false);
+  const [feedFilter, setFeedFilter] = useState<'all' | 'lana'>('all');
   const { toast } = useToast();
   const { giveLash } = useNostrLash();
   const { incrementUnpaidCount } = useNostrUnpaidLashes();
@@ -54,6 +55,14 @@ export default function Feed() {
   }, [selectedRelays, allRelays]);
 
   const { posts, loading, loadingMore, error, retryCount, hasMore, loadMore, retry } = useNostrFeed(activeRelays);
+
+  // Filter posts by LANA tag
+  const filteredPosts = useMemo(() => {
+    if (feedFilter === 'all') return posts;
+    return posts.filter(post =>
+      post.tags?.some(tag => tag[0] === 't' && tag[1]?.toLowerCase() === 'lana')
+    );
+  }, [posts, feedFilter]);
 
   const relays = allRelays;
 
@@ -326,8 +335,8 @@ export default function Feed() {
   );
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex gap-6">
+    <div className="max-w-5xl mx-auto">
+      <div className="flex gap-8">
         {/* Main Feed Column */}
         <div className="flex-1 max-w-2xl space-y-4">
 
@@ -352,6 +361,24 @@ export default function Feed() {
                 </CardContent>
               </Card>
             )}
+          </div>
+
+          {/* All / Lana Filter Toggle */}
+          <div className="flex gap-2">
+            <Button
+              variant={feedFilter === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFeedFilter('all')}
+            >
+              All
+            </Button>
+            <Button
+              variant={feedFilter === 'lana' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFeedFilter('lana')}
+            >
+              Lana
+            </Button>
           </div>
 
           {/* Error State */}
@@ -381,16 +408,16 @@ export default function Feed() {
           )}
 
           {/* Posts Feed */}
-          {!loading && !error && posts.length === 0 && (
+          {!loading && !error && filteredPosts.length === 0 && (
             <Card>
               <CardContent className="pt-6 text-center text-muted-foreground">
-                No posts found. Be the first to post!
+                {feedFilter === 'lana' ? 'No Lana posts found. Try switching to "All".' : 'No posts found. Be the first to post!'}
               </CardContent>
             </Card>
           )}
 
           <div className="space-y-4 pb-8">
-              {posts.map((post) => (
+              {filteredPosts.map((post) => (
                 <Card key={post.id}>
                   <CardHeader>
                     <div className="flex items-center gap-3">
@@ -423,14 +450,13 @@ export default function Feed() {
 
                       {/* Top right corner: Room badge + Three-dot menu */}
                       <div className="flex items-center gap-2">
-                        {post.tags && post.tags.some(tag => tag[0] === 'a' || tag[0] === 't') && (
-                          <Badge variant="secondary" className="text-xs">
-                            {(() => {
-                              const roomTag = post.tags.find(tag => tag[0] === 'a' || tag[0] === 't')?.[1];
-                              return roomTag ? `Room: ${roomTag}` : '';
-                            })()}
-                          </Badge>
-                        )}
+                        {post.tags && (() => {
+                          const tTag = post.tags.find(tag => tag[0] === 't');
+                          const aTag = post.tags.find(tag => tag[0] === 'a');
+                          if (tTag) return <Badge variant="secondary" className="text-xs">{tTag[1]}</Badge>;
+                          if (aTag) return <Badge variant="secondary" className="text-xs">Room: {aTag[1]}</Badge>;
+                          return null;
+                        })()}
                         <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8">
