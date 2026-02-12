@@ -118,7 +118,9 @@ function serveFile(bucket: string, relativePath: string, res: Response) {
 // GET /api/storage/:bucket/* - Serve file (supports any subdirectory depth)
 router.get('/:bucket/{*filePath}', (req: Request, res: Response) => {
   const { bucket, filePath } = req.params;
-  return serveFile(bucket, filePath as string, res);
+  // Express 5 wildcard returns array of path segments — join them
+  const resolvedPath = Array.isArray(filePath) ? filePath.join('/') : String(filePath);
+  return serveFile(bucket, resolvedPath, res);
 });
 
 // DELETE /api/storage/:bucket/:filename - Delete file
