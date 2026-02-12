@@ -4,7 +4,22 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { PlayCircle } from "lucide-react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { PlayCircle, ExternalLink } from "lucide-react";
+import lana8wonderIcon from "@/assets/lana8wonder-icon.png";
+
+const lana8wonderVideos = [
+  {
+    id: "l8w-purchase",
+    question: "How to Purchase LanaCoins via Lana8Wonder?",
+    youtubeId: "WnrmV2SNMvg",
+  },
+  {
+    id: "l8w-enroll",
+    question: "EN: How to Enroll in Lana8Wonder?",
+    youtubeId: "ZS10tAuH_4I",
+  },
+];
 
 const videos = [
   {
@@ -63,6 +78,51 @@ export default function VideoInstructions() {
           Click a question to watch the video tutorial
         </p>
       </div>
+
+      {/* Lana8Wonder Card */}
+      <Card className="mb-8 border-2 border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-orange-500/5">
+        <CardHeader className="pb-3">
+          <a
+            href="https://www.Lana8Wonder.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+          >
+            <img src={lana8wonderIcon} alt="Lana8Wonder" className="h-10 w-10 rounded-lg" />
+            <span className="text-xl font-bold">Lana8Wonder</span>
+            <ExternalLink className="h-4 w-4 text-muted-foreground" />
+          </a>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <Accordion type="single" collapsible className="space-y-2">
+            {lana8wonderVideos.map((video) => (
+              <AccordionItem
+                key={video.id}
+                value={video.id}
+                className="border rounded-lg px-4"
+              >
+                <AccordionTrigger className="text-left">
+                  <div className="flex items-center gap-3">
+                    <PlayCircle className="h-5 w-5 text-red-500 shrink-0" />
+                    <span>{video.question}</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="aspect-video rounded-lg overflow-hidden">
+                    <iframe
+                      src={`https://www.youtube.com/embed/${video.youtubeId}`}
+                      title={video.question}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="w-full h-full"
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </CardContent>
+      </Card>
 
       <Accordion type="single" collapsible className="space-y-2">
         {videos.map((video) => (
