@@ -502,8 +502,8 @@ export default function Feed() {
                   <CardContent>
                     <PostContent content={post.content} tags={post.tags} nostrHexId={session?.nostrHexId} />
                     <div className="flex items-center gap-6 text-muted-foreground">
-                      {/* LASH — only for posts with LANA tag (user has wallet) */}
-                      {post.tags?.some(tag => tag[0] === 't' && tag[1]?.toLowerCase() === 'lana') && (
+                      {/* LASH — only if author has LANA wallet */}
+                      {post.profile?.lana_wallet_id && (
                         <button
                           className={`flex items-center gap-1.5 transition-all duration-200 ${
                             lashedEvents.has(post.id)
@@ -529,8 +529,8 @@ export default function Feed() {
                         <MessageCircle className="h-4 w-4" />
                         <span className="text-sm">{post.replyCount || 0}</span>
                       </button>
-                      {/* OWN — only for posts with LANA tag */}
-                      {post.tags?.some(tag => tag[0] === 't' && tag[1]?.toLowerCase() === 'lana') && (
+                      {/* OWN — only if author has LANA wallet */}
+                      {post.profile?.lana_wallet_id && (
                         <button
                           className="flex items-center gap-2 hover:text-primary transition-colors"
                           onClick={() => navigate(`/own/start/${post.id}`)}
@@ -540,8 +540,8 @@ export default function Feed() {
                           <span className="text-sm">OWN</span>
                         </button>
                       )}
-                      {/* ROCK — only for posts with LANA tag */}
-                      {post.tags?.some(tag => tag[0] === 't' && tag[1]?.toLowerCase() === 'lana') && (
+                      {/* ROCK — only if author has LANA wallet */}
+                      {post.profile?.lana_wallet_id && (
                         <button
                           className="flex items-center gap-2 hover:text-green-600 transition-colors"
                           onClick={() => navigate(`/rock/grant-new?pubkey=${post.pubkey}`)}
