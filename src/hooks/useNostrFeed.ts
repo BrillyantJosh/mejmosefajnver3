@@ -23,6 +23,7 @@ export function useNostrFeed(customRelays?: string[]) {
   const [retryCount, setRetryCount] = useState(0);
   const [visiblePosts, setVisiblePosts] = useState(10);
   const [relayStatus, setRelayStatus] = useState<Map<string, { success: number; failures: number; avgTime: number }>>(new Map());
+  const [refreshCounter, setRefreshCounter] = useState(0);
   const pool = useMemo(() => new SimplePool(), []);
 
   const RELAYS = useMemo(() => {
@@ -367,9 +368,6 @@ export function useNostrFeed(customRelays?: string[]) {
   // Check if there are more posts to load
   const hasMore = visiblePosts < posts.length;
   
-  // Retry/refresh counter to force useEffect re-trigger
-  const [refreshCounter, setRefreshCounter] = useState(0);
-
   // Retry function that can be called from UI
   const retry = useCallback(() => {
     console.log('🔄 Manual retry triggered');
