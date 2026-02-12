@@ -61,9 +61,9 @@ export default function Feed() {
   // Selected relays state — default all selected
   const [selectedRelays, setSelectedRelays] = useState<Set<string>>(new Set());
 
-  // Initialize selectedRelays when allRelays loads
+  // Sync selectedRelays when allRelays changes (always select all by default)
   useEffect(() => {
-    if (allRelays.length > 0 && selectedRelays.size === 0) {
+    if (allRelays.length > 0) {
       setSelectedRelays(new Set(allRelays));
     }
   }, [allRelays]);
@@ -125,6 +125,10 @@ export default function Feed() {
   const selectAllRelays = useCallback(() => {
     setSelectedRelays(new Set(allRelays));
   }, [allRelays]);
+
+  const selectOurRelays = useCallback(() => {
+    setSelectedRelays(new Set(projectRelays));
+  }, [projectRelays]);
 
   const getRelayDisplayName = (relay: string) => {
     return relay.replace('wss://', '').replace('ws://', '').replace(/\/$/, '');
@@ -330,30 +334,31 @@ export default function Feed() {
     return () => observer.disconnect();
   }, [hasMore, loading, loadMore]);
 
-  // Which external relays are currently in the list
+  // External relays that are NOT already in project relays (avoid duplicates like relay.damus.io)
   const externalRelays = useMemo(() =>
-    EXTERNAL_RELAYS.filter(r => allRelays.includes(r)),
-    [allRelays]
+    EXTERNAL_RELAYS.filter(r => !projectRelays.includes(r)),
+    [projectRelays]
   );
 
   // Relay filter sidebar component with two groups
-  const RelayFilter = () => (
+  const RelayFilter = () => {
+    const allSelected = selectedRelays.size >= allRelays.length;
+    return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Radio className="h-4 w-4 text-primary" />
           <span className="font-semibold text-sm">Relays</span>
         </div>
-        {selectedRelays.size < allRelays.length && (
-          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={selectAllRelays}>
-            Select all
-          </Button>
-        )}
+        <Button variant="ghost" size="sm" className="h-7 text-xs"
+          onClick={allSelected ? selectOurRelays : selectAllRelays}>
+          {allSelected ? 'Select Ours' : 'Select All'}
+        </Button>
       </div>
 
       {/* Project Relays */}
       <div>
-        <p className="text-xs font-medium text-green-600 mb-1.5 px-2">🟢 Naši Relayi</p>
+        <p className="text-xs font-medium text-green-600 mb-1.5 px-2">🟢 Our Relays</p>
         <div className="space-y-1">
           {projectRelays.map(relay => (
             <label
@@ -373,7 +378,7 @@ export default function Feed() {
       {/* External Relays */}
       {externalRelays.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-blue-500 mb-1.5 px-2">🔵 Zunanji Relayi</p>
+          <p className="text-xs font-medium text-blue-500 mb-1.5 px-2">🔵 External Relays</p>
           <div className="space-y-1">
             {externalRelays.map(relay => (
               <label
@@ -395,7 +400,7 @@ export default function Feed() {
         {selectedRelays.size}/{allRelays.length} selected
       </p>
     </div>
-  );
+  );};
 
   return (
     <div className="w-full mx-auto px-4">
