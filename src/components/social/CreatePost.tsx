@@ -10,6 +10,15 @@ import { SimplePool, finalizeEvent } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "@/hooks/use-toast";
 
+const EXTERNAL_RELAYS = [
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+  'wss://relay.nostr.band',
+  'wss://relay.snort.social',
+  'wss://nostr.wine',
+  'wss://relay.primal.net',
+];
+
 interface CreatePostProps {
   onPostCreated?: () => void;
 }
@@ -27,7 +36,8 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
 
-  const relays = systemParameters?.relays || [];
+  const projectRelays = systemParameters?.relays || [];
+  const relays = [...projectRelays, ...EXTERNAL_RELAYS.filter(r => !projectRelays.includes(r))];
 
   // Default room from app_settings
   const defaultRoom = appSettings?.default_rooms?.[0] || '';
