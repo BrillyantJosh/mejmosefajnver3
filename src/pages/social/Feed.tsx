@@ -547,8 +547,8 @@ export default function Feed() {
                 </Card>
               ))}
 
-              {/* Infinite scroll trigger */}
-              {hasMore && (
+              {/* Infinite scroll trigger — only show when there are visible filtered posts and more to load */}
+              {hasMore && filteredPosts.length > 0 && (
                 <div ref={loadMoreRef} className="flex justify-center py-4">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
