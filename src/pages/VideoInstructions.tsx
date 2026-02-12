@@ -17,6 +17,41 @@ const videos = [
     question: "How to Get TAX report for Lana to FIAT exchange?",
     youtubeId: "ienYy-ve53E",
   },
+  {
+    id: "submit-bug",
+    question: "How To Submit Bug?",
+    youtubeId: "7KLswOwr4i0",
+  },
+  {
+    id: "personalise",
+    question: "How to personalise your Lana environment?",
+    youtubeId: "An-hUIc8Irs",
+  },
+  {
+    id: "create-events",
+    question: "How to create Lana Events?",
+    youtubeId: "H30egFg9L9o",
+  },
+  {
+    id: "attend-events",
+    question: "How to attend and share Lana Event?",
+    youtubeId: "MojnQsCjEnM",
+  },
+  {
+    id: "use-chat",
+    question: "How to use Chat?",
+    youtubeId: "pDXW3Z6lsPc",
+  },
+  {
+    id: "use-wallets",
+    question: "How to use Wallets?",
+    youtubeId: "sj-S0eALwYw",
+  },
+  {
+    id: "edit-profile",
+    question: "How to edit My Profile?",
+    youtubeId: "GBApPJM-BEE",
+  },
 ];
 
 export default function VideoInstructions() {
