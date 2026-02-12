@@ -281,8 +281,8 @@ export default function Chat() {
   const getLastMessageDisplay = (content: string | undefined) => {
     if (!content) return 'No messages';
     
-    // Check for dm-audio URL
-    const dmAudioRegex = /https:\/\/[^\s]+\.supabase\.co\/storage\/v1\/object\/public\/dm-audio\/[^\s]+\.(webm|mp4|m4a|aac|mpeg|mp3|wav|ogg)/i;
+    // Check for dm-audio URL (Supabase OR local /api/storage/ paths)
+    const dmAudioRegex = /(https:\/\/[^\s]+\.supabase\.co\/storage\/v1\/object\/public\/dm-audio\/[^\s]+|\/api\/storage\/dm-audio\/[^\s]+)\.(webm|mp4|m4a|aac|mpeg|mp3|wav|ogg)/i;
     if (dmAudioRegex.test(content)) {
       return (
         <span className="flex items-center gap-1">
@@ -291,9 +291,9 @@ export default function Chat() {
         </span>
       );
     }
-    
-    // Check for dm-images URL
-    const dmImageRegex = /https:\/\/[^\s]+\.supabase\.co\/storage\/v1\/object\/public\/dm-images\/[^\s]+\.(jpg|jpeg|png|gif|webp)/i;
+
+    // Check for dm-images URL (Supabase OR local /api/storage/ paths)
+    const dmImageRegex = /(https:\/\/[^\s]+\.supabase\.co\/storage\/v1\/object\/public\/dm-images\/[^\s]+|\/api\/storage\/dm-images\/[^\s]+)\.(jpg|jpeg|png|gif|webp)/i;
     if (dmImageRegex.test(content)) {
       return (
         <span className="flex items-center gap-1">
@@ -325,8 +325,8 @@ export default function Chat() {
   const renderMessageContent = (content: string, isOwn: boolean) => {
     const youtubeId = extractYouTubeId(content);
     
-    // Check for dm-audio URL first (highest priority)
-    const dmAudioRegex = /https:\/\/[^\s]+\.supabase\.co\/storage\/v1\/object\/public\/dm-audio\/[^\s]+\.(webm|mp4|m4a|aac|mpeg|mp3|wav|ogg)/i;
+    // Check for dm-audio URL first (highest priority) — Supabase OR local /api/storage/ paths
+    const dmAudioRegex = /(https:\/\/[^\s]+\.supabase\.co\/storage\/v1\/object\/public\/dm-audio\/[^\s]+|\/api\/storage\/dm-audio\/[^\s]+)\.(webm|mp4|m4a|aac|mpeg|mp3|wav|ogg)/i;
     const dmAudioMatch = content.match(dmAudioRegex);
     
     if (dmAudioMatch) {
@@ -353,8 +353,8 @@ export default function Chat() {
       );
     }
     
-    // Check for dm-images URLs (multiple images separated by newlines)
-    const dmImageRegex = /https:\/\/[^\s]+\.supabase\.co\/storage\/v1\/object\/public\/dm-images\/[^\s]+\.(jpg|jpeg|png|gif|webp)/gi;
+    // Check for dm-images URLs (multiple images separated by newlines) — Supabase OR local /api/storage/ paths
+    const dmImageRegex = /(https:\/\/[^\s]+\.supabase\.co\/storage\/v1\/object\/public\/dm-images\/[^\s]+|\/api\/storage\/dm-images\/[^\s]+)\.(jpg|jpeg|png|gif|webp)/gi;
     const imageMatches = content.match(dmImageRegex);
     
     if (imageMatches && imageMatches.length > 0) {
