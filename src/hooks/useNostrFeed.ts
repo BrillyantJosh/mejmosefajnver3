@@ -211,16 +211,20 @@ export function useNostrFeed(customRelays?: string[]) {
           console.log('📝 Phase 2: Main posts (filtered):', mainPosts.length);
           
           // Convert events to posts
-          const allPosts: NostrPost[] = mainPosts.map(event => ({
+          const phase2Posts: NostrPost[] = mainPosts.map(event => ({
             id: event.id,
             pubkey: event.pubkey,
             content: event.content,
             created_at: event.created_at,
             tags: event.tags
-          })).sort((a, b) => b.created_at - a.created_at);
-          
-          // Update posts with full set
-          setPosts(allPosts);
+          }));
+
+          // MERGE Phase 2 with existing Phase 1 posts (don't overwrite)
+          setPosts(prev => {
+            const existingIds = new Set(prev.map(p => p.id));
+            const newPosts = phase2Posts.filter(p => !existingIds.has(p.id));
+            return [...prev, ...newPosts].sort((a, b) => b.created_at - a.created_at);
+          });
           
           // Count all replies
           const replyCountMap = new Map<string, number>();
