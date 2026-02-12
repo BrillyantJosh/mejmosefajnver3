@@ -57,15 +57,12 @@ export default function Feed() {
 
   const activeRelays = useMemo(() => JSON.parse(activeRelaysKey) as string[], [activeRelaysKey]);
 
-  const { posts, loading, loadingMore, error, retryCount, hasMore, loadMore, retry } = useNostrFeed(activeRelays);
+  // Pass tag filter directly to the hook — relay-side NIP-12 filtering
+  const tagFilter = feedFilter === 'lana' ? 'LANA' : undefined;
+  const { posts, loading, loadingMore, error, retryCount, hasMore, loadMore, retry } = useNostrFeed(activeRelays, tagFilter);
 
-  // Filter posts by LANA tag
-  const filteredPosts = useMemo(() => {
-    if (feedFilter === 'all') return posts;
-    return posts.filter(post =>
-      post.tags?.some(tag => tag[0] === 't' && tag[1]?.toLowerCase() === 'lana')
-    );
-  }, [posts, feedFilter]);
+  // Posts are already filtered by the relay — no client-side filtering needed
+  const filteredPosts = posts;
 
   const relays = allRelays;
 

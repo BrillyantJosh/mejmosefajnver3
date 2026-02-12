@@ -12,7 +12,7 @@ export interface NostrPost {
   replyCount?: number;
 }
 
-export function useNostrFeed(customRelays?: string[]) {
+export function useNostrFeed(customRelays?: string[], tagFilter?: string) {
   const { parameters: systemParameters } = useSystemParameters();
   const [posts, setPosts] = useState<NostrPost[]>([]);
   const [replyCounts, setReplyCounts] = useState<Map<string, number>>(new Map());
@@ -34,6 +34,9 @@ export function useNostrFeed(customRelays?: string[]) {
 
   const RELAYS = useMemo(() => JSON.parse(relaysKey) as string[], [relaysKey]);
 
+  // Stabilize tagFilter — only re-trigger when actual value changes
+  const stableTagFilter = useMemo(() => tagFilter || null, [tagFilter]);
+
   // Get all post authors for bulk profile fetching
   const postAuthors = useMemo(() => 
     [...new Set(posts.map(p => p.pubkey))],
@@ -47,6 +50,12 @@ export function useNostrFeed(customRelays?: string[]) {
   useEffect(() => {
     if (RELAYS.length === 0) return; // Don't load with no relays
 
+    // Reset state for fresh load (important when tagFilter changes)
+    setPosts([]);
+    setReplyCounts(new Map());
+    setReady(false);
+    setVisiblePosts(10);
+
     let isSubscribed = true;
     let pollInterval: NodeJS.Timeout | null = null;
     let phase2Timeout: NodeJS.Timeout | null = null;
@@ -54,6 +63,7 @@ export function useNostrFeed(customRelays?: string[]) {
     const loadFeed = async (attempt = 1) => {
       console.log(`🔌 Connecting to Nostr relays for feed... (Attempt ${attempt}/3)`);
       console.log('📡 Relays:', RELAYS);
+      if (stableTagFilter) console.log(`🏷️ Tag filter: ${stableTagFilter}`);
       setLoading(true);
       setError(null);
 
@@ -64,11 +74,17 @@ export function useNostrFeed(customRelays?: string[]) {
         // ============ PHASE 1: QUICK LOAD (10 posts) ============
         console.log('⚡ PHASE 1: Quick loading first 10 posts...');
         
-        const quickFilter = {
+        const quickFilter: any = {
           kinds: [1],
           since: sevenDaysAgo,
           limit: 10  // Only 10 for fast initial display
         };
+
+        // NIP-12: Add hashtag filter for relay-side filtering (case variants)
+        if (stableTagFilter) {
+          quickFilter['#t'] = [stableTagFilter, stableTagFilter.toLowerCase()];
+          console.log(`🏷️ Phase 1: Filtering by #t tag: ${stableTagFilter}`);
+        }
         
         const phase1Start = Date.now();
         let quickEvents: Event[] = [];
@@ -135,11 +151,20 @@ export function useNostrFeed(customRelays?: string[]) {
             console.log('✅ Phase 1 complete - Posts visible!');
             setLoading(false);
             setReady(true);
+          } else {
+            // Phase 1 returned events but no main posts — still mark as loaded
+            console.log('ℹ️ Phase 1: No main posts found, continuing to Phase 2...');
           }
-          
+
         } catch (err) {
           console.error('❌ Phase 1 failed:', err);
           // Don't fail completely, try full load
+        }
+
+        // If Phase 1 didn't produce results, ensure loading state is correct for Phase 2
+        if (!isSubscribed) return;
+        if (!ready) {
+          // Phase 1 didn't set ready — Phase 2 will handle it
         }
         
         // ============ PHASE 2: BACKGROUND LOAD (more posts) ============
@@ -152,11 +177,17 @@ export function useNostrFeed(customRelays?: string[]) {
           console.log('🔄 PHASE 2: Loading more posts in background...');
           setLoadingMore(true);
           
-          const fullFilter = {
+          const fullFilter: any = {
             kinds: [1],
             // No 'since' - get latest 50 posts
             limit: 50
           };
+
+          // NIP-12: Add hashtag filter for relay-side filtering (case variants)
+          if (stableTagFilter) {
+            fullFilter['#t'] = [stableTagFilter, stableTagFilter.toLowerCase()];
+            console.log(`🏷️ Phase 2: Filtering by #t tag: ${stableTagFilter}`);
+          }
           
           const phase2Start = Date.now();
           let events: Event[] = [];
@@ -188,6 +219,8 @@ export function useNostrFeed(customRelays?: string[]) {
           } catch (err) {
             console.warn('⚠️ Phase 2 failed, keeping Phase 1 posts:', err);
             setLoadingMore(false);
+            setLoading(false);
+            setReady(true);
             return; // Keep Phase 1 posts
           }
           
@@ -197,6 +230,8 @@ export function useNostrFeed(customRelays?: string[]) {
           if (events.length === 0 || events.length === quickEvents.length) {
             console.log('ℹ️ No new posts in Phase 2, keeping Phase 1');
             setLoadingMore(false);
+            setLoading(false);
+            setReady(true);
             return;
           }
           
@@ -241,6 +276,8 @@ export function useNostrFeed(customRelays?: string[]) {
           
           console.log('✅ Phase 2 complete - All posts loaded, profiles will be loaded by cache hook!');
           setLoadingMore(false);
+          setLoading(false);
+          setReady(true);
           setRetryCount(0);
           setError(null);
         }, 100); // 100ms delay to let UI render
@@ -260,12 +297,17 @@ export function useNostrFeed(customRelays?: string[]) {
             : Math.floor(Date.now() / 1000) - 300; // Last 5 minutes
           
           try {
-            const newEvents = await Promise.race([
-              pool.querySync(RELAYS, {
+            const pollFilter: any = {
                 kinds: [1],
                 since: lastPostTime,
                 limit: 20
-              }),
+              };
+            if (stableTagFilter) {
+              pollFilter['#t'] = [stableTagFilter, stableTagFilter.toLowerCase()];
+            }
+
+            const newEvents = await Promise.race([
+              pool.querySync(RELAYS, pollFilter),
               new Promise<Event[]>((_, reject) => 
                 setTimeout(() => reject(new Error('Poll timeout')), 5000)
               )
@@ -356,7 +398,7 @@ export function useNostrFeed(customRelays?: string[]) {
       if (phase2Timeout) clearTimeout(phase2Timeout);
       pool.close(RELAYS);
     };
-  }, [RELAYS, pool, refreshCounter]);
+  }, [RELAYS, pool, refreshCounter, stableTagFilter]);
 
   // Merge posts with profiles and reply counts
   const postsWithProfiles = useMemo(() => {
