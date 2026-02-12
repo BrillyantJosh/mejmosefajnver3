@@ -257,8 +257,8 @@ export default function AiAdvisor() {
   const nostrHexId = session?.nostrHexId || '';
   const { updatedAnswers } = useAiTaskSSE(nostrHexId || null);
 
-  // Robust language fallback chain: profile > session > context > default 'sl'
-  const userLanguage = profile?.lang || session?.profileLang || context.userProfile?.language || 'sl';
+  // Robust language fallback chain: profile > session > context > default 'en'
+  const userLanguage = profile?.lang || session?.profileLang || context.userProfile?.language || 'en';
   const trans = getTranslation(userLanguage);
   
   const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null);
