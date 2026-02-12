@@ -1,7 +1,7 @@
 // VERSION: 2.2 - PWA Cache Fix + Version Display - 2026-01-22
 import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot, ExternalLink, PlayCircle } from "lucide-react";
+import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot, ExternalLink, PlayCircle, Bug } from "lucide-react";
 import logoImage from "@/assets/lana-logo.png";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -283,6 +283,12 @@ export default function MainLayout() {
                     <span>Video Instructions</span>
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/report-bug" className="flex items-center gap-2 cursor-pointer">
+                    <Bug className="h-4 w-4" />
+                    <span>Report Bug</span>
+                  </Link>
+                </DropdownMenuItem>
 
                 {/* Separator */}
                 {dynamicModules.length > 0 && <DropdownMenuSeparator />}
@@ -399,6 +405,18 @@ export default function MainLayout() {
               >
                 <PlayCircle className="h-5 w-5" />
                 <span>Video Instructions</span>
+              </Link>
+              <Link
+                to="/report-bug"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  location.pathname === "/report-bug"
+                    ? "bg-secondary text-primary font-medium"
+                    : "hover:bg-secondary/50"
+                }`}
+              >
+                <Bug className="h-5 w-5" />
+                <span>Report Bug</span>
               </Link>
 
               {/* Separator */}

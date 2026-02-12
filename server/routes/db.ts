@@ -6,7 +6,7 @@ const router = Router();
 // Allowed tables (whitelist for security)
 const ALLOWED_TABLES = new Set([
   'admin_users', 'ai_knowledge', 'ai_unsupported_prompts', 'ai_usage_logs',
-  'app_settings', 'direct_messages', 'dm_lashes', 'dm_last_seen',
+  'app_settings', 'bug_reports', 'direct_messages', 'dm_lashes', 'dm_last_seen',
   'dm_read_status', 'kind_38888', 'lash_users_history', 'nostr_profiles',
   'push_subscriptions', 'room_latest_posts', 'transaction_history', 'wallet_types'
 ]);
@@ -157,6 +157,7 @@ function convertBooleans(rows: any[], table: string): any[] {
 // Parse JSON columns back to objects
 const JSON_COLUMNS: Record<string, string[]> = {
   app_settings: ['value'],
+  bug_reports: ['images'],
   kind_38888: ['relays', 'electrum_servers', 'exchange_rates', 'trusted_signers', 'raw_event'],
   direct_messages: ['tags', 'raw_event'],
   nostr_profiles: ['raw_metadata'],
