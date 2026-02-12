@@ -258,20 +258,50 @@ router.post('/check-send-eligibility', async (req: Request, res: Response) => {
   }
 });
 
-// translate-post
+// translate-post (uses Gemini API, logs usage to ai_usage_logs)
 router.post('/translate-post', async (req: Request, res: Response) => {
   try {
-    const { text, targetLang, sourceLang } = req.body;
-    if (!text || !targetLang) return res.status(400).json({ error: 'text and targetLang required' });
+    // Support both frontend formats: { content, targetLanguage } and { text, targetLang }
+    const content = req.body.content || req.body.text;
+    const targetLanguage = req.body.targetLanguage || req.body.targetLang;
+    const nostrHexId = req.body.nostrHexId || null;
 
-    // Use a free translation API or return original if no API key
-    // For now, return the original text with a note
+    if (!content || !targetLanguage) {
+      return res.status(400).json({ error: 'content and targetLanguage required' });
+    }
+
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'Translation service not configured. GEMINI_API_KEY missing.' });
+    }
+
+    const langName = targetLanguage === 'sl' ? 'Slovenian' : targetLanguage === 'en' ? 'English' : targetLanguage;
+
+    const systemPrompt = `You are a professional translator. Translate the following text to ${langName}. Preserve the original meaning, tone, and formatting (including markdown bold, italic, bullet points). Return ONLY the translated text, nothing else. Do not add any explanation or notes.`;
+
+    const result = await callGemini(GEMINI_API_KEY, 'gemini-2.0-flash-lite', systemPrompt, content);
+
+    // Log usage to ai_usage_logs
+    if (nostrHexId || true) {
+      try {
+        const db = getDb();
+        const costUsd = (result.usage.prompt_tokens / 1_000_000) * 0.02 + (result.usage.completion_tokens / 1_000_000) * 0.08;
+        const costLana = costUsd * 270; // default rate
+        db.prepare(`
+          INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
+          VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)
+        `).run(nostrHexId || 'translate-anonymous', 'translate-gemini-flash-lite', result.usage.prompt_tokens, result.usage.completion_tokens, result.usage.total_tokens, costUsd, costLana);
+        console.log(`🌐 Translation [${targetLanguage}]: ${result.usage.total_tokens} tokens, $${costUsd.toFixed(6)} USD`);
+      } catch (err) {
+        console.error('Failed to log translation usage:', err);
+      }
+    }
+
     return res.json({
-      translatedText: text,
-      detectedLanguage: sourceLang || 'unknown',
-      note: 'Translation API not configured. Set TRANSLATION_API_KEY in server env.'
+      translatedText: result.content.trim(),
     });
   } catch (error: any) {
+    console.error('Translation error:', error.message);
     return res.status(500).json({ error: error.message });
   }
 });

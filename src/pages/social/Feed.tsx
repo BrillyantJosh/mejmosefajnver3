@@ -487,7 +487,7 @@ export default function Feed() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <PostContent content={post.content} tags={post.tags} />
+                    <PostContent content={post.content} tags={post.tags} nostrHexId={session?.nostrHexId} />
                     <div className="flex items-center gap-6 text-muted-foreground">
                       <button
                         className={`flex items-center gap-1.5 transition-all duration-200 ${
