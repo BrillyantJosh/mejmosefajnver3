@@ -116,10 +116,9 @@ function serveFile(bucket: string, relativePath: string, res: Response) {
 }
 
 // GET /api/storage/:bucket/* - Serve file (supports any subdirectory depth)
-router.get('/:bucket/*', (req: Request, res: Response) => {
-  const { bucket } = req.params;
-  const filePath = req.params[0]; // Everything after /:bucket/
-  return serveFile(bucket, filePath, res);
+router.get('/:bucket/{*filePath}', (req: Request, res: Response) => {
+  const { bucket, filePath } = req.params;
+  return serveFile(bucket, filePath as string, res);
 });
 
 // DELETE /api/storage/:bucket/:filename - Delete file
