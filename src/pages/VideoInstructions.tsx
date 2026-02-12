@@ -124,33 +124,41 @@ export default function VideoInstructions() {
         </CardContent>
       </Card>
 
-      <Accordion type="single" collapsible className="space-y-2">
-        {videos.map((video) => (
-          <AccordionItem
-            key={video.id}
-            value={video.id}
-            className="border rounded-lg px-4"
-          >
-            <AccordionTrigger className="text-left">
-              <div className="flex items-center gap-3">
-                <PlayCircle className="h-5 w-5 text-red-500 shrink-0" />
-                <span>{video.question}</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="aspect-video rounded-lg overflow-hidden">
-                <iframe
-                  src={`https://www.youtube.com/embed/${video.youtubeId}`}
-                  title={video.question}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="w-full h-full"
-                />
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        ))}
-      </Accordion>
+      {/* Lana Hub App Card */}
+      <Card className="border-2">
+        <CardHeader className="pb-3">
+          <span className="text-xl font-bold">How to use Lana Hub App</span>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <Accordion type="single" collapsible className="space-y-2">
+            {videos.map((video) => (
+              <AccordionItem
+                key={video.id}
+                value={video.id}
+                className="border rounded-lg px-4"
+              >
+                <AccordionTrigger className="text-left">
+                  <div className="flex items-center gap-3">
+                    <PlayCircle className="h-5 w-5 text-red-500 shrink-0" />
+                    <span>{video.question}</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="aspect-video rounded-lg overflow-hidden">
+                    <iframe
+                      src={`https://www.youtube.com/embed/${video.youtubeId}`}
+                      title={video.question}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="w-full h-full"
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </CardContent>
+      </Card>
     </div>
   );
 }
