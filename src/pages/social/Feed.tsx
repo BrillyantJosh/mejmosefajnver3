@@ -48,11 +48,14 @@ export default function Feed() {
     }
   }, [allRelays]);
 
-  // Stable array of selected relays for the hook
-  const activeRelays = useMemo(() => {
+  // Stable array of selected relays for the hook — use JSON to prevent reference changes
+  const activeRelaysKey = useMemo(() => {
     const selected = Array.from(selectedRelays);
-    return selected.length > 0 ? selected : allRelays;
+    const arr = selected.length > 0 ? selected : allRelays;
+    return JSON.stringify(arr);
   }, [selectedRelays, allRelays]);
+
+  const activeRelays = useMemo(() => JSON.parse(activeRelaysKey) as string[], [activeRelaysKey]);
 
   const { posts, loading, loadingMore, error, retryCount, hasMore, loadMore, retry } = useNostrFeed(activeRelays);
 
