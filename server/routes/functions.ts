@@ -251,12 +251,17 @@ router.post('/search-recipient', async (req: Request, res: Response) => {
 router.post('/check-send-eligibility', async (req: Request, res: Response) => {
   try {
     const { senderPubkey } = req.body;
+    const defaultServers = [
+      { host: 'electrum1.lanacoin.com', port: 5097 },
+      { host: 'electrum2.lanacoin.com', port: 5097 },
+      { host: 'electrum3.lanacoin.com', port: 5097 }
+    ];
 
     // Get current block height from Electrum
     let currentBlock = 0;
     let blockTime = Math.floor(Date.now() / 1000);
     try {
-      const headerInfo = await electrumCall('blockchain.headers.subscribe', [], undefined, 10000);
+      const headerInfo = await electrumCall('blockchain.headers.subscribe', [], defaultServers, 10000);
       currentBlock = headerInfo?.height || headerInfo?.block_height || 0;
       blockTime = headerInfo?.timestamp || blockTime;
     } catch (err) {
@@ -1812,11 +1817,17 @@ router.post('/send-lash-batch', async (req: Request, res: Response) => {
 
     console.log(`🚀 LASH batch: ${recipients.length} LASHes from ${changeAddress}`);
 
+    const defaultServers = [
+      { host: 'electrum1.lanacoin.com', port: 5097 },
+      { host: 'electrum2.lanacoin.com', port: 5097 },
+      { host: 'electrum3.lanacoin.com', port: 5097 }
+    ];
+
     // 1. Get current block height
     let currentBlockHeight = 0;
     let currentBlockTime = Math.floor(Date.now() / 1000);
     try {
-      const headerInfo = await electrumCall('blockchain.headers.subscribe', [], undefined, 10000);
+      const headerInfo = await electrumCall('blockchain.headers.subscribe', [], defaultServers, 10000);
       currentBlockHeight = headerInfo?.height || headerInfo?.block_height || 0;
       currentBlockTime = headerInfo?.timestamp || currentBlockTime;
     } catch (err) {
