@@ -124,7 +124,7 @@ export default function BugReportsAdmin() {
       const { error } = await supabase
         .from("bug_reports")
         .update({ status: editStatus, admin_notes: editNotes })
-        .eq("id", `eq.${selectedReport.id}`);
+        .eq("id", selectedReport.id);
 
       if (error) throw error;
 
