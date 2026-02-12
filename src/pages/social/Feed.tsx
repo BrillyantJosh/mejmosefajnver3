@@ -502,23 +502,26 @@ export default function Feed() {
                   <CardContent>
                     <PostContent content={post.content} tags={post.tags} nostrHexId={session?.nostrHexId} />
                     <div className="flex items-center gap-6 text-muted-foreground">
-                      <button
-                        className={`flex items-center gap-1.5 transition-all duration-200 ${
-                          lashedEvents.has(post.id)
-                            ? 'text-green-500'
-                            : 'hover:text-green-500 hover:scale-110'
-                        }`}
-                        onClick={() => !lashedEvents.has(post.id) && handleGiveLash(post.id, post.pubkey, post.profile?.lana_wallet_id)}
-                        disabled={lashedEvents.has(post.id)}
-                      >
-                        <Heart
-                          className={`h-5 w-5 transition-transform ${
+                      {/* LASH — only for posts with LANA tag (user has wallet) */}
+                      {post.tags?.some(tag => tag[0] === 't' && tag[1]?.toLowerCase() === 'lana') && (
+                        <button
+                          className={`flex items-center gap-1.5 transition-all duration-200 ${
                             lashedEvents.has(post.id)
-                              ? 'fill-green-500 scale-110'
-                              : ''
+                              ? 'text-green-500'
+                              : 'hover:text-green-500 hover:scale-110'
                           }`}
-                        />
-                      </button>
+                          onClick={() => !lashedEvents.has(post.id) && handleGiveLash(post.id, post.pubkey, post.profile?.lana_wallet_id)}
+                          disabled={lashedEvents.has(post.id)}
+                        >
+                          <Heart
+                            className={`h-5 w-5 transition-transform ${
+                              lashedEvents.has(post.id)
+                                ? 'fill-green-500 scale-110'
+                                : ''
+                            }`}
+                          />
+                        </button>
+                      )}
                       <button
                         className="flex items-center gap-2 hover:text-primary transition-colors"
                         onClick={() => setExpandedPostId(expandedPostId === post.id ? null : post.id)}
@@ -526,22 +529,28 @@ export default function Feed() {
                         <MessageCircle className="h-4 w-4" />
                         <span className="text-sm">{post.replyCount || 0}</span>
                       </button>
-                      <button
-                        className="flex items-center gap-2 hover:text-primary transition-colors"
-                        onClick={() => navigate(`/own/start/${post.id}`)}
-                        title="Start OWN process"
-                      >
-                        <Triangle className="h-4 w-4" />
-                        <span className="text-sm">OWN</span>
-                      </button>
-                      <button
-                        className="flex items-center gap-2 hover:text-green-600 transition-colors"
-                        onClick={() => navigate(`/rock/grant-new?pubkey=${post.pubkey}`)}
-                        title="Grant ROCK endorsement"
-                      >
-                        <CheckCircle className="h-4 w-4" />
-                        <span className="text-sm">ROCK</span>
-                      </button>
+                      {/* OWN — only for posts with LANA tag */}
+                      {post.tags?.some(tag => tag[0] === 't' && tag[1]?.toLowerCase() === 'lana') && (
+                        <button
+                          className="flex items-center gap-2 hover:text-primary transition-colors"
+                          onClick={() => navigate(`/own/start/${post.id}`)}
+                          title="Start OWN process"
+                        >
+                          <Triangle className="h-4 w-4" />
+                          <span className="text-sm">OWN</span>
+                        </button>
+                      )}
+                      {/* ROCK — only for posts with LANA tag */}
+                      {post.tags?.some(tag => tag[0] === 't' && tag[1]?.toLowerCase() === 'lana') && (
+                        <button
+                          className="flex items-center gap-2 hover:text-green-600 transition-colors"
+                          onClick={() => navigate(`/rock/grant-new?pubkey=${post.pubkey}`)}
+                          title="Grant ROCK endorsement"
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                          <span className="text-sm">ROCK</span>
+                        </button>
+                      )}
                     </div>
 
                     {/* Show replies when expanded */}
