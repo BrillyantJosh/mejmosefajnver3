@@ -203,6 +203,21 @@ export function initializeSchema(db: Database.Database): void {
       usd_to_lana_rate REAL DEFAULT 270
     );
 
+    CREATE TABLE IF NOT EXISTS bug_reports (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      nostr_hex_id TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'bug' CHECK (type IN ('bug', 'feature')),
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      images TEXT DEFAULT '[]',
+      notify_method TEXT DEFAULT '',
+      notify_contact TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed', 'wont_fix')),
+      admin_notes TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- =============================================
     -- INDEXES
     -- =============================================
@@ -236,7 +251,11 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_room_latest_posts_slug ON room_latest_posts(room_slug);
     CREATE INDEX IF NOT EXISTS idx_transaction_history_sender_block ON transaction_history(sender_pubkey, block_height);
     CREATE INDEX IF NOT EXISTS idx_transaction_history_txid ON transaction_history(txid);
+    CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON bug_reports(status);
+    CREATE INDEX IF NOT EXISTS idx_bug_reports_nostr ON bug_reports(nostr_hex_id);
+    CREATE INDEX IF NOT EXISTS idx_bug_reports_created ON bug_reports(created_at);
+    CREATE INDEX IF NOT EXISTS idx_bug_reports_type ON bug_reports(type);
   `);
 
-  console.log('SQLite schema initialized (18 tables + indexes)');
+  console.log('SQLite schema initialized (19 tables + indexes)');
 }

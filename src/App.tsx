@@ -109,8 +109,10 @@ import AiAdvisor from "./pages/AiAdvisor";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminSettings from "./pages/admin/AdminSettings";
+import BugReportsAdmin from "./pages/admin/BugReports";
 import DatabaseBrowser from "./pages/admin/DatabaseBrowser";
 import TrainAI from "./pages/admin/TrainAI";
+import ReportBug from "./pages/ReportBug";
 import PublicPost from "./pages/PublicPost";
 import PublicEvent from "./pages/PublicEvent";
 import PublicProposal from "./pages/PublicProposal";
@@ -143,6 +145,7 @@ const App = () => (
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/video-instructions" element={<VideoInstructions />} />
+                  <Route path="/report-bug" element={<ReportBug />} />
                   <Route path="/tax" element={<TaxCountries />} />
                   <Route path="/social" element={<SocialLayout />}>
                     <Route index element={<Navigate to="/social/home" replace />} />
@@ -271,6 +274,7 @@ const App = () => (
                   >
                     <Route index element={<TrainAI />} />
                     <Route path="train-ai" element={<TrainAI />} />
+                    <Route path="bug-reports" element={<BugReportsAdmin />} />
                     <Route path="database" element={<DatabaseBrowser />} />
                     <Route path="settings" element={<AdminSettings />} />
                   </Route>
