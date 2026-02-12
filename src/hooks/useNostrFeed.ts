@@ -26,9 +26,13 @@ export function useNostrFeed(customRelays?: string[]) {
   const [refreshCounter, setRefreshCounter] = useState(0);
   const pool = useMemo(() => new SimplePool(), []);
 
-  const RELAYS = useMemo(() => {
-    return customRelays && customRelays.length > 0 ? customRelays : (systemParameters?.relays || []);
+  // Stabilize RELAYS reference — only change when actual URLs change, not array reference
+  const relaysKey = useMemo(() => {
+    const arr = customRelays && customRelays.length > 0 ? customRelays : (systemParameters?.relays || []);
+    return JSON.stringify(arr);
   }, [customRelays, systemParameters?.relays]);
+
+  const RELAYS = useMemo(() => JSON.parse(relaysKey) as string[], [relaysKey]);
 
   // Get all post authors for bulk profile fetching
   const postAuthors = useMemo(() => 
@@ -41,8 +45,11 @@ export function useNostrFeed(customRelays?: string[]) {
 
 
   useEffect(() => {
+    if (RELAYS.length === 0) return; // Don't load with no relays
+
     let isSubscribed = true;
     let pollInterval: NodeJS.Timeout | null = null;
+    let phase2Timeout: NodeJS.Timeout | null = null;
 
     const loadFeed = async (attempt = 1) => {
       console.log(`🔌 Connecting to Nostr relays for feed... (Attempt ${attempt}/3)`);
@@ -139,7 +146,7 @@ export function useNostrFeed(customRelays?: string[]) {
         if (!isSubscribed) return;
         
         // Small delay to let UI render
-        setTimeout(async () => {
+        phase2Timeout = setTimeout(async () => {
           if (!isSubscribed) return;
           
           console.log('🔄 PHASE 2: Loading more posts in background...');
@@ -342,6 +349,7 @@ export function useNostrFeed(customRelays?: string[]) {
     return () => {
       isSubscribed = false;
       if (pollInterval) clearInterval(pollInterval);
+      if (phase2Timeout) clearTimeout(phase2Timeout);
       pool.close(RELAYS);
     };
   }, [RELAYS, pool, refreshCounter]);
