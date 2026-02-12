@@ -239,7 +239,7 @@ export default function ReportBug() {
         description: description.trim(),
         images: imageUrls,
         notify_method: notifyMethod || "",
-        notify_contact: notifyContact || "",
+        notify_contact: notifyMethod === "dm" ? "" : (notifyContact || ""),
       });
 
       if (error) throw error;
@@ -273,7 +273,6 @@ export default function ReportBug() {
     switch (notifyMethod) {
       case "email": return "your@email.com";
       case "gsm": return "+386 XX XXX XXX";
-      case "dm": return "Your Nostr npub or display name";
       case "whatsapp": return "+386 XX XXX XXX";
       default: return "";
     }
@@ -456,7 +455,7 @@ export default function ReportBug() {
                   </SelectContent>
                 </Select>
               </div>
-              {notifyMethod && notifyMethod !== "none" && (
+              {notifyMethod && notifyMethod !== "none" && notifyMethod !== "dm" && (
                 <div>
                   <Label>Contact</Label>
                   <Input
