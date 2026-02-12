@@ -21,6 +21,15 @@ import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { useNavigate } from "react-router-dom";
 import { useAiUsageThisMonth } from "@/hooks/useAiUsageThisMonth";
 
+const EXTERNAL_RELAYS = [
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+  'wss://relay.nostr.band',
+  'wss://relay.snort.social',
+  'wss://nostr.wine',
+  'wss://relay.primal.net',
+];
+
 export default function Feed() {
   const navigate = useNavigate();
   const { parameters: systemParameters } = useSystemParameters();
@@ -37,8 +46,17 @@ export default function Feed() {
   const { fetchUserLashes, addLash } = useLashHistory();
   const { totalLana: aiUsageLana, isLoading: usageLoading } = useAiUsageThisMonth();
 
-  // All available relays from system parameters
-  const allRelays = useMemo(() => systemParameters?.relays || [], [systemParameters?.relays]);
+  // Project relays from system parameters
+  const projectRelays = useMemo(() => systemParameters?.relays || [], [systemParameters?.relays]);
+
+  // All relays = project + external (deduplicated)
+  const allRelays = useMemo(() => {
+    const combined = [...projectRelays];
+    for (const r of EXTERNAL_RELAYS) {
+      if (!combined.includes(r)) combined.push(r);
+    }
+    return combined;
+  }, [projectRelays]);
 
   // Selected relays state — default all selected
   const [selectedRelays, setSelectedRelays] = useState<Set<string>>(new Set());
@@ -312,7 +330,13 @@ export default function Feed() {
     return () => observer.disconnect();
   }, [hasMore, loading, loadMore]);
 
-  // Relay filter sidebar component
+  // Which external relays are currently in the list
+  const externalRelays = useMemo(() =>
+    EXTERNAL_RELAYS.filter(r => allRelays.includes(r)),
+    [allRelays]
+  );
+
+  // Relay filter sidebar component with two groups
   const RelayFilter = () => (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -326,20 +350,47 @@ export default function Feed() {
           </Button>
         )}
       </div>
-      <div className="space-y-2">
-        {allRelays.map(relay => (
-          <label
-            key={relay}
-            className="flex items-center gap-2 cursor-pointer text-sm hover:bg-muted/50 rounded px-2 py-1.5 transition-colors"
-          >
-            <Checkbox
-              checked={selectedRelays.has(relay)}
-              onCheckedChange={() => toggleRelay(relay)}
-            />
-            <span className="truncate text-muted-foreground">{getRelayDisplayName(relay)}</span>
-          </label>
-        ))}
+
+      {/* Project Relays */}
+      <div>
+        <p className="text-xs font-medium text-green-600 mb-1.5 px-2">🟢 Naši Relayi</p>
+        <div className="space-y-1">
+          {projectRelays.map(relay => (
+            <label
+              key={relay}
+              className="flex items-center gap-2 cursor-pointer text-sm hover:bg-muted/50 rounded px-2 py-1.5 transition-colors"
+            >
+              <Checkbox
+                checked={selectedRelays.has(relay)}
+                onCheckedChange={() => toggleRelay(relay)}
+              />
+              <span className="truncate text-muted-foreground">{getRelayDisplayName(relay)}</span>
+            </label>
+          ))}
+        </div>
       </div>
+
+      {/* External Relays */}
+      {externalRelays.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-blue-500 mb-1.5 px-2">🔵 Zunanji Relayi</p>
+          <div className="space-y-1">
+            {externalRelays.map(relay => (
+              <label
+                key={relay}
+                className="flex items-center gap-2 cursor-pointer text-sm hover:bg-muted/50 rounded px-2 py-1.5 transition-colors"
+              >
+                <Checkbox
+                  checked={selectedRelays.has(relay)}
+                  onCheckedChange={() => toggleRelay(relay)}
+                />
+                <span className="truncate text-muted-foreground">{getRelayDisplayName(relay)}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground">
         {selectedRelays.size}/{allRelays.length} selected
       </p>
