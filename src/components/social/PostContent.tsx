@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 interface PostContentProps {
   content: string;
   tags?: string[][];
+  nostrHexId?: string;
 }
 
 // Helper component to render formatted text (bold and bullets)
@@ -160,7 +161,7 @@ function FormattedText({ text }: { text: string }) {
   );
 }
 
-export function PostContent({ content, tags }: PostContentProps) {
+export function PostContent({ content, tags, nostrHexId }: PostContentProps) {
   const [translatedContent, setTranslatedContent] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState<'sl' | 'en'>('sl');
@@ -171,7 +172,7 @@ export function PostContent({ content, tags }: PostContentProps) {
     
     try {
       const { data, error } = await supabase.functions.invoke('translate-post', {
-        body: { content, targetLanguage: language }
+        body: { content, targetLanguage: language, nostrHexId }
       });
 
       if (error) {
