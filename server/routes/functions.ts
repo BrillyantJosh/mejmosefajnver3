@@ -247,14 +247,44 @@ router.post('/search-recipient', async (req: Request, res: Response) => {
   }
 });
 
-// check-send-eligibility
+// check-send-eligibility — checks if sender can send in current block
 router.post('/check-send-eligibility', async (req: Request, res: Response) => {
   try {
-    const { senderPubkey, recipientAddress, amount } = req.body;
-    // Simple eligibility check - can be extended
-    return res.json({ eligible: true, reason: null });
+    const { senderPubkey } = req.body;
+
+    // Get current block height from Electrum
+    let currentBlock = 0;
+    let blockTime = Math.floor(Date.now() / 1000);
+    try {
+      const headerInfo = await electrumCall('blockchain.headers.subscribe', [], undefined, 10000);
+      currentBlock = headerInfo?.height || headerInfo?.block_height || 0;
+      blockTime = headerInfo?.timestamp || blockTime;
+    } catch (err) {
+      console.warn('⚠️ Could not fetch block height, allowing send:', err);
+      return res.json({ canSend: true, currentBlock: 0, blockTime });
+    }
+
+    // Check last transaction for this sender
+    let lastBlock: number | undefined;
+    if (senderPubkey) {
+      try {
+        const db = getDb();
+        const lastTx = db.prepare(
+          'SELECT block_height FROM transaction_history WHERE sender_pubkey = ? ORDER BY block_height DESC LIMIT 1'
+        ).get(senderPubkey) as { block_height: number } | undefined;
+        lastBlock = lastTx?.block_height;
+      } catch (err) {
+        console.warn('⚠️ Could not query transaction_history:', err);
+      }
+    }
+
+    const canSend = !lastBlock || currentBlock > lastBlock;
+    console.log(`📊 Block eligibility: current=${currentBlock}, last=${lastBlock || 'none'}, canSend=${canSend}`);
+
+    return res.json({ canSend, currentBlock, lastBlock, blockTime });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    console.error('❌ check-send-eligibility error:', error);
+    return res.json({ canSend: true, currentBlock: 0, blockTime: Math.floor(Date.now() / 1000) });
   }
 });
 
@@ -1771,25 +1801,142 @@ router.post('/send-unconditional-payment', async (req: Request, res: Response) =
   }
 });
 
-// send-lash-batch
+// send-lash-batch — batch LASH payment: groups recipients, builds single TX, broadcasts
 router.post('/send-lash-batch', async (req: Request, res: Response) => {
   try {
-    // sendLanaTransaction imported at top of file
-    const { transactions } = req.body;
-    const results: any[] = [];
+    const { privateKeyWIF, senderPrivkey, senderPubkey, recipients, changeAddress } = req.body;
 
-    for (const tx of (transactions || [])) {
+    if (!privateKeyWIF || !senderPubkey || !recipients || !changeAddress || recipients.length === 0) {
+      return res.status(400).json({ success: false, error: 'Missing required parameters' });
+    }
+
+    console.log(`🚀 LASH batch: ${recipients.length} LASHes from ${changeAddress}`);
+
+    // 1. Get current block height
+    let currentBlockHeight = 0;
+    let currentBlockTime = Math.floor(Date.now() / 1000);
+    try {
+      const headerInfo = await electrumCall('blockchain.headers.subscribe', [], undefined, 10000);
+      currentBlockHeight = headerInfo?.height || headerInfo?.block_height || 0;
+      currentBlockTime = headerInfo?.timestamp || currentBlockTime;
+    } catch (err) {
+      console.warn('⚠️ Could not fetch block height, proceeding:', err);
+    }
+
+    // 2. Check block eligibility
+    if (currentBlockHeight > 0) {
       try {
-        const result = await sendLanaTransaction(tx);
-        results.push({ ...result, index: tx.index });
-      } catch (err: any) {
-        results.push({ success: false, error: err.message, index: tx.index });
+        const db = getDb();
+        const lastTx = db.prepare(
+          'SELECT block_height FROM transaction_history WHERE sender_pubkey = ? ORDER BY block_height DESC LIMIT 1'
+        ).get(senderPubkey) as { block_height: number } | undefined;
+
+        if (lastTx && currentBlockHeight <= lastTx.block_height) {
+          return res.status(400).json({
+            success: false,
+            error: `Must wait for next block. Current: ${currentBlockHeight}, Last TX: ${lastTx.block_height}`,
+            canSend: false,
+            lastBlock: lastTx.block_height,
+            currentBlock: currentBlockHeight,
+            blockTime: currentBlockTime
+          });
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not check transaction_history:', err);
       }
     }
 
-    return res.json({ results });
+    // 3. Group recipients by address (sum amounts for same address)
+    const recipientMap = new Map<string, {
+      address: string;
+      totalAmount: number;
+      pubkeys: string[];
+      eventIds: string[];
+      lashIds: string[];
+    }>();
+
+    for (const r of recipients) {
+      const existing = recipientMap.get(r.address);
+      if (existing) {
+        existing.totalAmount += r.amount;
+        existing.pubkeys.push(r.recipientPubkey);
+        existing.eventIds.push(r.eventId);
+        existing.lashIds.push(r.lashId);
+      } else {
+        recipientMap.set(r.address, {
+          address: r.address,
+          totalAmount: r.amount,
+          pubkeys: [r.recipientPubkey],
+          eventIds: [r.eventId],
+          lashIds: [r.lashId]
+        });
+      }
+    }
+
+    const optimizedRecipients = Array.from(recipientMap.values()).map(r => ({
+      address: r.address,
+      amount: r.totalAmount
+    }));
+
+    // Build vout mapping: address → output index
+    const voutMap = new Map<string, number>();
+    optimizedRecipients.forEach((r, index) => {
+      voutMap.set(r.address, index);
+    });
+
+    console.log(`💡 Optimized to ${optimizedRecipients.length} unique addresses (from ${recipients.length} LASHes)`);
+
+    // 4. Send batch transaction using existing crypto function
+    const result = await sendBatchLanaTransaction({
+      senderAddress: changeAddress,
+      recipients: optimizedRecipients,
+      privateKey: privateKeyWIF
+    });
+
+    if (!result.success) {
+      console.error('❌ Batch transaction failed:', result.error);
+      return res.status(400).json({ success: false, error: result.error });
+    }
+
+    console.log(`✅ Batch TX broadcast: ${result.txHash}`);
+
+    // 5. Save to transaction_history
+    try {
+      const db = getDb();
+      db.prepare(`
+        INSERT INTO transaction_history (id, txid, sender_pubkey, block_height, block_time, used_utxos)
+        VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?)
+      `).run(result.txHash, senderPubkey, currentBlockHeight, currentBlockTime, '[]');
+      console.log(`✅ Transaction saved to history: Block ${currentBlockHeight}`);
+    } catch (err) {
+      console.warn('⚠️ Failed to save transaction history:', err);
+    }
+
+    // 6. Build expanded recipients with vout, fromWallet, toWallet
+    const expandedRecipients = recipients.map((r: any) => ({
+      lashId: r.lashId,
+      eventId: r.eventId,
+      recipientPubkey: r.recipientPubkey,
+      amount: r.amount,
+      fromWallet: changeAddress,
+      toWallet: r.address,
+      vout: voutMap.get(r.address) ?? 0
+    }));
+
+    return res.json({
+      success: true,
+      txid: result.txHash,
+      blockHeight: currentBlockHeight,
+      blockTime: currentBlockTime,
+      totalRecipients: recipients.length,
+      uniqueAddresses: optimizedRecipients.length,
+      totalAmount: result.totalAmount,
+      fee: result.fee,
+      recipients: expandedRecipients
+    });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    console.error('❌ send-lash-batch error:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
