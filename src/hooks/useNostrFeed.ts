@@ -12,7 +12,7 @@ export interface NostrPost {
   replyCount?: number;
 }
 
-export function useNostrFeed() {
+export function useNostrFeed(customRelays?: string[]) {
   const { parameters: systemParameters } = useSystemParameters();
   const [posts, setPosts] = useState<NostrPost[]>([]);
   const [replyCounts, setReplyCounts] = useState<Map<string, number>>(new Map());
@@ -24,10 +24,10 @@ export function useNostrFeed() {
   const [visiblePosts, setVisiblePosts] = useState(10);
   const [relayStatus, setRelayStatus] = useState<Map<string, { success: number; failures: number; avgTime: number }>>(new Map());
   const pool = useMemo(() => new SimplePool(), []);
-  
+
   const RELAYS = useMemo(() => {
-    return systemParameters?.relays || [];
-  }, [systemParameters?.relays]);
+    return customRelays && customRelays.length > 0 ? customRelays : (systemParameters?.relays || []);
+  }, [customRelays, systemParameters?.relays]);
 
   // Get all post authors for bulk profile fetching
   const postAuthors = useMemo(() => 

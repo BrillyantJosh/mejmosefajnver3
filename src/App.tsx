@@ -148,7 +148,7 @@ const App = () => (
                   <Route path="/report-bug" element={<ReportBug />} />
                   <Route path="/tax" element={<TaxCountries />} />
                   <Route path="/social" element={<SocialLayout />}>
-                    <Route index element={<Navigate to="/social/home" replace />} />
+                    <Route index element={<Navigate to="/social/feed" replace />} />
                     <Route path="feed" element={<Feed />} />
                     <Route path="home" element={<SocialHome />} />
                     <Route path="feed/:roomSlug" element={<RoomFeed />} />
