@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Heart, MessageCircle, Share, Loader2, MoreVertical, Trash2, Triangle, CheckCircle, Radio, ChevronDown } from "lucide-react";
+import { Heart, MessageCircle, Share, Loader2, MoreVertical, Trash2, Triangle, CheckCircle, Radio, ChevronDown, Coins } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,6 +19,7 @@ import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { useLashHistory } from "@/hooks/useLashHistory";
 import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { useNavigate } from "react-router-dom";
+import { useAiUsageThisMonth } from "@/hooks/useAiUsageThisMonth";
 
 export default function Feed() {
   const navigate = useNavigate();
@@ -34,6 +35,7 @@ export default function Feed() {
   const { giveLash } = useNostrLash();
   const { incrementUnpaidCount } = useNostrUnpaidLashes();
   const { fetchUserLashes, addLash } = useLashHistory();
+  const { totalLana: aiUsageLana, isLoading: usageLoading } = useAiUsageThisMonth();
 
   // All available relays from system parameters
   const allRelays = useMemo(() => systemParameters?.relays || [], [systemParameters?.relays]);
@@ -373,8 +375,8 @@ export default function Feed() {
             )}
           </div>
 
-          {/* All / Lana Filter Toggle */}
-          <div className="flex gap-2">
+          {/* All / Lana Filter Toggle + LANA Usage */}
+          <div className="flex items-center gap-2">
             <Button
               variant={feedFilter === 'all' ? 'default' : 'outline'}
               size="sm"
@@ -389,6 +391,15 @@ export default function Feed() {
             >
               Lana
             </Button>
+            {/* LANA usage badge — same as AI Advisor */}
+            {!usageLoading && aiUsageLana > 0 && (
+              <Badge variant="outline" className="flex items-center gap-1 text-[10px] sm:text-xs px-1.5 sm:px-2 ml-auto">
+                <Coins className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                <span className="hidden xs:inline">{aiUsageLana.toFixed(2)}</span>
+                <span className="xs:hidden">{aiUsageLana.toFixed(0)}</span>
+                <span className="hidden sm:inline">LANA</span>
+              </Badge>
+            )}
           </div>
 
           {/* Error State */}

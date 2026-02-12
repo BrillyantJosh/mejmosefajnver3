@@ -38,9 +38,9 @@ export function useAiUsageThisMonth(): AiUsageData {
           return;
         }
 
-        // Sum up the cost_lana values and multiply by 10
+        // Sum up the cost_lana values and multiply by 20 (service markup)
         const total = data?.reduce((sum, row) => sum + (row.cost_lana || 0), 0) || 0;
-        const totalWithMultiplier = total * 10;
+        const totalWithMultiplier = total * 20;
         
         setTotalLana(totalWithMultiplier);
         setRequestCount(data?.length || 0);
