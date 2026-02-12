@@ -335,10 +335,10 @@ export default function Feed() {
   );
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="flex gap-8">
+    <div className="w-full mx-auto px-4">
+      <div className="flex justify-between gap-8">
         {/* Main Feed Column */}
-        <div className="flex-1 max-w-2xl space-y-4">
+        <div className="flex-1 max-w-2xl mx-auto space-y-4">
 
           {/* Mobile Relay Filter Toggle */}
           <div className="lg:hidden">
