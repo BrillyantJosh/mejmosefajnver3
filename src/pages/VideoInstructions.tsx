@@ -67,6 +67,16 @@ const videos = [
     question: "How to edit My Profile?",
     youtubeId: "GBApPJM-BEE",
   },
+  {
+    id: "social-media",
+    question: "Lana Social Media Works",
+    youtubeId: "vZM7ikmlMac",
+  },
+  {
+    id: "work-with-lashes",
+    question: "How to Work with Lashes?",
+    youtubeId: "OuPgH14L6Z8",
+  },
 ];
 
 export default function VideoInstructions() {
