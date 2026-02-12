@@ -311,6 +311,9 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
         tags.push(["a", defaultRoom]);
       }
 
+      // Add LANA hashtag tag (NIP-12)
+      tags.push(["t", "LANA"]);
+
       // Add image URLs as NIP-92 imeta tags for compatibility with Damus and other clients
       imageUrls.forEach(url => {
         tags.push(['imeta', `url ${url}`, 'm image/jpeg']);
