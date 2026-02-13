@@ -57,6 +57,9 @@ export function useNostrDMs() {
   const initialLoadDone = useRef(false);
   // Guard against concurrent poll requests
   const isPolling = useRef(false);
+  // Mirror readStatuses as ref to avoid re-triggering initial load effect
+  const readStatusesRef = useRef<Map<string, boolean>>(new Map());
+  readStatusesRef.current = readStatuses;
 
   // Get all conversation pubkeys for bulk profile fetching
   const conversationPubkeys = useMemo(() =>
@@ -284,6 +287,110 @@ export function useNostrDMs() {
     });
   }, [session?.nostrHexId, decryptMessage, readStatuses, saveMessageReadStatus]);
 
+  // Batch decrypt messages in parallel for fast initial load
+  const decryptMessagesBatch = useCallback(async (
+    events: Event[],
+    userHexId: string,
+    batchSize = 50
+  ) => {
+    const results: Map<string, {
+      decryptedContent: string;
+      otherPubkey: string;
+      isOwn: boolean;
+      replyToId?: string;
+      event: Event;
+    }> = new Map();
+
+    for (let i = 0; i < events.length; i += batchSize) {
+      const batch = events.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        batch.map(async (event) => {
+          const isOwn = event.pubkey === userHexId;
+          const recipientPubkey = event.tags.find(tag => tag[0] === 'p')?.[1] || '';
+          const otherPubkey = isOwn ? recipientPubkey : event.pubkey;
+
+          if (!otherPubkey) return null;
+
+          // Check if this message is actually for me
+          const isForMe = isOwn || recipientPubkey === userHexId;
+          if (!isForMe) return null;
+
+          // Check for reply tag
+          const replyTag = event.tags.find(
+            tag => tag[0] === 'e' && tag[3] === 'reply'
+          );
+          const replyToId = replyTag ? replyTag[1] : undefined;
+
+          const decryptedContent = await decryptMessage(event, otherPubkey);
+
+          return {
+            eventId: event.id,
+            decryptedContent,
+            otherPubkey,
+            isOwn,
+            replyToId,
+            event
+          };
+        })
+      );
+
+      for (const result of batchResults) {
+        if (result) {
+          results.set(result.eventId, {
+            decryptedContent: result.decryptedContent,
+            otherPubkey: result.otherPubkey,
+            isOwn: result.isOwn,
+            replyToId: result.replyToId,
+            event: result.event
+          });
+        }
+      }
+    }
+
+    return results;
+  }, [decryptMessage]);
+
+  // Batch save read statuses (fire and forget, non-blocking)
+  const saveBatchReadStatuses = useCallback(async (
+    statuses: Array<{
+      user_nostr_id: string;
+      message_event_id: string;
+      sender_pubkey: string;
+      conversation_pubkey: string;
+    }>
+  ) => {
+    if (statuses.length === 0) return;
+
+    const CHUNK_SIZE = 100;
+    for (let i = 0; i < statuses.length; i += CHUNK_SIZE) {
+      const chunk = statuses.slice(i, i + CHUNK_SIZE);
+      try {
+        const rows = chunk.map(s => ({
+          user_nostr_id: s.user_nostr_id,
+          message_event_id: s.message_event_id,
+          sender_pubkey: s.sender_pubkey,
+          conversation_pubkey: s.conversation_pubkey,
+          is_read: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }));
+
+        const { error } = await supabase
+          .from('dm_read_status')
+          .upsert(rows, {
+            onConflict: 'user_nostr_id,message_event_id',
+            ignoreDuplicates: true
+          });
+
+        if (error) {
+          console.error('❌ Error batch saving read statuses:', error);
+        }
+      } catch (error) {
+        console.error('❌ Exception in saveBatchReadStatuses:', error);
+      }
+    }
+  }, []);
+
   // Fetch DM events from server endpoint
   const fetchDMEvents = useCallback(async (since?: number) => {
     if (!session?.nostrHexId) return [];
@@ -335,19 +442,102 @@ export function useNostrDMs() {
 
       if (!isActive) return;
 
-      console.log(`📨 Received ${events.length} DM events from server`);
+      // Filter out already-seen events
+      const newEvents = events.filter((e: Event) => {
+        if (seenEventIds.current.has(e.id)) return false;
+        seenEventIds.current.add(e.id);
+        return true;
+      });
 
-      // Process all events
-      for (const event of events) {
-        if (!isActive) break;
-        if (seenEventIds.current.has(event.id)) continue;
-        seenEventIds.current.add(event.id);
-        setTotalEvents(prev => prev + 1);
-        await processMessage(event as Event);
+      console.log(`📨 Received ${events.length} DM events, ${newEvents.length} new`);
 
-        // Track latest timestamp
-        if (event.created_at > latestTimestamp.current) {
-          latestTimestamp.current = event.created_at;
+      if (newEvents.length > 0) {
+        // PHASE 1: Decrypt all messages in parallel batches (fast)
+        const startTime = Date.now();
+        const decryptedMap = await decryptMessagesBatch(
+          newEvents as Event[],
+          session!.nostrHexId,
+          50
+        );
+        console.log(`🔓 Decrypted ${decryptedMap.size} messages in ${Date.now() - startTime}ms`);
+
+        if (!isActive) return;
+
+        // PHASE 2: Build conversations Map in one pass, single state update
+        const readStatusPending: Array<{
+          user_nostr_id: string;
+          message_event_id: string;
+          sender_pubkey: string;
+          conversation_pubkey: string;
+        }> = [];
+
+        // Pre-collect read status records
+        for (const [eventId, data] of decryptedMap) {
+          const { isOwn, event, otherPubkey } = data;
+          if (event.created_at > latestTimestamp.current) {
+            latestTimestamp.current = event.created_at;
+          }
+          if (!isOwn && session?.nostrHexId) {
+            readStatusPending.push({
+              user_nostr_id: session.nostrHexId,
+              message_event_id: event.id,
+              sender_pubkey: event.pubkey,
+              conversation_pubkey: otherPubkey
+            });
+          }
+        }
+
+        // Single state update using functional updater (no dependency on conversations state)
+        setConversations(prev => {
+          const newConversationsMap = new Map(prev);
+
+          for (const [eventId, data] of decryptedMap) {
+            const { decryptedContent, otherPubkey, isOwn, replyToId, event } = data;
+
+            const currentReadStatuses = readStatusesRef.current;
+            const isRead = isOwn ? true : (currentReadStatuses.get(event.id) ?? false);
+
+            const message: DirectMessage = {
+              id: event.id,
+              pubkey: event.pubkey,
+              content: event.content,
+              created_at: event.created_at,
+              decryptedContent,
+              isOwn,
+              isRead,
+              replyToId
+            };
+
+            const existing = newConversationsMap.get(otherPubkey) || {
+              pubkey: otherPubkey,
+              messages: [],
+              unreadCount: 0
+            };
+
+            // Skip duplicate
+            if (existing.messages.some(m => m.id === message.id)) continue;
+
+            const updatedMessages = [...existing.messages, message].sort(
+              (a, b) => a.created_at - b.created_at
+            );
+
+            const unreadCount = updatedMessages.filter(m => !m.isOwn && !m.isRead).length;
+
+            newConversationsMap.set(otherPubkey, {
+              ...existing,
+              messages: updatedMessages,
+              lastMessage: updatedMessages[updatedMessages.length - 1],
+              unreadCount
+            });
+          }
+
+          return newConversationsMap;
+        });
+        setTotalEvents(prev => prev + newEvents.length);
+
+        // PHASE 3: Save read statuses in background (fire and forget)
+        if (readStatusPending.length > 0) {
+          saveBatchReadStatuses(readStatusPending).catch(() => {});
         }
       }
 
@@ -400,7 +590,7 @@ export function useNostrDMs() {
       setConnected(false);
       if (pollTimer) clearInterval(pollTimer);
     };
-  }, [session?.nostrHexId, session?.nostrPrivateKey, processMessage, fetchDMEvents]);
+  }, [session?.nostrHexId, session?.nostrPrivateKey, processMessage, fetchDMEvents, decryptMessagesBatch, saveBatchReadStatuses]);
 
   // Supabase Realtime subscription for READ STATUS updates ONLY
   useEffect(() => {
