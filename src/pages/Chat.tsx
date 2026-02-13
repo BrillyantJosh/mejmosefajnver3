@@ -165,11 +165,7 @@ export default function Chat() {
     });
 
     if (result.success) {
-      toast({
-        title: "Success",
-        description: "LASH sent successfully! ❤️"
-      });
-      // Keep optimistic update, it will be replaced by real data on next fetch
+      // No toast — the filled heart icon is enough visual feedback
     } else {
       // Remove optimistic update if failed
       setOptimisticLashes(prev => {
