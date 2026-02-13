@@ -973,8 +973,9 @@ router.post('/send-push-notification', async (req: Request, res: Response) => {
     const payload = JSON.stringify({
       title: senderDisplayName || 'New Message',
       body: messagePreview || 'You have a new message',
-      icon: '/icon-192x192.png',
-      badge: '/icon-192x192.png'
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      url: '/chat'
     });
 
     let sentCount = 0;
