@@ -474,7 +474,7 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex flex-col h-screen md:block md:h-auto md:max-w-7xl md:mx-auto overflow-x-hidden w-full">
+    <div className="flex flex-col h-[calc(100dvh-4rem)] -mx-4 -my-6 md:my-0 md:block md:h-auto md:max-w-7xl md:mx-auto overflow-x-hidden w-full">
       <div className="hidden md:block p-0 md:mb-6">
         <div className="flex items-center justify-between">
           <div>
@@ -501,7 +501,7 @@ export default function Chat() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3 md:px-4 flex-1 overflow-hidden w-full">
+      <div className="grid gap-6 md:grid-cols-3 md:px-4 flex-1 overflow-hidden w-full min-h-0">
         {/* Conversations List - Hidden on mobile when chat is selected */}
         <Card className={`h-full md:col-span-1 border-0 shadow-none md:border md:shadow-sm min-w-0 flex flex-col ${selectedPubkey ? 'hidden md:block' : ''}`}>
           <CardHeader className="px-4 md:px-6">
@@ -568,10 +568,10 @@ export default function Chat() {
         </Card>
 
         {/* Chat Window - Hidden on mobile when no chat is selected */}
-        <Card className={`md:col-span-2 border-0 shadow-none md:border md:shadow-sm flex flex-col min-w-0 h-full ${!selectedPubkey ? 'hidden md:block' : ''}`}>
+        <Card className={`md:col-span-2 border-0 shadow-none md:border md:shadow-sm flex flex-col min-w-0 min-h-0 h-full ${!selectedPubkey ? 'hidden md:flex' : ''}`}>
           {displayConversation ? (
             <>
-              <CardHeader className="sticky top-16 bg-card/95 backdrop-blur-sm z-10 border-b px-4 md:static md:bg-transparent md:backdrop-blur-none md:border-b-0 md:px-6">
+              <CardHeader className="bg-card border-b flex-shrink-0 px-4 md:px-6">
                 <div className="flex items-center gap-3">
                   <Button
                     variant="ghost"
@@ -597,11 +597,11 @@ export default function Chat() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="flex flex-col h-[calc(100vh-64px)] px-0 md:h-[calc(100vh-250px)] md:max-h-[600px] md:px-6 overflow-hidden">
+              <CardContent className="flex flex-col flex-1 min-h-0 px-0 md:max-h-[600px] md:px-6 overflow-hidden">
                 {/* Messages */}
                 <div 
                   ref={messagesContainerRef}
-                  className="flex-1 overflow-y-auto overflow-x-hidden space-y-4 mb-4 px-4 pt-20 md:pt-0 md:pr-2 md:pb-2 md:px-0 w-full"
+                  className="flex-1 overflow-y-auto overflow-x-hidden space-y-4 mb-4 px-4 md:pr-2 md:pb-2 md:px-0 w-full"
                   style={{ scrollBehavior: 'smooth' }}
                 >
                   {allMessages.length === 0 ? (
@@ -777,7 +777,7 @@ export default function Chat() {
                 </div>
 
                 {/* Input */}
-                <form onSubmit={handleSendMessage} className="flex flex-col gap-2 pt-2 border-t pb-safe sticky bottom-0 bg-card px-4 md:static md:bg-transparent md:pb-0 md:px-0">
+                <form onSubmit={handleSendMessage} className="flex flex-col gap-2 pt-2 border-t pb-safe flex-shrink-0 bg-card px-4 md:bg-transparent md:pb-0 md:px-0">
                   {/* Reply Preview */}
                   {replyingTo && (
                     <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg">
