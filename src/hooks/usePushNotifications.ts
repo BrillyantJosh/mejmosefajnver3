@@ -85,6 +85,42 @@ export function usePushNotifications() {
     checkSupport();
   }, []);
 
+  // Auto-refresh subscription on app load — ensures DB always has the current
+  // browser's push endpoint (not a stale one from a previous install/browser)
+  useEffect(() => {
+    const refreshSubscription = async () => {
+      if (!session?.nostrHexId || !state.isSubscribed || !vapidPublicKey) return;
+
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (!subscription) return;
+
+        const p256dh = subscription.getKey('p256dh');
+        const auth = subscription.getKey('auth');
+        if (!p256dh || !auth) return;
+
+        const p256dhBase64 = btoa(String.fromCharCode(...new Uint8Array(p256dh)));
+        const authBase64 = btoa(String.fromCharCode(...new Uint8Array(auth)));
+
+        // Delete old subscriptions, insert current one
+        await supabase.from('push_subscriptions').delete().eq('nostr_hex_id', session.nostrHexId);
+        await supabase.from('push_subscriptions').upsert({
+          nostr_hex_id: session.nostrHexId,
+          endpoint: subscription.endpoint,
+          p256dh: p256dhBase64,
+          auth: authBase64,
+        }, { onConflict: 'nostr_hex_id,endpoint' });
+
+        console.log('[Push] Subscription refreshed for current browser');
+      } catch (error) {
+        console.error('[Push] Error refreshing subscription:', error);
+      }
+    };
+
+    refreshSubscription();
+  }, [session?.nostrHexId, state.isSubscribed, vapidPublicKey]);
+
   // Convert VAPID key to Uint8Array for Web Push
   const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -144,7 +180,13 @@ export function usePushNotifications() {
       const p256dhBase64 = btoa(String.fromCharCode(...new Uint8Array(p256dh)));
       const authBase64 = btoa(String.fromCharCode(...new Uint8Array(auth)));
 
-      // Save to database
+      // Delete all existing (possibly stale) subscriptions for this user
+      await supabase
+        .from('push_subscriptions')
+        .delete()
+        .eq('nostr_hex_id', session.nostrHexId);
+
+      // Save fresh subscription to database
       const { error: dbError } = await supabase
         .from('push_subscriptions')
         .upsert({
