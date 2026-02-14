@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { MessageSquare, Search, AlertCircle, Trash2, ArrowLeft, Heart, Mic, ImagePlus, Send, Loader2, Reply, X, History } from "lucide-react";
 
 const MESSAGES_PER_PAGE = 20;
@@ -37,7 +38,7 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [visibleCount, setVisibleCount] = useState(MESSAGES_PER_PAGE);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const messageInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const { giveLash, isSending: isSendingLash } = useNostrLash();
   const { toast } = useToast();
 
@@ -189,6 +190,13 @@ export default function Chat() {
 
   const handleLoadMore = () => {
     setVisibleCount(prev => prev + MESSAGES_PER_PAGE);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage(e);
+    }
   };
 
   const findMessageById = (messageId: string) => {
@@ -839,13 +847,15 @@ export default function Chat() {
                     >
                       <ImagePlus className="h-5 w-5" />
                     </Button>
-                    <Input 
+                    <Textarea
                       ref={messageInputRef}
-                      placeholder="Type a message..." 
-                      className="flex-1 touch-manipulation h-11 text-base md:h-10 md:text-sm"
+                      placeholder="Type a message..."
+                      className="flex-1 touch-manipulation min-h-[2.75rem] max-h-[5rem] resize-none text-base md:text-sm py-2.5"
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
                       disabled={isSending}
+                      rows={1}
                     />
                     <Button 
                       type="submit" 
