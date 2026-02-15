@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Lock, Users, Loader2, ShieldAlert, Mail, Settings, Info } from 'lucide-react';
+import { ArrowLeft, Lock, Users, Loader2, ShieldAlert, Mail, Settings, Info, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -18,6 +18,8 @@ import { RoomSettingsDialog } from '@/components/encrypted-rooms/RoomSettingsDia
 import { encryptRoomMessage, hexToBytes } from '@/lib/encrypted-room-crypto';
 import { finalizeEvent } from 'nostr-tools';
 import type { RoomMessage, RoomMessageContent } from '@/types/encryptedRooms';
+import { useNostrLash } from '@/hooks/useNostrLash';
+import { useNostrDMLashes } from '@/hooks/useNostrDMLashes';
 import { toast } from 'sonner';
 
 export default function RoomChat() {
@@ -25,8 +27,9 @@ export default function RoomChat() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [profileCache, setProfileCache] = useState<Record<string, { name: string; picture?: string }>>({});
+  const [profileCache, setProfileCache] = useState<Record<string, { name: string; picture?: string; lana_wallet_id?: string }>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [optimisticLashes, setOptimisticLashes] = useState<Set<string>>(new Set());
 
   const userPubkey = session?.nostrHexId || null;
   const userPrivKey = session?.nostrPrivateKey || null;
@@ -61,6 +64,16 @@ export default function RoomChat() {
     isOwner
   );
 
+  // LASH system
+  const { giveLash, isSending: isSendingLash } = useNostrLash();
+  const messageIds = messages.map((m) => m.id);
+  const {
+    lashCounts,
+    userLashedIds,
+    lashers: messageLashers,
+  } = useNostrDMLashes(messageIds, session?.nostrHexId);
+  const allLashedEventIds = new Set([...userLashedIds, ...optimisticLashes]);
+
   // Fetch profiles for member names + invite statuses
   useEffect(() => {
     const fetchProfiles = async () => {
@@ -69,15 +82,16 @@ export default function RoomChat() {
       const invitePubkeys = inviteStatuses.map((s) => s.pubkey);
       const pubkeys = [...new Set([...memberPubkeys, ...invitePubkeys])];
       try {
-        const res = await fetch('/api/db/nostr_profiles?select=nostr_hex_id,display_name,full_name,picture');
+        const res = await fetch('/api/db/nostr_profiles?select=nostr_hex_id,display_name,full_name,picture,lana_wallet_id');
         const data = await res.json();
         if (Array.isArray(data)) {
-          const cache: Record<string, { name: string; picture?: string }> = {};
+          const cache: Record<string, { name: string; picture?: string; lana_wallet_id?: string }> = {};
           for (const profile of data) {
             if (pubkeys.includes(profile.nostr_hex_id)) {
               cache[profile.nostr_hex_id] = {
                 name: profile.display_name || profile.full_name || profile.nostr_hex_id.slice(0, 12),
                 picture: profile.picture,
+                lana_wallet_id: profile.lana_wallet_id,
               };
             }
           }
@@ -144,6 +158,40 @@ export default function RoomChat() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event }),
     });
+  };
+
+  // LASH handler
+  const handleGiveLash = async (messageId: string, recipientPubkey: string) => {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId) {
+      toast.error('You must be logged in to give LASH');
+      return;
+    }
+
+    const recipientWallet = profileCache[recipientPubkey]?.lana_wallet_id;
+    if (!recipientWallet) {
+      toast.error('Recipient wallet not found');
+      return;
+    }
+
+    // Optimistic update
+    setOptimisticLashes((prev) => new Set([...prev, messageId]));
+
+    const result = await giveLash({
+      postId: messageId,
+      recipientPubkey,
+      recipientWallet,
+      memo: 'LASH for room message',
+    });
+
+    if (!result.success) {
+      // Remove optimistic update on failure
+      setOptimisticLashes((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(messageId);
+        return newSet;
+      });
+      toast.error(result.error || 'Failed to send LASH');
+    }
   };
 
   // Remove member handler (owner only)
@@ -334,6 +382,13 @@ export default function RoomChat() {
           const prevMsg = idx > 0 ? messages[idx - 1] : null;
           const showSender = !prevMsg || prevMsg.senderPubkey !== msg.senderPubkey;
           const profile = profileCache[msg.senderPubkey];
+          const hasLashed = allLashedEventIds.has(msg.id);
+          const lashCount = lashCounts.get(msg.id) || 0;
+          const lashersForMsg = (messageLashers.get(msg.id) || []).map((l) => ({
+            ...l,
+            name: profileCache[l.pubkey]?.name,
+            picture: profileCache[l.pubkey]?.picture,
+          }));
 
           return (
             <RoomMessageBubble
@@ -343,6 +398,11 @@ export default function RoomChat() {
               senderName={profile?.name}
               senderPicture={profile?.picture}
               showSender={showSender}
+              lashCount={lashCount}
+              hasLashed={hasLashed}
+              lashers={lashersForMsg}
+              onLash={() => handleGiveLash(msg.id, msg.senderPubkey)}
+              isLashing={isSendingLash}
             />
           );
         })}
