@@ -6,7 +6,7 @@ import type { RoomMember } from '@/types/encryptedRooms';
 /**
  * Hook to compute the current member list for a room.
  * Reconstructs members from:
- * - KIND 10100 (room creation) initial member list
+ * - KIND 30100 (room creation) initial member list
  * - KIND 10103 (invite accept) additions
  * - KIND 10105 (leave/removal) removals
  */
@@ -23,7 +23,7 @@ export const useEncryptedRoomMembers = (roomEventId: string | null) => {
       // Fetch room creation, accepts, and leaves/removals in parallel
       const [roomEvents, acceptEvents, leaveEvents] = await Promise.all([
         pool.querySync(parameters.relays, {
-          kinds: [10100],
+          kinds: [30100],
           ids: [roomEventId],
           limit: 1,
         } as Filter),
