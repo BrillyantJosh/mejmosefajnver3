@@ -42,10 +42,11 @@ export default function RoomChat() {
     room?.keyVersion || 1
   );
 
-  // Fetch messages
+  // Fetch messages (prefer stable d-tag over eventId for persistence across room updates)
   const { messages, isLoading: messagesLoading, addOptimisticMessage } = useEncryptedRoomMessages(
     roomEventId || null,
-    groupKey
+    groupKey,
+    room?.roomId || null
   );
 
   // Fetch members
@@ -116,6 +117,7 @@ export default function RoomChat() {
         created_at: Math.floor(Date.now() / 1000),
         tags: [
           ['e', roomEventId, '', 'root'],
+          ['d', room?.roomId || ''],          // stable room identifier (persists across room updates)
           ['key_version', '1'],
         ],
         content: encrypted,
