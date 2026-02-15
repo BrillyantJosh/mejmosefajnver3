@@ -9,6 +9,7 @@ import { useEncryptedRoomGroupKey } from '@/hooks/useEncryptedRoomGroupKey';
 import { useEncryptedRoomMessages } from '@/hooks/useEncryptedRoomMessages';
 import { useEncryptedRoomMembers } from '@/hooks/useEncryptedRoomMembers';
 import { useEncryptedRooms } from '@/hooks/useEncryptedRooms';
+import { useRoomInviteStatuses } from '@/hooks/useRoomInviteStatuses';
 import { RoomMessageBubble } from '@/components/encrypted-rooms/RoomMessageBubble';
 import { RoomChatInput } from '@/components/encrypted-rooms/RoomChatInput';
 import { RoomMembersList } from '@/components/encrypted-rooms/RoomMembersList';
@@ -48,11 +49,21 @@ export default function RoomChat() {
   // Fetch members
   const { members } = useEncryptedRoomMembers(roomEventId || null);
 
-  // Fetch profiles for member names
+  const isOwner = room?.ownerPubkey === userPubkey;
+
+  // Fetch invite statuses (owner only)
+  const { statuses: inviteStatuses } = useRoomInviteStatuses(
+    roomEventId || null,
+    isOwner
+  );
+
+  // Fetch profiles for member names + invite statuses
   useEffect(() => {
     const fetchProfiles = async () => {
-      if (members.length === 0) return;
-      const pubkeys = members.map((m) => m.pubkey);
+      if (members.length === 0 && inviteStatuses.length === 0) return;
+      const memberPubkeys = members.map((m) => m.pubkey);
+      const invitePubkeys = inviteStatuses.map((s) => s.pubkey);
+      const pubkeys = [...new Set([...memberPubkeys, ...invitePubkeys])];
       try {
         const res = await fetch('/api/db/nostr_profiles?select=nostr_hex_id,display_name,full_name,picture');
         const data = await res.json();
@@ -73,7 +84,7 @@ export default function RoomChat() {
       }
     };
     fetchProfiles();
-  }, [members]);
+  }, [members, inviteStatuses]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -132,7 +143,6 @@ export default function RoomChat() {
 
   const isLoading = keyLoading || messagesLoading;
   const roomName = room?.name || 'Room';
-  const isOwner = room?.ownerPubkey === userPubkey;
 
   return (
     <div className="flex flex-col h-[calc(100vh-180px)]">
@@ -182,6 +192,11 @@ export default function RoomChat() {
                     picture: profileCache[m.pubkey]?.picture,
                   }))}
                   currentUserPubkey={userPubkey || undefined}
+                  inviteStatuses={isOwner ? inviteStatuses.map((s) => ({
+                    ...s,
+                    displayName: profileCache[s.pubkey]?.name,
+                    picture: profileCache[s.pubkey]?.picture,
+                  })) : undefined}
                 />
               </div>
             </SheetContent>
