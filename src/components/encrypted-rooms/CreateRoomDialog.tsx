@@ -244,6 +244,9 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
       console.log(`✅ Room published to ${publishData.publishedTo} relays`);
 
       // 5. Create and publish invite events for each member (including owner)
+      // Use incrementing timestamps to avoid relay deduplication issues
+      let inviteTimestamp = Math.floor(Date.now() / 1000);
+
       for (const memberPubkey of allMembers) {
         const invitePayload: RoomInvitePayload = {
           roomId: roomDTag,
@@ -264,7 +267,7 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
         const inviteEvent = finalizeEvent(
           {
             kind: 10102,
-            created_at: Math.floor(Date.now() / 1000),
+            created_at: inviteTimestamp++,
             tags: [
               ['e', roomEvent.id],
               ['p', memberPubkey, 'receiver'],
@@ -275,13 +278,18 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
           privKeyBytes
         );
 
-        await fetch('/api/functions/publish-dm-event', {
+        const inviteRes = await fetch('/api/functions/publish-dm-event', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ event: inviteEvent }),
         });
 
-        console.log(`📨 Invite sent to ${memberPubkey.slice(0, 16)}...`);
+        const inviteData = await inviteRes.json();
+        if (!inviteData.success) {
+          console.warn(`⚠️ Failed to publish invite to ${memberPubkey.slice(0, 16)}`);
+        }
+
+        console.log(`📨 Invite sent to ${memberPubkey.slice(0, 16)} (${inviteData.publishedTo || 0} relays)`);
       }
 
       // 6. Cache group key locally for owner
