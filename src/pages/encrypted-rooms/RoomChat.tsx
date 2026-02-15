@@ -110,7 +110,7 @@ export default function RoomChat() {
 
     const event = finalizeEvent(
       {
-        kind: 10101,
+        kind: 1101,
         created_at: Math.floor(Date.now() / 1000),
         tags: [
           ['e', roomEventId, '', 'root'],

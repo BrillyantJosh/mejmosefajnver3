@@ -43,7 +43,7 @@ export interface RoomMessage {
 }
 
 export interface RoomInvite {
-  id: string;                    // Nostr event ID of KIND 10102
+  id: string;                    // Nostr event ID of KIND 1102
   roomEventId: string;
   roomId: string;
   roomName: string;
@@ -60,7 +60,7 @@ export interface RoomInvite {
 }
 
 export interface RoomInviteResponse {
-  id: string;                    // Nostr event ID of KIND 10103
+  id: string;                    // Nostr event ID of KIND 1103
   inviteEventId: string;
   roomEventId: string;
   responderPubkey: string;
@@ -69,7 +69,7 @@ export interface RoomInviteResponse {
 }
 
 export interface RoomMemberAction {
-  id: string;                    // Nostr event ID of KIND 10105
+  id: string;                    // Nostr event ID of KIND 1105
   roomEventId: string;
   actorPubkey: string;
   targetPubkey: string;
@@ -77,7 +77,7 @@ export interface RoomMemberAction {
   createdAt: number;
 }
 
-// Content structure for encrypted messages (KIND 10101)
+// Content structure for encrypted messages (KIND 1101)
 export interface RoomMessageContent {
   text: string;
   type: 'text' | 'image' | 'audio' | 'file' | 'system';
@@ -86,7 +86,7 @@ export interface RoomMessageContent {
   mediaSize?: number;
 }
 
-// Content structure for invite payload (KIND 10102, encrypted with NIP-44)
+// Content structure for invite payload (KIND 1102, encrypted with NIP-44)
 export interface RoomInvitePayload {
   roomId: string;
   roomEventId: string;

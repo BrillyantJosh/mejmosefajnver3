@@ -8,7 +8,7 @@ const POLL_INTERVAL = 10_000; // 10 seconds
 const MESSAGES_PER_PAGE = 50;
 
 /**
- * Hook to fetch, decrypt, and poll room messages (KIND 10101).
+ * Hook to fetch, decrypt, and poll room messages (KIND 1101).
  * Uses server endpoint for relay queries.
  */
 export const useEncryptedRoomMessages = (
@@ -72,7 +72,7 @@ export const useEncryptedRoomMessages = (
       try {
         const body: Record<string, any> = {
           roomEventId,
-          kinds: [10101],
+          kinds: [1101],
           limit: MESSAGES_PER_PAGE,
         };
         if (since) {

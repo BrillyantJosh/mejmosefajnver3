@@ -11,7 +11,7 @@ export interface InviteStatus {
 
 /**
  * Hook for room owners to see invite statuses (pending, accepted, declined).
- * Queries KIND 10102 (invites sent) and KIND 10103 (responses) for a room.
+ * Queries KIND 1102 (invites sent) and KIND 1103 (responses) for a room.
  * Only fetches if `enabled` is true (typically when current user is the owner).
  */
 export const useRoomInviteStatuses = (
@@ -29,15 +29,15 @@ export const useRoomInviteStatuses = (
     const pool = new SimplePool();
 
     try {
-      // Fetch invites and responses for this room in parallel
+      // Fetch invites (KIND 1102) and responses (KIND 1103) for this room in parallel
       const [inviteEvents, responseEvents] = await Promise.all([
         pool.querySync(parameters.relays, {
-          kinds: [10102],
+          kinds: [1102],
           '#e': [roomEventId],
           limit: 200,
         } as Filter),
         pool.querySync(parameters.relays, {
-          kinds: [10103],
+          kinds: [1103],
           '#e': [roomEventId],
           limit: 200,
         } as Filter),

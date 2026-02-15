@@ -188,7 +188,7 @@ export const InviteMemberDialog = ({
 
       const inviteEvent = finalizeEvent(
         {
-          kind: 10102,
+          kind: 1102,
           created_at: Math.floor(Date.now() / 1000),
           tags: [
             ['e', roomEventId],

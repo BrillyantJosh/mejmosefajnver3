@@ -43,10 +43,10 @@ export default function Invites() {
     try {
       const privKeyBytes = hexToBytes(session.nostrPrivateKey);
 
-      // Create KIND 10103 response event
+      // Create KIND 1103 response event (regular, non-replaceable)
       const responseEvent = finalizeEvent(
         {
-          kind: 10103,
+          kind: 1103,
           created_at: Math.floor(Date.now() / 1000),
           tags: [
             ['e', invite.id],

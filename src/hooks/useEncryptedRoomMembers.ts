@@ -7,8 +7,8 @@ import type { RoomMember } from '@/types/encryptedRooms';
  * Hook to compute the current member list for a room.
  * Reconstructs members from:
  * - KIND 30100 (room creation) initial member list
- * - KIND 10103 (invite accept) additions
- * - KIND 10105 (leave/removal) removals
+ * - KIND 1103 (invite accept) additions
+ * - KIND 1105 (leave/removal) removals
  */
 export const useEncryptedRoomMembers = (roomEventId: string | null) => {
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -20,7 +20,7 @@ export const useEncryptedRoomMembers = (roomEventId: string | null) => {
 
     const pool = new SimplePool();
     try {
-      // Fetch room creation, accepts, and leaves/removals in parallel
+      // Fetch room creation, accepts (KIND 1103), and leaves/removals (KIND 1105) in parallel
       const [roomEvents, acceptEvents, leaveEvents] = await Promise.all([
         pool.querySync(parameters.relays, {
           kinds: [30100],
@@ -28,12 +28,12 @@ export const useEncryptedRoomMembers = (roomEventId: string | null) => {
           limit: 1,
         } as Filter),
         pool.querySync(parameters.relays, {
-          kinds: [10103],
+          kinds: [1103],
           '#e': [roomEventId],
           limit: 200,
         } as Filter),
         pool.querySync(parameters.relays, {
-          kinds: [10105],
+          kinds: [1105],
           '#e': [roomEventId],
           limit: 200,
         } as Filter),
