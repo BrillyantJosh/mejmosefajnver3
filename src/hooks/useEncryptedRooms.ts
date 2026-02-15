@@ -6,7 +6,7 @@ import type { EncryptedRoom, RoomMember } from '@/types/encryptedRooms';
 
 /**
  * Hook to fetch all encrypted rooms where the user is a member.
- * Queries KIND 10100 events tagged with user's pubkey.
+ * Queries KIND 30100 (parameterized replaceable) events tagged with user's pubkey.
  */
 export const useEncryptedRooms = () => {
   const [rooms, setRooms] = useState<EncryptedRoom[]>([]);
@@ -61,13 +61,13 @@ export const useEncryptedRooms = () => {
       console.log('🔒 Fetching encrypted rooms for user:', userPubkey.slice(0, 16));
 
       const filter: Filter = {
-        kinds: [10100],
+        kinds: [30100],
         '#p': [userPubkey],
         limit: 100,
       };
 
       const events = await pool.querySync(parameters.relays, filter);
-      console.log(`📦 Found ${events.length} room events (KIND 10100)`);
+      console.log(`📦 Found ${events.length} room events (KIND 30100)`);
 
       const parsedRooms = events
         .map(parseRoomEvent)

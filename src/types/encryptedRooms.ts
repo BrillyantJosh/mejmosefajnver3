@@ -3,7 +3,7 @@
 // =============================================
 
 export interface EncryptedRoom {
-  id: string;                    // Nostr event ID of KIND 10100
+  id: string;                    // Nostr event ID of KIND 30100
   roomId: string;                // d-tag value (e.g. "room:uuid")
   name: string;
   description: string;

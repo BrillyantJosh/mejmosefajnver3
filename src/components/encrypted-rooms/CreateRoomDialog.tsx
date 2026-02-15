@@ -203,7 +203,7 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
       // 2. Build all member pubkeys (owner + invited)
       const allMembers = [ownerPubkey, ...memberPubkeys];
 
-      // 3. Create KIND 10100 room event
+      // 3. Create KIND 30100 room event (parameterized replaceable)
       const roomTags: string[][] = [
         ['d', roomDTag],
         ['name', name.trim()],
@@ -216,7 +216,7 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
 
       const roomEvent = finalizeEvent(
         {
-          kind: 10100,
+          kind: 30100,
           created_at: Math.floor(Date.now() / 1000),
           tags: roomTags,
           content: JSON.stringify({
