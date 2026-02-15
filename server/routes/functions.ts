@@ -1735,7 +1735,7 @@ router.post('/publish-dm-event', async (req: Request, res: Response) => {
 // Encrypted Rooms: Fetch room-related events from relays
 router.post('/fetch-room-events', async (req: Request, res: Response) => {
   try {
-    const { roomEventId, userPubkey, kinds, since, limit } = req.body;
+    const { roomEventId, roomDTag, userPubkey, kinds, since, limit } = req.body;
 
     if (!kinds || !Array.isArray(kinds) || kinds.length === 0) {
       return res.status(400).json({ success: false, error: 'kinds array is required' });
@@ -1758,7 +1758,10 @@ router.post('/fetch-room-events', async (req: Request, res: Response) => {
       limit: limit || 500
     };
 
-    if (roomEventId) {
+    // Prefer stable d-tag (persists across room updates) over eventId
+    if (roomDTag) {
+      filter['#d'] = [roomDTag];
+    } else if (roomEventId) {
       filter['#e'] = [roomEventId];
     }
     if (userPubkey) {
@@ -1768,7 +1771,7 @@ router.post('/fetch-room-events', async (req: Request, res: Response) => {
       filter.since = since;
     }
 
-    console.log(`🔒 fetch-room-events: Querying ${relays.length} relays for kinds=${kinds}, room=${roomEventId?.slice(0, 16) || 'all'}, limit=${filter.limit}`);
+    console.log(`🔒 fetch-room-events: Querying ${relays.length} relays for kinds=${kinds}, room=${roomDTag || roomEventId?.slice(0, 16) || 'all'}, limit=${filter.limit}`);
 
     const events = await queryEventsFromRelays(relays, filter, 15000);
 

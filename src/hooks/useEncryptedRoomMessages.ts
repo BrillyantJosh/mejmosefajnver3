@@ -13,7 +13,8 @@ const MESSAGES_PER_PAGE = 50;
  */
 export const useEncryptedRoomMessages = (
   roomEventId: string | null,
-  groupKey: string | null
+  groupKey: string | null,
+  roomDTag?: string | null
 ) => {
   const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,14 +68,19 @@ export const useEncryptedRoomMessages = (
 
   const fetchMessages = useCallback(
     async (since?: number) => {
-      if (!roomEventId || !groupKey) return;
+      if ((!roomEventId && !roomDTag) || !groupKey) return;
 
       try {
         const body: Record<string, any> = {
-          roomEventId,
           kinds: [1101],
           limit: MESSAGES_PER_PAGE,
         };
+        // Prefer stable d-tag (persists across room updates) over eventId
+        if (roomDTag) {
+          body.roomDTag = roomDTag;
+        } else if (roomEventId) {
+          body.roomEventId = roomEventId;
+        }
         if (since) {
           body.since = since;
         }
@@ -123,12 +129,12 @@ export const useEncryptedRoomMessages = (
         setIsLoading(false);
       }
     },
-    [roomEventId, groupKey]
+    [roomEventId, groupKey, roomDTag]
   );
 
   // Initial fetch
   useEffect(() => {
-    if (!roomEventId || !groupKey) {
+    if ((!roomEventId && !roomDTag) || !groupKey) {
       setIsLoading(false);
       return;
     }
@@ -136,11 +142,11 @@ export const useEncryptedRoomMessages = (
     setMessages([]);
     lastFetchTimestamp.current = 0;
     fetchMessages();
-  }, [roomEventId, groupKey, fetchMessages]);
+  }, [roomEventId, roomDTag, groupKey, fetchMessages]);
 
   // Polling for new messages
   useEffect(() => {
-    if (!roomEventId || !groupKey) return;
+    if ((!roomEventId && !roomDTag) || !groupKey) return;
 
     pollingRef.current = setInterval(() => {
       if (lastFetchTimestamp.current > 0) {
@@ -153,7 +159,7 @@ export const useEncryptedRoomMessages = (
         clearInterval(pollingRef.current);
       }
     };
-  }, [roomEventId, groupKey, fetchMessages]);
+  }, [roomEventId, roomDTag, groupKey, fetchMessages]);
 
   // Add optimistic message (for immediate UI feedback)
   const addOptimisticMessage = (message: RoomMessage) => {
