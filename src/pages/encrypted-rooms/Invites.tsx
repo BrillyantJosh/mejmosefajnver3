@@ -3,6 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { Mail, Check, X, Loader2, Lock, Inbox, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEncryptedRoomInvites } from '@/hooks/useEncryptedRoomInvites';
 import { setRoomKeyToCache, hexToBytes } from '@/lib/encrypted-room-crypto';
@@ -17,6 +27,7 @@ export default function Invites() {
   const navigate = useNavigate();
   const [responding, setResponding] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [declineTarget, setDeclineTarget] = useState<RoomInvite | null>(null);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -164,7 +175,7 @@ export default function Invites() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleRespond(invite, false)}
+                        onClick={() => setDeclineTarget(invite)}
                         disabled={isResponding}
                       >
                         <X className="h-3.5 w-3.5 mr-1" />
@@ -178,6 +189,33 @@ export default function Invites() {
           );
         })}
       </div>
+
+      {/* Decline confirmation dialog */}
+      <AlertDialog open={!!declineTarget} onOpenChange={(open) => !open && setDeclineTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Decline invite?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to decline the invite to <strong>"{declineTarget?.roomName}"</strong>?
+              This action cannot be undone — you will need a new invite to join this room.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (declineTarget) {
+                  handleRespond(declineTarget, false);
+                  setDeclineTarget(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Decline
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
