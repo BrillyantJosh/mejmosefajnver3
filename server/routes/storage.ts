@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 const router = Router();
 
 const UPLOADS_DIR = path.resolve(__dirname, '../uploads');
-const ALLOWED_BUCKETS = ['post-images', 'dm-images', 'dm-audio', 'project-images', 'profile-avatars'];
+const ALLOWED_BUCKETS = ['post-images', 'dm-images', 'dm-audio', 'project-images', 'profile-avatars', 'room-files'];
 
 // Ensure upload directories exist
 for (const bucket of ALLOWED_BUCKETS) {

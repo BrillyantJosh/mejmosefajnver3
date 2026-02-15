@@ -1732,6 +1732,59 @@ router.post('/publish-dm-event', async (req: Request, res: Response) => {
   }
 });
 
+// Encrypted Rooms: Fetch room-related events from relays
+router.post('/fetch-room-events', async (req: Request, res: Response) => {
+  try {
+    const { roomEventId, userPubkey, kinds, since, limit } = req.body;
+
+    if (!kinds || !Array.isArray(kinds) || kinds.length === 0) {
+      return res.status(400).json({ success: false, error: 'kinds array is required' });
+    }
+
+    // Get relays from KIND 38888 in DB
+    const db = getDb();
+    const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+    let relays: string[] = [];
+    if (row?.relays) {
+      relays = typeof row.relays === 'string' ? JSON.parse(row.relays) : row.relays;
+    }
+    if (relays.length === 0) {
+      relays = getRelaysFromDb();
+    }
+
+    // Build filter based on parameters
+    const filter: Record<string, any> = {
+      kinds,
+      limit: limit || 500
+    };
+
+    if (roomEventId) {
+      filter['#e'] = [roomEventId];
+    }
+    if (userPubkey) {
+      filter['#p'] = [userPubkey];
+    }
+    if (since) {
+      filter.since = since;
+    }
+
+    console.log(`🔒 fetch-room-events: Querying ${relays.length} relays for kinds=${kinds}, room=${roomEventId?.slice(0, 16) || 'all'}, limit=${filter.limit}`);
+
+    const events = await queryEventsFromRelays(relays, filter, 15000);
+
+    console.log(`📥 fetch-room-events: Received ${events.length} events`);
+
+    return res.json({
+      success: true,
+      events,
+      count: events.length
+    });
+  } catch (error: any) {
+    console.error('❌ Error fetching room events:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // send-lana-transaction (uses shared crypto lib)
 router.post('/send-lana-transaction', async (req: Request, res: Response) => {
   console.log('📋 send-lana-transaction:', {
