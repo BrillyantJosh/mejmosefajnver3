@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Lock, Users, Loader2, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Lock, Users, Loader2, ShieldAlert, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -31,11 +31,12 @@ export default function RoomChat() {
   const { rooms } = useEncryptedRooms();
   const room = rooms.find((r) => r.eventId === roomEventId);
 
-  // Fetch group key
-  const { groupKey, isLoading: keyLoading } = useEncryptedRoomGroupKey(
+  // Fetch group key (with retry + manual refetch)
+  const { groupKey, isLoading: keyLoading, refetch: refetchKey } = useEncryptedRoomGroupKey(
     roomEventId || null,
     userPubkey,
-    userPrivKey
+    userPrivKey,
+    room?.keyVersion || 1
   );
 
   // Fetch messages
@@ -201,8 +202,17 @@ export default function RoomChat() {
             <ShieldAlert className="h-10 w-10 text-amber-500 mb-3" />
             <h3 className="font-medium">Key not available</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              You don't have access to the encryption key for this room.
+              The encryption key hasn't arrived yet. This can take a few seconds.
             </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refetchKey}
+              className="mt-4"
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Retry
+            </Button>
           </div>
         )}
 

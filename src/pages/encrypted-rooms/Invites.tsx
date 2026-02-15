@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Check, X, Loader2, Lock, Inbox } from 'lucide-react';
+import { Mail, Check, X, Loader2, Lock, Inbox, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,6 +16,13 @@ export default function Invites() {
   const { session } = useAuth();
   const navigate = useNavigate();
   const [responding, setResponding] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refetch();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
 
   const handleRespond = async (invite: RoomInvite, accept: boolean) => {
     if (!session?.nostrHexId || !session?.nostrPrivateKey) return;
@@ -72,14 +79,25 @@ export default function Invites() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Mail className="h-6 w-6 text-violet-500" />
-          Invites
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Pending invites to encrypted rooms
-        </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Mail className="h-6 w-6 text-violet-500" />
+            Invites
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Pending invites to encrypted rooms
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+        >
+          <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
       {/* Loading */}
