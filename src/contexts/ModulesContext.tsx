@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -69,6 +69,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     order: 2
   },
   {
+    id: 'encryptedrooms',
+    title: 'Rooms',
+    description: 'Encrypted group chat rooms with end-to-end encryption',
+    icon: Lock,
+    path: '/encrypted-rooms',
+    gradient: 'from-violet-500 to-indigo-500',
+    enabled: true,
+    order: 3
+  },
+  {
     id: 'wallet',
     title: 'Wallet',
     description: 'Manage your Lightning wallet and transactions',
@@ -77,7 +87,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-orange-500 to-red-500',
     image: walletImage,
     enabled: true,
-    order: 3
+    order: 4
   },
   {
     id: 'unconditionalpayment',
@@ -342,6 +352,7 @@ const mapToNostrId = (id: ModuleType): string => {
     'aiadvisor': 'AI Advisor',
     'social': 'Social',
     'chat': 'Chat',
+    'encryptedrooms': 'Encrypted Rooms',
     'wallet': 'Wallet',
     'unconditionalpayment': 'Unconditional Payment',
     'selllana': 'SellLana',
@@ -375,6 +386,7 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'AI Advisor': 'aiadvisor',
     'Social': 'social',
     'Chat': 'chat',
+    'Encrypted Rooms': 'encryptedrooms',
     'Wallet': 'wallet',
     'Unconditional Payment': 'unconditionalpayment',
     'SellLana': 'selllana',

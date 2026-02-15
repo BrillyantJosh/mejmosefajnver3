@@ -93,6 +93,10 @@ import LanaAlignsWorldLayout from "./pages/lanaalignsworld/LanaAlignsWorldLayout
 import ActiveAlignments from "./pages/lanaalignsworld/ActiveAlignments";
 import LanaAlignsWorldInfo from "./pages/lanaalignsworld/Info";
 import MyStatus from "./pages/lanaalignsworld/MyStatus";
+import EncryptedRoomsLayout from "./pages/encrypted-rooms/EncryptedRoomsLayout";
+import EncryptedRoomList from "./pages/encrypted-rooms/RoomList";
+import EncryptedRoomChat from "./pages/encrypted-rooms/RoomChat";
+import EncryptedRoomInvites from "./pages/encrypted-rooms/Invites";
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -248,6 +252,11 @@ const App = () => (
           <Route path="active" element={<Navigate to="/lana-aligns-world/align" replace />} />
         </Route>
                   <Route path="/chat" element={<Chat />} />
+                  <Route path="/encrypted-rooms" element={<EncryptedRoomsLayout />}>
+                    <Route index element={<EncryptedRoomList />} />
+                    <Route path="room/:roomId" element={<EncryptedRoomChat />} />
+                    <Route path="invites" element={<EncryptedRoomInvites />} />
+                  </Route>
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/wallet/register" element={<RegisterWallet />} />
                   <Route path="/wallet/register/result" element={<RegisterWalletResult />} />

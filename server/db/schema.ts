@@ -203,6 +203,16 @@ export function initializeSchema(db: Database.Database): void {
       usd_to_lana_rate REAL DEFAULT 270
     );
 
+    CREATE TABLE IF NOT EXISTS encrypted_room_read_status (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      user_nostr_id TEXT NOT NULL,
+      room_event_id TEXT NOT NULL,
+      last_read_at INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(user_nostr_id, room_event_id)
+    );
+
     CREATE TABLE IF NOT EXISTS bug_reports (
       id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
       nostr_hex_id TEXT NOT NULL,
@@ -251,6 +261,8 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_room_latest_posts_slug ON room_latest_posts(room_slug);
     CREATE INDEX IF NOT EXISTS idx_transaction_history_sender_block ON transaction_history(sender_pubkey, block_height);
     CREATE INDEX IF NOT EXISTS idx_transaction_history_txid ON transaction_history(txid);
+    CREATE INDEX IF NOT EXISTS idx_enc_room_read_user ON encrypted_room_read_status(user_nostr_id);
+    CREATE INDEX IF NOT EXISTS idx_enc_room_read_room ON encrypted_room_read_status(room_event_id);
     CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON bug_reports(status);
     CREATE INDEX IF NOT EXISTS idx_bug_reports_nostr ON bug_reports(nostr_hex_id);
     CREATE INDEX IF NOT EXISTS idx_bug_reports_created ON bug_reports(created_at);
