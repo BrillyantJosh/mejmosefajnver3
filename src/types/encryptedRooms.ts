@@ -10,7 +10,7 @@ export interface EncryptedRoom {
   image?: string;
   ownerPubkey: string;
   members: RoomMember[];
-  status: 'active' | 'archived' | 'read-only';
+  status: 'active' | 'archived' | 'read-only' | 'deleted';
   keyVersion: number;
   createdAt: number;             // Unix timestamp
   eventId: string;               // Same as id, for clarity
