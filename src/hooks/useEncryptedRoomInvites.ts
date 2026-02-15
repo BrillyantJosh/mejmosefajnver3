@@ -1,19 +1,23 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { SimplePool, Filter, Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { decryptInvitePayload, isValidGroupKey } from '@/lib/encrypted-room-crypto';
 import type { RoomInvite } from '@/types/encryptedRooms';
 
+const POLL_INTERVAL = 10_000; // 10 seconds
+
 /**
  * Hook to fetch pending invites for the current user.
  * Queries KIND 10102 (invites) and KIND 10103 (responses) to determine pending state.
+ * Polls every 10 seconds to pick up new invites (relay propagation delay).
  */
 export const useEncryptedRoomInvites = () => {
   const [invites, setInvites] = useState<RoomInvite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { parameters } = useSystemParameters();
   const { session } = useAuth();
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const userPubkey = session?.nostrHexId;
   const userPrivKey = session?.nostrPrivateKey;
@@ -113,9 +117,25 @@ export const useEncryptedRoomInvites = () => {
     }
   }, [userPubkey, userPrivKey, parameters?.relays]);
 
+  // Initial fetch
   useEffect(() => {
     fetchInvites();
   }, [fetchInvites]);
+
+  // Polling for new invites every 10 seconds
+  useEffect(() => {
+    if (!userPubkey || !userPrivKey || !parameters?.relays) return;
+
+    pollingRef.current = setInterval(() => {
+      fetchInvites();
+    }, POLL_INTERVAL);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, [userPubkey, userPrivKey, parameters?.relays, fetchInvites]);
 
   return { invites, isLoading, refetch: fetchInvites };
 };
