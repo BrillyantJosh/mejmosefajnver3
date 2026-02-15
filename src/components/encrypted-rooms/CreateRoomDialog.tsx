@@ -200,8 +200,8 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
       const groupKey = generateGroupKey();
       console.log('🔑 Generated group key:', groupKey.slice(0, 16) + '...');
 
-      // 2. Build all member pubkeys (owner + invited)
-      const allMembers = [ownerPubkey, ...memberPubkeys];
+      // 2. Invite targets (owner doesn't need invite — key is cached at creation)
+      const inviteTargets = memberPubkeys;
 
       // 3. Create KIND 30100 room event (parameterized replaceable)
       const roomTags: string[][] = [
@@ -243,19 +243,19 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
 
       console.log(`✅ Room published to ${publishData.publishedTo} relays`);
 
-      // 5. Create and publish invite events for each member (including owner)
-      // Use incrementing timestamps to avoid relay deduplication issues
-      let inviteTimestamp = Math.floor(Date.now() / 1000);
+      // 5. Create and publish invite events for each invited member
+      // KIND 1102 (regular, non-replaceable) — NOT 10102 which is replaceable!
+      for (let i = 0; i < inviteTargets.length; i++) {
+        const memberPubkey = inviteTargets[i];
 
-      for (const memberPubkey of allMembers) {
         const invitePayload: RoomInvitePayload = {
           roomId: roomDTag,
           roomEventId: roomEvent.id,
           roomName: name.trim(),
           groupKey,
           keyVersion: 1,
-          role: memberPubkey === ownerPubkey ? 'owner' : 'member',
-          message: memberPubkey === ownerPubkey ? undefined : `You've been invited to "${name.trim()}"`,
+          role: 'member',
+          message: `You've been invited to "${name.trim()}"`,
         };
 
         const encryptedContent = encryptInvitePayload(
@@ -266,8 +266,8 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
 
         const inviteEvent = finalizeEvent(
           {
-            kind: 10102,
-            created_at: inviteTimestamp++,
+            kind: 1102,
+            created_at: Math.floor(Date.now() / 1000),
             tags: [
               ['e', roomEvent.id],
               ['p', memberPubkey, 'receiver'],
@@ -290,6 +290,11 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
         }
 
         console.log(`📨 Invite sent to ${memberPubkey.slice(0, 16)} (${inviteData.publishedTo || 0} relays)`);
+
+        // Delay between invites to avoid relay rate limiting
+        if (i < inviteTargets.length - 1) {
+          await new Promise((r) => setTimeout(r, 500));
+        }
       }
 
       // 6. Cache group key locally for owner
