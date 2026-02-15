@@ -22,7 +22,7 @@ export const useEncryptedRooms = () => {
       const name = event.tags.find((t) => t[0] === 'name')?.[1] || 'Unnamed Room';
       const description = event.tags.find((t) => t[0] === 'description')?.[1] || '';
       const image = event.tags.find((t) => t[0] === 'image')?.[1];
-      const status = (event.tags.find((t) => t[0] === 'status')?.[1] || 'active') as 'active' | 'archived' | 'read-only';
+      const status = (event.tags.find((t) => t[0] === 'status')?.[1] || 'active') as 'active' | 'archived' | 'read-only' | 'deleted';
       const keyVersion = parseInt(event.tags.find((t) => t[0] === 'key_version')?.[1] || '1', 10);
 
       // Parse members from p-tags

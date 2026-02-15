@@ -60,11 +60,15 @@ export const RoomCard = ({ room, unreadCount = 0, lastMessage, isPending, onClic
               <span>{room.members.length} {room.members.length === 1 ? 'member' : 'members'}</span>
             </div>
 
-            {lastMessage && (
+            {lastMessage ? (
               <p className="text-xs text-muted-foreground mt-1.5 truncate">
                 {lastMessage}
               </p>
-            )}
+            ) : room.description ? (
+              <p className="text-xs text-muted-foreground mt-1.5 truncate">
+                {room.description}
+              </p>
+            ) : null}
           </div>
         </div>
       </CardContent>

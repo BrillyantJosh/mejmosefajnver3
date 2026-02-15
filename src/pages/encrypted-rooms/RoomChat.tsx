@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Lock, Users, Loader2, ShieldAlert, Mail } from 'lucide-react';
+import { ArrowLeft, Lock, Users, Loader2, ShieldAlert, Mail, Settings, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -14,6 +14,7 @@ import { RoomMessageBubble } from '@/components/encrypted-rooms/RoomMessageBubbl
 import { RoomChatInput } from '@/components/encrypted-rooms/RoomChatInput';
 import { RoomMembersList } from '@/components/encrypted-rooms/RoomMembersList';
 import { InviteMemberDialog } from '@/components/encrypted-rooms/InviteMemberDialog';
+import { RoomSettingsDialog } from '@/components/encrypted-rooms/RoomSettingsDialog';
 import { encryptRoomMessage, hexToBytes } from '@/lib/encrypted-room-crypto';
 import { finalizeEvent } from 'nostr-tools';
 import type { RoomMessage, RoomMessageContent } from '@/types/encryptedRooms';
@@ -24,6 +25,7 @@ export default function RoomChat() {
   const { session } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [profileCache, setProfileCache] = useState<Record<string, { name: string; picture?: string }>>({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const userPubkey = session?.nostrHexId || null;
   const userPrivKey = session?.nostrPrivateKey || null;
@@ -157,11 +159,28 @@ export default function RoomChat() {
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <Lock className="h-4 w-4 text-violet-500" />
-          <h2 className="font-semibold text-sm truncate max-w-[200px]">{roomName}</h2>
+          <Lock className="h-4 w-4 text-violet-500 flex-shrink-0" />
+          <div className="min-w-0">
+            <h2 className="font-semibold text-sm truncate max-w-[200px]">{roomName}</h2>
+            {room?.description && (
+              <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{room.description}</p>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Settings button (owner only) */}
+          {isOwner && room && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          )}
+
           {/* Invite button (owner only) */}
           {isOwner && groupKey && roomEventId && (
             <InviteMemberDialog
@@ -212,7 +231,26 @@ export default function RoomChat() {
           </div>
         )}
 
-        {!isLoading && !groupKey && (
+        {!isLoading && !room && (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Info className="h-10 w-10 text-muted-foreground mb-3" />
+            <h3 className="font-medium">Room not found</h3>
+            <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+              This room may have been deleted or you no longer have access.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/encrypted-rooms')}
+              className="mt-4"
+            >
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Back to Rooms
+            </Button>
+          </div>
+        )}
+
+        {!isLoading && room && !groupKey && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <ShieldAlert className="h-10 w-10 text-amber-500 mb-3" />
             <h3 className="font-medium">Invite not accepted</h3>
@@ -267,6 +305,21 @@ export default function RoomChat() {
         disabled={!groupKey}
         placeholder={groupKey ? 'Type a message...' : 'Accept invite to start chatting...'}
       />
+
+      {/* Room settings dialog (owner only) */}
+      {room && isOwner && (
+        <RoomSettingsDialog
+          room={room}
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          onRoomUpdated={(newEventId) => {
+            navigate(`/encrypted-rooms/room/${newEventId}`, { replace: true });
+          }}
+          onRoomDeleted={() => {
+            navigate('/encrypted-rooms');
+          }}
+        />
+      )}
     </div>
   );
 }
