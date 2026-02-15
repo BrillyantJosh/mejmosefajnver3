@@ -1,6 +1,18 @@
-import { Crown, Shield, User, Eye, Clock, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import { Crown, Shield, User, Eye, Clock, XCircle, UserMinus, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { formatDistanceToNow } from 'date-fns';
 import type { RoomMember } from '@/types/encryptedRooms';
 
@@ -17,6 +29,9 @@ interface RoomMembersListProps {
   members: RoomMember[];
   currentUserPubkey?: string;
   inviteStatuses?: InviteStatusDisplay[];
+  isOwner?: boolean;
+  onRemoveMember?: (pubkey: string, displayName: string) => Promise<void>;
+  isRemoving?: boolean;
 }
 
 const roleConfig = {
@@ -26,106 +41,164 @@ const roleConfig = {
   readonly: { label: 'Read-only', icon: Eye, color: 'text-muted-foreground', badgeClass: 'bg-muted text-muted-foreground' },
 };
 
-export const RoomMembersList = ({ members, currentUserPubkey, inviteStatuses }: RoomMembersListProps) => {
+export const RoomMembersList = ({
+  members,
+  currentUserPubkey,
+  inviteStatuses,
+  isOwner,
+  onRemoveMember,
+  isRemoving,
+}: RoomMembersListProps) => {
+  const [removingMember, setRemovingMember] = useState<{ pubkey: string; displayName: string } | null>(null);
+
   // Filter invite statuses to only pending and declined (accepted are already in members list)
   const pendingDeclined = inviteStatuses?.filter((s) => s.status === 'pending' || s.status === 'declined') || [];
 
   return (
-    <div className="space-y-1">
-      <h3 className="text-sm font-medium text-muted-foreground px-2 mb-2">
-        Members ({members.length})
-      </h3>
-      {members.map((member) => {
-        const config = roleConfig[member.role] || roleConfig.member;
-        const RoleIcon = config.icon;
-        const isCurrentUser = member.pubkey === currentUserPubkey;
-        const displayName = member.displayName || member.pubkey.slice(0, 12) + '...';
+    <>
+      <div className="space-y-1">
+        <h3 className="text-sm font-medium text-muted-foreground px-2 mb-2">
+          Members ({members.length})
+        </h3>
+        {members.map((member) => {
+          const config = roleConfig[member.role] || roleConfig.member;
+          const RoleIcon = config.icon;
+          const isCurrentUser = member.pubkey === currentUserPubkey;
+          const displayName = member.displayName || member.pubkey.slice(0, 12) + '...';
 
-        return (
-          <div
-            key={member.pubkey}
-            className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors"
-          >
-            <Avatar className="h-8 w-8">
-              {member.picture ? (
-                <AvatarImage src={member.picture} alt={displayName} />
-              ) : null}
-              <AvatarFallback className="text-xs">
-                {displayName.slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+          return (
+            <div
+              key={member.pubkey}
+              className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors"
+            >
+              <Avatar className="h-8 w-8">
+                {member.picture ? (
+                  <AvatarImage src={member.picture} alt={displayName} />
+                ) : null}
+                <AvatarFallback className="text-xs">
+                  {displayName.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm font-medium truncate">
-                  {displayName}
-                  {isCurrentUser && (
-                    <span className="text-muted-foreground font-normal"> (you)</span>
-                  )}
-                </span>
-              </div>
-            </div>
-
-            {/* Role badge - only show for non-members */}
-            {member.role !== 'member' && (
-              <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${config.badgeClass}`}>
-                <RoleIcon className={`h-3 w-3 mr-0.5 ${config.color}`} />
-                {config.label}
-              </Badge>
-            )}
-          </div>
-        );
-      })}
-
-      {/* Pending & Declined invites section (owner only) */}
-      {pendingDeclined.length > 0 && (
-        <>
-          <div className="border-t my-3" />
-          <h3 className="text-sm font-medium text-muted-foreground px-2 mb-2">
-            Pending & Declined Invites
-          </h3>
-          {pendingDeclined.map((invite) => {
-            const displayName = invite.displayName || invite.pubkey.slice(0, 12) + '...';
-            const isPending = invite.status === 'pending';
-            const timeStr = invite.respondedAt
-              ? formatDistanceToNow(new Date(invite.respondedAt * 1000), { addSuffix: true })
-              : formatDistanceToNow(new Date(invite.invitedAt * 1000), { addSuffix: true });
-
-            return (
-              <div
-                key={invite.pubkey}
-                className="flex items-center gap-2.5 px-2 py-1.5 rounded-md opacity-60"
-              >
-                <Avatar className="h-8 w-8">
-                  {invite.picture ? (
-                    <AvatarImage src={invite.picture} alt={displayName} />
-                  ) : null}
-                  <AvatarFallback className="text-xs">
-                    {displayName.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium truncate block">{displayName}</span>
-                  <span className="text-[10px] text-muted-foreground">{timeStr}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium truncate">
+                    {displayName}
+                    {isCurrentUser && (
+                      <span className="text-muted-foreground font-normal"> (you)</span>
+                    )}
+                  </span>
                 </div>
-
-                {isPending ? (
-                  <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/20 text-[10px] px-1.5 py-0.5">
-                    <Clock className="h-3 w-3 mr-0.5" />
-                    Pending
-                  </Badge>
-                ) : (
-                  <Badge className="bg-red-500/15 text-red-600 border-red-500/20 text-[10px] px-1.5 py-0.5">
-                    <XCircle className="h-3 w-3 mr-0.5" />
-                    Declined
-                  </Badge>
-                )}
               </div>
-            );
-          })}
-        </>
+
+              {/* Role badge - only show for non-members */}
+              {member.role !== 'member' && (
+                <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${config.badgeClass}`}>
+                  <RoleIcon className={`h-3 w-3 mr-0.5 ${config.color}`} />
+                  {config.label}
+                </Badge>
+              )}
+
+              {/* Remove button - owner only, not for owner role or self */}
+              {isOwner && member.role !== 'owner' && !isCurrentUser && onRemoveMember && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
+                  disabled={isRemoving}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRemovingMember({ pubkey: member.pubkey, displayName });
+                  }}
+                >
+                  {isRemoving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <UserMinus className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Pending & Declined invites section (owner only) */}
+        {pendingDeclined.length > 0 && (
+          <>
+            <div className="border-t my-3" />
+            <h3 className="text-sm font-medium text-muted-foreground px-2 mb-2">
+              Pending & Declined Invites
+            </h3>
+            {pendingDeclined.map((invite) => {
+              const displayName = invite.displayName || invite.pubkey.slice(0, 12) + '...';
+              const isPending = invite.status === 'pending';
+              const timeStr = invite.respondedAt
+                ? formatDistanceToNow(new Date(invite.respondedAt * 1000), { addSuffix: true })
+                : formatDistanceToNow(new Date(invite.invitedAt * 1000), { addSuffix: true });
+
+              return (
+                <div
+                  key={invite.pubkey}
+                  className="flex items-center gap-2.5 px-2 py-1.5 rounded-md opacity-60"
+                >
+                  <Avatar className="h-8 w-8">
+                    {invite.picture ? (
+                      <AvatarImage src={invite.picture} alt={displayName} />
+                    ) : null}
+                    <AvatarFallback className="text-xs">
+                      {displayName.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium truncate block">{displayName}</span>
+                    <span className="text-[10px] text-muted-foreground">{timeStr}</span>
+                  </div>
+
+                  {isPending ? (
+                    <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/20 text-[10px] px-1.5 py-0.5">
+                      <Clock className="h-3 w-3 mr-0.5" />
+                      Pending
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-red-500/15 text-red-600 border-red-500/20 text-[10px] px-1.5 py-0.5">
+                      <XCircle className="h-3 w-3 mr-0.5" />
+                      Declined
+                    </Badge>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
+
+      {/* Remove member confirmation dialog */}
+      {removingMember && (
+        <AlertDialog open={!!removingMember} onOpenChange={(open) => !open && setRemovingMember(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove member?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove <strong>{removingMember.displayName}</strong> from this room?
+                They will no longer be able to read or send messages.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  onRemoveMember?.(removingMember.pubkey, removingMember.displayName);
+                  setRemovingMember(null);
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
-    </div>
+    </>
   );
 };

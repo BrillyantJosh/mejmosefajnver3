@@ -18,6 +18,7 @@ import { RoomSettingsDialog } from '@/components/encrypted-rooms/RoomSettingsDia
 import { encryptRoomMessage, hexToBytes } from '@/lib/encrypted-room-crypto';
 import { finalizeEvent } from 'nostr-tools';
 import type { RoomMessage, RoomMessageContent } from '@/types/encryptedRooms';
+import { toast } from 'sonner';
 
 export default function RoomChat() {
   const { roomId: roomEventId } = useParams<{ roomId: string }>();
@@ -50,7 +51,7 @@ export default function RoomChat() {
   );
 
   // Fetch members
-  const { members } = useEncryptedRoomMembers(roomEventId || null);
+  const { members, refetch: refetchMembers } = useEncryptedRoomMembers(roomEventId || null);
 
   const isOwner = room?.ownerPubkey === userPubkey;
 
@@ -145,6 +146,51 @@ export default function RoomChat() {
     });
   };
 
+  // Remove member handler (owner only)
+  const [isRemoving, setIsRemoving] = useState(false);
+
+  const handleRemoveMember = async (targetPubkey: string, displayName: string) => {
+    if (!roomEventId || !userPrivKey || !userPubkey) return;
+
+    setIsRemoving(true);
+    try {
+      const privKeyBytes = hexToBytes(userPrivKey);
+
+      const removeEvent = finalizeEvent(
+        {
+          kind: 1105,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            ['e', roomEventId],
+            ['d', room?.roomId || ''],
+            ['p', targetPubkey],
+          ],
+          content: JSON.stringify({ action: 'remove' }),
+        },
+        privKeyBytes
+      );
+
+      const res = await fetch('/api/functions/publish-dm-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: removeEvent }),
+      });
+
+      const data = await res.json();
+      if (!data.success) throw new Error('Failed to publish removal event');
+
+      toast.success(`${displayName} has been removed`);
+
+      // Refetch members to update the list
+      await refetchMembers();
+    } catch (error: any) {
+      console.error('Error removing member:', error);
+      toast.error(`Error: ${error.message}`);
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
   const isLoading = keyLoading || messagesLoading;
   const roomName = room?.name || 'Room';
 
@@ -218,6 +264,9 @@ export default function RoomChat() {
                     displayName: profileCache[s.pubkey]?.name,
                     picture: profileCache[s.pubkey]?.picture,
                   })) : undefined}
+                  isOwner={isOwner}
+                  onRemoveMember={handleRemoveMember}
+                  isRemoving={isRemoving}
                 />
               </div>
             </SheetContent>
