@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Lock, Users, Loader2, ShieldAlert, Mail, Settings, Info, Heart } from 'lucide-react';
+import { ArrowLeft, Lock, Users, Loader2, ShieldAlert, Mail, Settings, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -278,12 +278,13 @@ export default function RoomChat() {
           )}
 
           {/* Invite button (owner only) */}
-          {isOwner && groupKey && roomEventId && (
+          {isOwner && groupKey && room && (
             <InviteMemberDialog
-              roomEventId={roomEventId}
-              roomName={roomName}
+              room={room}
               groupKey={groupKey}
-              keyVersion={room?.keyVersion || 1}
+              onInviteSent={(newEventId) => {
+                navigate(`/encrypted-rooms/room/${newEventId}`, { replace: true });
+              }}
             />
           )}
 
