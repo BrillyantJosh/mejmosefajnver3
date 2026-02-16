@@ -147,7 +147,7 @@ export default function Profile() {
         intimateInterests: profile.intimateInterests?.join(', ') || '',
         statement_of_responsibility: profile.statement_of_responsibility || '',
         lanoshi2lash: profile.lanoshi2lash || '',
-        lanaWalletID: profile.lanaWalletID || '',
+        lanaWalletID: profile.lanaWalletID || session?.walletId || '',
         whoAreYou: profile.whoAreYou as "Human" | "EI" || 'Human',
         orgasmic_profile: profile.orgasmic_profile || '',
         website: profile.website || '',
@@ -500,9 +500,9 @@ export default function Profile() {
                   <Label className="text-muted-foreground text-xs">Nostr Private Key</Label>
                   <div className="flex items-center gap-2">
                     <p className="font-mono text-xs break-all select-all flex-1">
-                      {showPrivateKey 
-                        ? (typeof session.nostrPrivateKey === 'string' 
-                            ? session.nostrPrivateKey 
+                      {showPrivateKey
+                        ? (typeof session.nostrPrivateKey === 'string'
+                            ? session.nostrPrivateKey
                             : Array.from(session.nostrPrivateKey as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join(''))
                         : '••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••'}
                     </p>
@@ -517,8 +517,8 @@ export default function Profile() {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        const key = typeof session.nostrPrivateKey === 'string' 
-                          ? session.nostrPrivateKey 
+                        const key = typeof session.nostrPrivateKey === 'string'
+                          ? session.nostrPrivateKey
                           : Array.from(session.nostrPrivateKey as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('');
                         navigator.clipboard.writeText(key);
                         toast({ title: "Copied", description: "Nostr Private Key copied to clipboard" });
@@ -528,6 +528,33 @@ export default function Profile() {
                     </Button>
                   </div>
                   <p className="text-xs text-destructive mt-1">⚠️ Never share your private key!</p>
+                </div>
+              )}
+
+              {(profile.lanaWalletID || session?.walletId) && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <Label className="text-muted-foreground text-xs">
+                    Lana Wallet ID
+                    {!profile.lanaWalletID && session?.walletId && (
+                      <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">from session</Badge>
+                    )}
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <p className="font-mono text-xs break-all select-all flex-1">
+                      {profile.lanaWalletID || session?.walletId}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const walletId = profile.lanaWalletID || session?.walletId || '';
+                        navigator.clipboard.writeText(walletId);
+                        toast({ title: "Copied", description: "Lana Wallet ID copied to clipboard" });
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               )}
 
