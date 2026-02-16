@@ -2,6 +2,7 @@ export interface AppSettings {
   app_name: string;
   theme_colors: ThemeColors;
   default_rooms: string[];
+  new_projects_100millionideas: boolean;
 }
 
 export interface ThemeColors {

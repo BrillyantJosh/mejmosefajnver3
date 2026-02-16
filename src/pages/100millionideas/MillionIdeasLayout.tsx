@@ -1,10 +1,12 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { FolderKanban, Heart, PlusCircle, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAdmin } from "@/contexts/AdminContext";
 
 const MillionIdeasLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { appSettings } = useAdmin();
 
   const navItems = [
     {
@@ -52,15 +54,17 @@ const MillionIdeasLayout = () => {
             );
           })}
           
-          {/* Create Project Button */}
-          <Button
-            variant="ghost"
-            onClick={() => navigate('/100millionideas/create-project')}
-            className="flex flex-col items-center gap-1 h-auto py-2 px-4 text-muted-foreground hover:text-primary"
-          >
-            <PlusCircle className="h-5 w-5" />
-            <span className="text-xs">Create</span>
-          </Button>
+          {/* Create Project Button — hidden when admin disables new projects */}
+          {appSettings?.new_projects_100millionideas !== false && (
+            <Button
+              variant="ghost"
+              onClick={() => navigate('/100millionideas/create-project')}
+              className="flex flex-col items-center gap-1 h-auto py-2 px-4 text-muted-foreground hover:text-primary"
+            >
+              <PlusCircle className="h-5 w-5" />
+              <span className="text-xs">Create</span>
+            </Button>
+          )}
         </div>
       </div>
     </div>

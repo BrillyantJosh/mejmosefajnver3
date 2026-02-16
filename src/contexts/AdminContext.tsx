@@ -13,6 +13,7 @@ interface AdminContextType {
   updateAppName: (name: string) => Promise<void>;
   updateThemeColors: (colors: ThemeColors) => Promise<void>;
   updateDefaultRooms: (rooms: string[]) => Promise<void>;
+  updateNewProjects100M: (enabled: boolean) => Promise<void>;
   loadAppSettings: () => Promise<void>;
 }
 
@@ -63,6 +64,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
           foreground: "240 10% 15%",
         },
         default_rooms: (getValue('default_rooms') as string[]) || ["general"],
+        new_projects_100millionideas: getValue('100millionideas_new_projects_enabled') !== false,
       });
     } catch (error) {
       console.error('Error loading app settings:', error);
@@ -155,6 +157,30 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateNewProjects100M = async (enabled: boolean) => {
+    if (!session?.nostrHexId) {
+      toast({
+        title: "Error",
+        description: "Not authenticated",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await invokeSettingsUpdate('100millionideas_new_projects_enabled', enabled);
+      setAppSettings(prev => prev ? { ...prev, new_projects_100millionideas: enabled } : null);
+      toast({ title: "Success", description: enabled ? "New project creation enabled" : "New project creation disabled" });
+    } catch (error) {
+      console.error('Error updating 100M Ideas setting:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update setting",
+        variant: "destructive"
+      });
+    }
+  };
+
   useEffect(() => {
     // Don't run admin check until auth has finished loading
     if (authLoading) return;
@@ -188,6 +214,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         updateAppName,
         updateThemeColors,
         updateDefaultRooms,
+        updateNewProjects100M,
         loadAppSettings,
       }}
     >
