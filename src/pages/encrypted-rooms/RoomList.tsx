@@ -11,13 +11,13 @@ export default function RoomList() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Lock className="h-6 w-6 text-violet-500" />
+          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+            <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-violet-500" />
             Encrypted Rooms
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             End-to-end encrypted group conversations
           </p>
         </div>

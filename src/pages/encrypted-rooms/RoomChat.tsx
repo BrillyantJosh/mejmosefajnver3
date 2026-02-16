@@ -335,7 +335,7 @@ export default function RoomChat() {
   const roomName = room?.name || 'Room';
 
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)]">
+    <div className="flex flex-col h-[calc(100dvh-180px)]">
       {/* Header */}
       <div className="flex items-center justify-between px-2 py-3 border-b">
         <div className="flex items-center gap-2">
@@ -349,14 +349,14 @@ export default function RoomChat() {
           </Button>
           <Lock className="h-4 w-4 text-violet-500 flex-shrink-0" />
           <div className="min-w-0">
-            <h2 className="font-semibold text-sm truncate max-w-[200px]">{roomName}</h2>
+            <h2 className="font-semibold text-sm truncate max-w-[120px] sm:max-w-[200px]">{roomName}</h2>
             {room?.description && (
-              <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">{room.description}</p>
+              <p className="text-[10px] text-muted-foreground truncate max-w-[120px] sm:max-w-[200px]">{room.description}</p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           {/* Archive button (owner only) */}
           {isOwner && room && (
             <Button
@@ -401,12 +401,12 @@ export default function RoomChat() {
           {/* Members sheet */}
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Users className="h-4 w-4 mr-1" />
-                {members.length}
+              <Button variant="outline" size="sm" className="px-2 sm:px-3">
+                <Users className="h-4 w-4 sm:mr-1" />
+                <span className="hidden sm:inline">{members.length}</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[300px]">
+            <SheetContent side="right" className="w-[85vw] sm:w-[300px]">
               <SheetHeader>
                 <SheetTitle>Room Members</SheetTitle>
               </SheetHeader>
