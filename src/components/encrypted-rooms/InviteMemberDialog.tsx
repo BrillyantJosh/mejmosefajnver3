@@ -9,8 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
-import { SimplePool } from 'nostr-tools';
-import { finalizeEvent } from 'nostr-tools';
+import { SimplePool, finalizeEvent, nip04 } from 'nostr-tools';
 import {
   encryptInvitePayload,
   hexToBytes,
@@ -258,6 +257,36 @@ export const InviteMemberDialog = ({
 
       const inviteData = await inviteRes.json();
       if (!inviteData.success) throw new Error('Failed to publish invite');
+
+      // ─── Step 3: Send NIP-04 DM notification (fire-and-forget) ───
+      try {
+        const dmText = message.trim()
+          || `You've been invited to join encrypted room "${room.name}"`;
+
+        const encrypted = await nip04.encrypt(
+          session.nostrPrivateKey,
+          selectedPubkey,
+          dmText
+        );
+
+        const dmEvent = finalizeEvent(
+          {
+            kind: 4,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [['p', selectedPubkey]],
+            content: encrypted,
+          },
+          privKeyBytes
+        );
+
+        fetch('/api/functions/publish-dm-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: dmEvent }),
+        }).catch((err) => console.warn('DM notification failed (non-blocking):', err));
+      } catch (dmError) {
+        console.warn('Failed to send DM notification (non-blocking):', dmError);
+      }
 
       toast.success('Invite sent!');
       setOpen(false);
