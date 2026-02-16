@@ -13,6 +13,7 @@ import { electrumCall, fetchBatchBalances } from '../lib/electrum';
 import { detectMissingFields, createPendingTask } from '../lib/aiTasks';
 import { sendLanaTransaction, sendBatchLanaTransaction } from '../lib/crypto';
 import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays } from '../lib/nostr';
+import { sendPushToUser } from '../lib/pushNotification';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -996,6 +997,36 @@ router.post('/send-push-notification', async (req: Request, res: Response) => {
 
     return res.json({ sent: sentCount > 0, sentCount });
   } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// send-room-push-notification — notify room members about new encrypted room message
+router.post('/send-room-push-notification', async (req: Request, res: Response) => {
+  try {
+    const { roomName, senderDisplayName, senderPubkey, memberPubkeys, roomId, roomUrl } = req.body;
+
+    if (!memberPubkeys || !Array.isArray(memberPubkeys)) {
+      return res.status(400).json({ error: 'memberPubkeys required' });
+    }
+
+    const db = getDb();
+    let totalSent = 0;
+
+    for (const pubkey of memberPubkeys) {
+      if (pubkey === senderPubkey) continue; // Don't notify the sender
+      const result = await sendPushToUser(db, pubkey, {
+        title: `🔒 ${roomName || 'Encrypted Room'}`,
+        body: `${senderDisplayName || 'Someone'}: New message`,
+        url: roomUrl || '/encrypted-rooms',
+        tag: `room-${roomId || 'unknown'}`,
+      });
+      if (result.sent) totalSent += result.sentCount;
+    }
+
+    return res.json({ sent: totalSent > 0, totalSent });
+  } catch (error: any) {
+    console.error('Room push notification error:', error.message);
     return res.status(500).json({ error: error.message });
   }
 });

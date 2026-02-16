@@ -150,6 +150,25 @@ export default function RoomChat() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event }),
     });
+
+    // Fire-and-forget push notification to room members
+    try {
+      const senderProfile = profileCache[userPubkey];
+      const senderDisplayName = senderProfile?.name || 'Someone';
+      const memberPubkeys = room?.members.map((m) => m.pubkey) || [];
+      fetch('/api/functions/send-room-push-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomName: room?.name || 'Encrypted Room',
+          senderDisplayName,
+          senderPubkey: userPubkey,
+          memberPubkeys,
+          roomId: room?.roomId || '',
+          roomUrl: `/encrypted-rooms/room/${roomEventId}`,
+        }),
+      }).catch(() => {});
+    } catch {}
   };
 
   // LASH handler
