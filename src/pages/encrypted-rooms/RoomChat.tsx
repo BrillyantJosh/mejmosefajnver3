@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Lock, Users, Loader2, ShieldAlert, Settings, Info } from 'lucide-react';
+import { ArrowLeft, Lock, Users, Loader2, ShieldAlert, Settings, Info, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -280,6 +280,57 @@ export default function RoomChat() {
     }
   };
 
+  // Archive/export handler (owner only)
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportRoom = async () => {
+    if (!room?.roomId || !roomEventId) return;
+
+    setIsExporting(true);
+    try {
+      const res = await fetch('/api/functions/fetch-room-events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomDTag: room.roomId,
+          kinds: [30100, 1101, 1102, 1105],
+          limit: 10000,
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.success) throw new Error('Failed to fetch room events');
+
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        roomId: room.roomId,
+        roomName: room.name,
+        eventCount: data.events.length,
+        events: data.events,
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date().toISOString().split('T')[0];
+      a.download = `${room.name.replace(/[^a-zA-Z0-9]/g, '_')}_archive_${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Exported ${data.events.length} events`);
+    } catch (error: any) {
+      console.error('Error exporting room:', error);
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const isLoading = keyLoading || messagesLoading;
   const roomName = room?.name || 'Room';
 
@@ -306,6 +357,24 @@ export default function RoomChat() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Archive button (owner only) */}
+          {isOwner && room && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleExportRoom}
+              disabled={isExporting}
+              title="Archive room events"
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+
           {/* Settings button (owner only) */}
           {isOwner && room && (
             <Button
