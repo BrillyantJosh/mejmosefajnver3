@@ -258,11 +258,12 @@ export const InviteMemberDialog = ({
       const inviteData = await inviteRes.json();
       if (!inviteData.success) throw new Error('Failed to publish invite');
 
-      // ─── Step 3: Send NIP-04 DM notification (fire-and-forget) ───
+      // ─── Step 3: Send NIP-04 DM notification ───
       try {
         const dmText = message.trim()
           || `You've been invited to join encrypted room "${room.name}"`;
 
+        console.log('📩 Encrypting DM for invite notification...');
         const encrypted = await nip04.encrypt(
           session.nostrPrivateKey,
           selectedPubkey,
@@ -279,13 +280,17 @@ export const InviteMemberDialog = ({
           privKeyBytes
         );
 
-        fetch('/api/functions/publish-dm-event', {
+        console.log('📤 Publishing KIND 4 DM via server...');
+        const dmRes = await fetch('/api/functions/publish-dm-event', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ event: dmEvent }),
-        }).catch((err) => console.warn('DM notification failed (non-blocking):', err));
+        });
+
+        const dmData = await dmRes.json();
+        console.log(`✅ DM published to ${dmData.publishedTo}/${dmData.totalRelays} relays`);
       } catch (dmError) {
-        console.warn('Failed to send DM notification (non-blocking):', dmError);
+        console.warn('⚠️ DM notification failed (non-blocking):', dmError);
       }
 
       toast.success('Invite sent!');
