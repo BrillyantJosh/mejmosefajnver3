@@ -96,7 +96,7 @@ import MyStatus from "./pages/lanaalignsworld/MyStatus";
 import EncryptedRoomsLayout from "./pages/encrypted-rooms/EncryptedRoomsLayout";
 import EncryptedRoomList from "./pages/encrypted-rooms/RoomList";
 import EncryptedRoomChat from "./pages/encrypted-rooms/RoomChat";
-import EncryptedRoomInvites from "./pages/encrypted-rooms/Invites";
+
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
 import RegisterWallet from "./pages/RegisterWallet";
@@ -255,7 +255,6 @@ const App = () => (
                   <Route path="/encrypted-rooms" element={<EncryptedRoomsLayout />}>
                     <Route index element={<EncryptedRoomList />} />
                     <Route path="room/:roomId" element={<EncryptedRoomChat />} />
-                    <Route path="invites" element={<EncryptedRoomInvites />} />
                   </Route>
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/wallet/register" element={<RegisterWallet />} />
