@@ -14,7 +14,7 @@ import { RoomChatInput } from '@/components/encrypted-rooms/RoomChatInput';
 import { RoomMembersList } from '@/components/encrypted-rooms/RoomMembersList';
 import { InviteMemberDialog } from '@/components/encrypted-rooms/InviteMemberDialog';
 import { RoomSettingsDialog } from '@/components/encrypted-rooms/RoomSettingsDialog';
-import { encryptRoomMessage, hexToBytes } from '@/lib/encrypted-room-crypto';
+import { encryptRoomMessage, hexToBytes, getRoomKeyFromCache, setRoomKeyToCache } from '@/lib/encrypted-room-crypto';
 import { finalizeEvent } from 'nostr-tools';
 import type { RoomMessage, RoomMessageContent } from '@/types/encryptedRooms';
 import { useNostrLash } from '@/hooks/useNostrLash';
@@ -190,19 +190,20 @@ export default function RoomChat() {
   const [isRemoving, setIsRemoving] = useState(false);
 
   const handleRemoveMember = async (targetPubkey: string, displayName: string) => {
-    if (!roomEventId || !userPrivKey || !userPubkey) return;
+    if (!roomEventId || !userPrivKey || !userPubkey || !room) return;
 
     setIsRemoving(true);
     try {
       const privKeyBytes = hexToBytes(userPrivKey);
 
+      // ─── Step 1: Publish KIND 1105 removal event ───
       const removeEvent = finalizeEvent(
         {
           kind: 1105,
           created_at: Math.floor(Date.now() / 1000),
           tags: [
             ['e', roomEventId],
-            ['d', room?.roomId || ''],
+            ['d', room.roomId],
             ['p', targetPubkey],
           ],
           content: JSON.stringify({ action: 'remove' }),
@@ -219,10 +220,58 @@ export default function RoomChat() {
       const data = await res.json();
       if (!data.success) throw new Error('Failed to publish removal event');
 
+      // ─── Step 2: Republish KIND 30100 WITHOUT removed member's p-tag ───
+      const roomTags: string[][] = [
+        ['d', room.roomId],
+        ['name', room.name],
+        ['description', room.description],
+        ...room.members
+          .filter((m) => m.pubkey !== targetPubkey)
+          .map((m) => ['p', m.pubkey, m.role]),
+        ['status', room.status],
+        ['key_version', String(room.keyVersion)],
+      ];
+
+      if (room.image) {
+        roomTags.push(['image', room.image]);
+      }
+
+      const updatedRoomEvent = finalizeEvent(
+        {
+          kind: 30100,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: roomTags,
+          content: JSON.stringify({
+            maxMembers: 50,
+            created: room.createdAt,
+          }),
+        },
+        privKeyBytes
+      );
+
+      const roomRes = await fetch('/api/functions/publish-dm-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: updatedRoomEvent }),
+      });
+
+      const roomData = await roomRes.json();
+      if (!roomData.success) throw new Error('Failed to publish room update');
+
+      const newEventId = updatedRoomEvent.id;
+
+      // Copy group key cache: old eventId → new eventId
+      const oldKey = getRoomKeyFromCache(room.eventId, room.keyVersion);
+      if (oldKey) {
+        setRoomKeyToCache(newEventId, room.keyVersion, oldKey);
+      }
+
+      console.log(`🚫 Member removed, room updated: ${room.eventId.slice(0, 16)} → ${newEventId.slice(0, 16)}`);
+
       toast.success(`${displayName} has been removed`);
 
-      // Refetch members to update the list
-      await refetchMembers();
+      // Navigate to new eventId (KIND 30100 changed)
+      navigate(`/encrypted-rooms/room/${newEventId}`, { replace: true });
     } catch (error: any) {
       console.error('Error removing member:', error);
       toast.error(`Error: ${error.message}`);
