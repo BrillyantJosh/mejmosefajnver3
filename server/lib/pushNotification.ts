@@ -43,10 +43,8 @@ export async function sendPushToUser(
       body: payload.body,
       icon: payload.icon || '/icon-192.png',
       badge: payload.badge || '/icon-192.png',
-      data: {
-        url: payload.url || '/',
-        tag: payload.tag,
-      },
+      url: payload.url || '/',
+      tag: payload.tag,
     });
 
     let sentCount = 0;
