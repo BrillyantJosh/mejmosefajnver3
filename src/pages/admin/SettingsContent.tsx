@@ -5,12 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { ThemeColors } from "@/types/admin";
-import { Settings, Users, Loader2 } from "lucide-react";
+import { Settings, Users, Loader2, Lightbulb } from "lucide-react";
 import { useNostrRooms } from "@/hooks/useNostrRooms";
 
 export default function SettingsContent() {
-  const { appSettings, updateAppName, updateThemeColors, updateDefaultRooms } = useAdmin();
+  const { appSettings, updateAppName, updateThemeColors, updateDefaultRooms, updateNewProjects100M } = useAdmin();
   const { rooms, loading: roomsLoading } = useNostrRooms();
   
   const [localName, setLocalName] = useState(appSettings?.app_name || "");
@@ -152,6 +153,32 @@ export default function SettingsContent() {
           <Button onClick={handleSaveDefaultRooms} disabled={roomsLoading}>
             Save Default Rooms
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Feature Toggles */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lightbulb className="h-5 w-5" />
+            Feature Toggles
+          </CardTitle>
+          <CardDescription>Enable or disable specific features across the application</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-3 border rounded-lg">
+            <div className="space-y-0.5">
+              <Label htmlFor="toggle-100m" className="font-medium">100 Million Ideas — New Projects</Label>
+              <p className="text-xs text-muted-foreground">
+                When disabled, users can browse and edit existing projects but cannot create new ones
+              </p>
+            </div>
+            <Switch
+              id="toggle-100m"
+              checked={appSettings?.new_projects_100millionideas ?? true}
+              onCheckedChange={(checked) => updateNewProjects100M(checked)}
+            />
+          </div>
         </CardContent>
       </Card>
 
