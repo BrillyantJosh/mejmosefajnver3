@@ -3,25 +3,10 @@ import { Lock, Loader2, MessageSquareOff } from 'lucide-react';
 import { useEncryptedRooms } from '@/hooks/useEncryptedRooms';
 import { RoomCard } from '@/components/encrypted-rooms/RoomCard';
 import { CreateRoomDialog } from '@/components/encrypted-rooms/CreateRoomDialog';
-import { getRoomKeyFromCache } from '@/lib/encrypted-room-crypto';
-import type { EncryptedRoom } from '@/types/encryptedRooms';
-import { toast } from 'sonner';
 
 export default function RoomList() {
   const { rooms, isLoading, refetch } = useEncryptedRooms();
   const navigate = useNavigate();
-
-  const handleRoomClick = (room: EncryptedRoom) => {
-    const cachedKey = getRoomKeyFromCache(room.eventId, room.keyVersion);
-    if (!cachedKey) {
-      toast.info('Accept the invite first', {
-        description: `Go to Invites to accept "${room.name}"`,
-      });
-      navigate('/encrypted-rooms/invites');
-      return;
-    }
-    navigate(`/encrypted-rooms/room/${room.eventId}`);
-  };
 
   return (
     <div>
@@ -62,17 +47,13 @@ export default function RoomList() {
       {/* Room grid */}
       {!isLoading && rooms.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {rooms.map((room) => {
-            const isPending = !getRoomKeyFromCache(room.eventId, room.keyVersion);
-            return (
-              <RoomCard
-                key={room.id}
-                room={room}
-                isPending={isPending}
-                onClick={() => handleRoomClick(room)}
-              />
-            );
-          })}
+          {rooms.map((room) => (
+            <RoomCard
+              key={room.id}
+              room={room}
+              onClick={() => navigate(`/encrypted-rooms/room/${room.eventId}`)}
+            />
+          ))}
         </div>
       )}
     </div>

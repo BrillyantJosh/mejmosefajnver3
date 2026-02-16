@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Lock, Users, Loader2, ShieldAlert, Mail, Settings, Info } from 'lucide-react';
+import { ArrowLeft, Lock, Users, Loader2, ShieldAlert, Settings, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -9,7 +9,6 @@ import { useEncryptedRoomGroupKey } from '@/hooks/useEncryptedRoomGroupKey';
 import { useEncryptedRoomMessages } from '@/hooks/useEncryptedRoomMessages';
 import { useEncryptedRoomMembers } from '@/hooks/useEncryptedRoomMembers';
 import { useEncryptedRooms } from '@/hooks/useEncryptedRooms';
-import { useRoomInviteStatuses } from '@/hooks/useRoomInviteStatuses';
 import { RoomMessageBubble } from '@/components/encrypted-rooms/RoomMessageBubble';
 import { RoomChatInput } from '@/components/encrypted-rooms/RoomChatInput';
 import { RoomMembersList } from '@/components/encrypted-rooms/RoomMembersList';
@@ -38,12 +37,13 @@ export default function RoomChat() {
   const { rooms } = useEncryptedRooms();
   const room = rooms.find((r) => r.eventId === roomEventId);
 
-  // Get group key from cache (only available after accepting invite)
+  // Get group key — checks localStorage cache first, then auto-fetches from KIND 1102 invites
   const { groupKey, isLoading: keyLoading } = useEncryptedRoomGroupKey(
     roomEventId || null,
     userPubkey,
     userPrivKey,
-    room?.keyVersion || 1
+    room?.keyVersion || 1,
+    room?.roomId || null
   );
 
   // Fetch messages (prefer stable d-tag over eventId for persistence across room updates)
@@ -58,12 +58,6 @@ export default function RoomChat() {
 
   const isOwner = room?.ownerPubkey === userPubkey;
 
-  // Fetch invite statuses (owner only)
-  const { statuses: inviteStatuses } = useRoomInviteStatuses(
-    roomEventId || null,
-    isOwner
-  );
-
   // LASH system
   const { giveLash, isSending: isSendingLash } = useNostrLash();
   const messageIds = messages.map((m) => m.id);
@@ -74,13 +68,11 @@ export default function RoomChat() {
   } = useNostrDMLashes(messageIds, session?.nostrHexId);
   const allLashedEventIds = new Set([...userLashedIds, ...optimisticLashes]);
 
-  // Fetch profiles for member names + invite statuses
+  // Fetch profiles for member names
   useEffect(() => {
     const fetchProfiles = async () => {
-      if (members.length === 0 && inviteStatuses.length === 0) return;
-      const memberPubkeys = members.map((m) => m.pubkey);
-      const invitePubkeys = inviteStatuses.map((s) => s.pubkey);
-      const pubkeys = [...new Set([...memberPubkeys, ...invitePubkeys])];
+      if (members.length === 0) return;
+      const pubkeys = members.map((m) => m.pubkey);
       try {
         const res = await fetch('/api/db/nostr_profiles?select=nostr_hex_id,display_name,full_name,picture,lana_wallet_id');
         const data = await res.json();
@@ -102,7 +94,7 @@ export default function RoomChat() {
       }
     };
     fetchProfiles();
-  }, [members, inviteStatuses]);
+  }, [members]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -308,11 +300,6 @@ export default function RoomChat() {
                     picture: profileCache[m.pubkey]?.picture,
                   }))}
                   currentUserPubkey={userPubkey || undefined}
-                  inviteStatuses={isOwner ? inviteStatuses.map((s) => ({
-                    ...s,
-                    displayName: profileCache[s.pubkey]?.name,
-                    picture: profileCache[s.pubkey]?.picture,
-                  })) : undefined}
                   isOwner={isOwner}
                   onRemoveMember={handleRemoveMember}
                   isRemoving={isRemoving}
@@ -353,18 +340,18 @@ export default function RoomChat() {
         {!isLoading && room && !groupKey && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <ShieldAlert className="h-10 w-10 text-amber-500 mb-3" />
-            <h3 className="font-medium">Invite not accepted</h3>
+            <h3 className="font-medium">Unable to access room</h3>
             <p className="text-sm text-muted-foreground mt-1 max-w-xs">
-              You need to accept the invite before you can access this room.
+              No invite found for this room. Ask the room owner to send you an invite.
             </p>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate('/encrypted-rooms/invites')}
+              onClick={() => navigate('/encrypted-rooms')}
               className="mt-4"
             >
-              <Mail className="h-4 w-4 mr-1" />
-              Go to Invites
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Back to Rooms
             </Button>
           </div>
         )}
@@ -415,7 +402,7 @@ export default function RoomChat() {
       <RoomChatInput
         onSend={handleSendMessage}
         disabled={!groupKey}
-        placeholder={groupKey ? 'Type a message...' : 'Accept invite to start chatting...'}
+        placeholder={groupKey ? 'Type a message...' : isLoading ? 'Loading room key...' : 'No access to this room'}
       />
 
       {/* Room settings dialog (owner only) */}

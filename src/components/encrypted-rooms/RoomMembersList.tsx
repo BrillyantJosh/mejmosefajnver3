@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Crown, Shield, User, Eye, Clock, XCircle, UserMinus, Loader2 } from 'lucide-react';
+import { Crown, Shield, User, Eye, UserMinus, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,22 +13,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { formatDistanceToNow } from 'date-fns';
 import type { RoomMember } from '@/types/encryptedRooms';
-
-export interface InviteStatusDisplay {
-  pubkey: string;
-  displayName?: string;
-  picture?: string;
-  status: 'pending' | 'accepted' | 'declined';
-  invitedAt: number;
-  respondedAt?: number;
-}
 
 interface RoomMembersListProps {
   members: RoomMember[];
   currentUserPubkey?: string;
-  inviteStatuses?: InviteStatusDisplay[];
   isOwner?: boolean;
   onRemoveMember?: (pubkey: string, displayName: string) => Promise<void>;
   isRemoving?: boolean;
@@ -44,15 +33,11 @@ const roleConfig = {
 export const RoomMembersList = ({
   members,
   currentUserPubkey,
-  inviteStatuses,
   isOwner,
   onRemoveMember,
   isRemoving,
 }: RoomMembersListProps) => {
   const [removingMember, setRemovingMember] = useState<{ pubkey: string; displayName: string } | null>(null);
-
-  // Filter invite statuses to only pending and declined (accepted are already in members list)
-  const pendingDeclined = inviteStatuses?.filter((s) => s.status === 'pending' || s.status === 'declined') || [];
 
   return (
     <>
@@ -121,56 +106,6 @@ export const RoomMembersList = ({
             </div>
           );
         })}
-
-        {/* Pending & Declined invites section (owner only) */}
-        {pendingDeclined.length > 0 && (
-          <>
-            <div className="border-t my-3" />
-            <h3 className="text-sm font-medium text-muted-foreground px-2 mb-2">
-              Pending & Declined Invites
-            </h3>
-            {pendingDeclined.map((invite) => {
-              const displayName = invite.displayName || invite.pubkey.slice(0, 12) + '...';
-              const isPending = invite.status === 'pending';
-              const timeStr = invite.respondedAt
-                ? formatDistanceToNow(new Date(invite.respondedAt * 1000), { addSuffix: true })
-                : formatDistanceToNow(new Date(invite.invitedAt * 1000), { addSuffix: true });
-
-              return (
-                <div
-                  key={invite.pubkey}
-                  className="flex items-center gap-2.5 px-2 py-1.5 rounded-md opacity-60"
-                >
-                  <Avatar className="h-8 w-8">
-                    {invite.picture ? (
-                      <AvatarImage src={invite.picture} alt={displayName} />
-                    ) : null}
-                    <AvatarFallback className="text-xs">
-                      {displayName.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium truncate block">{displayName}</span>
-                    <span className="text-[10px] text-muted-foreground">{timeStr}</span>
-                  </div>
-
-                  {isPending ? (
-                    <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/20 text-[10px] px-1.5 py-0.5">
-                      <Clock className="h-3 w-3 mr-0.5" />
-                      Pending
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-red-500/15 text-red-600 border-red-500/20 text-[10px] px-1.5 py-0.5">
-                      <XCircle className="h-3 w-3 mr-0.5" />
-                      Declined
-                    </Badge>
-                  )}
-                </div>
-              );
-            })}
-          </>
-        )}
       </div>
 
       {/* Remove member confirmation dialog */}
