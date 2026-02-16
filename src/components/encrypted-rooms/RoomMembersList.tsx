@@ -54,7 +54,7 @@ export const RoomMembersList = ({
           return (
             <div
               key={member.pubkey}
-              className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors"
+              className="flex items-center gap-2.5 px-2 py-2 sm:py-1.5 rounded-md hover:bg-muted/50 transition-colors"
             >
               <Avatar className="h-8 w-8">
                 {member.picture ? (

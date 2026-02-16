@@ -14,23 +14,23 @@ interface RoomCardProps {
 export const RoomCard = ({ room, unreadCount = 0, lastMessage, onClick }: RoomCardProps) => {
   return (
     <Card
-      className="cursor-pointer hover:shadow-md transition-shadow border-border/50"
+      className="cursor-pointer hover:shadow-md active:scale-[0.98] transition-all border-border/50"
       onClick={onClick}
     >
-      <CardContent className="p-4">
-        <div className="flex items-start gap-3">
+      <CardContent className="p-3 sm:p-4">
+        <div className="flex items-start gap-2.5 sm:gap-3">
           {/* Room avatar */}
           <div className="flex-shrink-0">
             {room.image ? (
-              <Avatar className="h-12 w-12">
+              <Avatar className="h-10 w-10 sm:h-12 sm:w-12">
                 <AvatarImage src={room.image} alt={room.name} />
                 <AvatarFallback className="bg-violet-500/20 text-violet-600">
-                  <Lock className="h-5 w-5" />
+                  <Lock className="h-4 w-4 sm:h-5 sm:w-5" />
                 </AvatarFallback>
               </Avatar>
             ) : (
-              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
-                <Lock className="h-5 w-5 text-white" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
+                <Lock className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
               </div>
             )}
           </div>

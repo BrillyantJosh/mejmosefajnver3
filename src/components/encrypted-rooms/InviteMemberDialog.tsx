@@ -273,9 +273,9 @@ export const InviteMemberDialog = ({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          <UserPlus className="h-4 w-4 mr-1" />
-          Invite
+        <Button size="sm" variant="outline" className="px-2 sm:px-3">
+          <UserPlus className="h-4 w-4 sm:mr-1" />
+          <span className="hidden sm:inline">Invite</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[400px]">

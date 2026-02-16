@@ -72,7 +72,7 @@ export const RoomMessageBubble = ({
 
       {/* Message bubble */}
       <div
-        className={`max-w-[75%] ${
+        className={`max-w-[85%] sm:max-w-[75%] ${
           isOwn
             ? 'bg-violet-500 text-white rounded-2xl rounded-br-sm'
             : 'bg-muted rounded-2xl rounded-bl-sm'
@@ -113,7 +113,7 @@ export const RoomMessageBubble = ({
               className={`flex-shrink-0 h-7 w-7 relative self-center ${
                 hasLashed
                   ? 'opacity-100'
-                  : 'opacity-0 group-hover:opacity-100 transition-opacity'
+                  : 'sm:opacity-0 sm:group-hover:opacity-100 transition-opacity'
               }`}
               onClick={(e) => {
                 if (!hasLashed) {
@@ -138,7 +138,7 @@ export const RoomMessageBubble = ({
             </Button>
           </PopoverTrigger>
           {hasLashed && lashers.length > 0 && (
-            <PopoverContent className="w-72">
+            <PopoverContent className="w-[min(18rem,85vw)]">
               <div className="space-y-3">
                 <p className="font-semibold text-sm">LASHed by:</p>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
