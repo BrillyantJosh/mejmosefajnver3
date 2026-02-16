@@ -71,7 +71,49 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
       return;
     }
 
-    // If input looks like a hex pubkey, don't search
+    // If input is a valid 64-char hex pubkey, look up profile by authors filter
+    if (/^[0-9a-fA-F]{64}$/.test(memberInput.trim())) {
+      const existingPubkeys = new Set(selectedMembers.map((m) => m.pubkey));
+      const hexLookupFn = async () => {
+        setIsSearching(true);
+        const pool = new SimplePool();
+        try {
+          const hexPubkey = memberInput.trim();
+          if (hexPubkey === session?.nostrHexId || existingPubkeys.has(hexPubkey)) {
+            setSearchProfiles([]);
+            return;
+          }
+          const events = await Promise.race([
+            pool.querySync(relays, { kinds: [0], authors: [hexPubkey] }),
+            new Promise<any[]>((_, reject) =>
+              setTimeout(() => reject(new Error('Lookup timeout')), 8000)
+            ),
+          ]);
+          if (events.length > 0) {
+            const content = JSON.parse(events[0].content);
+            setSearchProfiles([{
+              pubkey: events[0].pubkey,
+              name: content.name,
+              display_name: content.display_name,
+              picture: content.picture,
+            }]);
+          } else {
+            // No profile found — show hex-only entry so user can still select
+            setSearchProfiles([{ pubkey: hexPubkey }]);
+          }
+        } catch (error) {
+          console.error('Error looking up hex profile:', error);
+          setSearchProfiles([{ pubkey: memberInput.trim() }]);
+        } finally {
+          setIsSearching(false);
+          pool.close(relays);
+        }
+      };
+      const timeoutId = setTimeout(hexLookupFn, 300);
+      return () => clearTimeout(timeoutId);
+    }
+
+    // Partial hex (20+ chars but not yet 64) — suppress search, show hint
     if (/^[0-9a-fA-F]{20,}$/.test(memberInput.trim())) {
       setSearchProfiles([]);
       return;
@@ -165,9 +207,13 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      // If input looks like a hex pubkey, add directly
+      // If a profile result is showing, add it; otherwise add raw hex
       if (/^[0-9a-fA-F]{64}$/.test(memberInput.trim())) {
-        addMemberByHex();
+        if (searchProfiles.length > 0) {
+          addMemberFromSearch(searchProfiles[0]);
+        } else {
+          addMemberByHex();
+        }
       }
     }
   };
