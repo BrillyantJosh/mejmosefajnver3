@@ -11,9 +11,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { SimplePool } from 'nostr-tools';
 import { finalizeEvent } from 'nostr-tools';
-import { encryptInvitePayload, hexToBytes } from '@/lib/encrypted-room-crypto';
+import {
+  encryptInvitePayload,
+  hexToBytes,
+  getRoomKeyFromCache,
+  setRoomKeyToCache,
+} from '@/lib/encrypted-room-crypto';
 import { getProxiedImageUrl } from '@/lib/imageProxy';
-import type { RoomInvitePayload } from '@/types/encryptedRooms';
+import type { RoomInvitePayload, EncryptedRoom } from '@/types/encryptedRooms';
 import { toast } from 'sonner';
 
 interface Profile {
@@ -24,18 +29,14 @@ interface Profile {
 }
 
 interface InviteMemberDialogProps {
-  roomEventId: string;
-  roomName: string;
+  room: EncryptedRoom;
   groupKey: string;
-  keyVersion: number;
-  onInviteSent?: () => void;
+  onInviteSent?: (newEventId: string) => void;
 }
 
 export const InviteMemberDialog = ({
-  roomEventId,
-  roomName,
+  room,
   groupKey,
-  keyVersion,
   onInviteSent,
 }: InviteMemberDialogProps) => {
   const [open, setOpen] = useState(false);
@@ -170,14 +171,63 @@ export const InviteMemberDialog = ({
       const ownerPubkey = session.nostrHexId;
       const privKeyBytes = hexToBytes(session.nostrPrivateKey);
 
+      // ─── Step 1: Republish KIND 30100 with new member's p-tag ───
+      // Same pattern as RoomSettingsDialog.handleUpdate()
+      const roomTags: string[][] = [
+        ['d', room.roomId],
+        ['name', room.name],
+        ['description', room.description],
+        ...room.members.map((m) => ['p', m.pubkey, m.role]),
+        ['p', selectedPubkey, 'member'], // Add new member
+        ['status', room.status],
+        ['key_version', String(room.keyVersion)],
+      ];
+
+      if (room.image) {
+        roomTags.push(['image', room.image]);
+      }
+
+      const updatedRoomEvent = finalizeEvent(
+        {
+          kind: 30100,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: roomTags,
+          content: JSON.stringify({
+            maxMembers: 50,
+            created: room.createdAt,
+          }),
+        },
+        privKeyBytes
+      );
+
+      const roomRes = await fetch('/api/functions/publish-dm-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: updatedRoomEvent }),
+      });
+
+      const roomData = await roomRes.json();
+      if (!roomData.success) throw new Error('Failed to publish room update with new member');
+
+      const newEventId = updatedRoomEvent.id;
+
+      // Copy group key cache: old eventId → new eventId
+      const oldKey = getRoomKeyFromCache(room.eventId, room.keyVersion);
+      if (oldKey) {
+        setRoomKeyToCache(newEventId, room.keyVersion, oldKey);
+      }
+
+      console.log(`✅ Room updated with new member: ${room.eventId.slice(0, 16)} → ${newEventId.slice(0, 16)}`);
+
+      // ─── Step 2: Create invite referencing the NEW eventId ───
       const invitePayload: RoomInvitePayload = {
-        roomId: '',
-        roomEventId,
-        roomName,
+        roomId: room.roomId,
+        roomEventId: newEventId,
+        roomName: room.name,
         groupKey,
-        keyVersion,
+        keyVersion: room.keyVersion,
         role: 'member',
-        message: message.trim() || `You've been invited to "${roomName}"`,
+        message: message.trim() || `You've been invited to "${room.name}"`,
       };
 
       const encryptedContent = encryptInvitePayload(
@@ -191,7 +241,7 @@ export const InviteMemberDialog = ({
           kind: 1102,
           created_at: Math.floor(Date.now() / 1000),
           tags: [
-            ['e', roomEventId],
+            ['e', newEventId],
             ['p', selectedPubkey, 'receiver'],
             ['p', ownerPubkey, 'sender'],
           ],
@@ -200,18 +250,18 @@ export const InviteMemberDialog = ({
         privKeyBytes
       );
 
-      const res = await fetch('/api/functions/publish-dm-event', {
+      const inviteRes = await fetch('/api/functions/publish-dm-event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ event: inviteEvent }),
       });
 
-      const data = await res.json();
-      if (!data.success) throw new Error('Failed to publish invite');
+      const inviteData = await inviteRes.json();
+      if (!inviteData.success) throw new Error('Failed to publish invite');
 
       toast.success('Invite sent!');
       setOpen(false);
-      onInviteSent?.();
+      onInviteSent?.(newEventId);
     } catch (error: any) {
       console.error('Error sending invite:', error);
       toast.error(`Error: ${error.message}`);
@@ -232,7 +282,7 @@ export const InviteMemberDialog = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-violet-500" />
-            Invite member to "{roomName}"
+            Invite member to "{room.name}"
           </DialogTitle>
         </DialogHeader>
 
