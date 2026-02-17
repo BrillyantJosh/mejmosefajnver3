@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { format } from "date-fns";
 import { sl } from "date-fns/locale";
 
 export default function Profiles() {
+  const navigate = useNavigate();
   const { profiles, isLoading } = useNostrKind0Profiles();
   const [searchQuery, setSearchQuery] = useState("");
   const [walletOnly, setWalletOnly] = useState(true);
@@ -79,7 +81,7 @@ export default function Profiles() {
       ) : (
         <div className="space-y-4">
           {filteredProfiles.map((profile) => (
-            <Card key={profile.pubkey} className="hover:shadow-md transition-shadow">
+            <Card key={profile.pubkey} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/transparency/profiles/${profile.pubkey}`)}>
               <CardContent className="p-4">
                 <div className="flex gap-4">
                   <UserAvatar
