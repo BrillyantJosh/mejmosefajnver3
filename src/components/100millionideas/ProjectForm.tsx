@@ -420,69 +420,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Basic Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Project Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="title">Title *</Label>
-            <Input
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="My Project Title"
-              maxLength={100}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="shortDesc">Short Description *</Label>
-            <Input
-              id="shortDesc"
-              value={shortDesc}
-              onChange={(e) => setShortDesc(e.target.value)}
-              placeholder="A brief summary of your project"
-              maxLength={200}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="content">Full Description (Markdown) *</Label>
-            <Textarea
-              id="content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Describe your project in detail: vision, goals, how funds will be used..."
-              rows={10}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="projectType">Project Type *</Label>
-            <Input value="Inspiration" disabled className="bg-muted" />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="whatType">What is Project all About?</Label>
-            <Select value={whatType} onValueChange={setWhatType}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select what this project is about..." />
-              </SelectTrigger>
-              <SelectContent>
-                {WHAT_TYPES.map((wt) => (
-                  <SelectItem key={wt.value} value={wt.value}>
-                    {wt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Funding */}
+      {/* Funding — first so user selects wallet immediately */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Funding</CardTitle>
@@ -541,6 +479,68 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
                         {w.note ? ` - ${w.note}` : ""}
                       </span>
                     </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Basic Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Project Details</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="title">Title *</Label>
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="My Project Title"
+              maxLength={100}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="shortDesc">Short Description *</Label>
+            <Input
+              id="shortDesc"
+              value={shortDesc}
+              onChange={(e) => setShortDesc(e.target.value)}
+              placeholder="A brief summary of your project"
+              maxLength={200}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="content">Full Description (Markdown) *</Label>
+            <Textarea
+              id="content"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Describe your project in detail: vision, goals, how funds will be used..."
+              rows={10}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="projectType">Project Type *</Label>
+            <Input value="Inspiration" disabled className="bg-muted" />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="whatType">What is Project all About?</Label>
+            <Select value={whatType} onValueChange={setWhatType}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select what this project is about..." />
+              </SelectTrigger>
+              <SelectContent>
+                {WHAT_TYPES.map((wt) => (
+                  <SelectItem key={wt.value} value={wt.value}>
+                    {wt.label}
                   </SelectItem>
                 ))}
               </SelectContent>
