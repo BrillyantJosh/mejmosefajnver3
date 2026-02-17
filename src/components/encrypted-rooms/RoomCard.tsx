@@ -1,4 +1,4 @@
-import { Lock, Crown, Users } from 'lucide-react';
+import { Lock, Crown, Shield, Users } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -6,12 +6,16 @@ import type { EncryptedRoom } from '@/types/encryptedRooms';
 
 interface RoomCardProps {
   room: EncryptedRoom;
+  userPubkey?: string;
   unreadCount?: number;
   lastMessage?: string;
   onClick: () => void;
 }
 
-export const RoomCard = ({ room, unreadCount = 0, lastMessage, onClick }: RoomCardProps) => {
+export const RoomCard = ({ room, userPubkey, unreadCount = 0, lastMessage, onClick }: RoomCardProps) => {
+  // Find current user's role in this room
+  const myMember = userPubkey ? room.members.find((m) => m.pubkey === userPubkey) : undefined;
+  const myRole = myMember?.role;
   return (
     <Card
       className="cursor-pointer hover:shadow-md active:scale-[0.98] transition-all border-border/50"
@@ -52,6 +56,18 @@ export const RoomCard = ({ room, unreadCount = 0, lastMessage, onClick }: RoomCa
             <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
               <Users className="h-3 w-3" />
               <span>{room.members.length} {room.members.length === 1 ? 'member' : 'members'}</span>
+              {myRole === 'owner' && (
+                <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 text-[10px] px-1.5 py-0 ml-1">
+                  <Crown className="h-3 w-3 mr-0.5" />
+                  Owner
+                </Badge>
+              )}
+              {myRole === 'admin' && (
+                <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 text-[10px] px-1.5 py-0 ml-1">
+                  <Shield className="h-3 w-3 mr-0.5" />
+                  Admin
+                </Badge>
+              )}
             </div>
 
             {lastMessage ? (
