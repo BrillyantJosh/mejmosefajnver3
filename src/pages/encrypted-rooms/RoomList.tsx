@@ -1,15 +1,15 @@
 import { useNavigate } from 'react-router-dom';
-import { Lock, Loader2, MessageSquareOff, Shield } from 'lucide-react';
+import { Lock, Loader2, MessageSquareOff } from 'lucide-react';
 import { useEncryptedRooms } from '@/hooks/useEncryptedRooms';
-import { useAdmin } from '@/contexts/AdminContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { RoomCard } from '@/components/encrypted-rooms/RoomCard';
 import { CreateRoomDialog } from '@/components/encrypted-rooms/CreateRoomDialog';
-import { Badge } from '@/components/ui/badge';
 
 export default function RoomList() {
   const { rooms, isLoading, refetch } = useEncryptedRooms();
-  const { isAdmin } = useAdmin();
+  const { session } = useAuth();
   const navigate = useNavigate();
+  const userPubkey = session?.nostrHexId;
 
   return (
     <div>
@@ -23,12 +23,6 @@ export default function RoomList() {
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             End-to-end encrypted group conversations
           </p>
-          {isAdmin && (
-            <Badge variant="secondary" className="mt-1.5 bg-blue-500/10 text-blue-600 text-xs px-2 py-0.5 w-fit">
-              <Shield className="h-3 w-3 mr-1" />
-              Admin
-            </Badge>
-          )}
         </div>
         <CreateRoomDialog onRoomCreated={refetch} />
       </div>
@@ -60,6 +54,7 @@ export default function RoomList() {
             <RoomCard
               key={room.id}
               room={room}
+              userPubkey={userPubkey}
               onClick={() => navigate(`/encrypted-rooms/room/${room.eventId}`)}
             />
           ))}
