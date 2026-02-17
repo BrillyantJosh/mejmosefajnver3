@@ -5,6 +5,7 @@ import { toast } from '@/hooks/use-toast';
 import { nip04Decrypt as customNip04Decrypt } from '@/lib/nostr-nip04';
 import { supabase } from '@/integrations/supabase/client';
 import { useNostrProfilesCacheBulk } from './useNostrProfilesCacheBulk';
+import { getAllCachedEvents, saveCachedEvents, deleteCachedEvent, getLatestTimestamp, setLatestTimestamp, type CachedEvent } from '@/lib/dmCache';
 
 // Helper: Hex to Uint8Array
 function hexToBytes(hex: string): Uint8Array {
@@ -432,13 +433,135 @@ export function useNostrDMs() {
     let pollTimer: ReturnType<typeof setInterval> | undefined;
 
     const doInitialLoad = async () => {
-      console.log('🔌 Loading DM messages via server relay query...');
+      console.log('🔌 Loading DM messages...');
       setConnected(true);
       setLoading(true);
 
-      // Initial load: fetch last 30 days
-      const thirtyDaysAgo = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
-      const events = await fetchDMEvents(thirtyDaysAgo);
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 0: Load from IndexedDB cache (encrypted events → decrypt → show)
+      // This skips the network round-trip and shows cached conversations fast
+      // ═══════════════════════════════════════════════════════════════
+      let cacheLoaded = false;
+      try {
+        const cachedEvents = await getAllCachedEvents(session!.nostrHexId);
+        if (cachedEvents.length > 0) {
+          console.log(`📦 Cache: ${cachedEvents.length} encrypted events found, decrypting...`);
+
+          // Mark all cached events as seen to avoid re-processing
+          cachedEvents.forEach(e => seenEventIds.current.add(e.id));
+
+          // Convert CachedEvent[] → Event[] for decryptMessagesBatch
+          const eventsAsNostr = cachedEvents.map(e => ({
+            id: e.id,
+            pubkey: e.pubkey,
+            content: e.content,   // ⚠️ Still encrypted — decrypted in-memory only
+            created_at: e.created_at,
+            tags: e.tags,
+            kind: 4,
+            sig: ''               // Not needed for decryption
+          })) as Event[];
+
+          const cacheStartTime = Date.now();
+          const decryptedCache = await decryptMessagesBatch(eventsAsNostr, session!.nostrHexId, 50);
+          console.log(`🔓 Cache decrypted: ${decryptedCache.size} messages in ${Date.now() - cacheStartTime}ms`);
+
+          if (!isActive) return;
+
+          // Build conversations from cached data
+          const readStatusPendingCache: Array<{
+            user_nostr_id: string;
+            message_event_id: string;
+            sender_pubkey: string;
+            conversation_pubkey: string;
+          }> = [];
+
+          for (const [, data] of decryptedCache) {
+            const { isOwn, event, otherPubkey } = data;
+            if (event.created_at > latestTimestamp.current) {
+              latestTimestamp.current = event.created_at;
+            }
+            if (!isOwn && session?.nostrHexId) {
+              readStatusPendingCache.push({
+                user_nostr_id: session.nostrHexId,
+                message_event_id: event.id,
+                sender_pubkey: event.pubkey,
+                conversation_pubkey: otherPubkey
+              });
+            }
+          }
+
+          setConversations(prev => {
+            const newConversationsMap = new Map(prev);
+
+            for (const [, data] of decryptedCache) {
+              const { decryptedContent, otherPubkey, isOwn, replyToId, event } = data;
+              const currentReadStatuses = readStatusesRef.current;
+              const isRead = isOwn ? true : (currentReadStatuses.get(event.id) ?? false);
+
+              const message: DirectMessage = {
+                id: event.id,
+                pubkey: event.pubkey,
+                content: event.content,
+                created_at: event.created_at,
+                decryptedContent,
+                isOwn,
+                isRead,
+                replyToId
+              };
+
+              const existing = newConversationsMap.get(otherPubkey) || {
+                pubkey: otherPubkey,
+                messages: [],
+                unreadCount: 0
+              };
+
+              if (existing.messages.some(m => m.id === message.id)) continue;
+
+              const updatedMessages = [...existing.messages, message].sort(
+                (a, b) => a.created_at - b.created_at
+              );
+              const unreadCount = updatedMessages.filter(m => !m.isOwn && !m.isRead).length;
+
+              newConversationsMap.set(otherPubkey, {
+                ...existing,
+                messages: updatedMessages,
+                lastMessage: updatedMessages[updatedMessages.length - 1],
+                unreadCount
+              });
+            }
+
+            return newConversationsMap;
+          });
+          setTotalEvents(cachedEvents.length);
+
+          // Show cached data immediately
+          setLoading(false);
+          cacheLoaded = true;
+
+          // Get latest cached timestamp for narrower relay query
+          const cachedTs = await getLatestTimestamp(session!.nostrHexId);
+          if (cachedTs > 0) latestTimestamp.current = cachedTs;
+
+          // Save read statuses in background
+          if (readStatusPendingCache.length > 0) {
+            saveBatchReadStatuses(readStatusPendingCache).catch(() => {});
+          }
+
+          console.log(`✅ Cache loaded: ${decryptedCache.size} messages shown instantly`);
+        }
+      } catch (err) {
+        console.warn('⚠️ Cache load failed, falling back to relay:', err);
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 1: Relay sync (narrower window if cache exists)
+      // ═══════════════════════════════════════════════════════════════
+      const sinceTimestamp = latestTimestamp.current > 0
+        ? latestTimestamp.current - 60  // 1 min buffer for relay propagation
+        : Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60); // Full 30 days
+
+      console.log(`📡 Syncing from relay (since ${new Date(sinceTimestamp * 1000).toLocaleString()})...`);
+      const events = await fetchDMEvents(sinceTimestamp);
 
       if (!isActive) return;
 
@@ -449,21 +572,21 @@ export function useNostrDMs() {
         return true;
       });
 
-      console.log(`📨 Received ${events.length} DM events, ${newEvents.length} new`);
+      console.log(`📨 Relay sync: ${events.length} total, ${newEvents.length} new`);
 
       if (newEvents.length > 0) {
-        // PHASE 1: Decrypt all messages in parallel batches (fast)
+        // Decrypt new messages
         const startTime = Date.now();
         const decryptedMap = await decryptMessagesBatch(
           newEvents as Event[],
           session!.nostrHexId,
           50
         );
-        console.log(`🔓 Decrypted ${decryptedMap.size} messages in ${Date.now() - startTime}ms`);
+        console.log(`🔓 Decrypted ${decryptedMap.size} new messages in ${Date.now() - startTime}ms`);
 
         if (!isActive) return;
 
-        // PHASE 2: Build conversations Map in one pass, single state update
+        // Build/merge conversations
         const readStatusPending: Array<{
           user_nostr_id: string;
           message_event_id: string;
@@ -471,8 +594,7 @@ export function useNostrDMs() {
           conversation_pubkey: string;
         }> = [];
 
-        // Pre-collect read status records
-        for (const [eventId, data] of decryptedMap) {
+        for (const [, data] of decryptedMap) {
           const { isOwn, event, otherPubkey } = data;
           if (event.created_at > latestTimestamp.current) {
             latestTimestamp.current = event.created_at;
@@ -487,11 +609,11 @@ export function useNostrDMs() {
           }
         }
 
-        // Single state update using functional updater (no dependency on conversations state)
+        // Single state update using functional updater
         setConversations(prev => {
           const newConversationsMap = new Map(prev);
 
-          for (const [eventId, data] of decryptedMap) {
+          for (const [, data] of decryptedMap) {
             const { decryptedContent, otherPubkey, isOwn, replyToId, event } = data;
 
             const currentReadStatuses = readStatusesRef.current;
@@ -535,15 +657,30 @@ export function useNostrDMs() {
         });
         setTotalEvents(prev => prev + newEvents.length);
 
-        // PHASE 3: Save read statuses in background (fire and forget)
+        // Save read statuses in background
         if (readStatusPending.length > 0) {
           saveBatchReadStatuses(readStatusPending).catch(() => {});
         }
+
+        // ═══════════════════════════════════════════════════════════
+        // Save new ENCRYPTED events to IndexedDB cache (fire and forget)
+        // ⚠️ Only encrypted content is persisted — never decrypted text
+        // ═══════════════════════════════════════════════════════════
+        const eventsToCache: CachedEvent[] = newEvents.map((e: any) => ({
+          id: e.id,
+          pubkey: e.pubkey,
+          content: e.content,         // ⚠️ Encrypted NIP-04 ciphertext
+          created_at: e.created_at,
+          tags: e.tags,
+          userHexId: session!.nostrHexId
+        }));
+        saveCachedEvents(eventsToCache).catch(() => {});
+        setLatestTimestamp(session!.nostrHexId, latestTimestamp.current).catch(() => {});
       }
 
       setLoading(false);
       initialLoadDone.current = true;
-      console.log('✅ Initial DM load complete, starting polling...');
+      console.log(`✅ DM load complete (cache: ${cacheLoaded ? 'yes' : 'no'}), starting polling...`);
 
       // Start polling for new messages
       pollTimer = setInterval(async () => {
@@ -561,6 +698,8 @@ export function useNostrDMs() {
           if (!isActive) return;
 
           let newCount = 0;
+          const pollEventsToCache: CachedEvent[] = [];
+
           for (const event of newEvents) {
             if (!isActive) break;
             if (seenEventIds.current.has(event.id)) continue;
@@ -572,10 +711,23 @@ export function useNostrDMs() {
             if (event.created_at > latestTimestamp.current) {
               latestTimestamp.current = event.created_at;
             }
+
+            // Collect encrypted event for cache
+            pollEventsToCache.push({
+              id: event.id,
+              pubkey: event.pubkey,
+              content: event.content,   // ⚠️ Encrypted only
+              created_at: event.created_at,
+              tags: event.tags,
+              userHexId: session!.nostrHexId
+            });
           }
 
           if (newCount > 0) {
             console.log(`📨 ${newCount} new DM event(s) received via polling`);
+            // Save polled encrypted events to cache
+            saveCachedEvents(pollEventsToCache).catch(() => {});
+            setLatestTimestamp(session!.nostrHexId, latestTimestamp.current).catch(() => {});
           }
         } finally {
           isPolling.current = false;
@@ -705,6 +857,16 @@ export function useNostrDMs() {
       seenEventIds.current.add(event.id);
       await processMessage(event);
 
+      // Cache the encrypted event in IndexedDB (fire and forget)
+      saveCachedEvents([{
+        id: event.id,
+        pubkey: session.nostrHexId,
+        content: event.content,       // ⚠️ Encrypted NIP-04 ciphertext
+        created_at: event.created_at,
+        tags: event.tags,
+        userHexId: session.nostrHexId
+      }]).catch(() => {});
+
       // Only show error toast if all relays failed
       if (successCount === 0) {
         toast({
@@ -776,6 +938,9 @@ export function useNostrDMs() {
       if (session.nostrHexId) {
         await deleteReadStatus(session.nostrHexId, messageId);
       }
+
+      // Remove from IndexedDB cache
+      deleteCachedEvent(messageId).catch(() => {});
 
       // Remove from local state
       setConversations(prev => {
