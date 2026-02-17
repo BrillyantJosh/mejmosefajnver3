@@ -1649,6 +1649,67 @@ router.post('/fetch-donation-payments', async (req: Request, res: Response) => {
 });
 
 // =============================================
+// FETCH PAYMENT SCORE (KIND 30321) - SERVER-SIDE RELAY QUERY
+// Subscriber Payment Discipline Rating (last 3 months)
+// =============================================
+router.post('/fetch-payment-score', async (req: Request, res: Response) => {
+  try {
+    const { userPubkey } = req.body;
+    if (!userPubkey) {
+      return res.json({ success: true, score: null });
+    }
+
+    console.log('📥 Fetching KIND 30321 payment score for', userPubkey.substring(0, 8) + '...');
+
+    // Get relays from KIND 38888 in DB
+    const db = getDb();
+    const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+    let relays: string[] = [];
+    if (row?.relays) {
+      relays = typeof row.relays === 'string' ? JSON.parse(row.relays) : row.relays;
+    }
+    if (relays.length === 0) {
+      relays = getRelaysFromDb();
+    }
+
+    // Query KIND 30321 by d-tag (subscriber hex id)
+    const scoreEvents = await queryEventsFromRelays(relays, {
+      kinds: [30321],
+      '#d': [userPubkey],
+      limit: 1
+    }, 10000);
+
+    if (scoreEvents.length === 0) {
+      console.log('ℹ️ No payment score found for user');
+      return res.json({ success: true, score: null });
+    }
+
+    // Take the most recent event
+    const event = scoreEvents.sort((a, b) => b.created_at - a.created_at)[0];
+    const tags = event.tags || [];
+
+    const getTag = (name: string) => tags.find((t: string[]) => t[0] === name)?.[1] || '';
+
+    const score = {
+      score: getTag('score'),
+      proposedLanoshi: getTag('proposed_lanoshi'),
+      paidLanoshi: getTag('paid_lanoshi'),
+      periodMonths: getTag('period_months'),
+      periodStart: getTag('period_start'),
+      periodEnd: getTag('period_end'),
+      content: event.content || '',
+      createdAt: event.created_at
+    };
+
+    console.log(`✅ Payment score: ${score.score}/10 (period: ${score.periodStart} – ${score.periodEnd})`);
+    return res.json({ success: true, score });
+  } catch (error: any) {
+    console.error('❌ Error fetching payment score:', error);
+    return res.json({ success: true, score: null });
+  }
+});
+
+// =============================================
 // FETCH DM EVENTS (KIND 4) - SERVER-SIDE RELAY QUERY
 // Used by chat page since browser WebSocket to relays fails
 // =============================================
