@@ -28,6 +28,7 @@ export interface UseNostrDonationPaymentsOptions {
 }
 
 export const useNostrDonationPayments = (
+  userPubkey?: string,
   options: UseNostrDonationPaymentsOptions = {}
 ) => {
   const { poll = true, pollIntervalMs = 5000, enabled = true } = options;
@@ -37,7 +38,7 @@ export const useNostrDonationPayments = (
   const fetchStartedRef = useRef(false);
 
   const fetchPayments = useCallback(async () => {
-    if (!enabled) {
+    if (!enabled || !userPubkey) {
       return;
     }
 
@@ -50,7 +51,7 @@ export const useNostrDonationPayments = (
       console.log('📥 Fetching KIND 90901 donation payments via server...');
 
       const { data, error } = await supabase.functions.invoke('fetch-donation-payments', {
-        body: {}
+        body: { userPubkey }
       });
 
       if (error) throw error;
@@ -80,10 +81,10 @@ export const useNostrDonationPayments = (
         hasLoadedOnceRef.current = true;
       }
     }
-  }, [enabled]);
+  }, [enabled, userPubkey]);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !userPubkey) {
       setIsLoading(false);
       return;
     }

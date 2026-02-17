@@ -1580,7 +1580,8 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
 // =============================================
 router.post('/fetch-donation-payments', async (req: Request, res: Response) => {
   try {
-    console.log('📥 Fetching KIND 90901 donation payments via server...');
+    const { userPubkey } = req.body;
+    console.log('📥 Fetching KIND 90901 donation payments via server...', userPubkey ? `for user ${userPubkey.slice(0, 8)}...` : '(all)');
 
     // Get relays from KIND 38888 in DB
     const db = getDb();
@@ -1593,10 +1594,16 @@ router.post('/fetch-donation-payments', async (req: Request, res: Response) => {
       relays = getRelaysFromDb();
     }
 
-    const events = await queryEventsFromRelays(relays, {
+    // Build filter — if userPubkey provided, filter by author (payer)
+    const paymentFilter: Record<string, any> = {
       kinds: [90901],
       limit: 100
-    }, 15000);
+    };
+    if (userPubkey) {
+      paymentFilter.authors = [userPubkey];
+    }
+
+    const events = await queryEventsFromRelays(relays, paymentFilter, 15000);
     console.log(`✅ Found ${events.length} KIND 90901 donation payments`);
 
     // Parse events into payment format
