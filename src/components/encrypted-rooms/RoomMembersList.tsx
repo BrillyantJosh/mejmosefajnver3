@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Crown, Shield, User, Eye, UserMinus, Loader2 } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -56,14 +56,7 @@ export const RoomMembersList = ({
               key={member.pubkey}
               className="flex items-center gap-2.5 px-2 py-2 sm:py-1.5 rounded-md hover:bg-muted/50 transition-colors"
             >
-              <Avatar className="h-8 w-8">
-                {member.picture ? (
-                  <AvatarImage src={member.picture} alt={displayName} />
-                ) : null}
-                <AvatarFallback className="text-xs">
-                  {displayName.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar pubkey={member.pubkey} picture={member.picture} name={displayName} className="h-8 w-8" />
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">

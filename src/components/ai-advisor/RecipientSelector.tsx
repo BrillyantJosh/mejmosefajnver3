@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Loader2, Search, User, Wallet, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
@@ -142,12 +142,7 @@ export function RecipientSelector({ searchQuery, language, onSelect, onCancel }:
               {results.map((result) => (
                 <Card key={result.pubkey} className="p-3">
                   <div className="flex items-start gap-3 mb-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={result.picture} alt={result.displayName} />
-                      <AvatarFallback>
-                        <User className="h-5 w-5" />
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar pubkey={result.pubkey} picture={result.picture} name={result.displayName} className="h-10 w-10" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold truncate">{result.displayName}</p>
                       {result.name && result.name !== result.displayName && (

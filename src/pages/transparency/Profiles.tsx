@@ -2,9 +2,8 @@ import { useState, useMemo } from "react";
 import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Search, Calendar } from "lucide-react";
-import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { format } from "date-fns";
 import { sl } from "date-fns/locale";
 
@@ -53,12 +52,12 @@ export default function Profiles() {
             <Card key={profile.pubkey} className="hover:shadow-md transition-shadow">
               <CardContent className="p-4">
                 <div className="flex gap-4">
-                  <Avatar className="h-16 w-16 flex-shrink-0">
-                    <AvatarImage src={getProxiedImageUrl(profile.picture)} />
-                    <AvatarFallback>
-                      {(profile.display_name || profile.name || 'U').charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    pubkey={profile.pubkey}
+                    picture={profile.picture}
+                    name={profile.display_name || profile.name || 'Anonymous'}
+                    className="h-16 w-16 flex-shrink-0"
+                  />
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">

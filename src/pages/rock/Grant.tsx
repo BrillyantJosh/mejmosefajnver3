@@ -1,7 +1,7 @@
 import { useNostrRockGiven } from "@/hooks/useNostrRockGiven";
 import { useNostrSellerProfiles } from "@/hooks/useNostrSellerProfiles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RockCheck } from "@/components/rock/RockCheck";
@@ -84,10 +84,7 @@ export default function Grant() {
           <Card key={reference.id}>
             <CardHeader>
               <div className="flex items-start gap-4">
-                <Avatar className="h-12 w-12">
-                  <AvatarImage src={profile?.picture} alt={displayName} />
-                  <AvatarFallback>{displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
-                </Avatar>
+                <UserAvatar pubkey={reference.targetPubkey} picture={profile?.picture} name={displayName} className="h-12 w-12" />
                 <div className="flex-1">
                   <CardTitle className="text-lg">{displayName}</CardTitle>
                   {profile?.name && profile.name !== displayName && (

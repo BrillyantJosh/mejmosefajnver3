@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Users, Calendar, Edit, User } from "lucide-react";
+import { UserAvatar } from '@/components/ui/UserAvatar';
+import { ArrowLeft, Users, Calendar, Edit } from "lucide-react";
 import { format } from "date-fns";
 import { SimplePool } from "nostr-tools";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,14 +21,7 @@ function AttendeeRow({ registration }: { registration: EventRegistration }) {
   
   return (
     <div className="flex items-center gap-3 py-3 border-b last:border-b-0">
-      <Avatar className="h-10 w-10">
-        {profile?.picture ? (
-          <AvatarImage src={profile.picture} alt={displayName} />
-        ) : null}
-        <AvatarFallback>
-          <User className="h-4 w-4" />
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar pubkey={registration.pubkey} picture={profile?.picture} name={displayName} className="h-10 w-10" />
       <div className="flex-1 min-w-0">
         <p className="font-medium truncate">{displayName}</p>
         {registration.note && (

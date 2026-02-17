@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <circle cx="32" cy="32" r="32" fill="#EF4444"/>
+  <!-- Fox ears -->
+  <polygon points="10,6 6,26 22,20" fill="#fff" opacity="0.9"/>
+  <polygon points="54,6 58,26 42,20" fill="#fff" opacity="0.9"/>
+  <!-- Inner ears -->
+  <polygon points="12,10 10,23 20,19" fill="#EF4444" opacity="0.6"/>
+  <polygon points="52,10 54,23 44,19" fill="#EF4444" opacity="0.6"/>
+  <!-- White cheeks -->
+  <ellipse cx="22" cy="40" rx="8" ry="7" fill="#fff" opacity="0.3"/>
+  <ellipse cx="42" cy="40" rx="8" ry="7" fill="#fff" opacity="0.3"/>
+  <!-- Eyes -->
+  <ellipse cx="23" cy="30" rx="3.5" ry="4" fill="#fff"/>
+  <ellipse cx="41" cy="30" rx="3.5" ry="4" fill="#fff"/>
+  <ellipse cx="23.5" cy="30.5" rx="2" ry="2.5" fill="#1a1a2e"/>
+  <ellipse cx="41.5" cy="30.5" rx="2" ry="2.5" fill="#1a1a2e"/>
+  <!-- Nose -->
+  <circle cx="32" cy="37" r="2.5" fill="#1a1a2e"/>
+  <!-- Mouth -->
+  <path d="M29,40 L32,37 L35,40" stroke="#fff" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+  <path d="M27,42 Q32,46 37,42" stroke="#fff" stroke-width="1" fill="none" stroke-linecap="round" opacity="0.6"/>
+</svg>

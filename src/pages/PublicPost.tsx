@@ -2,13 +2,11 @@ import { useParams } from "react-router-dom";
 import { useNostrPost } from "@/hooks/useNostrPost";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Loader2, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PostContent } from "@/components/social/PostContent";
 import { PostReplies } from "@/components/social/PostReplies";
-import { getProxiedImageUrl } from "@/lib/imageProxy";
-
 export default function PublicPost() {
   const { eventId } = useParams<{ eventId: string }>();
   const { parameters } = useSystemParameters();
@@ -22,11 +20,6 @@ export default function PublicPost() {
     if (profile?.display_name) return profile.display_name;
     if (profile?.name) return profile.name;
     return `${post.pubkey.slice(0, 8)}...`;
-  };
-
-  const getAvatarFallback = () => {
-    const displayName = getDisplayName();
-    return displayName.slice(0, 2).toUpperCase();
   };
 
   const formatTime = (timestamp: number) => {
@@ -81,10 +74,11 @@ export default function PublicPost() {
         
         <Card>
           <CardHeader className="flex flex-row items-start gap-3">
-            <Avatar>
-              <AvatarImage src={getProxiedImageUrl(profile?.picture, Date.now())} />
-              <AvatarFallback>{getAvatarFallback()}</AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              pubkey={post.pubkey}
+              picture={profile?.picture}
+              name={getDisplayName()}
+            />
             <div className="flex-1">
               <p className="font-semibold">{getDisplayName()}</p>
               <p className="text-sm text-muted-foreground">

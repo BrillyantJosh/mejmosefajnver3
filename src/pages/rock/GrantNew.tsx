@@ -5,9 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, User, Loader2, ArrowLeft } from "lucide-react";
+import { Search, Loader2, ArrowLeft } from "lucide-react";
 import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
@@ -233,12 +233,7 @@ export default function GrantNew() {
                         onClick={() => setSelectedProfile(profile)}
                         className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-muted transition-colors"
                       >
-                        <Avatar className="h-12 w-12">
-                          <AvatarImage src={profile.picture} alt={profile.name || profile.display_name} />
-                          <AvatarFallback>
-                            <User className="h-6 w-6" />
-                          </AvatarFallback>
-                        </Avatar>
+                        <UserAvatar pubkey={profile.pubkey} picture={profile.picture} name={profile.display_name || profile.name} className="h-12 w-12" />
                         <div className="flex-1 min-w-0">
                           <p className="font-medium truncate">
                             {profile.display_name || profile.name || 'Anonymous'}
@@ -267,12 +262,7 @@ export default function GrantNew() {
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-4">
-                  <Avatar className="h-16 w-16">
-                    <AvatarImage src={selectedProfile.picture} alt={selectedProfile.name} />
-                    <AvatarFallback>
-                      <User className="h-8 w-8" />
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar pubkey={selectedProfile.pubkey} picture={selectedProfile.picture} name={selectedProfile.display_name || selectedProfile.name} className="h-16 w-16" />
                   <div className="flex-1">
                     <h2 className="text-xl font-semibold">
                       {selectedProfile.display_name || selectedProfile.name || 'Anonymous'}

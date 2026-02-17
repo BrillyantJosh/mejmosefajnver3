@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Loader2, Heart, Send, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { NostrProfile } from "@/types/nostr";
@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { getProxiedImageUrl } from "@/lib/imageProxy";
 
 interface Reply {
   id: string;
@@ -288,11 +287,6 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
     return profile.display_name || profile.name || reply.pubkey.slice(0, 8) + '...';
   };
 
-  const getAvatarFallback = (reply: Reply) => {
-    const displayName = getDisplayName(reply);
-    return displayName[0].toUpperCase();
-  };
-
   const formatTime = (timestamp: number) => {
     try {
       return formatDistanceToNow(new Date(timestamp * 1000), { addSuffix: true });
@@ -395,17 +389,12 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
       {/* Existing replies */}
       {replies.map((reply) => (
         <div key={reply.id} className="flex gap-3 pl-4">
-          <Avatar className="h-8 w-8 flex-shrink-0">
-            {profiles.get(reply.pubkey)?.picture && (
-              <AvatarImage 
-                src={getProxiedImageUrl(profiles.get(reply.pubkey)?.picture, Date.now())} 
-                alt={getDisplayName(reply)} 
-              />
-            )}
-            <AvatarFallback className="bg-gradient-to-br from-secondary to-accent text-xs">
-              {getAvatarFallback(reply)}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar
+            pubkey={reply.pubkey}
+            picture={profiles.get(reply.pubkey)?.picture}
+            name={getDisplayName(reply)}
+            className="h-8 w-8 flex-shrink-0"
+          />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <p className="font-semibold text-sm">{getDisplayName(reply)}</p>

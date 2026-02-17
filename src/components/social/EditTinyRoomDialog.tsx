@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, X, Search, UserPlus, Archive } from "lucide-react";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { toast } from "sonner";
 import { finalizeEvent, SimplePool } from "nostr-tools";
 import { useAuth } from "@/contexts/AuthContext";
@@ -326,13 +327,7 @@ export function EditTinyRoomDialog({ room, open, onOpenChange }: EditTinyRoomDia
                       disabled={updating || isAdded}
                       className="w-full flex items-center gap-3 p-3 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {profile.picture ? (
-                        <img src={profile.picture} alt="" className="w-8 h-8 rounded-full object-cover" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-xs font-medium">{(profile.display_name || profile.full_name || "?").charAt(0).toUpperCase()}</span>
-                        </div>
-                      )}
+                      <UserAvatar pubkey={profile.nostr_hex_id} picture={profile.picture} name={profile.display_name || profile.full_name} className="h-8 w-8" />
                       <div className="flex-1 text-left">
                         <p className="text-sm font-medium">{profile.display_name || `${profile.nostr_hex_id.slice(0, 8)}...`}</p>
                         {profile.full_name && <p className="text-xs text-muted-foreground">{profile.full_name}</p>}
@@ -359,9 +354,7 @@ export function EditTinyRoomDialog({ room, open, onOpenChange }: EditTinyRoomDia
                     
                     return (
                       <div key={member} className="flex items-center gap-2 text-sm bg-muted p-2 rounded">
-                        {cachedProfile?.picture && (
-                          <img src={cachedProfile.picture} alt="" className="w-6 h-6 rounded-full object-cover" />
-                        )}
+                        <UserAvatar pubkey={member} picture={cachedProfile?.picture} name={displayName} className="h-6 w-6" />
                         <span className="flex-1 truncate">{displayName}</span>
                         {isAdmin && (
                           <Badge variant="outline" className="text-xs">Admin</Badge>

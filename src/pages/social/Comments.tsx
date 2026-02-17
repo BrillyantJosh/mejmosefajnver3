@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,8 +10,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { finalizeEvent, SimplePool } from "nostr-tools";
 import { toast } from "sonner";
-import { getProxiedImageUrl } from "@/lib/imageProxy";
-
 export default function Comments() {
   const { comments, isLoading } = useNostrPostComments();
   const { session } = useAuth();
@@ -28,11 +26,6 @@ export default function Comments() {
     if (profile?.name) return profile.name;
     if (pubkey) return `${pubkey.slice(0, 8)}...${pubkey.slice(-4)}`;
     return "Anonymous";
-  };
-
-  const getAvatarFallback = (profile?: { name?: string; display_name?: string }) => {
-    const name = profile?.display_name || profile?.name || "?";
-    return name.slice(0, 2).toUpperCase();
   };
 
   const formatTime = (timestamp: number) => {
@@ -163,14 +156,12 @@ export default function Comments() {
             <CardContent className="p-4">
               {/* Comment */}
               <div className="flex gap-4 mb-4">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage 
-                    src={getProxiedImageUrl(notification.commentAuthorProfile?.picture, Date.now())} 
-                  />
-                  <AvatarFallback>
-                    {getAvatarFallback(notification.commentAuthorProfile)}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  pubkey={notification.commentAuthor}
+                  picture={notification.commentAuthorProfile?.picture}
+                  name={getDisplayName(notification.commentAuthorProfile, notification.commentAuthor)}
+                  className="h-10 w-10"
+                />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-semibold">

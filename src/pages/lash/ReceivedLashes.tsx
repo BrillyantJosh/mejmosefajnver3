@@ -1,7 +1,7 @@
 import { useNostrReceivedLashes } from "@/hooks/useNostrReceivedLashes";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Heart } from "lucide-react";
 
@@ -58,14 +58,7 @@ export default function ReceivedLashes() {
             <div className="space-y-3">
               {/* Sender Info */}
               <div className="flex items-start gap-3">
-                <Avatar className="h-10 w-10 flex-shrink-0">
-                  <AvatarImage src={lash.senderPicture} />
-                  <AvatarFallback>
-                    {lash.senderDisplayName?.[0] ||
-                      lash.senderName?.[0] ||
-                      "?"}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar pubkey={lash.senderPubkey} picture={lash.senderPicture} name={lash.senderDisplayName || lash.senderName} className="h-10 w-10 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold truncate">

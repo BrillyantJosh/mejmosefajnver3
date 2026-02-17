@@ -4,7 +4,7 @@ import { useNostrProjectDonations } from "@/hooks/useNostrProjectDonations";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Users, Target, Wallet, ExternalLink } from "lucide-react";
 import { Loader2 } from "lucide-react";
@@ -113,12 +113,7 @@ const ProjectDetail = () => {
             <div className="flex-1">
               <h2 className="text-xl font-semibold mb-4">Project Initiator</h2>
               <div className="flex items-start gap-4">
-                <Avatar className="h-12 w-12">
-                  <AvatarImage src={ownerProfile?.picture} />
-                  <AvatarFallback>
-                    {(ownerProfile?.display_name || ownerProfile?.full_name || 'U')[0].toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar pubkey={project.ownerPubkey} picture={ownerProfile?.picture} name={ownerProfile?.display_name || ownerProfile?.full_name} className="h-12 w-12" />
                 <div className="flex-1">
                   <h3 className="font-semibold">
                     {ownerProfile?.display_name || ownerProfile?.full_name || 'Anonymous'}
@@ -285,12 +280,7 @@ const ParticipantCard = ({ pubkey }: { pubkey: string }) => {
 
   return (
     <div className="flex items-center gap-4">
-      <Avatar>
-        <AvatarImage src={profile?.picture} />
-        <AvatarFallback>
-          {(profile?.display_name || 'U')[0].toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar pubkey={pubkey} picture={profile?.picture} name={profile?.display_name || profile?.full_name} />
       <div>
         <p className="font-semibold">
           {profile?.display_name || profile?.full_name || 'Anonymous'}
@@ -306,12 +296,7 @@ const DonationItem = ({ donation }: { donation: any }) => {
   return (
     <Card className="p-4">
       <div className="flex items-start gap-4">
-        <Avatar>
-          <AvatarImage src={profile?.picture} />
-          <AvatarFallback>
-            {(profile?.display_name || 'U')[0].toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar pubkey={donation.supporterPubkey} picture={profile?.picture} name={profile?.display_name || profile?.full_name} />
         <div className="flex-1">
           <div className="flex justify-between items-start mb-2">
             <div>

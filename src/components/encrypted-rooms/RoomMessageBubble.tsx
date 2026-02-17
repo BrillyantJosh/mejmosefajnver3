@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertTriangle, Heart } from 'lucide-react';
@@ -59,12 +59,7 @@ export const RoomMessageBubble = ({
     <div className={`group flex gap-2 mb-3 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
       {/* Avatar - only show for others */}
       {!isOwn && showSender && (
-        <Avatar className="h-8 w-8 flex-shrink-0 mt-1">
-          {senderPicture ? (
-            <AvatarImage src={senderPicture} alt={senderName} />
-          ) : null}
-          <AvatarFallback className="text-xs bg-muted">{initials}</AvatarFallback>
-        </Avatar>
+        <UserAvatar pubkey={message.senderPubkey} picture={senderPicture} name={senderName} className="h-8 w-8 flex-shrink-0 mt-1" />
       )}
 
       {/* Spacer for alignment when avatar hidden */}
@@ -147,14 +142,7 @@ export const RoomMessageBubble = ({
                       key={lasher.pubkey}
                       className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
                     >
-                      <Avatar className="h-8 w-8">
-                        {lasher.picture ? (
-                          <AvatarImage src={lasher.picture} alt={lasher.name} />
-                        ) : null}
-                        <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white text-xs">
-                          {(lasher.name || lasher.pubkey).slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar pubkey={lasher.pubkey} picture={lasher.picture} name={lasher.name} className="h-8 w-8" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
                           {lasher.name || `${lasher.pubkey.slice(0, 8)}...${lasher.pubkey.slice(-8)}`}

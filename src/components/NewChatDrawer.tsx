@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { 
   Drawer,
   DrawerClose,
@@ -17,7 +17,6 @@ import { MessageSquarePlus, Search, Loader2, X } from "lucide-react";
 import { SimplePool } from 'nostr-tools/pool';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
-import { getProxiedImageUrl } from "@/lib/imageProxy";
 
 interface Profile {
   pubkey: string;
@@ -109,20 +108,6 @@ export default function NewChatDrawer({ onSelectUser }: NewChatDrawerProps) {
     setOpen(false);
   };
 
-  const getInitials = (profile: Profile) => {
-    if (profile.display_name) {
-      const names = profile.display_name.split(' ');
-      if (names.length >= 2) {
-        return (names[0][0] + names[names.length - 1][0]).toUpperCase();
-      }
-      return profile.display_name.slice(0, 2).toUpperCase();
-    }
-    if (profile.name) {
-      return profile.name.slice(0, 2).toUpperCase();
-    }
-    return profile.pubkey.slice(0, 2).toUpperCase();
-  };
-
   const getDisplayName = (profile: Profile) => {
     return profile.display_name || profile.name || profile.pubkey.slice(0, 12) + '...';
   };
@@ -186,15 +171,12 @@ export default function NewChatDrawer({ onSelectUser }: NewChatDrawerProps) {
                     className="w-full p-4 rounded-lg hover:bg-secondary transition-colors text-left touch-manipulation"
                   >
                     <div className="flex items-center gap-4">
-                      <Avatar className="h-12 w-12 flex-shrink-0">
-                        <AvatarImage 
-                          src={getProxiedImageUrl(profile.picture, Date.now())} 
-                          alt={getDisplayName(profile)} 
-                        />
-                        <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white font-bold">
-                          {getInitials(profile)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        pubkey={profile.pubkey}
+                        picture={profile.picture}
+                        name={getDisplayName(profile)}
+                        className="h-12 w-12 flex-shrink-0"
+                      />
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold truncate text-base">
                           {getDisplayName(profile)}
