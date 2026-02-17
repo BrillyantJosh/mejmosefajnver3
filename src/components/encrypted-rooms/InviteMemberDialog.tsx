@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { UserPlus, Loader2, Search } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { SimplePool, finalizeEvent, nip04 } from 'nostr-tools';
@@ -16,7 +16,6 @@ import {
   getRoomKeyFromCache,
   setRoomKeyToCache,
 } from '@/lib/encrypted-room-crypto';
-import { getProxiedImageUrl } from '@/lib/imageProxy';
 import type { RoomInvitePayload, EncryptedRoom } from '@/types/encryptedRooms';
 import { toast } from 'sonner';
 
@@ -410,15 +409,12 @@ export const InviteMemberDialog = ({
                         className="flex items-center gap-2.5 p-2 rounded-md hover:bg-muted/50 cursor-pointer transition-colors"
                         onClick={() => selectProfile(profile)}
                       >
-                        <Avatar className="h-8 w-8 flex-shrink-0">
-                          <AvatarImage
-                            src={getProxiedImageUrl(profile.picture, Date.now())}
-                            alt={profile.display_name || profile.name}
-                          />
-                          <AvatarFallback className="text-xs bg-gradient-to-br from-violet-500 to-indigo-500 text-white">
-                            {(profile.display_name || profile.name || profile.pubkey).slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
+                        <UserAvatar
+                          pubkey={profile.pubkey}
+                          picture={profile.picture}
+                          name={profile.display_name || profile.name}
+                          className="h-8 w-8 flex-shrink-0"
+                        />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
                             {profile.display_name || profile.name || profile.pubkey.slice(0, 12)}

@@ -2,17 +2,16 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  Calendar, Clock, MapPin, Globe, Users, 
+import { UserAvatar } from "@/components/ui/UserAvatar";
+import {
+  Calendar, Clock, MapPin, Globe, Users,
   ExternalLink, Youtube, FileText, Wallet, Loader2, AlertCircle, LogIn, Share2, AlertTriangle
 } from "lucide-react";
 import { format } from "date-fns";
 import { useNostrPublicEvent } from "@/hooks/useNostrPublicEvent";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { getEventStatus } from "@/hooks/useNostrEvents";
-import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { toast } from "@/hooks/use-toast";
 import { getTimezoneAbbreviation, getUserTimezone, formatTimeInTimezone } from "@/lib/timezones";
 
@@ -54,11 +53,6 @@ export default function PublicEvent() {
     if (profile?.name) return profile.name;
     if (event?.organizerPubkey) return `${event.organizerPubkey.slice(0, 8)}...`;
     return 'Unknown';
-  };
-
-  const getAvatarFallback = () => {
-    const displayName = getDisplayName();
-    return displayName.slice(0, 2).toUpperCase();
   };
 
   if (loading) {
@@ -163,10 +157,7 @@ export default function PublicEvent() {
           <CardContent className="space-y-6">
             {/* Organizer */}
             <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-              <Avatar>
-                <AvatarImage src={getProxiedImageUrl(profile?.picture, Date.now())} />
-                <AvatarFallback>{getAvatarFallback()}</AvatarFallback>
-              </Avatar>
+              <UserAvatar pubkey={event?.organizerPubkey} picture={profile?.picture} name={getDisplayName()} />
               <div>
                 <p className="text-sm text-muted-foreground">Organized by</p>
                 <p className="font-semibold">{getDisplayName()}</p>

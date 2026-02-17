@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, MessageCircle, Share, MoreVertical, Trash2, Triangle, CheckCircle } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -17,8 +17,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useNostrLash } from "@/hooks/useNostrLash";
 import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { useLashHistory } from "@/hooks/useLashHistory";
-import { getProxiedImageUrl } from "@/lib/imageProxy";
-
 export default function RoomFeed() {
   const { roomSlug } = useParams<{ roomSlug: string }>();
   const navigate = useNavigate();
@@ -52,11 +50,6 @@ export default function RoomFeed() {
     const profile = post.profile;
     if (!profile) return post.pubkey.slice(0, 8) + '...';
     return profile.display_name || profile.name || post.pubkey.slice(0, 8) + '...';
-  };
-
-  const getAvatarFallback = (post: any) => {
-    const displayName = getDisplayName(post);
-    return displayName[0].toUpperCase();
   };
 
   const formatTime = (timestamp: number) => {
@@ -239,20 +232,12 @@ export default function RoomFeed() {
                   className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
                   onClick={() => navigate(`/social/user/${post.pubkey}`)}
                 >
-                  <Avatar>
-                    {post.profile?.picture && (
-                      <AvatarImage 
-                        src={getProxiedImageUrl(
-                          post.profile.picture, 
-                          post.profile.last_fetched_at ? new Date(post.profile.last_fetched_at).getTime() : post.created_at
-                        )} 
-                        alt={getDisplayName(post)} 
-                      />
-                    )}
-                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white font-bold">
-                      {getAvatarFallback(post)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    pubkey={post.pubkey}
+                    picture={post.profile?.picture}
+                    name={getDisplayName(post)}
+                    cacheBuster={post.profile?.last_fetched_at ? new Date(post.profile.last_fetched_at).getTime() : undefined}
+                  />
                   <div className="flex-1">
                     <p className="font-semibold hover:text-primary transition-colors">{getDisplayName(post)}</p>
                     {post.profile?.full_name && post.profile?.display_name && (

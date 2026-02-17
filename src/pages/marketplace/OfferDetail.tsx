@@ -7,7 +7,7 @@ import { ArrowLeft, MapPin, Package, Truck, Wallet, Coins, Share2 } from "lucide
 import { MarketOffer } from "@/hooks/useNostrMarketOffers";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrSellerProfiles } from "@/hooks/useNostrSellerProfiles";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -168,12 +168,7 @@ export default function OfferDetail() {
             <CardContent className="p-6">
               <p className="text-sm font-medium mb-3">Seller</p>
               <div className="flex items-center gap-3">
-                <Avatar>
-                  <AvatarImage src={sellerProfile?.picture} />
-                  <AvatarFallback>
-                    {(sellerProfile?.display_name || sellerProfile?.name || '?')[0].toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar pubkey={offer.pubkey} picture={sellerProfile?.picture} name={sellerProfile?.display_name || sellerProfile?.name || 'Anonymous'} />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium break-words">
                     {sellerProfile?.display_name || sellerProfile?.name || 'Anonymous'}

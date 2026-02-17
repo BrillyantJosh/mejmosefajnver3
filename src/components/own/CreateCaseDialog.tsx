@@ -5,15 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, User, X, Loader2 } from "lucide-react";
+import { Plus, Search, X, Loader2 } from "lucide-react";
 import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { SimplePool, finalizeEvent } from "nostr-tools";
-import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 
@@ -264,12 +263,12 @@ export default function CreateCaseDialog() {
               <div className="flex flex-wrap gap-2 mb-3">
                 {selectedParticipants.map((participant) => (
                   <Badge key={participant.pubkey} variant="secondary" className="gap-2 pr-1">
-                    <Avatar className="h-5 w-5">
-                      <AvatarImage src={getProxiedImageUrl(participant.picture)} />
-                      <AvatarFallback className="text-xs">
-                        {participant.name.slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      pubkey={participant.pubkey}
+                      picture={participant.picture}
+                      name={participant.name}
+                      className="h-5 w-5"
+                    />
                     <span>{participant.name}</span>
                     <Button
                       type="button"
@@ -323,12 +322,12 @@ export default function CreateCaseDialog() {
                         onClick={() => addParticipant(profile)}
                         className="flex items-start gap-3 p-3 rounded-md cursor-pointer hover:bg-muted transition-colors"
                       >
-                        <Avatar className="h-10 w-10 flex-shrink-0">
-                          <AvatarImage src={getProxiedImageUrl(profile.picture)} />
-                          <AvatarFallback>
-                            <User className="h-4 w-4" />
-                          </AvatarFallback>
-                        </Avatar>
+                        <UserAvatar
+                          pubkey={profile.pubkey}
+                          picture={profile.picture}
+                          name={profile.display_name || profile.name || "Anonymous"}
+                          className="h-10 w-10 flex-shrink-0"
+                        />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
                             {profile.display_name || profile.name || "Anonymous"}

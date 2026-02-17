@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Heart, Users } from "lucide-react";
@@ -78,12 +78,7 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
 
         {/* Project Initiator */}
         <div className="flex items-center gap-3 pt-2">
-          <Avatar className="h-10 w-10">
-            <AvatarImage src={profile?.picture} />
-            <AvatarFallback>
-              {profile?.display_name?.[0] || project.ownerPubkey.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar pubkey={project.ownerPubkey} picture={profile?.picture} name={profile?.display_name || profile?.full_name} className="h-10 w-10" />
           <div>
             <p className="text-xs text-muted-foreground">Project Initiator</p>
             <p className="font-medium">

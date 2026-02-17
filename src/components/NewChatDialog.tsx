@@ -5,9 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Search, Loader2, MessageSquarePlus } from "lucide-react";
 import { SimplePool } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { getProxiedImageUrl } from "@/lib/imageProxy";
 
 interface Profile {
   pubkey: string;
@@ -104,20 +103,6 @@ export default function NewChatDialog({ onSelectUser }: NewChatDialogProps) {
     setOpen(false);
   };
 
-  const getInitials = (profile: Profile) => {
-    if (profile.display_name) {
-      const names = profile.display_name.split(' ');
-      if (names.length >= 2) {
-        return (names[0][0] + names[names.length - 1][0]).toUpperCase();
-      }
-      return profile.display_name.slice(0, 2).toUpperCase();
-    }
-    if (profile.name) {
-      return profile.name.slice(0, 2).toUpperCase();
-    }
-    return profile.pubkey.slice(0, 2).toUpperCase();
-  };
-
   const getDisplayName = (profile: Profile) => {
     return profile.display_name || profile.name || profile.pubkey.slice(0, 12) + '...';
   };
@@ -170,15 +155,12 @@ export default function NewChatDialog({ onSelectUser }: NewChatDialogProps) {
                       onClick={() => handleSelectUser(profile.pubkey)}
                     >
                       <div className="flex items-start gap-3">
-                        <Avatar className="h-10 w-10 flex-shrink-0">
-                          <AvatarImage 
-                            src={getProxiedImageUrl(profile.picture, Date.now())} 
-                            alt={getDisplayName(profile)} 
-                          />
-                          <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white font-bold">
-                            {getInitials(profile)}
-                          </AvatarFallback>
-                        </Avatar>
+                        <UserAvatar
+                          pubkey={profile.pubkey}
+                          picture={profile.picture}
+                          name={getDisplayName(profile)}
+                          className="h-10 w-10 flex-shrink-0"
+                        />
                         <div className="flex-1 min-w-0 overflow-hidden">
                           <p className="font-semibold truncate text-sm">
                             {getDisplayName(profile)}

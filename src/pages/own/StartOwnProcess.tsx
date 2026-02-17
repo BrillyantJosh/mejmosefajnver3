@@ -3,14 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { ArrowLeft, Triangle, Loader2, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { SimplePool, finalizeEvent } from 'nostr-tools';
 import { toast } from 'sonner';
-import { getProxiedImageUrl } from "@/lib/imageProxy";
 
 interface PostAuthor {
   pubkey: string;
@@ -222,17 +221,7 @@ export default function StartOwnProcess() {
             </div>
           ) : postAuthor ? (
             <div className="flex items-center gap-3">
-              <Avatar className="h-12 w-12">
-                {postAuthor.picture && (
-                  <AvatarImage 
-                    src={getProxiedImageUrl(postAuthor.picture, Date.now())} 
-                    alt={postAuthor.displayName} 
-                  />
-                )}
-                <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white font-bold">
-                  {postAuthor.displayName[0].toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar pubkey={postAuthor.pubkey} picture={postAuthor.picture} name={postAuthor.displayName} className="h-12 w-12" />
               <div>
                 <p className="font-semibold">{postAuthor.displayName}</p>
                 <Badge variant="secondary" className="text-xs mt-1">

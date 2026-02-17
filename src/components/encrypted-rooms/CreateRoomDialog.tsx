@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, Loader2, Lock, X, UserPlus, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { SimplePool } from 'nostr-tools';
@@ -19,7 +19,6 @@ import {
   setRoomKeyToCache,
   hexToBytes,
 } from '@/lib/encrypted-room-crypto';
-import { getProxiedImageUrl } from '@/lib/imageProxy';
 import type { RoomInvitePayload } from '@/types/encryptedRooms';
 import { toast } from 'sonner';
 
@@ -216,11 +215,6 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
         }
       }
     }
-  };
-
-  const getInitials = (member: SelectedMember) => {
-    if (member.name) return member.name.slice(0, 2).toUpperCase();
-    return member.pubkey.slice(0, 2).toUpperCase();
   };
 
   const handleCreate = async () => {
@@ -431,15 +425,12 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
                         className="flex items-center gap-2.5 p-2 rounded-md hover:bg-muted/50 cursor-pointer transition-colors"
                         onClick={() => addMemberFromSearch(profile)}
                       >
-                        <Avatar className="h-8 w-8 flex-shrink-0">
-                          <AvatarImage
-                            src={getProxiedImageUrl(profile.picture, Date.now())}
-                            alt={profile.display_name || profile.name}
-                          />
-                          <AvatarFallback className="text-xs bg-gradient-to-br from-violet-500 to-indigo-500 text-white">
-                            {(profile.display_name || profile.name || profile.pubkey).slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
+                        <UserAvatar
+                          pubkey={profile.pubkey}
+                          picture={profile.picture}
+                          name={profile.display_name || profile.name}
+                          className="h-8 w-8 flex-shrink-0"
+                        />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
                             {profile.display_name || profile.name || profile.pubkey.slice(0, 12)}
@@ -471,12 +462,12 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
                     variant="secondary"
                     className="text-xs pl-1 pr-1 py-1 flex items-center gap-1"
                   >
-                    <Avatar className="h-4 w-4">
-                      {member.picture ? (
-                        <AvatarImage src={getProxiedImageUrl(member.picture, Date.now())} />
-                      ) : null}
-                      <AvatarFallback className="text-[8px]">{getInitials(member)}</AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      pubkey={member.pubkey}
+                      picture={member.picture}
+                      name={member.name}
+                      className="h-4 w-4"
+                    />
                     <span className="max-w-[80px] truncate">
                       {member.name || `${member.pubkey.slice(0, 8)}...`}
                     </span>

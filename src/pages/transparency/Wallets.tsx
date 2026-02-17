@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Wallet as WalletIcon, TrendingUp, User, Copy, ExternalLink, CreditCard, FileText } from "lucide-react";
+import { Search, Wallet as WalletIcon, TrendingUp, Copy, ExternalLink, CreditCard, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
@@ -184,12 +184,7 @@ export default function Wallets() {
                         : 'hover:bg-muted'
                     }`}
                   >
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={profile.picture} alt={profile.name || profile.display_name} />
-                      <AvatarFallback>
-                        <User className="h-5 w-5" />
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar pubkey={profile.pubkey} picture={profile.picture} name={profile.display_name || profile.name} className="h-10 w-10" />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">
                         {profile.display_name || profile.name || 'Anonymous'}
@@ -213,12 +208,7 @@ export default function Wallets() {
           <Card className="mb-6">
             <CardContent className="pt-6">
               <div className="flex items-center gap-4 mb-4">
-                <Avatar className="h-16 w-16">
-                  <AvatarImage src={selectedProfile.picture} alt={selectedProfile.name} />
-                  <AvatarFallback>
-                    <User className="h-8 w-8" />
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar pubkey={selectedProfile.pubkey} picture={selectedProfile.picture} name={selectedProfile.display_name || selectedProfile.name} className="h-16 w-16" />
                 <div>
                   <h2 className="text-2xl font-bold">
                     {selectedProfile.display_name || selectedProfile.name || 'Anonymous'}

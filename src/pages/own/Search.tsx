@@ -5,9 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search as SearchIcon, Calendar, Users, User, Loader2 } from "lucide-react";
-import { getProxiedImageUrl } from '@/lib/imageProxy';
+import { UserAvatar } from "@/components/ui/UserAvatar";
+import { Search as SearchIcon, Calendar, Users, Loader2 } from "lucide-react";
 import { useNostrClosedCases } from '@/hooks/useNostrClosedCases';
 import { useNostrProfilesCacheBulk } from '@/hooks/useNostrProfilesCacheBulk';
 import { useNostrRevenueSharesBatch } from '@/hooks/useNostrRevenueSharesBatch';
@@ -207,12 +206,12 @@ export default function Search() {
                     <div className="text-sm">
                       <span className="text-muted-foreground">Facilitator</span>
                       <div className="flex items-center gap-2 mt-1">
-                        <Avatar className="h-6 w-6">
-                          <AvatarImage src={getProxiedImageUrl(facilitator.picture)} />
-                          <AvatarFallback>
-                            <User className="h-3 w-3" />
-                          </AvatarFallback>
-                        </Avatar>
+                        <UserAvatar
+                          pubkey={ownCase.pubkey}
+                          picture={facilitator.picture}
+                          name={facilitator.display_name || facilitator.full_name || `${ownCase.pubkey.slice(0, 8)}...`}
+                          className="h-6 w-6"
+                        />
                         <span className="font-medium">
                           {facilitator.display_name || facilitator.full_name || `${ownCase.pubkey.slice(0, 8)}...`}
                         </span>
@@ -231,12 +230,12 @@ export default function Search() {
                           const profile = profiles.get(pubkey);
                           return (
                             <div key={pubkey} className="flex items-center gap-1.5 bg-secondary px-2 py-1 rounded-md">
-                              <Avatar className="h-5 w-5">
-                                <AvatarImage src={getProxiedImageUrl(profile?.picture)} />
-                                <AvatarFallback className="text-xs">
-                                  <User className="h-3 w-3" />
-                                </AvatarFallback>
-                              </Avatar>
+                              <UserAvatar
+                                pubkey={pubkey}
+                                picture={profile?.picture}
+                                name={profile?.display_name || profile?.full_name || `${pubkey.slice(0, 2)} ${pubkey.slice(2, 8)}...`}
+                                className="h-5 w-5"
+                              />
                               <span className="text-xs">
                                 {profile?.display_name || profile?.full_name || `${pubkey.slice(0, 2)} ${pubkey.slice(2, 8)}...`}
                               </span>

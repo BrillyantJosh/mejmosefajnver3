@@ -4,10 +4,9 @@ import { useNostrProfilesCacheBulk } from '@/hooks/useNostrProfilesCacheBulk';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Calendar, Clock, User, Image as ImageIcon, Mic, File } from 'lucide-react';
-import { getProxiedImageUrl } from '@/lib/imageProxy';
+import { UserAvatar } from '@/components/ui/UserAvatar';
+import { ArrowLeft, Calendar, Clock, Image as ImageIcon, Mic, File } from 'lucide-react';
 import { format } from 'date-fns';
 import { useMemo } from 'react';
 
@@ -146,12 +145,12 @@ export default function Transcript() {
             <div className="pt-4 border-t">
               <span className="text-sm text-muted-foreground">Facilitator</span>
               <div className="flex items-center gap-2 mt-1">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src={getProxiedImageUrl(facilitator.picture)} />
-                  <AvatarFallback>
-                    <User className="h-4 w-4" />
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  pubkey={transcript.facilitatorPubkey}
+                  picture={facilitator.picture}
+                  name={facilitator.display_name || facilitator.full_name || `${transcript.facilitatorPubkey.slice(0, 8)}...`}
+                  className="h-8 w-8"
+                />
                 <span className="font-medium">
                   {facilitator.display_name || facilitator.full_name || `${transcript.facilitatorPubkey.slice(0, 8)}...`}
                 </span>
@@ -178,12 +177,12 @@ export default function Transcript() {
                   key={`${message.source_event_id}-${message.seq}`}
                   className="flex gap-3 p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
                 >
-                  <Avatar className="h-10 w-10 flex-shrink-0">
-                    <AvatarImage src={getProxiedImageUrl(profile?.picture)} />
-                    <AvatarFallback>
-                      <User className="h-5 w-5" />
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    pubkey={message.sender_pubkey}
+                    picture={profile?.picture}
+                    name={profile?.display_name || profile?.full_name || `${message.sender_pubkey.slice(0, 8)}...`}
+                    className="h-10 w-10 flex-shrink-0"
+                  />
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">

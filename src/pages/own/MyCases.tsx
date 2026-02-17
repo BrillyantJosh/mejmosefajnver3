@@ -3,8 +3,7 @@ import { useNostrOwnCases } from "@/hooks/useNostrOwnCases";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getProxiedImageUrl } from "@/lib/imageProxy";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Users, Calendar, Globe } from "lucide-react";
 import CreateCaseDialog from "@/components/own/CreateCaseDialog";
 
@@ -110,12 +109,7 @@ export default function MyCases() {
                 <div className="flex items-center gap-2 flex-wrap">
                   {caseParticipants.map((participant) => (
                     <div key={participant.pubkey} className="flex items-center gap-1.5">
-                      <Avatar className="h-5 w-5 md:h-6 md:w-6">
-                        <AvatarImage src={getProxiedImageUrl(participant.picture)} />
-                        <AvatarFallback className="text-xs">
-                          {participant.name.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar pubkey={participant.pubkey} picture={participant.picture} name={participant.name} className="h-5 w-5 md:h-6 md:w-6" />
                       <span className="text-xs md:text-sm">{participant.name}</span>
                     </div>
                   ))}

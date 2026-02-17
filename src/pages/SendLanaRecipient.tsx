@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, ArrowRight, Scan, Search, User, Wallet } from "lucide-react";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Html5Qrcode } from "html5-qrcode";
@@ -370,13 +371,7 @@ export default function SendLanaRecipient() {
                     {searchResults.map((result) => (
                       <Card key={result.pubkey} className="p-4">
                         <div className="flex items-start gap-3 mb-3">
-                          {result.picture && (
-                            <img
-                              src={result.picture}
-                              alt={result.name}
-                              className="w-10 h-10 rounded-full"
-                            />
-                          )}
+                          <UserAvatar pubkey={result.pubkey} picture={result.picture} name={result.display_name || result.name} className="h-10 w-10" />
                           <div>
                             <p className="font-semibold">{result.display_name}</p>
                             <p className="text-sm text-muted-foreground">@{result.name}</p>

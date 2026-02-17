@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { useNostrBuyOffers } from "@/hooks/useNostrBuyOffers";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
@@ -184,10 +184,7 @@ export default function BuyLana() {
                       <tr key={offer.id} className="border-b hover:bg-muted/50">
                         <td className="py-3 px-2 md:px-4">
                           <div className="flex items-center gap-2">
-                            <Avatar className="h-6 w-6 md:h-8 md:w-8 flex-shrink-0">
-                              <AvatarImage src={sellerProfile?.picture} alt={displayName} />
-                              <AvatarFallback className="text-xs">{displayName.substring(0, 2).toUpperCase()}</AvatarFallback>
-                            </Avatar>
+                            <UserAvatar pubkey={offer.sellerPubkey} picture={sellerProfile?.picture} name={displayName} className="h-6 w-6 md:h-8 md:w-8 flex-shrink-0" />
                             <span className="font-medium text-xs md:text-sm truncate">{displayName}</span>
                           </div>
                         </td>

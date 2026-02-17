@@ -2,7 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
 import { SimplePool } from "nostr-tools";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -15,7 +15,6 @@ import { useNostrLash } from "@/hooks/useNostrLash";
 import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { useLashHistory } from "@/hooks/useLashHistory";
 import { PostContent } from "@/components/social/PostContent";
-import { getProxiedImageUrl } from "@/lib/imageProxy";
 import type { NostrProfile } from "@/hooks/useNostrProfile";
 
 interface UserPost {
@@ -212,17 +211,12 @@ export default function UserProfile() {
       <Card>
         <CardHeader className="pb-4">
           <div className="flex items-start gap-4">
-            <Avatar className="h-20 w-20">
-              {profile?.picture && (
-                <AvatarImage 
-                  src={getProxiedImageUrl(profile.picture)} 
-                  alt={getDisplayName()} 
-                />
-              )}
-              <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white text-2xl font-bold">
-                {getDisplayName()[0]?.toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              pubkey={pubkey}
+              picture={profile?.picture}
+              name={getDisplayName()}
+              className="h-20 w-20"
+            />
             <div className="flex-1">
               <h1 className="text-2xl font-bold">{profile?.display_name || profile?.name || 'Unknown'}</h1>
               {profile?.name && profile?.display_name && profile.name !== profile.display_name && (

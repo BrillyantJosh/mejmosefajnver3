@@ -4,10 +4,10 @@ import { SimplePool } from "nostr-tools";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Calendar, Globe, MapPin, Edit, Users, ChevronDown, ChevronUp, User, Plus } from "lucide-react";
+import { Calendar, Globe, MapPin, Edit, Users, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { format } from "date-fns";
@@ -21,14 +21,7 @@ function AttendeeRow({ registration }: { registration: EventRegistration }) {
   
   return (
     <div className="flex items-center gap-2 py-2">
-      <Avatar className="h-8 w-8">
-        {profile?.picture ? (
-          <AvatarImage src={profile.picture} alt={displayName} />
-        ) : null}
-        <AvatarFallback>
-          <User className="h-3 w-3" />
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar pubkey={registration.pubkey} picture={profile?.picture} name={displayName} className="h-8 w-8" />
       <span className="text-sm flex-1 truncate">{displayName}</span>
       <Badge variant={registration.status === 'going' ? 'default' : 'secondary'} className="text-xs">
         {registration.status === 'going' ? 'Going' : 'Interested'}

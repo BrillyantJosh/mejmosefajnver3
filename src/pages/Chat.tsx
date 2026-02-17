@@ -9,8 +9,8 @@ import { MessageSquare, Search, AlertCircle, Trash2, ArrowLeft, Heart, Mic, Imag
 const MESSAGES_PER_PAGE = 20;
 import { useNostrDMs } from "@/hooks/useNostrDMs";
 import { useAuth } from "@/contexts/AuthContext";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { formatDistanceToNow } from "date-fns";
 import NewChatDialog from "@/components/NewChatDialog";
 import NewChatDrawer from "@/components/NewChatDrawer";
@@ -21,7 +21,6 @@ import { DMAudioRecorder } from "@/components/DMAudioRecorder";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { DMImageUploader } from "@/components/DMImageUploader";
 import { ImageGallery } from "@/components/ImageGallery";
-import { getProxiedImageUrl } from "@/lib/imageProxy";
 import { useNostrDMLashes } from "@/hooks/useNostrDMLashes";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -232,28 +231,9 @@ export default function Chat() {
     }
   };
 
-  const getInitials = (pubkey: string) => {
+  const getCacheBuster = (pubkey: string) => {
     const profile = profiles.get(pubkey);
-    if (profile?.display_name) {
-      const names = profile.display_name.split(' ');
-      if (names.length >= 2) {
-        return (names[0][0] + names[names.length - 1][0]).toUpperCase();
-      }
-      return profile.display_name.slice(0, 2).toUpperCase();
-    }
-    if (profile?.full_name) {
-      return profile.full_name.slice(0, 2).toUpperCase();
-    }
-    return pubkey.slice(0, 2).toUpperCase();
-  };
-
-  const getAvatar = (pubkey: string) => {
-    const profile = profiles.get(pubkey);
-    if (!profile?.picture) return undefined;
-    
-    // Use proxied URL with cache busting based on profile fetch time
-    const cacheBuster = profile.last_fetched_at ? new Date(profile.last_fetched_at).getTime() : Date.now();
-    return getProxiedImageUrl(profile.picture, cacheBuster);
+    return profile?.last_fetched_at ? new Date(profile.last_fetched_at).getTime() : undefined;
   };
 
   const getDisplayName = (pubkey: string) => {
@@ -545,12 +525,13 @@ export default function Chat() {
                   onClick={() => setSelectedPubkey(conv.pubkey)}
                 >
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-12 w-12 md:h-10 md:w-10">
-                      <AvatarImage src={getAvatar(conv.pubkey)} alt={getDisplayName(conv.pubkey)} />
-                      <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white font-bold">
-                        {getInitials(conv.pubkey)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      pubkey={conv.pubkey}
+                      picture={profiles.get(conv.pubkey)?.picture}
+                      name={getDisplayName(conv.pubkey)}
+                      cacheBuster={getCacheBuster(conv.pubkey)}
+                      className="h-12 w-12 md:h-10 md:w-10"
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">
                         <p className="font-semibold truncate text-sm">
@@ -585,12 +566,13 @@ export default function Chat() {
                   >
                     <ArrowLeft className="h-5 w-5" />
                   </Button>
-                  <Avatar className="h-12 w-12 md:h-10 md:w-10">
-                    <AvatarImage src={getAvatar(displayConversation.pubkey)} alt={getFullName(displayConversation.pubkey)} />
-                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white font-bold">
-                      {getInitials(displayConversation.pubkey)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    pubkey={displayConversation.pubkey}
+                    picture={profiles.get(displayConversation.pubkey)?.picture}
+                    name={getFullName(displayConversation.pubkey)}
+                    cacheBuster={getCacheBuster(displayConversation.pubkey)}
+                    className="h-12 w-12 md:h-10 md:w-10"
+                  />
                   <div>
                     <CardTitle className="text-lg">
                       {getFullName(displayConversation.pubkey)}
@@ -637,12 +619,13 @@ export default function Chat() {
                       className={`flex gap-2 items-start ${msg.isOwn ? 'justify-end' : 'justify-start'} group w-full`}
                     >
                       {!msg.isOwn && (
-                        <Avatar className="flex-shrink-0 h-7 w-7 md:h-8 md:w-8">
-                          <AvatarImage src={getAvatar(msg.pubkey)} alt={getDisplayName(msg.pubkey)} />
-                          <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white font-bold text-sm">
-                            {getInitials(msg.pubkey)}
-                          </AvatarFallback>
-                        </Avatar>
+                        <UserAvatar
+                          pubkey={msg.pubkey}
+                          picture={profiles.get(msg.pubkey)?.picture}
+                          name={getDisplayName(msg.pubkey)}
+                          cacheBuster={getCacheBuster(msg.pubkey)}
+                          className="flex-shrink-0 h-7 w-7 md:h-8 md:w-8"
+                        />
                       )}
                       <div className="flex items-start gap-1 max-w-[85%] md:max-w-[70%] min-w-0">
                         {msg.isOwn && (
@@ -750,12 +733,12 @@ export default function Chat() {
                                       <div className="space-y-2 max-h-60 overflow-y-auto">
                                          {lashers.map((lasher) => (
                                            <div key={lasher.pubkey} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                                            <Avatar className="h-8 w-8">
-                                              <AvatarImage src={lasher.picture ? getProxiedImageUrl(lasher.picture) : undefined} />
-                                              <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white text-xs">
-                                                {lasher.name?.slice(0, 2).toUpperCase() || lasher.pubkey.slice(0, 2).toUpperCase()}
-                                              </AvatarFallback>
-                                            </Avatar>
+                                            <UserAvatar
+                                              pubkey={lasher.pubkey}
+                                              picture={lasher.picture}
+                                              name={lasher.name}
+                                              className="h-8 w-8"
+                                            />
                                             <div className="flex-1 min-w-0">
                                               <p className="text-sm font-medium truncate">
                                                 {lasher.name || truncatePubkey(lasher.pubkey)}

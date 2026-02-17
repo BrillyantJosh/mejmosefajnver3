@@ -1,11 +1,11 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useNostrDonationProposals } from "@/hooks/useNostrDonationProposals";
 import { useNostrDonationPayments } from "@/hooks/useNostrDonationPayments";
 import { useNostrSellerProfiles } from "@/hooks/useNostrSellerProfiles";
 import { formatLana, formatCurrency } from "@/lib/currencyConversion";
-import { CheckCircle, ExternalLink, User } from "lucide-react";
+import { CheckCircle, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { useMemo } from "react";
 
@@ -74,12 +74,7 @@ export default function Completed() {
                   {/* Profile Information */}
                   {profile && (
                     <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={profile.picture} alt={profile.name || profile.display_name} />
-                        <AvatarFallback>
-                          <User className="h-5 w-5" />
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar pubkey={payment.recipientPubkey} picture={profile.picture} name={profile.display_name || profile.name} className="h-10 w-10" />
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-sm truncate">
                           {profile.display_name || profile.name || 'Anonymous'}
