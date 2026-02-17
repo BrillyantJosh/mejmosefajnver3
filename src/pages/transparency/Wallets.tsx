@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Wallet as WalletIcon, TrendingUp, User, Copy, ExternalLink } from "lucide-react";
+import { Search, Wallet as WalletIcon, TrendingUp, User, Copy, ExternalLink, CreditCard, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
@@ -11,6 +11,8 @@ import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { supabase } from "@/integrations/supabase/client";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
+import lana8wonderBg from "@/assets/lana8wonder-bg.png";
+import knightsBg from "@/assets/knights-bg.png";
 
 interface WalletWithBalance {
   walletId: string;
@@ -116,6 +118,21 @@ export default function Wallets() {
     const fiat = getFiatValue(w.balance || 0);
     return sum + fiat.value;
   }, 0);
+
+  // Sort wallets by type priority (same order as /wallet page)
+  const walletTypeOrder: Record<string, number> = {
+    "Main Wallet": 1,
+    "Wallet": 2,
+    "LanaPays.Us": 3,
+    "Knights": 4,
+    "Lana8Wonder": 5,
+  };
+
+  const sortedWallets = [...walletsWithBalances].sort((a, b) => {
+    const orderA = walletTypeOrder[a.walletType] || 99;
+    const orderB = walletTypeOrder[b.walletType] || 99;
+    return orderA - orderB;
+  });
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
@@ -257,21 +274,42 @@ export default function Wallets() {
 
               {/* Wallet Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {walletsWithBalances.map((wallet, index) => (
-                  <Card key={wallet.walletId || index} className="hover:shadow-lg transition-shadow">
-                    <CardHeader>
-                      <div className="flex items-center gap-2">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <WalletIcon className="h-5 w-5 text-primary" />
+                {sortedWallets.map((wallet, index) => (
+                  <Card
+                    key={wallet.walletId || index}
+                    className={`hover:shadow-lg transition-shadow relative overflow-hidden ${
+                      wallet.walletType === "Main Wallet" ? "bg-green-500/10 border-green-500/30" : ""
+                    }`}
+                    style={wallet.walletType === "Lana8Wonder" ? {
+                      backgroundImage: `url(${lana8wonderBg})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    } : wallet.walletType === "Knights" ? {
+                      backgroundImage: `url(${knightsBg})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    } : undefined}
+                  >
+                    {(wallet.walletType === "Lana8Wonder" || wallet.walletType === "Knights") && (
+                      <div className="absolute inset-0 bg-background/85" />
+                    )}
+                    <CardHeader className="relative z-10">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <WalletIcon className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <CardTitle className="text-base font-semibold truncate" title={wallet.walletId}>
+                              {wallet.walletId}
+                            </CardTitle>
+                          </div>
                         </div>
-                        <CardTitle className="text-sm font-mono truncate flex-1" title={wallet.walletId}>
-                          {wallet.walletId}
-                        </CardTitle>
-                        <div className="flex items-center gap-1">
+                        <div className="flex gap-1 flex-shrink-0">
                           <Button
                             variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
+                            size="sm"
+                            className="h-8 w-8 p-0"
                             onClick={() => {
                               navigator.clipboard.writeText(wallet.walletId);
                               toast.success("Wallet address copied!");
@@ -281,8 +319,8 @@ export default function Wallets() {
                           </Button>
                           <Button
                             variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
+                            size="sm"
+                            className="h-8 w-8 p-0"
                             onClick={() => {
                               window.open(`https://chainz.cryptoid.info/lana/address.dws?${wallet.walletId}.htm`, '_blank');
                             }}
@@ -292,7 +330,7 @@ export default function Wallets() {
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-3 relative z-10">
                       <div className="flex flex-col gap-2 p-3 rounded-lg bg-muted/50">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
@@ -304,7 +342,7 @@ export default function Wallets() {
                           ) : (
                             <div className="flex flex-col items-end">
                               {wallet.balance && wallet.balance > 0 && (
-                                <span className="text-xl font-bold text-green-600">
+                                <span className="text-2xl font-bold text-green-600">
                                   {formatNumber(getFiatValue(wallet.balance).value)} {getFiatValue(wallet.balance).currency}
                                 </span>
                               )}
@@ -316,17 +354,38 @@ export default function Wallets() {
                         </div>
                       </div>
 
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Type: </span>
+                      <div className="flex items-center gap-2 text-sm">
+                        <CreditCard className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">Type:</span>
                         <span className="font-medium">{wallet.walletType}</span>
                       </div>
-                      
+
                       {wallet.note && (
-                        <div className="text-sm">
-                          <span className="text-muted-foreground">Note: </span>
-                          <p className="text-foreground mt-1">{wallet.note}</p>
+                        <div className="flex items-start gap-2 text-sm">
+                          <FileText className="h-4 w-4 text-muted-foreground mt-0.5" />
+                          <div className="flex-1">
+                            <span className="text-muted-foreground">Note:</span>
+                            <p className="text-foreground mt-1">{wallet.note}</p>
+                          </div>
                         </div>
                       )}
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        asChild
+                      >
+                        <a
+                          href={`https://chainz.cryptoid.info/lana/address.dws?${wallet.walletId}.htm`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          Transaction History
+                        </a>
+                      </Button>
                     </CardContent>
                   </Card>
                 ))}
