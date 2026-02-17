@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { User, Save, Loader2, Navigation, Map, Plus, Upload, X, Eye, EyeOff, Copy } from "lucide-react";
+import { User, Save, Loader2, Navigation, Map, Plus, Upload, X, Eye, EyeOff, Copy, Globe, Link, Building2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -473,6 +473,12 @@ export default function Profile() {
                   <h2 className="text-2xl font-bold break-words">{profile.display_name || profile.name}</h2>
                   <p className="text-muted-foreground break-all">@{profile.name}</p>
                   {profile.nip05 && <p className="text-sm text-muted-foreground break-all">✓ {profile.nip05}</p>}
+                  {profile.website && (
+                    <a href={profile.website} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1 mt-1">
+                      <Globe className="h-3 w-3" />
+                      {profile.website}
+                    </a>
+                  )}
                 </div>
               </div>
 
@@ -590,6 +596,15 @@ export default function Profile() {
                   <Label className="text-muted-foreground">Exchange Rate</Label>
                   <p>{profile.lanoshi2lash}</p>
                 </div>
+                {profile.payment_link && (
+                  <div>
+                    <Label className="text-muted-foreground">Payment Link</Label>
+                    <a href={profile.payment_link} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1">
+                      <Link className="h-3 w-3" />
+                      {profile.payment_link}
+                    </a>
+                  </div>
+                )}
                 {profile.interests && profile.interests.length > 0 && (
                   <div className="md:col-span-2">
                     <Label className="text-muted-foreground">Interests</Label>
@@ -637,6 +652,44 @@ export default function Profile() {
                           </div>
                         </Card>
                       ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {(profile.bankName || profile.bankAccount) && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-muted-foreground" />
+                      <h3 className="text-lg font-semibold">Legacy Banking Information</h3>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {profile.bankName && (
+                        <div>
+                          <Label className="text-muted-foreground">Bank Name</Label>
+                          <p>{profile.bankName}</p>
+                        </div>
+                      )}
+                      {profile.bankSWIFT && (
+                        <div>
+                          <Label className="text-muted-foreground">SWIFT/BIC Code</Label>
+                          <p className="font-mono">{profile.bankSWIFT}</p>
+                        </div>
+                      )}
+                      {profile.bankAddress && (
+                        <div>
+                          <Label className="text-muted-foreground">Bank Address</Label>
+                          <p>{profile.bankAddress}</p>
+                        </div>
+                      )}
+                      {profile.bankAccount && (
+                        <div>
+                          <Label className="text-muted-foreground">Bank Account Number</Label>
+                          <p className="font-mono">{profile.bankAccount}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </>
