@@ -1,28 +1,37 @@
 import { useState, useMemo } from "react";
 import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { Search, Calendar } from "lucide-react";
+import { Search, Calendar, Wallet } from "lucide-react";
 import { format } from "date-fns";
 import { sl } from "date-fns/locale";
 
 export default function Profiles() {
   const { profiles, isLoading } = useNostrKind0Profiles();
   const [searchQuery, setSearchQuery] = useState("");
+  const [walletOnly, setWalletOnly] = useState(true);
+
+  const walletCount = useMemo(() => profiles.filter(p => !!p.lanaWalletID).length, [profiles]);
 
   const filteredProfiles = useMemo(() => {
-    if (!searchQuery.trim()) return profiles;
-    
-    const query = searchQuery.toLowerCase();
-    return profiles.filter(profile => 
-      profile.name?.toLowerCase().includes(query) ||
-      profile.display_name?.toLowerCase().includes(query) ||
-      profile.location?.toLowerCase().includes(query) ||
-      profile.about?.toLowerCase().includes(query) ||
-      profile.pubkey?.toLowerCase().includes(query)
-    );
-  }, [profiles, searchQuery]);
+    let result = profiles;
+    if (walletOnly) {
+      result = result.filter(p => !!p.lanaWalletID);
+    }
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(profile =>
+        profile.name?.toLowerCase().includes(query) ||
+        profile.display_name?.toLowerCase().includes(query) ||
+        profile.location?.toLowerCase().includes(query) ||
+        profile.about?.toLowerCase().includes(query) ||
+        profile.pubkey?.toLowerCase().includes(query)
+      );
+    }
+    return result;
+  }, [profiles, searchQuery, walletOnly]);
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
@@ -36,6 +45,27 @@ export default function Profiles() {
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-10"
         />
+      </div>
+
+      <div className="flex items-center gap-2 mb-6">
+        <Button
+          variant={walletOnly ? "default" : "outline"}
+          size="sm"
+          onClick={() => setWalletOnly(true)}
+          className="gap-2"
+        >
+          <Wallet className="h-4 w-4" />
+          With Lana Wallet
+          <span className="ml-1 bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{walletCount}</span>
+        </Button>
+        <Button
+          variant={!walletOnly ? "default" : "outline"}
+          size="sm"
+          onClick={() => setWalletOnly(false)}
+        >
+          Show All
+          <span className="ml-1 text-xs opacity-70">({profiles.length})</span>
+        </Button>
       </div>
 
       {isLoading ? (
