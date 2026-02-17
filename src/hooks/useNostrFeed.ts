@@ -124,20 +124,9 @@ export function useNostrFeed(customRelays?: string[], tagFilter?: string) {
             setPosts(initialPosts);
             
             console.log('👥 Phase 1: Profiles will be loaded by cache hook');
-            
-            // Count replies
-            const replyCountMap = new Map<string, number>();
-            quickEvents.forEach(event => {
-              const replyToTags = event.tags?.filter(tag => tag[0] === 'e') || [];
-              replyToTags.forEach(tag => {
-                const referencedEventId = tag[1];
-                if (referencedEventId) {
-                  replyCountMap.set(referencedEventId, (replyCountMap.get(referencedEventId) || 0) + 1);
-                }
-              });
-            });
-            setReplyCounts(replyCountMap);
-            
+
+            // Reply counts will be fetched via dedicated query in Phase 2
+
             // Cache to sessionStorage for instant display on refresh
             try {
               sessionStorage.setItem('lana_feed_cache', JSON.stringify({
@@ -261,19 +250,40 @@ export function useNostrFeed(customRelays?: string[], tagFilter?: string) {
             return [...prev, ...newPosts].sort((a, b) => b.created_at - a.created_at);
           });
           
-          // Count all replies
-          const replyCountMap = new Map<string, number>();
-          events.forEach(event => {
-            const replyToTags = event.tags?.filter(tag => tag[0] === 'e') || [];
-            replyToTags.forEach(tag => {
-              const referencedEventId = tag[1];
-              if (referencedEventId) {
-                replyCountMap.set(referencedEventId, (replyCountMap.get(referencedEventId) || 0) + 1);
-              }
-            });
-          });
-          setReplyCounts(replyCountMap);
-          
+          // Fetch accurate reply counts via dedicated #e query
+          const allPostIds = phase2Posts.map(p => p.id);
+          if (allPostIds.length > 0) {
+            try {
+              console.log('💬 Fetching reply counts for', allPostIds.length, 'posts...');
+              const replyEvents = await Promise.race([
+                pool.querySync(RELAYS, {
+                  kinds: [1],
+                  '#e': allPostIds,
+                  limit: 500
+                }),
+                new Promise<Event[]>((_, reject) =>
+                  setTimeout(() => reject(new Error('Reply count timeout')), 10000)
+                )
+              ]).catch(() => [] as Event[]);
+
+              const replyCountMap = new Map<string, number>();
+              const postIdSet = new Set(allPostIds);
+              replyEvents.forEach(event => {
+                const eTags = event.tags?.filter(tag => tag[0] === 'e') || [];
+                eTags.forEach(tag => {
+                  const refId = tag[1];
+                  if (refId && postIdSet.has(refId)) {
+                    replyCountMap.set(refId, (replyCountMap.get(refId) || 0) + 1);
+                  }
+                });
+              });
+              setReplyCounts(replyCountMap);
+              console.log('💬 Reply counts loaded:', replyCountMap.size, 'posts with replies');
+            } catch (err) {
+              console.warn('⚠️ Reply count fetch failed:', err);
+            }
+          }
+
           console.log('✅ Phase 2 complete - All posts loaded, profiles will be loaded by cache hook!');
           setLoadingMore(false);
           setLoading(false);
