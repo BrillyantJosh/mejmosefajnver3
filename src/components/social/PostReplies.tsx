@@ -206,6 +206,18 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
       setSubmitProgress(`Publishing to ${relays.length} relays...`);
       console.log('💬 Publishing comment to', relays.length, 'relays');
 
+      // Also publish via server for reliability (especially mobile)
+      try {
+        await fetch('/api/functions/publish-dm-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: signedEvent }),
+        });
+        console.log('✅ Comment published via server');
+      } catch (serverErr) {
+        console.warn('⚠️ Server publish failed, trying direct relay publish:', serverErr);
+      }
+
       // Publish to all relays with individual tracking
       const publishPromises = pool.publish(relays, signedEvent);
       
@@ -313,7 +325,8 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
               placeholder="Write a comment..."
               className="min-h-[80px] resize-none"
             />
-            <Button 
+            <Button
+              type="button"
               onClick={handleSubmitComment}
               disabled={isSubmitting || !commentText.trim()}
               size="sm"
