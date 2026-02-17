@@ -4,14 +4,16 @@ import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useNostrDonationProposals } from "@/hooks/useNostrDonationProposals";
 import { useNostrDonationPayments } from "@/hooks/useNostrDonationPayments";
 import { useNostrSellerProfiles } from "@/hooks/useNostrSellerProfiles";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatLana, formatCurrency } from "@/lib/currencyConversion";
 import { CheckCircle, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { useMemo } from "react";
 
 export default function Completed() {
-  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals();
-  const { payments, isLoading: paymentsLoading } = useNostrDonationPayments();
+  const { session } = useAuth();
+  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(session?.nostrHexId);
+  const { payments, isLoading: paymentsLoading } = useNostrDonationPayments(session?.nostrHexId);
   
   // Extract unique recipient pubkeys
   const recipientPubkeys = useMemo(() => {
