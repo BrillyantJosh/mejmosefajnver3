@@ -1,10 +1,19 @@
+import { useMemo } from "react";
 import { useNostrMarketOffers } from "@/hooks/useNostrMarketOffers";
+import { useNostrSellerProfiles } from "@/hooks/useNostrSellerProfiles";
 import OfferCard from "@/components/marketplace/OfferCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Globe } from "lucide-react";
 
 export default function MarketplaceGlobal() {
   const { offers, isLoading } = useNostrMarketOffers({ status: 'active' });
+
+  // Bulk fetch seller profiles for all offers
+  const sellerPubkeys = useMemo(() =>
+    Array.from(new Set(offers.map(o => o.pubkey))),
+    [offers]
+  );
+  const { profiles: sellerProfiles } = useNostrSellerProfiles(sellerPubkeys);
 
   return (
     <div className="space-y-6">
@@ -32,7 +41,11 @@ export default function MarketplaceGlobal() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {offers.map((offer) => (
-              <OfferCard key={offer.id} offer={offer} />
+              <OfferCard
+                key={offer.id}
+                offer={offer}
+                sellerProfile={sellerProfiles.get(offer.pubkey)}
+              />
             ))}
           </div>
         </>

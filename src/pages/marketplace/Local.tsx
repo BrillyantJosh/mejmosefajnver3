@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNostrMarketOffers } from "@/hooks/useNostrMarketOffers";
+import { useNostrSellerProfiles } from "@/hooks/useNostrSellerProfiles";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 import OfferCard from "@/components/marketplace/OfferCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +13,13 @@ import { toast } from "sonner";
 export default function MarketplaceLocal() {
   const { offers, isLoading } = useNostrMarketOffers({ status: 'active' });
   const { profile } = useNostrProfile();
+
+  // Bulk fetch seller profiles for all offers
+  const sellerPubkeys = useMemo(() =>
+    Array.from(new Set(offers.map(o => o.pubkey))),
+    [offers]
+  );
+  const { profiles: sellerProfiles } = useNostrSellerProfiles(sellerPubkeys);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
 
@@ -226,7 +234,7 @@ export default function MarketplaceLocal() {
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {localOffers.map((offer) => (
-                      <OfferCard key={offer.id} offer={offer} />
+                      <OfferCard key={offer.id} offer={offer} sellerProfile={sellerProfiles.get(offer.pubkey)} />
                     ))}
                   </div>
                 </div>
@@ -247,7 +255,7 @@ export default function MarketplaceLocal() {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {noGeoOffers.map((offer) => (
-                  <OfferCard key={offer.id} offer={offer} />
+                  <OfferCard key={offer.id} offer={offer} sellerProfile={sellerProfiles.get(offer.pubkey)} />
                 ))}
               </div>
             </div>
