@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw, CheckCircle2, XCircle, Clock, Network, Send } from "lucide-react";
 import { toast } from "sonner";
+import { finalizeEvent } from "nostr-tools";
 
 interface PendingEvent {
   id: string;
@@ -62,12 +63,47 @@ export default function RetryEvents() {
   }, [fetchEvents]);
 
   const handleRetry = async (eventId: string) => {
-    if (!session?.nostrHexId) return;
+    if (!session?.nostrHexId || !session?.nostrPrivateKey) {
+      toast.error("Nostr authentication required");
+      return;
+    }
+
+    // Find the event in the list
+    const pendingEvent = events.find(e => e.event_id === eventId);
+    if (!pendingEvent) {
+      toast.error("Event not found");
+      return;
+    }
 
     setRetrying(eventId);
     try {
+      // Parse the original signed event to extract tags, kind, content
+      const originalEvent = JSON.parse(pendingEvent.signed_event);
+
+      // Create a NEW event template with fresh created_at
+      const eventTemplate = {
+        kind: originalEvent.kind,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: originalEvent.tags,
+        content: originalEvent.content,
+        pubkey: session.nostrHexId
+      };
+
+      // Re-sign with the user's Nostr private key (produces new id + sig)
+      const privateKeyBytes = new Uint8Array(
+        session.nostrPrivateKey.match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16))
+      );
+      const newSignedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
+
+      console.log(`🔄 Re-signed event: old=${eventId.substring(0, 8)}... → new=${newSignedEvent.id.substring(0, 8)}... (created_at: ${newSignedEvent.created_at})`);
+
+      // Send the new signed event to the server for relay publishing
       const { data, error } = await supabase.functions.invoke('retry-pending-event', {
-        body: { eventId, userPubkey: session.nostrHexId }
+        body: {
+          oldEventId: eventId,
+          newSignedEvent: newSignedEvent,
+          userPubkey: session.nostrHexId
+        }
       });
 
       if (error) {
@@ -78,21 +114,26 @@ export default function RetryEvents() {
       if (data?.alreadyPublished) {
         toast.info("Already published", { description: "This event was already published to relays" });
       } else if (data?.success) {
-        toast.success("Published successfully!", { description: "Event published to relays with new timestamp" });
+        toast.success("Published successfully!", { description: "Event re-signed and published to relays" });
       } else {
         toast.error("Publishing failed", { description: "Could not publish to any relay. Try again later." });
       }
 
-      // Store relay results
+      // Store relay results (keyed by the NEW event id since old one is replaced)
       if (data?.results) {
-        setLastResults(prev => new Map(prev).set(eventId, data.results));
+        setLastResults(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(eventId); // clear old results
+          newMap.set(newSignedEvent.id, data.results);
+          return newMap;
+        });
       }
 
       // Refresh the list
       await fetchEvents();
     } catch (err) {
       console.error('Retry error:', err);
-      toast.error("Retry failed");
+      toast.error("Retry failed", { description: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
       setRetrying(null);
     }
@@ -253,12 +294,12 @@ export default function RetryEvents() {
                       {isRetrying ? (
                         <>
                           <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                          Retrying...
+                          Re-signing & Publishing...
                         </>
                       ) : (
                         <>
                           <RefreshCw className="h-4 w-4 mr-2" />
-                          Retry with New Timestamp
+                          Re-sign & Publish
                         </>
                       )}
                     </Button>
