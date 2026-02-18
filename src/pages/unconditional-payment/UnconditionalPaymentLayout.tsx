@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Clock, CheckCircle, TrendingUp } from "lucide-react";
+import { Clock, CheckCircle, TrendingUp, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrPaymentScore } from "@/hooks/useNostrPaymentScore";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,7 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const unconditionalPaymentNavItems = [
   { title: "Pending", path: "/unconditional-payment", icon: Clock },
-  { title: "Completed", path: "/unconditional-payment/completed", icon: CheckCircle }
+  { title: "Completed", path: "/unconditional-payment/completed", icon: CheckCircle },
+  { title: "Relay Retry", path: "/unconditional-payment/retry", icon: RefreshCw }
 ];
 
 function formatPeriod(start: string, end: string): string {
