@@ -47,11 +47,14 @@ export function useAiAdvisorUnconditionalPayments() {
   );
   
   // Fetch payments to check which are already paid (with polling)
-  const { payments, isLoading: paymentsLoading } = useNostrDonationPayments({
-    poll: true,
-    pollIntervalMs: 15000,
-    enabled: !!session?.nostrHexId
-  });
+  const { payments, isLoading: paymentsLoading } = useNostrDonationPayments(
+    session?.nostrHexId,
+    {
+      poll: true,
+      pollIntervalMs: 15000,
+      enabled: !!session?.nostrHexId
+    }
+  );
 
   // Debug logging moved to inside processedData useMemo
 

@@ -1581,7 +1581,7 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
 router.post('/fetch-donation-payments', async (req: Request, res: Response) => {
   try {
     const { userPubkey } = req.body;
-    console.log('📥 Fetching KIND 90901 donation payments via server...', userPubkey ? `for user ${userPubkey.slice(0, 8)}...` : '(all)');
+    console.log('📥 Fetching KIND 90901 donation payments via server...', typeof userPubkey === 'string' ? `for user ${userPubkey.slice(0, 8)}...` : '(all)');
 
     // Get relays from KIND 38888 in DB
     const db = getDb();
