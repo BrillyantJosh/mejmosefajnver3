@@ -53,6 +53,7 @@ import UnconditionalPaymentPending from "./pages/unconditional-payment/Pending";
 import UnconditionalPaymentCompleted from "./pages/unconditional-payment/Completed";
 import UnconditionalPaymentConfirmPayment from "./pages/unconditional-payment/ConfirmPayment";
 import UnconditionalPaymentResult from "./pages/unconditional-payment/Result";
+import UnconditionalPaymentRetryEvents from "./pages/unconditional-payment/RetryEvents";
 import OwnLayout from "./pages/own/OwnLayout";
 import Own from "./pages/own/Own";
 import OwnSearch from "./pages/own/Search";
@@ -194,6 +195,7 @@ const App = () => (
                   <Route path="/unconditional-payment" element={<UnconditionalPaymentLayout />}>
                     <Route index element={<UnconditionalPaymentPending />} />
                     <Route path="completed" element={<UnconditionalPaymentCompleted />} />
+                    <Route path="retry" element={<UnconditionalPaymentRetryEvents />} />
                   </Route>
                   <Route path="/unconditional-payment/confirm-payment" element={<UnconditionalPaymentConfirmPayment />} />
                   <Route path="/unconditional-payment/result" element={<UnconditionalPaymentResult />} />

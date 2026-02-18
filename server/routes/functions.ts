@@ -2176,6 +2176,105 @@ router.post('/queue-relay-event', async (req: Request, res: Response) => {
 });
 
 // =============================================
+// GET PENDING EVENTS — Fetch user's pending relay events
+// =============================================
+router.post('/get-pending-events', async (req: Request, res: Response) => {
+  try {
+    const { userPubkey } = req.body;
+    if (!userPubkey) {
+      return res.status(400).json({ success: false, error: 'userPubkey required' });
+    }
+
+    const db = getDb();
+    const events = db.prepare(`
+      SELECT id, event_id, event_kind, signed_event, retry_count, status, created_at, last_attempt_at, published_at
+      FROM pending_nostr_events
+      WHERE user_pubkey = ?
+      ORDER BY created_at DESC
+    `).all(userPubkey) as any[];
+
+    return res.json({ success: true, events });
+  } catch (error: any) {
+    console.error('❌ Error fetching pending events:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
+// MANUAL RETRY EVENT — Manually retry a single pending event with new timestamp
+// =============================================
+router.post('/retry-pending-event', async (req: Request, res: Response) => {
+  try {
+    const { eventId, userPubkey } = req.body;
+    if (!eventId || !userPubkey) {
+      return res.status(400).json({ success: false, error: 'eventId and userPubkey required' });
+    }
+
+    const db = getDb();
+
+    // Fetch the pending event
+    const row = db.prepare(`
+      SELECT id, event_id, signed_event, status
+      FROM pending_nostr_events
+      WHERE event_id = ? AND user_pubkey = ?
+    `).get(eventId, userPubkey) as any;
+
+    if (!row) {
+      return res.status(404).json({ success: false, error: 'Event not found' });
+    }
+
+    if (row.status === 'published') {
+      return res.json({ success: true, alreadyPublished: true, message: 'Event already published' });
+    }
+
+    // Get relays
+    const relays = getRelaysFromDb();
+    if (relays.length === 0) {
+      return res.status(500).json({ success: false, error: 'No relays available' });
+    }
+
+    // Parse the signed event and update its created_at to now
+    const event = JSON.parse(row.signed_event);
+    const originalCreatedAt = event.created_at;
+    event.created_at = Math.floor(Date.now() / 1000);
+
+    console.log(`🔄 Manual retry for event ${eventId.substring(0, 8)}... (created_at: ${originalCreatedAt} → ${event.created_at})`);
+
+    // Publish to relays
+    const results = await publishEventToRelays(relays, event, 15000);
+    const anySuccess = results.some(r => r.success);
+
+    if (anySuccess) {
+      // Mark as published
+      db.prepare(`
+        UPDATE pending_nostr_events
+        SET status = 'published', published_at = datetime('now'), last_attempt_at = datetime('now'),
+            signed_event = ?
+        WHERE id = ?
+      `).run(JSON.stringify(event), row.id);
+      console.log(`✅ Manual retry published event ${eventId.substring(0, 8)}...`);
+    } else {
+      // Increment retry count
+      db.prepare(`
+        UPDATE pending_nostr_events
+        SET retry_count = retry_count + 1, last_attempt_at = datetime('now'),
+            signed_event = ?
+        WHERE id = ?
+      `).run(JSON.stringify(event), row.id);
+      console.log(`❌ Manual retry failed for event ${eventId.substring(0, 8)}...`);
+    }
+
+    return res.json({
+      success: anySuccess,
+      results: results.map(r => ({ relay: r.relay, success: r.success, error: r.error })),
+    });
+  } catch (error: any) {
+    console.error('❌ Error in manual retry:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
 // RETRY PENDING NOSTR EVENTS — Called by heartbeat
 // Publishes queued events to relays, marks as published on success
 // =============================================
@@ -2184,7 +2283,7 @@ export async function retryPendingNostrEvents(db: any): Promise<void> {
     const pending = db.prepare(`
       SELECT id, event_id, signed_event, retry_count, max_retries
       FROM pending_nostr_events
-      WHERE status = 'pending' AND retry_count < max_retries
+      WHERE status = 'pending'
       ORDER BY created_at ASC
       LIMIT 10
     `).all() as any[];
@@ -2215,17 +2314,12 @@ export async function retryPendingNostrEvents(db: any): Promise<void> {
           console.log(`✅ Published queued event ${row.event_id.substring(0, 8)}... (attempt ${row.retry_count + 1})`);
         } else {
           const newCount = row.retry_count + 1;
-          const newStatus = newCount >= row.max_retries ? 'abandoned' : 'pending';
           db.prepare(`
             UPDATE pending_nostr_events
-            SET retry_count = ?, status = ?, last_attempt_at = datetime('now')
+            SET retry_count = ?, last_attempt_at = datetime('now')
             WHERE id = ?
-          `).run(newCount, newStatus, row.id);
-          if (newStatus === 'abandoned') {
-            console.warn(`⚠️ Abandoned event ${row.event_id.substring(0, 8)}... after ${newCount} attempts`);
-          } else {
-            console.log(`↻ Retry ${newCount}/${row.max_retries} failed for ${row.event_id.substring(0, 8)}...`);
-          }
+          `).run(newCount, row.id);
+          console.log(`↻ Retry ${newCount} failed for ${row.event_id.substring(0, 8)}...`);
         }
       } catch (err) {
         console.error(`❌ Error retrying event ${row.event_id}:`, err);

@@ -236,7 +236,7 @@ export function initializeSchema(db: Database.Database): void {
       user_pubkey TEXT NOT NULL,
       retry_count INTEGER NOT NULL DEFAULT 0,
       max_retries INTEGER NOT NULL DEFAULT 20,
-      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','published','abandoned')),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','published')),
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       last_attempt_at TEXT,
       published_at TEXT
