@@ -46,10 +46,13 @@ export default function Dashboard() {
     }
   );
   
-  const { payments, isLoading: paymentsLoading } = useNostrDonationPayments({ 
-    poll: false,
-    enabled: stage === 'account' || stage === 'platform'
-  });
+  const { payments, isLoading: paymentsLoading } = useNostrDonationPayments(
+    session?.nostrHexId,
+    {
+      poll: false,
+      enabled: stage === 'account' || stage === 'platform'
+    }
+  );
 
   // SECTION 3: Platform data - enabled after account stage completes
   const { events: onlineEvents, loading: onlineLoading } = useNostrEvents('online', {
