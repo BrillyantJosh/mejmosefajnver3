@@ -269,6 +269,12 @@ export default function ConfirmPayment() {
           );
           const signedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
 
+          // Queue event to server DB as fallback (fire-and-forget)
+          // If relay publishing fails, heartbeat will retry from the DB
+          supabase.functions.invoke('queue-relay-event', {
+            body: { signedEvent, userPubkey: session.nostrHexId }
+          }).catch(() => {}); // silent — best-effort
+
           console.log(`📡 Publishing KIND 90901 for proposal ${proposal.proposalDTag}...`);
 
           // Publish to each relay individually (DonationProposalDialog pattern with for-await)

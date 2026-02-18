@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 import dbRoutes from './routes/db';
 import storageRoutes from './routes/storage';
 import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks } from './routes/sse';
-import functionsRoutes from './routes/functions';
+import functionsRoutes, { retryPendingNostrEvents } from './routes/functions';
 import { processPendingTasks, setSSEHandlers } from './lib/aiTasks';
 
 const app = express();
@@ -138,9 +138,18 @@ const heartbeatTimer = setInterval(async () => {
   } catch (err) {
     console.error('❌ Error processing pending AI tasks:', err);
   }
+
+  // Retry pending Nostr events every 5 heartbeats (= every 5 minutes)
+  if (heartbeatCount % 5 === 0) {
+    try {
+      await retryPendingNostrEvents(db);
+    } catch (err) {
+      console.error('❌ Error retrying pending Nostr events:', err);
+    }
+  }
 }, HEARTBEAT_INTERVAL);
 
-console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute)`);
+console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute, relay retry every 5min)`);
 
 // =============================================
 // API Routes

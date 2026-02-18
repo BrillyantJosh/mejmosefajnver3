@@ -228,6 +228,20 @@ export function initializeSchema(db: Database.Database): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS pending_nostr_events (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      event_id TEXT NOT NULL UNIQUE,
+      event_kind INTEGER NOT NULL,
+      signed_event TEXT NOT NULL,
+      user_pubkey TEXT NOT NULL,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      max_retries INTEGER NOT NULL DEFAULT 20,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','published','abandoned')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_attempt_at TEXT,
+      published_at TEXT
+    );
+
     -- =============================================
     -- INDEXES
     -- =============================================
@@ -267,7 +281,9 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_bug_reports_nostr ON bug_reports(nostr_hex_id);
     CREATE INDEX IF NOT EXISTS idx_bug_reports_created ON bug_reports(created_at);
     CREATE INDEX IF NOT EXISTS idx_bug_reports_type ON bug_reports(type);
+    CREATE INDEX IF NOT EXISTS idx_pending_nostr_events_status ON pending_nostr_events(status);
+    CREATE INDEX IF NOT EXISTS idx_pending_nostr_events_user ON pending_nostr_events(user_pubkey);
   `);
 
-  console.log('SQLite schema initialized (19 tables + indexes)');
+  console.log('SQLite schema initialized (20 tables + indexes)');
 }
