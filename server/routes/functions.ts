@@ -2150,4 +2150,90 @@ router.post('/register-virgin-wallet', async (req: Request, res: Response) => {
   }
 });
 
+// =============================================
+// QUEUE RELAY EVENT — Persist signed Nostr events for retry
+// Used as fallback when client-side relay publishing fails
+// =============================================
+router.post('/queue-relay-event', async (req: Request, res: Response) => {
+  try {
+    const { signedEvent, userPubkey } = req.body;
+    if (!signedEvent || !signedEvent.id || !userPubkey) {
+      return res.status(400).json({ success: false, error: 'signedEvent and userPubkey required' });
+    }
+
+    const db = getDb();
+    db.prepare(`
+      INSERT OR IGNORE INTO pending_nostr_events (id, event_id, event_kind, signed_event, user_pubkey)
+      VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?)
+    `).run(signedEvent.id, signedEvent.kind, JSON.stringify(signedEvent), userPubkey);
+
+    console.log(`📥 Queued KIND ${signedEvent.kind} event ${signedEvent.id.substring(0, 8)}... for relay retry`);
+    return res.json({ success: true });
+  } catch (error: any) {
+    console.error('❌ Error queuing relay event:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
+// RETRY PENDING NOSTR EVENTS — Called by heartbeat
+// Publishes queued events to relays, marks as published on success
+// =============================================
+export async function retryPendingNostrEvents(db: any): Promise<void> {
+  try {
+    const pending = db.prepare(`
+      SELECT id, event_id, signed_event, retry_count, max_retries
+      FROM pending_nostr_events
+      WHERE status = 'pending' AND retry_count < max_retries
+      ORDER BY created_at ASC
+      LIMIT 10
+    `).all() as any[];
+
+    if (pending.length === 0) return;
+
+    console.log(`🔄 Retrying ${pending.length} pending Nostr events...`);
+
+    // Get relays
+    const relays = getRelaysFromDb();
+    if (relays.length === 0) {
+      console.warn('⚠️ No relays available for retry');
+      return;
+    }
+
+    for (const row of pending) {
+      try {
+        const event = JSON.parse(row.signed_event);
+        const results = await publishEventToRelays(relays, event, 10000);
+        const anySuccess = results.some(r => r.success);
+
+        if (anySuccess) {
+          db.prepare(`
+            UPDATE pending_nostr_events
+            SET status = 'published', published_at = datetime('now'), last_attempt_at = datetime('now')
+            WHERE id = ?
+          `).run(row.id);
+          console.log(`✅ Published queued event ${row.event_id.substring(0, 8)}... (attempt ${row.retry_count + 1})`);
+        } else {
+          const newCount = row.retry_count + 1;
+          const newStatus = newCount >= row.max_retries ? 'abandoned' : 'pending';
+          db.prepare(`
+            UPDATE pending_nostr_events
+            SET retry_count = ?, status = ?, last_attempt_at = datetime('now')
+            WHERE id = ?
+          `).run(newCount, newStatus, row.id);
+          if (newStatus === 'abandoned') {
+            console.warn(`⚠️ Abandoned event ${row.event_id.substring(0, 8)}... after ${newCount} attempts`);
+          } else {
+            console.log(`↻ Retry ${newCount}/${row.max_retries} failed for ${row.event_id.substring(0, 8)}...`);
+          }
+        }
+      } catch (err) {
+        console.error(`❌ Error retrying event ${row.event_id}:`, err);
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error in retryPendingNostrEvents:', error);
+  }
+}
+
 export default router;
