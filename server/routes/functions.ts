@@ -1456,7 +1456,7 @@ router.post('/get-utxo-info', async (req: Request, res: Response) => {
     const maxInputs = 20;
     const usableInputs = Math.min(utxoCount, maxInputs);
     const estimatedFee = usableInputs > 0
-      ? (usableInputs * 180 + 1 * 34 + 10) * 100
+      ? Math.floor((usableInputs * 180 + 1 * 34 + 10) * 100 * 1.5)
       : 0;
 
     return res.json({
