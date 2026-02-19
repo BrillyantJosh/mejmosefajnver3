@@ -1432,6 +1432,47 @@ router.post('/get-wallet-balances', async (req: Request, res: Response) => {
 });
 
 // =============================================
+// GET UTXO INFO — UTXO count + estimated fee for empty wallet
+// =============================================
+router.post('/get-utxo-info', async (req: Request, res: Response) => {
+  try {
+    const { address, electrumServers } = req.body;
+    if (!address) {
+      return res.status(400).json({ success: false, error: 'address required' });
+    }
+
+    const servers = electrumServers && electrumServers.length > 0
+      ? electrumServers
+      : [
+          { host: 'electrum1.lanacoin.com', port: 5097 },
+          { host: 'electrum2.lanacoin.com', port: 5097 }
+        ];
+
+    const utxos = await electrumCall('blockchain.address.listunspent', [address], servers);
+    const utxoCount = utxos ? utxos.length : 0;
+    const totalBalance = utxos ? utxos.reduce((sum: number, u: any) => sum + u.value, 0) : 0;
+
+    // Estimate fee for empty wallet (all UTXOs as inputs, 1 output, no change)
+    const maxInputs = 20;
+    const usableInputs = Math.min(utxoCount, maxInputs);
+    const estimatedFee = usableInputs > 0
+      ? (usableInputs * 180 + 1 * 34 + 10) * 100
+      : 0;
+
+    return res.json({
+      success: true,
+      utxoCount,
+      totalBalance,
+      estimatedFee,
+      maxInputs
+    });
+  } catch (error: any) {
+    console.error('❌ get-utxo-info error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
 // FETCH DONATION PROPOSALS (KIND 90900) - SERVER-SIDE RELAY QUERY
 // Also fetches KIND 90901 confirmations and matches them server-side
 // =============================================

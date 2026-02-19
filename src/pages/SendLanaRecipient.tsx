@@ -37,6 +37,7 @@ export default function SendLanaRecipient() {
   const amount = searchParams.get("amount") || "";
   const currency = searchParams.get("currency") || "";
   const inputAmount = searchParams.get("inputAmount") || "";
+  const emptyWallet = searchParams.get("emptyWallet") === "true";
 
   const [recipientWalletId, setRecipientWalletId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -243,9 +244,15 @@ export default function SendLanaRecipient() {
     });
 
     // Navigate to private key entry page
-    navigate(
-      `/send-lana/private-key?walletId=${walletId}&recipientWalletId=${recipientWalletId}&amount=${amount}&currency=${currency}&inputAmount=${inputAmount}`
-    );
+    const params = new URLSearchParams({
+      walletId,
+      recipientWalletId,
+      amount,
+      currency,
+      inputAmount,
+    });
+    if (emptyWallet) params.set('emptyWallet', 'true');
+    navigate(`/send-lana/private-key?${params.toString()}`);
   };
 
   return (

@@ -23,6 +23,7 @@ export default function SendLanaPrivateKey() {
   const amount = searchParams.get("amount") || "";
   const currency = searchParams.get("currency") || "";
   const inputAmount = searchParams.get("inputAmount") || "";
+  const emptyWallet = searchParams.get("emptyWallet") === "true";
 
   const [privateKey, setPrivateKey] = useState("");
   const [isScanning, setIsScanning] = useState(false);
@@ -167,7 +168,7 @@ export default function SendLanaPrivateKey() {
           recipientAddress: recipientWalletId,
           amount: parseFloat(amount),
           privateKey: privateKey.trim(),
-          emptyWallet: false,
+          emptyWallet,
           electrumServers: parameters?.electrumServers || []
         }
       });
