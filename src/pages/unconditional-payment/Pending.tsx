@@ -29,7 +29,7 @@ export default function Pending() {
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
 
   const [selectedProposals, setSelectedProposals] = useState<Set<string>>(new Set());
-  const [customAmounts, setCustomAmounts] = useState<{ [key: string]: number }>({});
+  const [customAmounts, setCustomAmounts] = useState<{ [key: string]: string }>({});
   const [selectedWallet, setSelectedWallet] = useState<string>("");
   const userCurrency = getUserCurrency();
 
@@ -59,7 +59,8 @@ export default function Pending() {
     
     const customAmount = customAmounts[proposalId];
     if (customAmount !== undefined) {
-      return sum + customAmount;
+      const parsed = parseFloat(customAmount);
+      return sum + (isNaN(parsed) ? 0 : parsed);
     }
     
     // Calculate from fiat to LANA
@@ -87,10 +88,7 @@ export default function Pending() {
   }, [selectedProposals, customAmounts]);
 
   const handleAmountChange = useCallback((proposalId: string, value: string) => {
-    const amount = parseFloat(value);
-    if (!isNaN(amount) && amount > 0) {
-      setCustomAmounts(prev => ({ ...prev, [proposalId]: amount }));
-    }
+    setCustomAmounts(prev => ({ ...prev, [proposalId]: value }));
   }, []);
 
   const handleProceedToPayment = () => {
@@ -104,12 +102,24 @@ export default function Pending() {
       return;
     }
 
+    // Validate that all selected proposals have valid amounts > 0
+    for (const id of selectedProposals) {
+      const customAmount = customAmounts[id];
+      if (customAmount !== undefined) {
+        const parsed = parseFloat(customAmount);
+        if (isNaN(parsed) || parsed <= 0) {
+          toast.error("Please enter a valid amount greater than 0 for all selected payments");
+          return;
+        }
+      }
+    }
+
     // Store payment details in session storage
     const paymentData = {
       selectedProposals: Array.from(selectedProposals).map(id => {
         const proposal = pendingProposals.find(p => p.eventId === id);
         const customAmount = customAmounts[id];
-        const lanaAmount = customAmount !== undefined ? customAmount : fiatToLana(parseFloat(proposal!.fiatAmount), proposal!.fiatCurrency);
+        const lanaAmount = customAmount !== undefined ? parseFloat(customAmount) : fiatToLana(parseFloat(proposal!.fiatAmount), proposal!.fiatCurrency);
         
         return {
           proposalId: id,
@@ -319,8 +329,9 @@ export default function Pending() {
                         const proposal = pendingProposals.find(p => p.eventId === proposalId);
                         if (!proposal) return null;
                         
-                        const amount = customAmounts[proposalId] !== undefined 
-                          ? customAmounts[proposalId] 
+                        const customAmount = customAmounts[proposalId];
+                        const amount = customAmount !== undefined
+                          ? (parseFloat(customAmount) || 0)
                           : fiatToLana(parseFloat(proposal.fiatAmount), proposal.fiatCurrency);
                         
                         return (
