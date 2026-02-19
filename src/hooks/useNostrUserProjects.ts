@@ -133,13 +133,24 @@ export const useNostrUserProjects = () => {
           if (parsed) parsedProjects.push(parsed);
         });
 
+        // NIP-33: Deduplicate by (pubkey + d-tag), keeping newest event
+        const projectMap = new Map<string, UserProjectData>();
+        parsedProjects.forEach(p => {
+          const key = `${p.pubkey}:${p.id}`;
+          const existing = projectMap.get(key);
+          if (!existing || p.createdAt > existing.createdAt) {
+            projectMap.set(key, p);
+          }
+        });
+        const dedupedProjects = Array.from(projectMap.values());
+
         // Store all visible projects (not blocked, not draft)
-        const visibleProjects = parsedProjects.filter(p => !p.isBlocked && p.status !== 'draft');
+        const visibleProjects = dedupedProjects.filter(p => !p.isBlocked && p.status !== 'draft');
         setAllProjects(visibleProjects);
 
         // Filter for user's own projects - check both event.pubkey and owner p-tag
         // Projects created on 100million.fun may have a different event signer
-        const userProjects = parsedProjects.filter(
+        const userProjects = dedupedProjects.filter(
           p => p.pubkey === session.nostrHexId || p.ownerPubkey === session.nostrHexId
         );
         setProjects(userProjects);
