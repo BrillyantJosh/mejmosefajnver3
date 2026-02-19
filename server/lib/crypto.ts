@@ -930,7 +930,7 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
 
       const estimatedInputCount = Math.min(utxos.length, UTXOSelector.MAX_INPUTS);
       const outputCount = 1;
-      fee = (estimatedInputCount * 180 + outputCount * 34 + 10) * 100;
+      fee = Math.floor((estimatedInputCount * 180 + outputCount * 34 + 10) * 100 * 1.5);
 
       amountSatoshis = totalBalance - fee;
       if (amountSatoshis <= 0) {
@@ -967,7 +967,7 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
 
     // UTXO selection with iterative fee recalculation (like working Deno version)
     const totalAmountSatoshis = recipients.reduce((sum, r) => sum + r.amount, 0);
-    const actualOutputCount = recipients.length + 1; // + change output
+    const actualOutputCount = emptyWallet ? recipients.length : recipients.length + 1; // + change output (no change for emptyWallet)
 
     // Step 1: Initial selection
     let selection = UTXOSelector.selectUTXOs(utxos, totalAmountSatoshis);
