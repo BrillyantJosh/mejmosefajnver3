@@ -162,6 +162,17 @@ export const useNostrProjects = () => {
           .map((e: any) => parseProjectEvent(e as Event))
           .filter((p: ProjectData | null): p is ProjectData => p !== null);
 
+        // NIP-33: Deduplicate by (pubkey + d-tag), keeping newest event
+        const projectMap = new Map<string, ProjectData>();
+        parsedProjects.forEach(p => {
+          const key = `${p.pubkey}:${p.id}`;
+          const existing = projectMap.get(key);
+          if (!existing || p.createdAt > existing.createdAt) {
+            projectMap.set(key, p);
+          }
+        });
+        const dedupedProjects = Array.from(projectMap.values());
+
         // Create a map of blocked projects
         const blockedProjects = new Set<string>();
         visibilityEvents.forEach((event: any) => {
@@ -174,7 +185,7 @@ export const useNostrProjects = () => {
         });
 
         // Filter out blocked projects and draft projects
-        const visibleProjects = parsedProjects.filter(project => {
+        const visibleProjects = dedupedProjects.filter(project => {
           const isBlocked = blockedProjects.has(project.id);
           const isDraft = project.status === 'draft';
           if (isBlocked) {
@@ -186,7 +197,7 @@ export const useNostrProjects = () => {
           return !isBlocked && !isDraft;
         });
 
-        console.log(`✅ ${visibleProjects.length} visible projects out of ${parsedProjects.length} total`);
+        console.log(`✅ ${visibleProjects.length} visible projects out of ${dedupedProjects.length} deduped (${parsedProjects.length} raw)`);
         setProjects(visibleProjects);
       } catch (error) {
         console.error('Error fetching projects:', error);

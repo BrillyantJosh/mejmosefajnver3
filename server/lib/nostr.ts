@@ -282,7 +282,7 @@ export async function queryEventsFromRelays(
     relays.map(relay => fetchEventsFromRelay(relay))
   );
 
-  // Flatten and deduplicate
+  // Flatten and deduplicate by event ID
   for (const relayEvents of results) {
     for (const event of relayEvents) {
       if (!seenIds.has(event.id)) {
@@ -290,6 +290,30 @@ export async function queryEventsFromRelays(
         allEvents.push(event);
       }
     }
+  }
+
+  // NIP-33: For parameterized replaceable events (kinds 30000-39999),
+  // keep only the newest per (pubkey + kind + d-tag)
+  const isReplaceableKind = (k: number) => k >= 30000 && k < 40000;
+  if (allEvents.some(e => isReplaceableKind(e.kind))) {
+    const replaceableMap = new Map<string, NostrEvent>();
+    const result: NostrEvent[] = [];
+
+    for (const event of allEvents) {
+      if (isReplaceableKind(event.kind)) {
+        const dTag = event.tags?.find((t: string[]) => t[0] === 'd')?.[1] || '';
+        const key = `${event.pubkey}:${event.kind}:${dTag}`;
+        const existing = replaceableMap.get(key);
+        if (!existing || event.created_at > existing.created_at) {
+          replaceableMap.set(key, event);
+        }
+      } else {
+        result.push(event);
+      }
+    }
+
+    result.push(...replaceableMap.values());
+    return result;
   }
 
   return allEvents;
