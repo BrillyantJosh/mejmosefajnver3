@@ -1,12 +1,13 @@
 import { Outlet } from "react-router-dom";
 import MainLayout from "@/components/layout/MainLayout";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Users, Wallet } from "lucide-react";
+import { Users, Wallet, WalletCards } from "lucide-react";
 
 export default function LanaTransparencyLayout() {
   const navItems = [
     { title: "Profiles", path: "/transparency/profiles", icon: Users },
     { title: "Wallets", path: "/transparency/wallets", icon: Wallet },
+    { title: "Unregistered", path: "/transparency/unregistered-wallets", icon: WalletCards },
   ];
 
   return (

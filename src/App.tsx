@@ -48,6 +48,7 @@ import LanaTransparencyLayout from "./pages/transparency/LanaTransparencyLayout"
 import TransparencyProfiles from "./pages/transparency/Profiles";
 import TransparencyProfileDetail from "./pages/transparency/ProfileDetail";
 import TransparencyWallets from "./pages/transparency/Wallets";
+import TransparencyUnregisteredWallets from "./pages/transparency/UnregisteredWallets";
 import UnconditionalPaymentLayout from "./pages/unconditional-payment/UnconditionalPaymentLayout";
 import UnconditionalPaymentPending from "./pages/unconditional-payment/Pending";
 import UnconditionalPaymentCompleted from "./pages/unconditional-payment/Completed";
@@ -191,6 +192,7 @@ const App = () => (
                     <Route path="profiles" element={<TransparencyProfiles />} />
                     <Route path="profiles/:pubkey" element={<TransparencyProfileDetail />} />
                     <Route path="wallets" element={<TransparencyWallets />} />
+                    <Route path="unregistered-wallets" element={<TransparencyUnregisteredWallets />} />
                   </Route>
                   <Route path="/unconditional-payment" element={<UnconditionalPaymentLayout />}>
                     <Route index element={<UnconditionalPaymentPending />} />
