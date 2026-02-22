@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
-const CACHE_VALIDITY_HOURS = 24;
+const CACHE_VALIDITY_HOURS = 1;
 
 export interface CachedProfile {
   nostr_hex_id: string;

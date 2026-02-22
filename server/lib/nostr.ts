@@ -462,6 +462,125 @@ export async function publishEventToRelays(
 // getLanaRelays() removed — relays should come from kind_38888 DB table, not hardcoded
 
 /**
+ * Refresh stale profiles from Nostr relays and update the database.
+ * Called periodically by the server heartbeat.
+ * Fetches profiles where last_fetched_at is older than 1 hour, up to 50 at a time.
+ */
+export async function refreshStaleProfiles(db: any): Promise<void> {
+  // 1. Get relays from kind_38888
+  const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+  let relays: string[] = [];
+  if (row?.relays) {
+    try {
+      const parsed = JSON.parse(row.relays);
+      if (Array.isArray(parsed) && parsed.length > 0) relays = parsed;
+    } catch {}
+  }
+  if (relays.length === 0) {
+    console.log('⚠️ refreshStaleProfiles: No relays available, skipping');
+    return;
+  }
+
+  // 2. Find stale profiles (last_fetched_at older than 1 hour), limit 50
+  const staleProfiles = db.prepare(
+    `SELECT nostr_hex_id FROM nostr_profiles WHERE last_fetched_at < datetime('now', '-1 hour') LIMIT 50`
+  ).all() as { nostr_hex_id: string }[];
+
+  if (staleProfiles.length === 0) {
+    console.log('✅ refreshStaleProfiles: All profiles are fresh');
+    return;
+  }
+
+  const pubkeys = staleProfiles.map(p => p.nostr_hex_id);
+  console.log(`🔄 refreshStaleProfiles: Refreshing ${pubkeys.length} stale profiles...`);
+
+  // 3. Fetch KIND 0 events from relays
+  let events: NostrEvent[];
+  try {
+    events = await queryEventsFromRelays(relays, {
+      kinds: [0],
+      authors: pubkeys,
+    }, 15000);
+  } catch (error) {
+    console.error('❌ refreshStaleProfiles: Relay fetch failed:', error);
+    // Bump last_fetched_at for all queried pubkeys to avoid re-querying every cycle
+    const bumpStmt = db.prepare(`UPDATE nostr_profiles SET last_fetched_at = datetime('now') WHERE nostr_hex_id = ?`);
+    for (const pk of pubkeys) bumpStmt.run(pk);
+    return;
+  }
+
+  console.log(`📥 refreshStaleProfiles: Fetched ${events.length} KIND 0 events`);
+
+  // 4. Deduplicate - keep newest per pubkey
+  const latestEvents = new Map<string, NostrEvent>();
+  for (const event of events) {
+    const existing = latestEvents.get(event.pubkey);
+    if (!existing || event.created_at > existing.created_at) {
+      latestEvents.set(event.pubkey, event);
+    }
+  }
+
+  // 5. Upsert to database
+  const upsertStmt = db.prepare(`
+    INSERT INTO nostr_profiles (nostr_hex_id, full_name, display_name, picture, about, lana_wallet_id, raw_metadata, last_fetched_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    ON CONFLICT(nostr_hex_id) DO UPDATE SET
+      full_name = excluded.full_name,
+      display_name = excluded.display_name,
+      picture = excluded.picture,
+      about = excluded.about,
+      lana_wallet_id = excluded.lana_wallet_id,
+      raw_metadata = excluded.raw_metadata,
+      last_fetched_at = datetime('now'),
+      updated_at = datetime('now')
+  `);
+
+  let upsertedCount = 0;
+  for (const [pubkey, event] of latestEvents) {
+    try {
+      const content = JSON.parse(event.content);
+
+      // Extract tags (lang, interests, intimateInterests) - same as refresh-nostr-profiles endpoint
+      const langTag = event.tags?.find((t: string[]) => t[0] === 'lang')?.[1];
+      const interests = event.tags?.filter((t: string[]) => t[0] === 't').map((t: string[]) => t[1]) || [];
+      const intimateInterests = event.tags?.filter((t: string[]) => t[0] === 'o').map((t: string[]) => t[1]) || [];
+
+      const rawMetadata = {
+        ...content,
+        ...(langTag ? { lang: langTag } : {}),
+        ...(interests.length > 0 ? { interests } : {}),
+        ...(intimateInterests.length > 0 ? { intimateInterests } : {}),
+      };
+
+      upsertStmt.run(
+        pubkey,
+        content.name || null,
+        content.display_name || null,
+        content.picture || null,
+        content.about || null,
+        content.lanaWalletID || null,
+        JSON.stringify(rawMetadata)
+      );
+      upsertedCount++;
+    } catch (error) {
+      console.error(`❌ refreshStaleProfiles: Error parsing profile for ${pubkey}:`, error);
+    }
+  }
+
+  // 6. Bump last_fetched_at for pubkeys NOT found on relays (to avoid re-querying)
+  const foundPubkeys = new Set(latestEvents.keys());
+  const bumpStmt = db.prepare(`UPDATE nostr_profiles SET last_fetched_at = datetime('now') WHERE nostr_hex_id = ?`);
+  for (const pk of pubkeys) {
+    if (!foundPubkeys.has(pk)) {
+      bumpStmt.run(pk);
+    }
+  }
+
+  const notFound = pubkeys.length - upsertedCount;
+  console.log(`✅ refreshStaleProfiles: ${upsertedCount} updated, ${notFound} not found on relays`);
+}
+
+/**
  * Get the authorized pubkey for KIND 38888
  */
 export function getAuthorizedPubkey(): string {

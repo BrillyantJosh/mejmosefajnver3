@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb, closeDb } from './db/connection';
-import { fetchKind38888 } from './lib/nostr';
+import { fetchKind38888, refreshStaleProfiles } from './lib/nostr';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -147,9 +147,18 @@ const heartbeatTimer = setInterval(async () => {
       console.error('❌ Error retrying pending Nostr events:', err);
     }
   }
+
+  // Refresh stale profiles every 30 heartbeats (= every 30 minutes)
+  if (heartbeatCount % 30 === 0) {
+    try {
+      await refreshStaleProfiles(db);
+    } catch (err) {
+      console.error('❌ Error refreshing stale profiles:', err);
+    }
+  }
 }, HEARTBEAT_INTERVAL);
 
-console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute, relay retry every 5min)`);
+console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute, relay retry every 5min, profile refresh every 30min)`);
 
 // =============================================
 // API Routes
