@@ -11,6 +11,8 @@ const UNREGISTERED_MODULE_IDS: Set<ModuleType> = new Set([
   'lanapay', 'offlinelana', 'lanaevents', 'encryptedrooms',
   'chat', 'social', 'lanaexchange'
 ]);
+
+const UNR_MODULE_IDS: Set<ModuleType> = new Set(['lanaknights', 'unregisteredwallets', 'lanaexchange']);
 export default function Modules() {
   const {
     getEnabledModules,
@@ -48,6 +50,11 @@ export default function Modules() {
                             Reg
                           </Badge>
                         )}
+                        {UNR_MODULE_IDS.has(module.id) && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                            UNR
+                          </Badge>
+                        )}
                       </div>
                       <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                     </div>
@@ -80,6 +87,11 @@ export default function Modules() {
                         {!UNREGISTERED_MODULE_IDS.has(module.id) && (
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
                             Reg
+                          </Badge>
+                        )}
+                        {UNR_MODULE_IDS.has(module.id) && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                            UNR
                           </Badge>
                         )}
                       </div>
