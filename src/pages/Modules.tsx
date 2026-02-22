@@ -1,8 +1,12 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useModules } from "@/contexts/ModulesContext";
 import { Button } from "@/components/ui/button";
+import type { ModuleType } from "@/types/modules";
+
+const UNREGISTERED_MODULE_IDS: Set<ModuleType> = new Set(['lanaknights', 'unregisteredwallets']);
 export default function Modules() {
   const {
     getEnabledModules,
@@ -33,7 +37,14 @@ export default function Modules() {
                     </div>}
                   <div className="p-6">
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-2xl font-bold">{module.title}</h3>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-2xl font-bold">{module.title}</h3>
+                        {!UNREGISTERED_MODULE_IDS.has(module.id) && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+                            Reg
+                          </Badge>
+                        )}
+                      </div>
                       <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                     </div>
                     <p className="text-muted-foreground" dangerouslySetInnerHTML={{ __html: module.description }} />
@@ -60,7 +71,14 @@ export default function Modules() {
                       <Icon className="h-6 w-6 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-lg font-semibold mb-1">{module.title}</h3>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <h3 className="text-lg font-semibold">{module.title}</h3>
+                        {!UNREGISTERED_MODULE_IDS.has(module.id) && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+                            Reg
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: module.description }} />
                     </div>
                     <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all flex-shrink-0" />

@@ -13,6 +13,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useModules } from "@/contexts/ModulesContext";
+import type { ModuleType } from "@/types/modules";
+
+const UNREGISTERED_MODULE_IDS: Set<ModuleType> = new Set(['lanaknights', 'unregisteredwallets']);
 import { useAdmin } from "@/contexts/AdminContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
@@ -300,11 +303,21 @@ export default function MainLayout() {
                       <a href={module.externalUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 cursor-pointer">
                         <module.icon className="h-4 w-4" />
                         <span>{module.title}</span>
+                        {!UNREGISTERED_MODULE_IDS.has(module.id) && (
+                          <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+                            Reg
+                          </Badge>
+                        )}
                       </a>
                     ) : (
                       <Link to={module.path} className="flex items-center gap-2 cursor-pointer">
                         <module.icon className="h-4 w-4" />
                         <span>{module.title}</span>
+                        {!UNREGISTERED_MODULE_IDS.has(module.id) && (
+                          <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+                            Reg
+                          </Badge>
+                        )}
                       </Link>
                     )}
                   </DropdownMenuItem>
@@ -435,6 +448,11 @@ export default function MainLayout() {
                   >
                     <module.icon className="h-5 w-5" />
                     <span>{module.title}</span>
+                    {!UNREGISTERED_MODULE_IDS.has(module.id) && (
+                      <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+                        Reg
+                      </Badge>
+                    )}
                   </a>
                 ) : (
                   <Link
@@ -449,6 +467,11 @@ export default function MainLayout() {
                   >
                     <module.icon className="h-5 w-5" />
                     <span>{module.title}</span>
+                    {!UNREGISTERED_MODULE_IDS.has(module.id) && (
+                      <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+                        Reg
+                      </Badge>
+                    )}
                   </Link>
                 )
               ))}
