@@ -6,7 +6,11 @@ import { useModules } from "@/contexts/ModulesContext";
 import { Button } from "@/components/ui/button";
 import type { ModuleType } from "@/types/modules";
 
-const UNREGISTERED_MODULE_IDS: Set<ModuleType> = new Set(['lanaknights', 'unregisteredwallets']);
+const UNREGISTERED_MODULE_IDS: Set<ModuleType> = new Set([
+  'lanaknights', 'unregisteredwallets', 'lanamusic', 'tax',
+  'lanapay', 'offlinelana', 'lanaevents', 'encryptedrooms',
+  'chat', 'social', 'lanaexchange'
+]);
 export default function Modules() {
   const {
     getEnabledModules,
