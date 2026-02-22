@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -318,6 +318,17 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-amber-500 to-orange-500',
     enabled: true,
     order: 24
+  },
+  {
+    id: 'lanaexchange',
+    title: 'Lana Exchange',
+    description: 'Over-the-counter trading with LanaCoins',
+    icon: ArrowLeftRight,
+    path: '/lana-exchange',
+    gradient: 'from-emerald-500 to-cyan-500',
+    externalUrl: 'https://www.Lana.exchange',
+    enabled: true,
+    order: 25
   }
 ];
 
@@ -375,7 +386,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'lanaevents': 'Lana Events',
     'lanaalignsworld': 'Lana Aligns World',
     'registrar': 'Registrar',
-    'tax': 'TAX'
+    'tax': 'TAX',
+    'lanaexchange': 'Lana Exchange'
   };
   return mapping[id] || id;
 };
@@ -409,7 +421,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Lana Events': 'lanaevents',
     'Lana Aligns World': 'lanaalignsworld',
     'Registrar': 'registrar',
-    'TAX': 'tax'
+    'TAX': 'tax',
+    'Lana Exchange': 'lanaexchange'
   };
   return mapping[id] || null;
 };
