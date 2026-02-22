@@ -20,6 +20,8 @@ const UNREGISTERED_MODULE_IDS: Set<ModuleType> = new Set([
   'lanapay', 'offlinelana', 'lanaevents', 'encryptedrooms',
   'chat', 'social', 'lanaexchange'
 ]);
+
+const UNR_MODULE_IDS: Set<ModuleType> = new Set(['lanaknights', 'unregisteredwallets', 'lanaexchange']);
 import { useAdmin } from "@/contexts/AdminContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
@@ -312,6 +314,11 @@ export default function MainLayout() {
                             Reg
                           </Badge>
                         )}
+                        {UNR_MODULE_IDS.has(module.id) && (
+                          <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                            UNR
+                          </Badge>
+                        )}
                       </a>
                     ) : (
                       <Link to={module.path} className="flex items-center gap-2 cursor-pointer">
@@ -320,6 +327,11 @@ export default function MainLayout() {
                         {!UNREGISTERED_MODULE_IDS.has(module.id) && (
                           <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
                             Reg
+                          </Badge>
+                        )}
+                        {UNR_MODULE_IDS.has(module.id) && (
+                          <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                            UNR
                           </Badge>
                         )}
                       </Link>
@@ -457,6 +469,11 @@ export default function MainLayout() {
                         Reg
                       </Badge>
                     )}
+                    {UNR_MODULE_IDS.has(module.id) && (
+                      <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                        UNR
+                      </Badge>
+                    )}
                   </a>
                 ) : (
                   <Link
@@ -474,6 +491,11 @@ export default function MainLayout() {
                     {!UNREGISTERED_MODULE_IDS.has(module.id) && (
                       <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
                         Reg
+                      </Badge>
+                    )}
+                    {UNR_MODULE_IDS.has(module.id) && (
+                      <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                        UNR
                       </Badge>
                     )}
                   </Link>
