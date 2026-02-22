@@ -4,7 +4,7 @@ import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { getProxiedImageUrl } from '@/lib/imageProxy';
 
-const CACHE_VALIDITY_HOURS = 24;
+const CACHE_VALIDITY_HOURS = 1;
 
 export interface CachedProfile {
   nostr_hex_id: string;
