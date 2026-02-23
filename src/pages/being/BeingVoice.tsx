@@ -276,11 +276,22 @@ export default function BeingVoice() {
         body: JSON.stringify({ path: endpoint, method: "POST", body: sozitjeBody, authHeader }),
       });
 
-      if (!sozRes.ok) throw new Error("Sožitje API failed");
       const sozData = await sozRes.json();
 
-      // Update mood
+      // Update mood even from error responses
       if (sozData.mood) setSozitjeState({ mood: sozData.mood, energy: sozData.energy });
+
+      // Check if Sožitje had an internal error with no response
+      if (sozData._status && sozData._status >= 500 && !sozData.response) {
+        setTranscript((prev) => [...prev, {
+          role: "sozitje",
+          text: "⚠️ Sožitje ima interno napako. Poskusi znova.",
+          timestamp: Date.now()
+        }]);
+        setVoiceState("idle");
+        setStatusText("Pritisni za govor");
+        return;
+      }
 
       // 3. TTS only for conversation/group modes (not listening/observation)
       if (mode !== "listening" && sozData.response) {
