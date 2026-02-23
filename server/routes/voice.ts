@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import http from 'http';
 import multer from 'multer';
 import { getDb } from '../db/connection';
 
@@ -9,6 +10,48 @@ const audioUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB
 });
+
+// Helper: build multipart body manually (Node 20 FormData+Blob is unreliable for file uploads)
+function buildMultipart(fields: { name: string; value: string }[], file: { name: string; filename: string; contentType: string; data: Buffer }) {
+  const boundary = '----WhisperBoundary' + Date.now() + Math.random().toString(36).slice(2);
+  const parts: Buffer[] = [];
+
+  // File part
+  parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${file.name}"; filename="${file.filename}"\r\nContent-Type: ${file.contentType}\r\n\r\n`));
+  parts.push(file.data);
+  parts.push(Buffer.from('\r\n'));
+
+  // Text fields
+  for (const field of fields) {
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${field.name}"\r\n\r\n${field.value}\r\n`));
+  }
+
+  parts.push(Buffer.from(`--${boundary}--\r\n`));
+  return { body: Buffer.concat(parts), boundary };
+}
+
+// Helper: HTTP request via http module (more reliable than fetch for multipart in Node 20)
+function httpPost(url: string, body: Buffer, contentType: string, timeoutMs: number): Promise<{ status: number; data: string }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const req = http.request({
+      hostname: parsed.hostname,
+      port: parseInt(parsed.port) || 80,
+      path: parsed.pathname,
+      method: 'POST',
+      timeout: timeoutMs,
+      headers: { 'Content-Type': contentType, 'Content-Length': body.length },
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk: Buffer) => data += chunk.toString());
+      res.on('end', () => resolve({ status: res.statusCode || 500, data }));
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
+    req.write(body);
+    req.end();
+  });
+}
 
 // =============================================
 // POST /api/voice/stt — Speech-to-Text via local Whisper
@@ -23,31 +66,38 @@ router.post('/stt', audioUpload.single('file'), async (req: Request, res: Respon
 
     const language = req.body?.language || 'sl';
     const startTime = Date.now();
-
-    console.log(`🎙 Voice STT received: ${req.file.originalname}, size=${req.file.size} bytes, mime=${req.file.mimetype}`);
-
-    // Build FormData for Whisper OpenAI-compatible API
-    const formData = new FormData();
     const cleanMime = (req.file.mimetype || 'audio/webm').split(';')[0];
-    const blob = new Blob([req.file.buffer], { type: cleanMime });
-    formData.append('file', blob, req.file.originalname || 'audio.webm');
-    formData.append('model', 'small');
-    formData.append('language', language);
-    formData.append('response_format', 'json');
 
-    const response = await fetch(`${WHISPER_URL}/v1/audio/transcriptions`, {
-      method: 'POST',
-      body: formData,
-      signal: AbortSignal.timeout(30000),
-    });
+    console.log(`🎙 Voice STT received: ${req.file.originalname}, size=${req.file.size} bytes, mime=${cleanMime}`);
 
-    if (!response.ok) {
-      const err = await response.text();
-      console.error(`🎙 Whisper error ${response.status}: ${err}`);
-      throw new Error(`Whisper error ${response.status}: ${err}`);
+    // Build multipart body manually for Whisper OpenAI-compatible API
+    const { body, boundary } = buildMultipart(
+      [
+        { name: 'model', value: 'whisper-1' },
+        { name: 'language', value: language },
+        { name: 'response_format', value: 'json' },
+      ],
+      {
+        name: 'file',
+        filename: req.file.originalname || 'audio.webm',
+        contentType: cleanMime,
+        data: req.file.buffer,
+      }
+    );
+
+    const result = await httpPost(
+      `${WHISPER_URL}/v1/audio/transcriptions`,
+      body,
+      `multipart/form-data; boundary=${boundary}`,
+      120000 // 120s timeout — first request loads model
+    );
+
+    if (result.status !== 200) {
+      console.error(`🎙 Whisper error ${result.status}: ${result.data.slice(0, 300)}`);
+      throw new Error(`Whisper error ${result.status}: ${result.data.slice(0, 200)}`);
     }
 
-    const data = await response.json() as any;
+    const data = JSON.parse(result.data);
     const text = data.text || '';
     const elapsed = Date.now() - startTime;
 
