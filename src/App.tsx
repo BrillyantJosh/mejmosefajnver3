@@ -99,6 +99,9 @@ import MyStatus from "./pages/lanaalignsworld/MyStatus";
 import EncryptedRoomsLayout from "./pages/encrypted-rooms/EncryptedRoomsLayout";
 import EncryptedRoomList from "./pages/encrypted-rooms/RoomList";
 import EncryptedRoomChat from "./pages/encrypted-rooms/RoomChat";
+import BeingLayout from "./pages/being/BeingLayout";
+import BeingChat from "./pages/being/BeingChat";
+import BeingWorld from "./pages/being/BeingWorld";
 
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
@@ -278,7 +281,12 @@ const App = () => (
                     <Route index element={<Songs />} />
                     <Route path="popular" element={<Popular />} />
                   </Route>
-                  <Route 
+                  <Route path="/being" element={<BeingLayout />}>
+                    <Route index element={<Navigate to="/being/chat" replace />} />
+                    <Route path="chat" element={<BeingChat />} />
+                    <Route path="world" element={<BeingWorld />} />
+                  </Route>
+                  <Route
                     path="/admin"
                     element={
                       <AdminProtectedRoute>
