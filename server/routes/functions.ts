@@ -362,9 +362,11 @@ router.post('/speech-to-text', sttUpload.single('file'), async (req: Request, re
 
     // Convert audio buffer to base64
     const base64Audio = req.file.buffer.toString('base64');
-    const mimeType = req.file.mimetype || 'audio/webm';
+    // Use the base mime type (strip codec info) — Gemini needs clean MIME types
+    const rawMime = req.file.mimetype || 'audio/webm';
+    const mimeType = rawMime.split(';')[0]; // "audio/webm;codecs=opus" → "audio/webm"
 
-    console.log(`🎤 STT received: ${req.file.originalname}, size=${req.file.size} bytes, mimetype=${mimeType}, base64len=${base64Audio.length}`);
+    console.log(`🎤 STT received: ${req.file.originalname}, size=${req.file.size} bytes, rawMime=${rawMime}, cleanMime=${mimeType}, base64len=${base64Audio.length}`);
 
     // Language hint for the prompt
     const LANG_NAMES: Record<string, string> = {
