@@ -101,6 +101,7 @@ import EncryptedRoomList from "./pages/encrypted-rooms/RoomList";
 import EncryptedRoomChat from "./pages/encrypted-rooms/RoomChat";
 import BeingLayout from "./pages/being/BeingLayout";
 import BeingChat from "./pages/being/BeingChat";
+import BeingVoice from "./pages/being/BeingVoice";
 import BeingWorld from "./pages/being/BeingWorld";
 
 import Chat from "./pages/Chat";
@@ -284,6 +285,7 @@ const App = () => (
                   <Route path="/being" element={<BeingLayout />}>
                     <Route index element={<Navigate to="/being/chat" replace />} />
                     <Route path="chat" element={<BeingChat />} />
+                    <Route path="voice" element={<BeingVoice />} />
                     <Route path="world" element={<BeingWorld />} />
                   </Route>
                   <Route

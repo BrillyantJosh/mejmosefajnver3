@@ -11,6 +11,7 @@ import dbRoutes from './routes/db';
 import storageRoutes from './routes/storage';
 import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks } from './routes/sse';
 import functionsRoutes, { retryPendingNostrEvents } from './routes/functions';
+import voiceRoutes from './routes/voice';
 import { processPendingTasks, setSSEHandlers } from './lib/aiTasks';
 
 const app = express();
@@ -175,6 +176,9 @@ app.use('/api/sse', sseRoutes);
 
 // Edge Functions (converted to Express routes)
 app.use('/api/functions', functionsRoutes);
+
+// Voice proxy routes (STT, TTS, Sožitje)
+app.use('/api/voice', voiceRoutes);
 
 // =============================================
 // Static Frontend (production)
