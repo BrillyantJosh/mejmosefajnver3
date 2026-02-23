@@ -14,6 +14,7 @@ import { detectMissingFields, createPendingTask } from '../lib/aiTasks';
 import { sendLanaTransaction, sendBatchLanaTransaction } from '../lib/crypto';
 import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays } from '../lib/nostr';
 import { sendPushToUser } from '../lib/pushNotification';
+import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -338,6 +339,88 @@ router.post('/translate-post', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Translation error:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// speech-to-text (uses Gemini multimodal to transcribe audio)
+const sttUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+router.post('/speech-to-text', sttUpload.single('file'), async (req: Request, res: Response) => {
+  try {
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'Speech-to-text not configured. GEMINI_API_KEY missing.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No audio file provided' });
+    }
+
+    const language = req.body?.language || '';
+    const nostrHexId = req.body?.nostrHexId || null;
+
+    // Convert audio buffer to base64
+    const base64Audio = req.file.buffer.toString('base64');
+    const mimeType = req.file.mimetype || 'audio/webm';
+
+    // Language hint for the prompt
+    const LANG_NAMES: Record<string, string> = {
+      sl: 'Slovenian', en: 'English', de: 'German', hr: 'Croatian',
+      hu: 'Hungarian', it: 'Italian', es: 'Spanish', pt: 'Portuguese',
+    };
+    const langHint = language && LANG_NAMES[language]
+      ? ` The speaker is likely speaking in ${LANG_NAMES[language]}.`
+      : '';
+
+    const systemPrompt = `Transcribe this audio exactly as spoken. Return ONLY the transcription text — no explanations, no formatting, no quotes. If the audio is unclear or empty, return an empty string. Preserve the original language of the speech.${langHint}`;
+
+    // Call Gemini multimodal API with inlineData (audio)
+    const model = 'gemini-2.0-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType, data: base64Audio } },
+            { text: systemPrompt }
+          ]
+        }]
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Gemini API error ${response.status}: ${err}`);
+    }
+
+    const data = await response.json() as any;
+    const transcribedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const usage = data.usageMetadata || {};
+
+    // Log usage
+    try {
+      const db = getDb();
+      const promptTokens = usage.promptTokenCount || 0;
+      const completionTokens = usage.candidatesTokenCount || 0;
+      const totalTokens = usage.totalTokenCount || 0;
+      const costUsd = (promptTokens / 1_000_000) * 0.10 + (completionTokens / 1_000_000) * 0.40; // Gemini Flash audio pricing
+      const costLana = costUsd * 270;
+      db.prepare(`
+        INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
+        VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)
+      `).run(nostrHexId || 'stt-anonymous', 'stt-gemini-flash', promptTokens, completionTokens, totalTokens, costUsd, costLana);
+      console.log(`🎤 STT [${language || 'auto'}]: ${totalTokens} tokens, $${costUsd.toFixed(6)} USD, "${transcribedText.slice(0, 50)}..."`);
+    } catch (err) {
+      console.error('Failed to log STT usage:', err);
+    }
+
+    return res.json({ text: transcribedText.trim() });
+  } catch (error: any) {
+    console.error('Speech-to-text error:', error.message);
     return res.status(500).json({ error: error.message });
   }
 });

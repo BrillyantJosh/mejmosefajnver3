@@ -15,7 +15,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useNostrLash } from "@/hooks/useNostrLash";
 import { useToast } from "@/hooks/use-toast";
 import { LinkPreview } from "@/components/social/LinkPreview";
-import { DMAudioRecorder } from "@/components/DMAudioRecorder";
+import { SpeechToTextButton } from "@/components/SpeechToTextButton";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { DMImageUploader } from "@/components/DMImageUploader";
 import { ImageGallery } from "@/components/ImageGallery";
@@ -664,12 +664,12 @@ export default function BeingChat() {
                 setReplyingTo(null);
               }}
             />
-            <DMAudioRecorder
-              recipientPubkey={SOZITJE_PUBKEY}
-              onSendMessage={async (audioUrl) => {
-                await sendMessage(SOZITJE_PUBKEY, audioUrl, replyingTo?.id);
-                setReplyingTo(null);
+            <SpeechToTextButton
+              onTranscription={(text) => {
+                setMessageInput(prev => prev ? prev + ' ' + text : text);
+                setTimeout(() => messageInputRef.current?.focus(), 0);
               }}
+              language="sl"
             />
             <div className="flex gap-2 items-center">
               <Button
@@ -677,10 +677,10 @@ export default function BeingChat() {
                 variant="ghost"
                 size="icon"
                 onClick={() => {
-                  const audioRecorder = document.querySelector('[data-audio-recorder]') as HTMLButtonElement;
-                  if (audioRecorder) audioRecorder.click();
+                  const sttButton = document.querySelector('[data-speech-to-text]') as HTMLButtonElement;
+                  if (sttButton) sttButton.click();
                 }}
-                title="Record audio message"
+                title="Voice to text"
                 className="touch-manipulation h-11 w-11 md:h-10 md:w-10"
               >
                 <Mic className="h-5 w-5" />
