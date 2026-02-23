@@ -1,10 +1,11 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { MessageSquare, Globe } from "lucide-react";
+import { MessageSquare, Globe, Mic } from "lucide-react";
 
 export default function BeingLayout() {
   const navItems = [
     { title: "Chat", path: "/being/chat", icon: MessageSquare },
+    { title: "Voice", path: "/being/voice", icon: Mic },
     { title: "World", path: "/being/world", icon: Globe },
   ];
 
