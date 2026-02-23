@@ -263,18 +263,26 @@ export default function BeingVoice() {
       // 2. Send to Sožitje
       setStatusText("Sožitje razmišlja...");
       const endpoint = mode === "listening" ? "/api/listen" : "/api/message";
+      console.log("[Voice] Sending to Sožitje:", endpoint, "mode:", mode);
       const authHeader = await createNip98AuthHeader(endpoint, "POST");
+      console.log("[Voice] Auth header:", authHeader ? "present" : "null");
 
       const sozitjeBody =
         mode === "listening"
           ? { chunk: userText, speaker_label: "govorec", session_id: sessionIdRef.current, silence_detected: true }
           : { content: userText, mode, speaker_label: "jaz" };
 
+      const sozController = new AbortController();
+      const sozTimeout = setTimeout(() => sozController.abort(), 60000); // 60s timeout
+
       const sozRes = await fetch("/api/voice/sozitje", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: endpoint, method: "POST", body: sozitjeBody, authHeader }),
+        signal: sozController.signal,
       });
+      clearTimeout(sozTimeout);
+      console.log("[Voice] Sožitje proxy response:", sozRes.status);
 
       const sozData = await sozRes.json();
 
@@ -306,7 +314,8 @@ export default function BeingVoice() {
       setStatusText("Pritisni za govor");
     } catch (error: any) {
       console.error("[Voice] Process error:", error);
-      toast({ title: "Napaka", description: error.message || "Napaka pri obdelavi.", variant: "destructive" });
+      const msg = error.name === "AbortError" ? "Sožitje ni odgovorilo pravočasno." : (error.message || "Napaka pri obdelavi.");
+      toast({ title: "Napaka", description: msg, variant: "destructive" });
       setVoiceState("idle");
       setStatusText("Pritisni za govor");
     }
