@@ -84,6 +84,14 @@ export default function BeingChat() {
     }
   }, [allMessages.length]);
 
+  // Auto-resize textarea when content changes
+  useEffect(() => {
+    const el = messageInputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }, [messageInput]);
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageInput.trim() || isSending) return;
@@ -701,7 +709,7 @@ export default function BeingChat() {
               <Textarea
                 ref={messageInputRef}
                 placeholder="Talk to Sožitje..."
-                className="flex-1 touch-manipulation min-h-[2.75rem] max-h-[5rem] resize-none text-base md:text-sm py-2.5"
+                className="flex-1 touch-manipulation min-h-[2.75rem] max-h-[10rem] resize-none text-base md:text-sm py-2.5"
                 value={messageInput}
                 onChange={(e) => setMessageInput(e.target.value)}
                 onKeyDown={handleKeyDown}
