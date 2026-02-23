@@ -231,15 +231,17 @@ router.post('/sozitje', async (req: Request, res: Response) => {
 
     const response = await fetch(url, fetchOptions);
 
+    // Always parse JSON — Sožitje may include mood/response even in error responses
+    const data = await response.json().catch(() => ({}));
+
     if (!response.ok) {
-      const err = await response.text();
-      console.error(`🤖 Sožitje error ${response.status}: ${err.slice(0, 200)}`);
-      return res.status(response.status).json({ error: err });
+      console.error(`🤖 Sožitje error ${response.status}: ${JSON.stringify(data).slice(0, 200)}`);
+    } else {
+      console.log(`🤖 Sožitje response: ${JSON.stringify(data).slice(0, 100)}...`);
     }
 
-    const data = await response.json();
-    console.log(`🤖 Sožitje response: ${JSON.stringify(data).slice(0, 100)}...`);
-    return res.json(data);
+    // Always forward the data with status — frontend handles partial responses
+    return res.json({ ...data, _status: response.status });
   } catch (error: any) {
     console.error('Sožitje proxy error:', error.message);
     return res.status(500).json({ error: error.message || 'Sožitje API failed' });
