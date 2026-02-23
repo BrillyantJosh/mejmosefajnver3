@@ -364,6 +364,8 @@ router.post('/speech-to-text', sttUpload.single('file'), async (req: Request, re
     const base64Audio = req.file.buffer.toString('base64');
     const mimeType = req.file.mimetype || 'audio/webm';
 
+    console.log(`🎤 STT received: ${req.file.originalname}, size=${req.file.size} bytes, mimetype=${mimeType}, base64len=${base64Audio.length}`);
+
     // Language hint for the prompt
     const LANG_NAMES: Record<string, string> = {
       sl: 'Slovenian', en: 'English', de: 'German', hr: 'Croatian',
