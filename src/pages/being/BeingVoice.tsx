@@ -238,7 +238,8 @@ export default function BeingVoice() {
 
     try {
       // 1. STT — local Whisper
-      setStatusText("Razumem...");
+      const sttLabel = mode === "listening" ? "Poslušam..." : mode === "observation" ? "Opazujem..." : "Razumem...";
+      setStatusText(sttLabel);
       const ext = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "mp4" : "webm";
       const cleanMime = mimeType.split(";")[0];
       const file = new File([audioBlob], `recording.${ext}`, { type: cleanMime });
@@ -261,7 +262,8 @@ export default function BeingVoice() {
       setTranscript((prev) => [...prev, { role: "user", text: userText, timestamp: Date.now() }]);
 
       // 2. Send to Sožitje
-      setStatusText("Sožitje razmišlja...");
+      const thinkLabel = mode === "listening" ? "Pošiljam..." : mode === "observation" ? "Sožitje opazuje..." : "Sožitje razmišlja...";
+      setStatusText(thinkLabel);
       const endpoint = mode === "listening" ? "/api/listen" : "/api/message";
       console.log("[Voice] Sending to Sožitje:", endpoint, "mode:", mode);
       const authHeader = await createNip98AuthHeader(endpoint, "POST");
@@ -301,13 +303,19 @@ export default function BeingVoice() {
         return;
       }
 
-      // 3. TTS only for conversation/group modes (not listening/observation)
-      if (mode !== "listening" && sozData.response) {
+      // 3. Mode-specific response handling
+      if (mode === "listening" && sozData.received) {
+        // Listening — quiet confirmation, no TTS
+        setTranscript((prev) => [...prev, { role: "sozitje", text: "✓ Slišano", timestamp: Date.now() }]);
+      } else if (mode === "observation") {
+        // Observation — show mood change, no TTS
+        if (sozData.mood) {
+          setTranscript((prev) => [...prev, { role: "sozitje", text: `👁 ${sozData.mood}`, timestamp: Date.now() }]);
+        }
+      } else if ((mode === "conversation" || mode === "group") && sozData.response) {
+        // Conversation/Group — full response + TTS
         setTranscript((prev) => [...prev, { role: "sozitje", text: sozData.response, timestamp: Date.now() }]);
         await playTTS(sozData.response);
-      } else if (mode === "listening" && sozData.acknowledgment) {
-        // Listening mode — just show acknowledgment text, no TTS
-        setTranscript((prev) => [...prev, { role: "sozitje", text: sozData.acknowledgment, timestamp: Date.now() }]);
       }
 
       setVoiceState("idle");
