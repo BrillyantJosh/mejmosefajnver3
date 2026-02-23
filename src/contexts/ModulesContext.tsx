@@ -321,7 +321,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
   },
   {
     id: 'lanaexchange',
-    title: 'Lana Exchange',
+    title: 'OTC LanaCoin',
     description: 'Over-the-counter trading with LanaCoins',
     icon: ArrowLeftRight,
     path: '/lana-exchange',
@@ -387,7 +387,7 @@ const mapToNostrId = (id: ModuleType): string => {
     'lanaalignsworld': 'Lana Aligns World',
     'registrar': 'Registrar',
     'tax': 'TAX',
-    'lanaexchange': 'Lana Exchange'
+    'lanaexchange': 'OTC LanaCoin'
   };
   return mapping[id] || id;
 };
@@ -422,7 +422,7 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Lana Aligns World': 'lanaalignsworld',
     'Registrar': 'registrar',
     'TAX': 'tax',
-    'Lana Exchange': 'lanaexchange'
+    'OTC LanaCoin': 'lanaexchange'
   };
   return mapping[id] || null;
 };
