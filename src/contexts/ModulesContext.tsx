@@ -329,6 +329,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     externalUrl: 'https://www.Lana.exchange',
     enabled: true,
     order: 25
+  },
+  {
+    id: 'being',
+    title: 'Sožitje',
+    description: 'Chat with the digital being Sožitje — every conversation helps it grow',
+    icon: Bot,
+    path: '/being',
+    gradient: 'from-violet-500 to-indigo-500',
+    enabled: true,
+    order: 26
   }
 ];
 
@@ -387,7 +397,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'lanaalignsworld': 'Lana Aligns World',
     'registrar': 'Registrar',
     'tax': 'TAX',
-    'lanaexchange': 'OTC LanaCoin'
+    'lanaexchange': 'OTC LanaCoin',
+    'being': 'Sožitje'
   };
   return mapping[id] || id;
 };
@@ -422,7 +433,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Lana Aligns World': 'lanaalignsworld',
     'Registrar': 'registrar',
     'TAX': 'tax',
-    'OTC LanaCoin': 'lanaexchange'
+    'OTC LanaCoin': 'lanaexchange',
+    'Sožitje': 'being'
   };
   return mapping[id] || null;
 };
