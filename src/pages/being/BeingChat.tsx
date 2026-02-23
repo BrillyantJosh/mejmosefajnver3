@@ -658,7 +658,8 @@ export default function BeingChat() {
             )}
             <ImageToTextButton
               onDescription={(text) => {
-                setMessageInput(prev => prev ? prev + ' ' + text : text);
+                const imageMessage = `[Pošiljam ti sliko] ${text}`;
+                setMessageInput(prev => prev ? prev + ' ' + imageMessage : imageMessage);
                 setTimeout(() => messageInputRef.current?.focus(), 0);
               }}
               language="sl"

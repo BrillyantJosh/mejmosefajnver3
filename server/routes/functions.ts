@@ -460,7 +460,7 @@ router.post('/image-to-text', sttUpload.single('file'), async (req: Request, res
       ? ` Respond in ${LANG_NAMES[language]}.`
       : '';
 
-    const prompt = `Describe this image in detail. What do you see? Be specific about objects, people, colors, text, and the overall scene. Return a clear, natural description.${langHint}`;
+    const prompt = `You are describing an image that a user wants to share in a chat message. Write a concise but vivid description (3-5 sentences) of what's in the image. Write from the perspective of someone telling a friend what's in the picture. Do NOT start with phrases like "Sure", "Of course", "In this image" or "The image shows". Start directly with the description of the content.${langHint}`;
 
     // Call Gemini multimodal API with inlineData (image)
     const model = 'gemini-2.0-flash';
