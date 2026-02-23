@@ -66,6 +66,7 @@ export function SpeechToTextButton({ onTranscription, language, disabled }: Spee
 
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: mimeType });
+        console.log(`🎤 STT: Recording stopped. Chunks: ${chunksRef.current.length}, Blob size: ${blob.size} bytes, Type: ${blob.type}`);
 
         // Stop all tracks to release microphone
         if (streamRef.current) {
@@ -96,7 +97,7 @@ export function SpeechToTextButton({ onTranscription, language, disabled }: Spee
         await transcribeAudio(blob, mimeType);
       };
 
-      mediaRecorder.start();
+      mediaRecorder.start(1000); // Collect data every 1 second for reliable chunks
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
 
@@ -124,11 +125,13 @@ export function SpeechToTextButton({ onTranscription, language, disabled }: Spee
       abortControllerRef.current = new AbortController();
 
       const formData = new FormData();
-      // Determine extension for filename
+      // Determine extension for filename and clean MIME type (strip codecs)
       const ext = mimeType.includes('webm') ? 'webm' :
                   mimeType.includes('mp4') ? 'mp4' :
                   mimeType.includes('aac') ? 'aac' : 'mp3';
-      formData.append('file', blob, `recording.${ext}`);
+      const cleanMime = mimeType.split(';')[0]; // "audio/webm;codecs=opus" → "audio/webm"
+      const file = new File([blob], `recording.${ext}`, { type: cleanMime });
+      formData.append('file', file);
       if (language) {
         formData.append('language', language);
       }
