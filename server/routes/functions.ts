@@ -429,6 +429,89 @@ router.post('/speech-to-text', sttUpload.single('file'), async (req: Request, re
   }
 });
 
+// image-to-text (uses Gemini vision to describe images)
+router.post('/image-to-text', sttUpload.single('file'), async (req: Request, res: Response) => {
+  try {
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'Image-to-text not configured. GEMINI_API_KEY missing.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    const language = req.body?.language || '';
+    const nostrHexId = req.body?.nostrHexId || null;
+
+    // Convert image buffer to base64
+    const base64Image = req.file.buffer.toString('base64');
+    const rawMime = req.file.mimetype || 'image/jpeg';
+    const mimeType = rawMime.split(';')[0];
+
+    console.log(`🖼 ITT received: ${req.file.originalname}, size=${req.file.size} bytes, mime=${mimeType}, base64len=${base64Image.length}`);
+
+    // Language hint for the prompt
+    const LANG_NAMES: Record<string, string> = {
+      sl: 'Slovenian', en: 'English', de: 'German', hr: 'Croatian',
+      hu: 'Hungarian', it: 'Italian', es: 'Spanish', pt: 'Portuguese',
+    };
+    const langHint = language && LANG_NAMES[language]
+      ? ` Respond in ${LANG_NAMES[language]}.`
+      : '';
+
+    const prompt = `Describe this image in detail. What do you see? Be specific about objects, people, colors, text, and the overall scene. Return a clear, natural description.${langHint}`;
+
+    // Call Gemini multimodal API with inlineData (image)
+    const model = 'gemini-2.0-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType, data: base64Image } },
+            { text: prompt }
+          ]
+        }]
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Gemini API error ${response.status}: ${err}`);
+    }
+
+    const data = await response.json() as any;
+    const description = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const usage = data.usageMetadata || {};
+
+    // Log usage
+    try {
+      const db = getDb();
+      const promptTokens = usage.promptTokenCount || 0;
+      const completionTokens = usage.candidatesTokenCount || 0;
+      const totalTokens = usage.totalTokenCount || 0;
+      const costUsd = (promptTokens / 1_000_000) * 0.10 + (completionTokens / 1_000_000) * 0.40;
+      const costLana = costUsd * 270;
+      db.prepare(`
+        INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
+        VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)
+      `).run(nostrHexId || 'itt-anonymous', 'itt-gemini-flash', promptTokens, completionTokens, totalTokens, costUsd, costLana);
+      console.log(`🖼 ITT [${language || 'auto'}]: ${totalTokens} tokens, $${costUsd.toFixed(6)} USD, "${description.slice(0, 50)}..."`);
+    } catch (err) {
+      console.error('Failed to log ITT usage:', err);
+    }
+
+    return res.json({ text: description.trim() });
+  } catch (error: any) {
+    console.error('Image-to-text error:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // cleanup (combined cleanup functions)
 router.post('/cleanup-direct-messages', async (req: Request, res: Response) => {
   try {

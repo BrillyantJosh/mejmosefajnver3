@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LinkPreview } from "@/components/social/LinkPreview";
 import { SpeechToTextButton } from "@/components/SpeechToTextButton";
 import { AudioPlayer } from "@/components/AudioPlayer";
-import { DMImageUploader } from "@/components/DMImageUploader";
+import { ImageToTextButton } from "@/components/ImageToTextButton";
 import { ImageGallery } from "@/components/ImageGallery";
 import { useNostrDMLashes } from "@/hooks/useNostrDMLashes";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -656,13 +656,12 @@ export default function BeingChat() {
                 </Button>
               </div>
             )}
-            <DMImageUploader
-              recipientPubkey={SOZITJE_PUBKEY}
-              onSendMessage={async (imageUrls) => {
-                const message = imageUrls.join('\n');
-                await sendMessage(SOZITJE_PUBKEY, message, replyingTo?.id);
-                setReplyingTo(null);
+            <ImageToTextButton
+              onDescription={(text) => {
+                setMessageInput(prev => prev ? prev + ' ' + text : text);
+                setTimeout(() => messageInputRef.current?.focus(), 0);
               }}
+              language="sl"
             />
             <SpeechToTextButton
               onTranscription={(text) => {
@@ -690,10 +689,10 @@ export default function BeingChat() {
                 variant="ghost"
                 size="icon"
                 onClick={() => {
-                  const imageUploader = document.querySelector('[data-image-uploader]') as HTMLInputElement;
-                  if (imageUploader) imageUploader.click();
+                  const ittButton = document.querySelector('[data-image-to-text]') as HTMLInputElement;
+                  if (ittButton) ittButton.click();
                 }}
-                title="Add images"
+                title="Image to text"
                 className="touch-manipulation h-11 w-11 md:h-10 md:w-10"
               >
                 <ImagePlus className="h-5 w-5" />
