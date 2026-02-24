@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import http from 'http';
 import multer from 'multer';
 import { getDb } from '../db/connection';
 
@@ -13,7 +12,7 @@ const audioUpload = multer({
 
 // Helper: build multipart body manually (Node 20 FormData+Blob is unreliable for file uploads)
 function buildMultipart(fields: { name: string; value: string }[], file: { name: string; filename: string; contentType: string; data: Buffer }) {
-  const boundary = '----WhisperBoundary' + Date.now() + Math.random().toString(36).slice(2);
+  const boundary = '----GroqBoundary' + Date.now() + Math.random().toString(36).slice(2);
   const parts: Buffer[] = [];
 
   // File part
@@ -30,35 +29,15 @@ function buildMultipart(fields: { name: string; value: string }[], file: { name:
   return { body: Buffer.concat(parts), boundary };
 }
 
-// Helper: HTTP request via http module (more reliable than fetch for multipart in Node 20)
-function httpPost(url: string, body: Buffer, contentType: string, timeoutMs: number): Promise<{ status: number; data: string }> {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url);
-    const req = http.request({
-      hostname: parsed.hostname,
-      port: parseInt(parsed.port) || 80,
-      path: parsed.pathname,
-      method: 'POST',
-      timeout: timeoutMs,
-      headers: { 'Content-Type': contentType, 'Content-Length': body.length },
-    }, (res) => {
-      let data = '';
-      res.on('data', (chunk: Buffer) => data += chunk.toString());
-      res.on('end', () => resolve({ status: res.statusCode || 500, data }));
-    });
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
-    req.write(body);
-    req.end();
-  });
-}
-
 // =============================================
-// POST /api/voice/stt — Speech-to-Text via local Whisper
+// POST /api/voice/stt — Speech-to-Text via Groq Whisper API
 // =============================================
 router.post('/stt', audioUpload.single('file'), async (req: Request, res: Response) => {
   try {
-    const WHISPER_URL = process.env.WHISPER_URL || 'http://whisper:8000';
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    if (!GROQ_API_KEY) {
+      return res.status(500).json({ error: 'GROQ_API_KEY not configured' });
+    }
 
     if (!req.file) {
       return res.status(400).json({ error: 'No audio file provided' });
@@ -70,10 +49,10 @@ router.post('/stt', audioUpload.single('file'), async (req: Request, res: Respon
 
     console.log(`🎙 Voice STT received: ${req.file.originalname}, size=${req.file.size} bytes, mime=${cleanMime}`);
 
-    // Build multipart body manually for Whisper OpenAI-compatible API
+    // Build multipart body for Groq Whisper API (OpenAI-compatible)
     const { body, boundary } = buildMultipart(
       [
-        { name: 'model', value: 'whisper-1' },
+        { name: 'model', value: 'whisper-large-v3-turbo' },
         { name: 'language', value: language },
         { name: 'response_format', value: 'json' },
       ],
@@ -85,31 +64,38 @@ router.post('/stt', audioUpload.single('file'), async (req: Request, res: Respon
       }
     );
 
-    const result = await httpPost(
-      `${WHISPER_URL}/v1/audio/transcriptions`,
+    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
       body,
-      `multipart/form-data; boundary=${boundary}`,
-      120000 // 120s timeout — first request loads model
-    );
+      signal: AbortSignal.timeout(30000), // 30s timeout
+    });
 
-    if (result.status !== 200) {
-      console.error(`🎙 Whisper error ${result.status}: ${result.data.slice(0, 300)}`);
-      throw new Error(`Whisper error ${result.status}: ${result.data.slice(0, 200)}`);
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`🎙 Groq STT error ${response.status}: ${errText.slice(0, 300)}`);
+      throw new Error(`Groq STT error ${response.status}: ${errText.slice(0, 200)}`);
     }
 
-    const data = JSON.parse(result.data);
+    const data = await response.json();
     const text = data.text || '';
     const elapsed = Date.now() - startTime;
 
     console.log(`🎙 Voice STT [${language}]: "${text.slice(0, 80)}..." (${elapsed}ms)`);
 
-    // Log usage (local whisper — no token cost, but track usage)
+    // Log usage (Groq whisper: ~$0.04/hour audio, negligible per request)
     try {
       const db = getDb();
+      const durationSec = req.file.size / 16000; // rough estimate: 16KB/s for webm
+      const costUsd = (durationSec / 3600) * 0.04;
+      const costLana = costUsd * 270;
       db.prepare(`
         INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
         VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)
-      `).run('voice-stt', 'stt-whisper-local', 0, 0, 0, 0, 0);
+      `).run('voice-stt', 'groq-whisper-large-v3-turbo', 0, 0, 0, costUsd, costLana);
     } catch (err) {
       console.error('Failed to log Voice STT usage:', err);
     }
