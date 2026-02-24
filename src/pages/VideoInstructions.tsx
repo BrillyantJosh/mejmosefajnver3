@@ -63,6 +63,11 @@ const videos = [
     youtubeId: "sj-S0eALwYw",
   },
   {
+    id: "change-wallet-notes",
+    question: "How to change the Wallet notes?",
+    youtubeId: "aeBdzkhf5EA",
+  },
+  {
     id: "edit-profile",
     question: "How to edit My Profile?",
     youtubeId: "GBApPJM-BEE",
