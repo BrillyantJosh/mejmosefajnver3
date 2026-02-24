@@ -86,10 +86,12 @@ export const useNostrProfile = () => {
 
       if (cachedProfile && !error) {
         console.log('✅ Profile loaded from database cache');
-        
+
         // Parse raw_metadata to get full profile
         const rawMetadata = cachedProfile.raw_metadata as Record<string, any> || {};
-        
+
+        console.log('📋 raw_metadata tags:', { lang: rawMetadata.lang, interests: rawMetadata.interests, intimateInterests: rawMetadata.intimateInterests });
+
         const profileData: NostrProfile = {
           name: cachedProfile.full_name || rawMetadata.name,
           display_name: cachedProfile.display_name || rawMetadata.display_name,
@@ -275,11 +277,14 @@ export const useNostrProfile = () => {
 
       console.log('✅ Profile published successfully');
 
-      // Update local state
+      // Update local state immediately
       setProfile(profileData);
 
-      // Trigger server-side refresh to update database cache
-      await triggerProfileRefresh(session.nostrHexId);
+      // NOTE: Don't triggerProfileRefresh here — Profile.tsx does a direct DB upsert
+      // after publishProfile returns, which is the authoritative source of truth.
+      // Calling refresh here risks a race condition where the relay hasn't stored
+      // the new event yet, causing stale data (without tags) to overwrite the DB.
+      // Background refreshStaleProfiles() (every 30min) will sync from relay later.
 
       return { success: true };
     } catch (error) {

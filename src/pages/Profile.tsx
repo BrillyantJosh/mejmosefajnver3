@@ -130,8 +130,9 @@ export default function Profile() {
   // Load profile data into form
   useEffect(() => {
     if (profile && session?.nostrHexId) {
+      console.log('📋 Profile form reset:', { lang: profile.lang, interests: profile.interests, intimateInterests: profile.intimateInterests });
       const formattedPictureUrl = formatAvatarUrl(profile.picture, session.nostrHexId);
-      
+
       form.reset({
         name: profile.name || '',
         display_name: profile.display_name || '',
@@ -605,18 +606,22 @@ export default function Profile() {
                     </a>
                   </div>
                 )}
-                {profile.interests && profile.interests.length > 0 && (
-                  <div className="md:col-span-2">
-                    <Label className="text-muted-foreground">Interests</Label>
-                    <p className="break-words">{profile.interests.join(", ")}</p>
-                  </div>
-                )}
-                {profile.intimateInterests && profile.intimateInterests.length > 0 && (
-                  <div className="md:col-span-2">
-                    <Label className="text-muted-foreground">Intimate Interests</Label>
-                    <p className="break-words">{profile.intimateInterests.join(", ")}</p>
-                  </div>
-                )}
+                <div className="md:col-span-2">
+                  <Label className="text-muted-foreground">Interests</Label>
+                  <p className="break-words">
+                    {profile.interests && profile.interests.length > 0
+                      ? profile.interests.join(", ")
+                      : <span className="text-muted-foreground italic">Not set</span>}
+                  </p>
+                </div>
+                <div className="md:col-span-2">
+                  <Label className="text-muted-foreground">Intimate Interests</Label>
+                  <p className="break-words">
+                    {profile.intimateInterests && profile.intimateInterests.length > 0
+                      ? profile.intimateInterests.join(", ")
+                      : <span className="text-muted-foreground italic">Not set</span>}
+                  </p>
+                </div>
                 <div className="md:col-span-2">
                   <Label className="text-muted-foreground">Orgasmic Profile</Label>
                   <p className="break-words">{profile.orgasmic_profile}</p>
