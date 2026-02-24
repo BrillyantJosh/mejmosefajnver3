@@ -338,7 +338,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     path: '/being',
     gradient: 'from-violet-500 to-indigo-500',
     enabled: true,
-    order: 26
+    order: 0.5
   }
 ];
 
