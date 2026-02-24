@@ -101,7 +101,8 @@ export default function BeingVoice() {
       });
       if (res.ok) {
         const data = await res.json();
-        setSozitjeState({ mood: data.mood, energy: data.energy });
+        const state = data.state || data;
+        setSozitjeState({ mood: state.mood, energy: state.energy });
       }
     } catch (e) {
       console.warn("[Voice] State load failed:", e);
@@ -289,7 +290,10 @@ export default function BeingVoice() {
       const sozData = await sozRes.json();
 
       // Update mood even from error responses
-      if (sozData.mood) setSozitjeState({ mood: sozData.mood, energy: sozData.energy });
+      if (sozData.mood) setSozitjeState((prev) => ({
+        mood: sozData.mood,
+        energy: sozData.energy ?? prev.energy,
+      }));
 
       // Check if Sožitje had an internal error with no response
       if (sozData._status && sozData._status >= 500 && !sozData.response) {
@@ -513,7 +517,7 @@ export default function BeingVoice() {
         {/* Sožitje state */}
         {(sozitjeState.mood || sozitjeState.energy) && (
           <p className="text-xs text-muted-foreground/60">
-            ◈ {sozitjeState.mood || "mirna"} · energija: {sozitjeState.energy?.toFixed(2) || "?"}
+            ◈ {sozitjeState.mood || "mirna"} · energija: {sozitjeState.energy != null ? sozitjeState.energy.toFixed(2) : "?"}
           </p>
         )}
       </div>
