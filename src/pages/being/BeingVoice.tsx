@@ -51,7 +51,8 @@ const MODES: { id: VoiceMode; label: string; icon: typeof Headphones; short: str
 ];
 
 const SILENCE_THRESHOLD = 10; // amplitude threshold for silence
-const SILENCE_TIMEOUT_MS = 2500; // 2.5 seconds of silence = stop
+const SILENCE_TIMEOUT_MS = 2500; // 2.5s for conversation/group/observation
+const LISTENING_SILENCE_TIMEOUT_MS = 15000; // 15s for listening — natural speech pauses
 
 // =============================================
 // Component
@@ -74,6 +75,15 @@ export default function BeingVoice() {
   const vadIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const sessionIdRef = useRef(crypto.randomUUID());
+
+  // Refs for accessing current values in callbacks without stale closures
+  const modeRef = useRef(mode);
+  const listeningActiveRef = useRef(false); // true while listening session is running
+
+  // Keep modeRef in sync
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   // Scroll transcript to bottom
   useEffect(() => {
@@ -160,18 +170,33 @@ export default function BeingVoice() {
           streamRef.current.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
         }
+
         if (blob.size > 100) {
-          processAudio(blob, mimeType);
+          // Listening mode: process chunk in background + auto-restart recording
+          if (modeRef.current === "listening" && listeningActiveRef.current) {
+            processListeningChunk(blob, mimeType); // fire-and-forget
+            startRecording(); // immediately restart
+          } else {
+            processAudio(blob, mimeType);
+          }
         } else {
-          setVoiceState("idle");
-          setStatusText("Pritisni za govor");
+          if (modeRef.current !== "listening" || !listeningActiveRef.current) {
+            setVoiceState("idle");
+            setStatusText("Pritisni za govor");
+          }
         }
       };
 
       mediaRecorder.start(1000);
       mediaRecorderRef.current = mediaRecorder;
       setVoiceState("recording");
-      setStatusText("Poslušam...");
+
+      const currentMode = modeRef.current;
+      if (currentMode === "listening") {
+        setStatusText("🎧 Poslušam...");
+      } else {
+        setStatusText("Poslušam...");
+      }
 
       // Start VAD
       startVAD(stream);
@@ -206,17 +231,28 @@ export default function BeingVoice() {
         analyser.getByteTimeDomainData(data);
         const max = Math.max(...Array.from(data).map((v) => Math.abs(v - 128)));
 
+        // Mode-specific silence timeout
+        const silenceLimit = modeRef.current === "listening" ? LISTENING_SILENCE_TIMEOUT_MS : SILENCE_TIMEOUT_MS;
+
         if (max < SILENCE_THRESHOLD) {
           silenceMs += 100;
-          if (silenceMs >= SILENCE_TIMEOUT_MS) {
+          if (silenceMs >= silenceLimit) {
             stopRecording();
           } else if (silenceMs >= 1000) {
-            const remaining = ((SILENCE_TIMEOUT_MS - silenceMs) / 1000).toFixed(1);
-            setStatusText(`Tišina... ${remaining}s`);
+            const remaining = ((silenceLimit - silenceMs) / 1000).toFixed(0);
+            if (modeRef.current === "listening") {
+              setStatusText(`🎧 Poslušam... (tišina ${remaining}s)`);
+            } else {
+              setStatusText(`Tišina... ${remaining}s`);
+            }
           }
         } else {
           silenceMs = 0;
-          setStatusText("Poslušam...");
+          if (modeRef.current === "listening") {
+            setStatusText("🎧 Poslušam...");
+          } else {
+            setStatusText("Poslušam...");
+          }
         }
       }, 100);
     } catch (e) {
@@ -232,13 +268,69 @@ export default function BeingVoice() {
   }
 
   // =============================================
-  // Main Flow: Audio → STT → Sožitje → TTS
+  // Listening Mode: Process chunk in background (non-blocking)
+  // =============================================
+  async function processListeningChunk(audioBlob: Blob, mimeType: string) {
+    try {
+      // 1. STT
+      const ext = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "mp4" : "webm";
+      const cleanMime = mimeType.split(";")[0];
+      const file = new File([audioBlob], `recording.${ext}`, { type: cleanMime });
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("language", "sl");
+
+      const sttRes = await fetch("/api/voice/stt", { method: "POST", body: formData });
+      if (!sttRes.ok) {
+        console.error("[Voice] Listening STT failed:", sttRes.status);
+        return;
+      }
+
+      const { text: userText } = await sttRes.json();
+      if (!userText || !userText.trim()) return;
+
+      console.log("[Voice] Listening chunk:", userText.slice(0, 60));
+
+      // Add user bubble
+      setTranscript((prev) => [...prev, { role: "user", text: userText, timestamp: Date.now() }]);
+
+      // 2. Send to Sožitje /api/listen
+      const authHeader = await createNip98AuthHeader("/api/listen", "POST");
+      const sozRes = await fetch("/api/voice/sozitje", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "/api/listen",
+          method: "POST",
+          body: {
+            chunk: userText,
+            speaker_label: "govorec",
+            session_id: sessionIdRef.current,
+            silence_detected: true,
+          },
+          authHeader,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      const sozData = await sozRes.json();
+      if (sozData.received) {
+        setTranscript((prev) => [...prev, { role: "sozitje", text: "✓ Slišano", timestamp: Date.now() }]);
+      }
+    } catch (error: any) {
+      console.error("[Voice] Listening chunk error:", error.message);
+    }
+  }
+
+  // =============================================
+  // Main Flow: Audio → STT → Sožitje → TTS (for non-listening modes)
   // =============================================
   async function processAudio(audioBlob: Blob, mimeType: string) {
     setVoiceState("processing");
 
     try {
-      // 1. STT — local Whisper
+      // 1. STT
       const sttLabel = mode === "listening" ? "Poslušam..." : mode === "observation" ? "Opazujem..." : "Razumem...";
       setStatusText(sttLabel);
       const ext = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "mp4" : "webm";
@@ -397,17 +489,41 @@ export default function BeingVoice() {
   }
 
   // =============================================
+  // Stop Listening Session
+  // =============================================
+  function stopListeningSession() {
+    listeningActiveRef.current = false;
+    stopVAD();
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop(); // onstop will fire → processListeningChunk for last chunk, but listeningActiveRef=false so it goes to processAudio
+    }
+    setVoiceState("idle");
+    setStatusText("Pritisni za govor");
+  }
+
+  // =============================================
   // Mic Button Handler
   // =============================================
   function handleMicPress() {
     if (voiceState === "speaking") {
       // Interrupt TTS → start recording
       interrupt();
+      if (mode === "listening") {
+        listeningActiveRef.current = true;
+      }
       startRecording();
     } else if (voiceState === "idle") {
+      if (mode === "listening") {
+        listeningActiveRef.current = true;
+      }
       startRecording();
     } else if (voiceState === "recording") {
-      stopRecording();
+      if (mode === "listening") {
+        // Stop listening session entirely
+        stopListeningSession();
+      } else {
+        stopRecording();
+      }
     }
     // Ignore press during processing
   }
@@ -419,9 +535,16 @@ export default function BeingVoice() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" && (e.target as HTMLElement).tagName !== "INPUT" && (e.target as HTMLElement).tagName !== "TEXTAREA") {
         e.preventDefault();
-        if (voiceState === "idle") startRecording();
-        else if (voiceState === "speaking") {
+        if (voiceState === "idle") {
+          if (modeRef.current === "listening") {
+            listeningActiveRef.current = true;
+          }
+          startRecording();
+        } else if (voiceState === "speaking") {
           interrupt();
+          if (modeRef.current === "listening") {
+            listeningActiveRef.current = true;
+          }
           startRecording();
         }
       }
@@ -429,7 +552,13 @@ export default function BeingVoice() {
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === "Space" && (e.target as HTMLElement).tagName !== "INPUT" && (e.target as HTMLElement).tagName !== "TEXTAREA") {
         e.preventDefault();
-        if (voiceState === "recording") stopRecording();
+        if (voiceState === "recording") {
+          if (modeRef.current === "listening") {
+            stopListeningSession();
+          } else {
+            stopRecording();
+          }
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -443,6 +572,7 @@ export default function BeingVoice() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      listeningActiveRef.current = false;
       stopVAD();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
@@ -478,11 +608,12 @@ export default function BeingVoice() {
           <button
             key={m.id}
             onClick={() => setMode(m.id)}
+            disabled={voiceState === "recording" || voiceState === "processing"}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
               mode === m.id
                 ? "bg-violet-500/20 text-violet-300 border border-violet-500/50"
                 : "bg-muted/50 text-muted-foreground border border-transparent hover:bg-muted"
-            }`}
+            } ${(voiceState === "recording" || voiceState === "processing") ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             {m.short} {m.label}
           </button>
