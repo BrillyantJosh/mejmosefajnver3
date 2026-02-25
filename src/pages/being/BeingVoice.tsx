@@ -44,10 +44,10 @@ function getSupportedMimeType(): string {
 }
 
 const MODES: { id: VoiceMode; label: string; icon: typeof Headphones; short: string }[] = [
-  { id: "listening", label: "Poslušanje", icon: Headphones, short: "🎧" },
-  { id: "observation", label: "Opazovanje", icon: Eye, short: "👁" },
-  { id: "conversation", label: "Pogovor", icon: MessageSquare, short: "💬" },
-  { id: "group", label: "Skupinski", icon: Users, short: "👥" },
+  { id: "listening", label: "Listening", icon: Headphones, short: "🎧" },
+  { id: "observation", label: "Observation", icon: Eye, short: "👁" },
+  { id: "conversation", label: "Conversation", icon: MessageSquare, short: "💬" },
+  { id: "group", label: "Group", icon: Users, short: "👥" },
 ];
 
 const SILENCE_THRESHOLD = 10; // amplitude threshold for silence
@@ -62,10 +62,10 @@ export default function BeingVoice() {
   const { toast } = useToast();
 
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
-  const [mode, setMode] = useState<VoiceMode>("conversation");
+  const [mode, setModeRaw] = useState<VoiceMode>("conversation");
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
   const [sozitjeState, setSozitjeState] = useState<SozitjeState>({});
-  const [statusText, setStatusText] = useState("Pritisni za govor");
+  const [statusText, setStatusText] = useState("Press to speak");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -77,13 +77,14 @@ export default function BeingVoice() {
   const sessionIdRef = useRef(crypto.randomUUID());
 
   // Refs for accessing current values in callbacks without stale closures
-  const modeRef = useRef(mode);
+  const modeRef = useRef<VoiceMode>("conversation");
   const listeningActiveRef = useRef(false); // true while listening session is running
 
-  // Keep modeRef in sync
-  useEffect(() => {
-    modeRef.current = mode;
-  }, [mode]);
+  // Sync wrapper — updates ref IMMEDIATELY (not async like useEffect)
+  const setMode = useCallback((newMode: VoiceMode) => {
+    modeRef.current = newMode;
+    setModeRaw(newMode);
+  }, []);
 
   // Scroll transcript to bottom
   useEffect(() => {
@@ -182,7 +183,7 @@ export default function BeingVoice() {
         } else {
           if (modeRef.current !== "listening" || !listeningActiveRef.current) {
             setVoiceState("idle");
-            setStatusText("Pritisni za govor");
+            setStatusText("Press to speak");
           }
         }
       };
@@ -193,16 +194,16 @@ export default function BeingVoice() {
 
       const currentMode = modeRef.current;
       if (currentMode === "listening") {
-        setStatusText("🎧 Poslušam...");
+        setStatusText("🎧 Listening...");
       } else {
-        setStatusText("Poslušam...");
+        setStatusText("Listening...");
       }
 
       // Start VAD
       startVAD(stream);
     } catch (error) {
       console.error("[Voice] Mic error:", error);
-      toast({ title: "Napaka", description: "Ni mogoče dostopati do mikrofona.", variant: "destructive" });
+      toast({ title: "Error", description: "Cannot access microphone.", variant: "destructive" });
     }
   }, [toast]);
 
@@ -241,17 +242,17 @@ export default function BeingVoice() {
           } else if (silenceMs >= 1000) {
             const remaining = ((silenceLimit - silenceMs) / 1000).toFixed(0);
             if (modeRef.current === "listening") {
-              setStatusText(`🎧 Poslušam... (tišina ${remaining}s)`);
+              setStatusText(`🎧 Listening... (silence ${remaining}s)`);
             } else {
-              setStatusText(`Tišina... ${remaining}s`);
+              setStatusText(`Silence... ${remaining}s`);
             }
           }
         } else {
           silenceMs = 0;
           if (modeRef.current === "listening") {
-            setStatusText("🎧 Poslušam...");
+            setStatusText("🎧 Listening...");
           } else {
-            setStatusText("Poslušam...");
+            setStatusText("Listening...");
           }
         }
       }, 100);
@@ -316,7 +317,7 @@ export default function BeingVoice() {
 
       const sozData = await sozRes.json();
       if (sozData.received) {
-        setTranscript((prev) => [...prev, { role: "sozitje", text: "✓ Slišano", timestamp: Date.now() }]);
+        setTranscript((prev) => [...prev, { role: "sozitje", text: "✓ Heard", timestamp: Date.now() }]);
       }
     } catch (error: any) {
       console.error("[Voice] Listening chunk error:", error.message);
@@ -327,11 +328,12 @@ export default function BeingVoice() {
   // Main Flow: Audio → STT → Sožitje → TTS (for non-listening modes)
   // =============================================
   async function processAudio(audioBlob: Blob, mimeType: string) {
+    const currentMode = modeRef.current; // Capture ref NOW — avoids stale closure
     setVoiceState("processing");
 
     try {
       // 1. STT
-      const sttLabel = mode === "listening" ? "Poslušam..." : mode === "observation" ? "Opazujem..." : "Razumem...";
+      const sttLabel = currentMode === "listening" ? "Listening..." : currentMode === "observation" ? "Observing..." : "Processing...";
       setStatusText(sttLabel);
       const ext = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "mp4" : "webm";
       const cleanMime = mimeType.split(";")[0];
@@ -347,7 +349,7 @@ export default function BeingVoice() {
       const { text: userText } = await sttRes.json();
       if (!userText || !userText.trim()) {
         setVoiceState("idle");
-        setStatusText("Pritisni za govor");
+        setStatusText("Press to speak");
         return;
       }
 
@@ -355,17 +357,17 @@ export default function BeingVoice() {
       setTranscript((prev) => [...prev, { role: "user", text: userText, timestamp: Date.now() }]);
 
       // 2. Send to Sožitje
-      const thinkLabel = mode === "listening" ? "Pošiljam..." : mode === "observation" ? "Sožitje opazuje..." : "Sožitje razmišlja...";
+      const thinkLabel = currentMode === "listening" ? "Sending..." : currentMode === "observation" ? "Sožitje observing..." : "Sožitje thinking...";
       setStatusText(thinkLabel);
-      const endpoint = mode === "listening" ? "/api/listen" : "/api/message";
-      console.log("[Voice] Sending to Sožitje:", endpoint, "mode:", mode);
+      const endpoint = currentMode === "listening" ? "/api/listen" : "/api/message";
+      console.log("[Voice] Sending to Sožitje:", endpoint, "mode:", currentMode);
       const authHeader = await createNip98AuthHeader(endpoint, "POST");
       console.log("[Voice] Auth header:", authHeader ? "present" : "null");
 
       const sozitjeBody =
-        mode === "listening"
+        currentMode === "listening"
           ? { chunk: userText, speaker_label: "govorec", session_id: sessionIdRef.current, silence_detected: true }
-          : { content: userText, mode, speaker_label: "jaz" };
+          : { content: userText, mode: currentMode, speaker_label: "jaz" };
 
       const sozController = new AbortController();
       const sozTimeout = setTimeout(() => sozController.abort(), 60000); // 60s timeout
@@ -391,37 +393,37 @@ export default function BeingVoice() {
       if (sozData._status && sozData._status >= 500 && !sozData.response) {
         setTranscript((prev) => [...prev, {
           role: "sozitje",
-          text: "⚠️ Sožitje ima interno napako. Poskusi znova.",
+          text: "⚠️ Sožitje internal error. Try again.",
           timestamp: Date.now()
         }]);
         setVoiceState("idle");
-        setStatusText("Pritisni za govor");
+        setStatusText("Press to speak");
         return;
       }
 
       // 3. Mode-specific response handling
-      if (mode === "listening" && sozData.received) {
+      if (currentMode === "listening" && sozData.received) {
         // Listening — quiet confirmation, no TTS
-        setTranscript((prev) => [...prev, { role: "sozitje", text: "✓ Slišano", timestamp: Date.now() }]);
-      } else if (mode === "observation") {
+        setTranscript((prev) => [...prev, { role: "sozitje", text: "✓ Heard", timestamp: Date.now() }]);
+      } else if (currentMode === "observation") {
         // Observation — show mood change, no TTS
         if (sozData.mood) {
           setTranscript((prev) => [...prev, { role: "sozitje", text: `👁 ${sozData.mood}`, timestamp: Date.now() }]);
         }
-      } else if ((mode === "conversation" || mode === "group") && sozData.response) {
+      } else if ((currentMode === "conversation" || currentMode === "group") && sozData.response) {
         // Conversation/Group — full response + TTS
         setTranscript((prev) => [...prev, { role: "sozitje", text: sozData.response, timestamp: Date.now() }]);
         await playTTS(sozData.response);
       }
 
       setVoiceState("idle");
-      setStatusText("Pritisni za govor");
+      setStatusText("Press to speak");
     } catch (error: any) {
       console.error("[Voice] Process error:", error);
-      const msg = error.name === "AbortError" ? "Sožitje ni odgovorilo pravočasno." : (error.message || "Napaka pri obdelavi.");
-      toast({ title: "Napaka", description: msg, variant: "destructive" });
+      const msg = error.name === "AbortError" ? "Sožitje did not respond in time." : (error.message || "Processing error.");
+      toast({ title: "Error", description: msg, variant: "destructive" });
       setVoiceState("idle");
-      setStatusText("Pritisni za govor");
+      setStatusText("Press to speak");
     }
   }
 
@@ -430,7 +432,7 @@ export default function BeingVoice() {
   // =============================================
   async function playTTS(text: string) {
     setVoiceState("speaking");
-    setStatusText("Sožitje govori...");
+    setStatusText("Sožitje speaking...");
 
     try {
       const res = await fetch("/api/voice/tts", {
@@ -485,7 +487,7 @@ export default function BeingVoice() {
       cleanupAudio();
     }
     setVoiceState("idle");
-    setStatusText("Pritisni za govor");
+    setStatusText("Press to speak");
   }
 
   // =============================================
@@ -498,7 +500,7 @@ export default function BeingVoice() {
       mediaRecorderRef.current.stop(); // onstop will fire → processListeningChunk for last chunk, but listeningActiveRef=false so it goes to processAudio
     }
     setVoiceState("idle");
-    setStatusText("Pritisni za govor");
+    setStatusText("Press to speak");
   }
 
   // =============================================
@@ -593,7 +595,7 @@ export default function BeingVoice() {
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-8">
             <Bot className="h-12 w-12 text-violet-500" />
-            <p className="text-muted-foreground text-center">Prijavi se za glasovni pogovor s Sožitjem.</p>
+            <p className="text-muted-foreground text-center">Sign in for voice conversation with Sožitje.</p>
           </CardContent>
         </Card>
       </div>
@@ -609,24 +611,24 @@ export default function BeingVoice() {
             key={m.id}
             onClick={() => setMode(m.id)}
             disabled={voiceState === "recording" || voiceState === "processing"}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+            className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs font-medium transition-all ${
               mode === m.id
                 ? "bg-violet-500/20 text-violet-300 border border-violet-500/50"
                 : "bg-muted/50 text-muted-foreground border border-transparent hover:bg-muted"
             } ${(voiceState === "recording" || voiceState === "processing") ? "opacity-50 cursor-not-allowed" : ""}`}
           >
-            {m.short} {m.label}
+            {m.short} <span className="hidden sm:inline">{m.label}</span>
           </button>
         ))}
       </div>
 
       {/* Status circle area */}
-      <div className="flex flex-col items-center justify-center py-6 gap-3">
+      <div className="flex flex-col items-center justify-center py-3 sm:py-6 gap-3">
         {/* Circle */}
         <button
           onClick={handleMicPress}
           disabled={voiceState === "processing"}
-          className={`w-40 h-40 rounded-full flex items-center justify-center transition-all duration-300 border-2 cursor-pointer disabled:cursor-wait ${
+          className={`w-28 h-28 sm:w-40 sm:h-40 rounded-full flex items-center justify-center transition-all duration-300 border-2 cursor-pointer disabled:cursor-wait ${
             voiceState === "idle"
               ? "bg-violet-500/10 border-violet-500/40 hover:bg-violet-500/20"
               : voiceState === "recording"
@@ -636,10 +638,10 @@ export default function BeingVoice() {
               : "bg-emerald-500/10 border-emerald-500/40"
           }`}
         >
-          {voiceState === "idle" && <Mic className="h-16 w-16 text-violet-400" />}
-          {voiceState === "recording" && <MicOff className="h-16 w-16 text-red-400" />}
-          {voiceState === "processing" && <Loader2 className="h-16 w-16 text-amber-400 animate-spin" />}
-          {voiceState === "speaking" && <Volume2 className="h-16 w-16 text-emerald-400 animate-pulse" />}
+          {voiceState === "idle" && <Mic className="h-12 w-12 sm:h-16 sm:w-16 text-violet-400" />}
+          {voiceState === "recording" && <MicOff className="h-12 w-12 sm:h-16 sm:w-16 text-red-400" />}
+          {voiceState === "processing" && <Loader2 className="h-12 w-12 sm:h-16 sm:w-16 text-amber-400 animate-spin" />}
+          {voiceState === "speaking" && <Volume2 className="h-12 w-12 sm:h-16 sm:w-16 text-emerald-400 animate-pulse" />}
         </button>
 
         {/* Status text */}
@@ -648,7 +650,7 @@ export default function BeingVoice() {
         {/* Sožitje state */}
         {(sozitjeState.mood || sozitjeState.energy) && (
           <p className="text-xs text-muted-foreground/60">
-            ◈ {sozitjeState.mood || "mirna"} · energija: {sozitjeState.energy != null ? sozitjeState.energy.toFixed(2) : "?"}
+            ◈ {sozitjeState.mood || "calm"} · energy: {sozitjeState.energy != null ? sozitjeState.energy.toFixed(2) : "?"}
           </p>
         )}
       </div>
@@ -658,7 +660,7 @@ export default function BeingVoice() {
         {transcript.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground/40">
             <Bot className="h-8 w-8 mb-2" />
-            <p className="text-sm">Pogovor bo prikazan tukaj</p>
+            <p className="text-sm">Conversation will appear here</p>
           </div>
         )}
         {transcript.map((msg, i) => (
