@@ -787,7 +787,7 @@ export default function AiAdvisor() {
                         <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
                       </div>
                     )}
-                    <div className={cn("max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4", message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
+                    <div className={cn("max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4", message.role === 'user' ? 'bg-orange-500 text-white' : 'bg-muted')}>
                       {message.role === 'assistant' ? (
                         <div className="space-y-2">
                           {/* Update badge for async answers */}
@@ -865,8 +865,8 @@ export default function AiAdvisor() {
                       )}
                     </div>
                     {message.role === 'user' && (
-                      <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-primary flex items-center justify-center">
-                        <User className="h-3 w-3 sm:h-4 sm:w-4 text-primary-foreground" />
+                      <div className="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-orange-500 flex items-center justify-center">
+                        <User className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
                       </div>
                     )}
                   </div>

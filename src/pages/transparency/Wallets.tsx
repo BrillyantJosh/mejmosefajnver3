@@ -180,7 +180,7 @@ export default function Wallets() {
                     onClick={() => setSelectedProfile(profile)}
                     className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
                       selectedProfile?.pubkey === profile.pubkey
-                        ? 'bg-primary/10 border border-primary'
+                        ? 'bg-orange-500/10 border border-orange-500'
                         : 'hover:bg-muted'
                     }`}
                   >

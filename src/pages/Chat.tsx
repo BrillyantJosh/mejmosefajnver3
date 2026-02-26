@@ -519,8 +519,8 @@ export default function Chat() {
               filteredConversations.map((conv) => (
                 <div
                   key={conv.pubkey}
-                  className={`rounded-lg hover:bg-secondary cursor-pointer transition-colors touch-manipulation p-4 md:p-3 ${
-                    selectedPubkey === conv.pubkey ? 'bg-secondary' : ''
+                  className={`rounded-lg cursor-pointer transition-colors touch-manipulation p-4 md:p-3 ${
+                    selectedPubkey === conv.pubkey ? 'bg-orange-500 text-white' : 'hover:bg-secondary'
                   }`}
                   onClick={() => setSelectedPubkey(conv.pubkey)}
                 >
@@ -537,11 +537,11 @@ export default function Chat() {
                         <p className="font-semibold truncate text-sm">
                           {getDisplayName(conv.pubkey)}
                         </p>
-                        <span className="text-xs text-muted-foreground">
+                        <span className={`text-xs ${selectedPubkey === conv.pubkey ? 'text-white/70' : 'text-muted-foreground'}`}>
                           {conv.lastMessage && formatTime(conv.lastMessage.created_at)}
                         </span>
                       </div>
-                      <div className="text-sm text-muted-foreground truncate">
+                      <div className={`text-sm truncate ${selectedPubkey === conv.pubkey ? 'text-white/70' : 'text-muted-foreground'}`}>
                         {getLastMessageDisplay(conv.lastMessage?.decryptedContent)}
                       </div>
                     </div>
@@ -651,7 +651,7 @@ export default function Chat() {
                         )}
                         <div className={`rounded-lg p-3 overflow-hidden break-words max-w-full ${
                           msg.isOwn
-                            ? 'bg-[#8B5CF6] text-white'
+                            ? 'bg-orange-500 text-white'
                             : 'bg-muted text-foreground'
                         }`}>
                           {msg.replyToId && (() => {

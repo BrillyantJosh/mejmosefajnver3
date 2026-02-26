@@ -46,7 +46,7 @@ export default function SubNavigation({ items, variant = "top", onActionClick, a
                   to={item.path}
                   className={`flex flex-col items-center justify-center gap-1 px-3 py-2 flex-1 transition-colors ${
                     isActive
-                      ? "text-primary"
+                      ? "text-orange-600 dark:text-orange-400"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -74,7 +74,7 @@ export default function SubNavigation({ items, variant = "top", onActionClick, a
               to={item.path}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap border-b-2 ${
                 isActive
-                  ? "border-primary text-primary"
+                  ? "border-orange-500 text-orange-600 dark:text-orange-400"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted"
               }`}
             >

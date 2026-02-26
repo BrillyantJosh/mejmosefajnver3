@@ -143,7 +143,7 @@ export default function DatabaseBrowser() {
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors text-left",
                 selectedTable === table.name
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-orange-500 text-white"
                   : "hover:bg-muted"
               )}
             >
