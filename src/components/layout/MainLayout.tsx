@@ -293,6 +293,17 @@ export default function MainLayout() {
                     </Link>
                   </DropdownMenuItem>
                 ))}
+                {isAdmin && (
+                  <DropdownMenuItem asChild>
+                    <Link
+                      to="/admin/settings"
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <Shield className="h-4 w-4" />
+                      <span className="font-semibold text-destructive">Admin</span>
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                   <LogOut className="h-4 w-4 mr-2" />
                   <span>Logout</span>
@@ -359,19 +370,6 @@ export default function MainLayout() {
                   </DropdownMenuItem>
                 ))}
 
-                {/* Admin Section */}
-                {isAdmin && <DropdownMenuSeparator />}
-                {isAdmin && (
-                  <DropdownMenuItem asChild>
-                    <Link
-                      to="/admin/settings"
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      <Shield className="h-4 w-4" />
-                      <span className="font-semibold text-destructive">Admin Settings</span>
-                    </Link>
-                  </DropdownMenuItem>
-                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -419,6 +417,21 @@ export default function MainLayout() {
                   <span>{item.title}</span>
                 </Link>
               ))}
+
+              {isAdmin && (
+                <Link
+                  to="/admin/settings"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                    location.pathname.startsWith("/admin")
+                      ? "bg-secondary text-primary font-medium"
+                      : "hover:bg-secondary/50"
+                  }`}
+                >
+                  <Shield className="h-5 w-5" />
+                  <span className="font-semibold text-destructive">Admin</span>
+                </Link>
+              )}
 
               <button
                 onClick={() => {
@@ -522,22 +535,6 @@ export default function MainLayout() {
                 )
               ))}
 
-              {/* Admin Section */}
-              {isAdmin && <div className="border-t my-2" />}
-              {isAdmin && (
-                <Link
-                  to="/admin/settings"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    location.pathname === "/admin/settings"
-                      ? "bg-secondary text-primary font-medium"
-                      : "hover:bg-secondary/50"
-                  }`}
-                >
-                  <Shield className="h-5 w-5" />
-                  <span className="font-semibold text-destructive">Admin Settings</span>
-                </Link>
-              )}
             </nav>
           </div>
         )}
