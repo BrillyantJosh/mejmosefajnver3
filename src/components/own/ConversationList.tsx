@@ -40,7 +40,7 @@ export default function ConversationList({ conversations, selectedId, onSelect }
         <Card
           key={conv.id}
           className={`p-3 md:p-4 cursor-pointer transition-colors hover:bg-accent/50 active:scale-[0.98] ${
-            selectedId === conv.id ? 'border-primary bg-accent/30' : ''
+            selectedId === conv.id ? 'border-orange-500 bg-orange-500/15' : ''
           } ${getPhaseBackground(conv.phase)}`}
           onClick={() => onSelect(conv.id)}
         >
