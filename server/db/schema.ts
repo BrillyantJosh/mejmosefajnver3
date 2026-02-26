@@ -253,6 +253,17 @@ export function initializeSchema(db: Database.Database): void {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS faq (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      title TEXT NOT NULL,
+      youtube_url TEXT,
+      display_order INTEGER NOT NULL DEFAULT 0,
+      published INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     -- =============================================
     -- INDEXES
     -- =============================================
@@ -295,7 +306,8 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_pending_nostr_events_status ON pending_nostr_events(status);
     CREATE INDEX IF NOT EXISTS idx_pending_nostr_events_user ON pending_nostr_events(user_pubkey);
     CREATE INDEX IF NOT EXISTS idx_whats_up_created ON whats_up(created_at);
+    CREATE INDEX IF NOT EXISTS idx_faq_order ON faq(display_order);
   `);
 
-  console.log('SQLite schema initialized (21 tables + indexes)');
+  console.log('SQLite schema initialized (22 tables + indexes)');
 }
