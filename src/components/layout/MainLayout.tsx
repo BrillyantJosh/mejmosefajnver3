@@ -27,6 +27,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 import { useAutoLashSender } from "@/hooks/useAutoLashSender";
 import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
+import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "sonner";
 import InstallPromptBanner from "./InstallPromptBanner";
 import InstallAppDialog from "./InstallAppDialog";
@@ -52,6 +53,7 @@ export default function MainLayout() {
   const { logout: authLogout, refreshSession } = useAuth();
   const { profile } = useNostrProfile();
   const { unpaidCount } = useNostrUnpaidLashes();
+  const { parameters } = useSystemParameters();
   const lastRefreshRef = useRef<number>(Date.now());
 
   const dynamicModules = getEnabledModules();
@@ -207,6 +209,18 @@ export default function MainLayout() {
               {appSettings?.app_name || "Nostr App"}
             </span>
           </Link>
+
+          {/* Split Badge */}
+          {parameters?.split && (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-500/10 to-indigo-500/10 border border-violet-500/20">
+              <span className="text-lg font-black bg-gradient-to-r from-violet-500 to-indigo-500 bg-clip-text text-transparent leading-none">
+                {parameters.split}
+              </span>
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider leading-tight">
+                Split
+              </span>
+            </div>
+          )}
 
           {/* User Profile Display */}
           {profile && (
