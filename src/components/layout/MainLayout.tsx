@@ -409,7 +409,7 @@ export default function MainLayout() {
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                     location.pathname === item.path
-                      ? "bg-secondary text-primary font-medium"
+                      ? "bg-orange-500 text-white font-medium"
                       : "hover:bg-secondary/50"
                   }`}
                 >
@@ -424,12 +424,12 @@ export default function MainLayout() {
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                     location.pathname.startsWith("/admin")
-                      ? "bg-secondary text-primary font-medium"
+                      ? "bg-orange-500 text-white font-medium"
                       : "hover:bg-secondary/50"
                   }`}
                 >
                   <Shield className="h-5 w-5" />
-                  <span className="font-semibold text-destructive">Admin</span>
+                  <span className={location.pathname.startsWith("/admin") ? "font-semibold" : "font-semibold text-destructive"}>Admin</span>
                 </Link>
               )}
 
@@ -461,7 +461,7 @@ export default function MainLayout() {
                 onClick={() => setMobileMenuOpen(false)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   location.pathname === "/video-instructions"
-                    ? "bg-secondary text-primary font-medium"
+                    ? "bg-orange-500 text-white font-medium"
                     : "hover:bg-secondary/50"
                 }`}
               >
@@ -473,7 +473,7 @@ export default function MainLayout() {
                 onClick={() => setMobileMenuOpen(false)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   location.pathname === "/report-bug"
-                    ? "bg-secondary text-primary font-medium"
+                    ? "bg-orange-500 text-white font-medium"
                     : "hover:bg-secondary/50"
                 }`}
               >
@@ -515,7 +515,7 @@ export default function MainLayout() {
                     onClick={() => setMobileMenuOpen(false)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                       location.pathname.startsWith(module.path)
-                        ? "bg-secondary text-primary font-medium"
+                        ? "bg-orange-500 text-white font-medium"
                         : "hover:bg-secondary/50"
                     }`}
                   >
