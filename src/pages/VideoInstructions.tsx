@@ -19,6 +19,11 @@ const lana8wonderVideos = [
     question: "EN: How to Enroll in Lana8Wonder?",
     youtubeId: "ZS10tAuH_4I",
   },
+  {
+    id: "l8w-what-now",
+    question: "I have Lana8Wonder, what now?",
+    youtubeId: "6JfBRu69tHs",
+  },
 ];
 
 const videos = [
