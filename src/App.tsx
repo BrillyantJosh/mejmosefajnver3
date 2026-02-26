@@ -131,6 +131,7 @@ import ReportBug from "./pages/ReportBug";
 import PublicPost from "./pages/PublicPost";
 import PublicEvent from "./pages/PublicEvent";
 import PublicProposal from "./pages/PublicProposal";
+import PublicHome from "./pages/PublicHome";
 
 const queryClient = new QueryClient();
 
@@ -146,6 +147,7 @@ const App = () => (
               <Sonner />
               <Routes>
                 <Route path="/login" element={<Login />} />
+                <Route path="/public" element={<PublicHome />} />
                 <Route path="/post/:eventId" element={<PublicPost />} />
                 <Route path="/event/:dTag" element={<PublicEvent />} />
                 <Route path="/proposal/:dTag" element={<PublicProposal />} />
