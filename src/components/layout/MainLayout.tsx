@@ -219,11 +219,11 @@ export default function MainLayout() {
               rel="noopener noreferrer"
               className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-500/10 to-indigo-500/10 border border-violet-500/20 hover:from-violet-500/20 hover:to-indigo-500/20 transition-colors"
             >
-              <span className="text-lg font-black bg-gradient-to-r from-violet-500 to-indigo-500 bg-clip-text text-transparent leading-none">
-                {parameters.split}
-              </span>
               <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider leading-tight">
                 Split
+              </span>
+              <span className="text-lg font-black bg-gradient-to-r from-violet-500 to-indigo-500 bg-clip-text text-transparent leading-none">
+                {parameters.split}
               </span>
             </a>
           )}
