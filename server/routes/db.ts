@@ -9,7 +9,7 @@ const ALLOWED_TABLES = new Set([
   'app_settings', 'bug_reports', 'direct_messages', 'dm_lashes', 'dm_last_seen',
   'dm_read_status', 'encrypted_room_read_status', 'kind_38888', 'lash_users_history',
   'nostr_profiles', 'pending_nostr_events', 'push_subscriptions', 'room_latest_posts',
-  'transaction_history', 'wallet_types', 'whats_up'
+  'transaction_history', 'wallet_types', 'whats_up', 'faq'
 ]);
 
 // Boolean columns that need integer conversion (SQLite stores booleans as 0/1)
