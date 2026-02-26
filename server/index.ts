@@ -25,6 +25,9 @@ app.use(cors({
     'http://localhost:4173',   // Vite preview
     'http://localhost:3001',   // Self
     'https://new.mejmosefajn.org',  // Production
+    'https://app.lanaloves.us',    // Main app domain
+    'https://lanapays.us',         // Public landing page
+    'https://www.lanapays.us',     // Public landing page (www)
   ],
   credentials: true,
 }));
