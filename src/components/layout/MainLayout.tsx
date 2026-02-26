@@ -1,7 +1,7 @@
 // VERSION: 2.2 - PWA Cache Fix + Version Display - 2026-01-22
 import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot, ExternalLink, PlayCircle, Bug } from "lucide-react";
+import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot, ExternalLink, PlayCircle, Bug, Home as HomeIcon } from "lucide-react";
 import logoImage from "@/assets/lana-logo.png";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +38,8 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const fixedMenuItems = [
-  { title: "Enlightened AI", icon: Bot, path: "/" },
+  { title: "Home", icon: HomeIcon, path: "/" },
+  { title: "Enlightened AI", icon: Bot, path: "/ai-advisor" },
   { title: "Modules", icon: Grid, path: "/modules" },
   { title: "Profile", icon: User, path: "/profile" },
   { title: "Settings", icon: Settings, path: "/settings" },
