@@ -198,7 +198,7 @@ export default function MainLayout() {
 
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-[env(safe-area-inset-top)]">
-        <div className="container flex h-16 items-center justify-between px-4">
+        <div className="container relative flex h-16 items-center justify-between px-4">
           <Link to="/" className="flex items-center space-x-2 min-w-0 flex-1 mr-4">
             <img
               src={logoImage}
@@ -210,9 +210,9 @@ export default function MainLayout() {
             </span>
           </Link>
 
-          {/* Split Badge */}
+          {/* Split Badge — centered */}
           {parameters?.split && (
-            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-500/10 to-indigo-500/10 border border-violet-500/20">
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-500/10 to-indigo-500/10 border border-violet-500/20">
               <span className="text-lg font-black bg-gradient-to-r from-violet-500 to-indigo-500 bg-clip-text text-transparent leading-none">
                 {parameters.split}
               </span>
