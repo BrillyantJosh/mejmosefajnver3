@@ -117,12 +117,14 @@ import BuyLana from "./pages/BuyLana";
 import Lana8Wonder from "./pages/Lana8Wonder";
 import Lana8WonderTransfer from "./pages/Lana8WonderTransfer";
 import AiAdvisor from "./pages/AiAdvisor";
+import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminSettings from "./pages/admin/AdminSettings";
 import BugReportsAdmin from "./pages/admin/BugReports";
 import DatabaseBrowser from "./pages/admin/DatabaseBrowser";
 import TrainAI from "./pages/admin/TrainAI";
+import WhatsUpAdmin from "./pages/admin/WhatsUpAdmin";
 import ReportBug from "./pages/ReportBug";
 import PublicPost from "./pages/PublicPost";
 import PublicEvent from "./pages/PublicEvent";
@@ -150,7 +152,8 @@ const App = () => (
                     <MainLayout />
                   </ProtectedRoute>
                 }>
-                  <Route path="/" element={<AiAdvisor />} />
+                  <Route path="/" element={<Home />} />
+                  <Route path="/ai-advisor" element={<AiAdvisor />} />
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/modules" element={<Modules />} />
                   <Route path="/profile" element={<Profile />} />
@@ -300,6 +303,7 @@ const App = () => (
                     <Route path="train-ai" element={<TrainAI />} />
                     <Route path="bug-reports" element={<BugReportsAdmin />} />
                     <Route path="database" element={<DatabaseBrowser />} />
+                    <Route path="whats-up" element={<WhatsUpAdmin />} />
                     <Route path="settings" element={<AdminSettings />} />
                   </Route>
                 </Route>
