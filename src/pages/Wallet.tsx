@@ -102,6 +102,7 @@ export default function Wallet() {
     "LanaPays.Us": 3,
     "Knights": 4,
     "Lana8Wonder": 5,
+    "Lana.Discount": 6,
   };
 
   const sortedWallets = [...walletsWithBalances].sort((a, b) => {
