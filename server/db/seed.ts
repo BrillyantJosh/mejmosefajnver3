@@ -15,6 +15,7 @@ export function seedData(db: Database.Database): void {
       ['Wallet', 'Custom wallet type', 0],
       ['Knights', 'A special Wallet for Knights', 9],
       ['LanaPays.Us', 'LanaPays.Us', 10],
+      ['Lana.Discount', 'Lana Discount wallet', 11],
     ];
 
     const insertMany = db.transaction((types: any[]) => {
@@ -25,6 +26,17 @@ export function seedData(db: Database.Database): void {
 
     insertMany(walletTypes);
     console.log('Seeded wallet_types with default values');
+  }
+
+  // Ensure Lana.Discount wallet type exists (for existing databases)
+  const lanaDiscountExists = db.prepare(
+    "SELECT COUNT(*) as count FROM wallet_types WHERE name = 'Lana.Discount'"
+  ).get() as any;
+  if (lanaDiscountExists.count === 0) {
+    db.prepare(
+      "INSERT INTO wallet_types (id, name, description, is_active, display_order) VALUES (lower(hex(randomblob(16))), 'Lana.Discount', 'Lana Discount wallet', 1, 11)"
+    ).run();
+    console.log('Added Lana.Discount wallet type');
   }
 
   // Seed default app_settings if empty
