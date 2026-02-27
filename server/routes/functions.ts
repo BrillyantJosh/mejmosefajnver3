@@ -68,8 +68,8 @@ router.post('/sync-kind-38888', async (req: Request, res: Response) => {
     db.prepare(`
       INSERT INTO kind_38888 (
         id, event_id, pubkey, created_at, relays, electrum_servers,
-        exchange_rates, split, version, valid_from, trusted_signers, raw_event
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        exchange_rates, split, version, valid_from, split_started_at, trusted_signers, raw_event
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       'synced_' + Date.now(),
       data.event_id,
@@ -81,6 +81,7 @@ router.post('/sync-kind-38888', async (req: Request, res: Response) => {
       data.split,
       data.version,
       data.valid_from,
+      data.split_started_at || 0,
       JSON.stringify(data.trusted_signers),
       data.raw_event
     );
