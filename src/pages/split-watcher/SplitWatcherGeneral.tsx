@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, TrendingUp, Calendar, Target, DollarSign } from "lucide-react";
+import { Loader2, TrendingUp, Calendar, Target, DollarSign, Clock } from "lucide-react";
 
 export default function SplitWatcherGeneral() {
   const { parameters, isLoading } = useSystemParameters();
@@ -42,6 +42,16 @@ export default function SplitWatcherGeneral() {
     }
   };
 
+  const getDaysInSplit = (isoString: string): number | null => {
+    try {
+      const startDate = new Date(isoString).getTime();
+      if (isNaN(startDate) || startDate === 0) return null;
+      return Math.floor((Date.now() - startDate) / 86400000);
+    } catch {
+      return null;
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -49,6 +59,10 @@ export default function SplitWatcherGeneral() {
       </div>
     );
   }
+
+  const daysInSplit = parameters?.splitStartedAt
+    ? getDaysInSplit(parameters.splitStartedAt)
+    : null;
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -67,7 +81,7 @@ export default function SplitWatcherGeneral() {
         </CardContent>
       </Card>
 
-      {/* Start Date */}
+      {/* Start Date + Days in Split */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -75,10 +89,18 @@ export default function SplitWatcherGeneral() {
             Start Date
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <p className="text-2xl font-semibold">
-            {parameters?.validFrom ? formatDate(parameters.validFrom) : "—"}
+            {parameters?.splitStartedAt ? formatDate(parameters.splitStartedAt) : "—"}
           </p>
+          {daysInSplit !== null && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Clock className="h-4 w-4" />
+              <span className="text-sm">
+                <span className="font-semibold text-foreground">{daysInSplit}</span> days in this SPLIT
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

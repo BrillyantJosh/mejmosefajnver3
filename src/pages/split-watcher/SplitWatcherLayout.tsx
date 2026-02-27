@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { BarChart3, Eye, Wallet, CreditCard, Tag, Globe } from "lucide-react";
+import { BarChart3, Eye, Wallet, CreditCard, Tag, FastForward } from "lucide-react";
 
 const splitWatcherNavItems = [
   { title: "General", path: "/split-watcher", icon: BarChart3 },
@@ -8,6 +8,7 @@ const splitWatcherNavItems = [
   { title: "All Wallets", path: "/split-watcher/all-wallets", icon: Wallet, href: "https://www.lanawatch.us/all-wallets" },
   { title: "LanaPays.Us", path: "/split-watcher/lanapays", icon: CreditCard, href: "https://www.lanawatch.us/lanapays" },
   { title: "Lana.Discount", path: "/split-watcher/lana-discount", icon: Tag, href: "https://www.lanawatch.us/lana-discount" },
+  { title: "Next Split", path: "/split-watcher/next-split", icon: FastForward, href: "https://watch.lana8wonder.com/next-split" },
 ];
 
 export default function SplitWatcherLayout() {
