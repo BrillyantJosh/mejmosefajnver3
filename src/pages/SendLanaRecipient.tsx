@@ -54,9 +54,9 @@ export default function SendLanaRecipient() {
   // Fetch user's own wallets
   const { wallets: userWallets, isLoading: isLoadingWallets } = useNostrUserWallets(session?.nostrHexId || null);
   
-  // Filter wallets - only "Main Wallet" or "Wallet" types, exclude the source wallet
-  const eligibleWallets = userWallets.filter(w => 
-    (w.walletType === "Main Wallet" || w.walletType === "Wallet") && 
+  // Filter wallets - only eligible types, exclude the source wallet
+  const eligibleWallets = userWallets.filter(w =>
+    (w.walletType === "Main Wallet" || w.walletType === "Wallet" || w.walletType === "Lana.Discount") &&
     w.walletId !== walletId
   );
 
