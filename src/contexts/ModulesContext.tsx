@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -339,6 +339,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-violet-500 to-indigo-500',
     enabled: true,
     order: 0.5
+  },
+  {
+    id: 'splitwatcher',
+    title: 'SPLIT Watcher',
+    description: 'Monitor SPLIT parameters, exchange rates, and account watchers',
+    icon: Eye,
+    path: '/split-watcher',
+    gradient: 'from-amber-500 to-orange-500',
+    enabled: true,
+    order: 26
   }
 ];
 
@@ -398,7 +408,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'registrar': 'Registrar',
     'tax': 'TAX',
     'lanaexchange': 'OTC LanaCoin',
-    'being': 'Sožitje'
+    'being': 'Sožitje',
+    'splitwatcher': 'SPLIT Watcher'
   };
   return mapping[id] || id;
 };
@@ -434,7 +445,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Registrar': 'registrar',
     'TAX': 'tax',
     'OTC LanaCoin': 'lanaexchange',
-    'Sožitje': 'being'
+    'Sožitje': 'being',
+    'SPLIT Watcher': 'splitwatcher'
   };
   return mapping[id] || null;
 };

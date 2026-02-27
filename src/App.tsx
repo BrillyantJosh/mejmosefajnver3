@@ -103,6 +103,8 @@ import BeingLayout from "./pages/being/BeingLayout";
 import BeingChat from "./pages/being/BeingChat";
 import BeingVoice from "./pages/being/BeingVoice";
 import BeingWorld from "./pages/being/BeingWorld";
+import SplitWatcherLayout from "./pages/split-watcher/SplitWatcherLayout";
+import SplitWatcherGeneral from "./pages/split-watcher/SplitWatcherGeneral";
 
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
@@ -295,6 +297,10 @@ const App = () => (
                     <Route path="chat" element={<BeingChat />} />
                     <Route path="voice" element={<BeingVoice />} />
                     <Route path="world" element={<BeingWorld />} />
+                  </Route>
+                  <Route path="/split-watcher" element={<SplitWatcherLayout />}>
+                    <Route index element={<SplitWatcherGeneral />} />
+                    <Route path="general" element={<SplitWatcherGeneral />} />
                   </Route>
                   <Route
                     path="/admin"
