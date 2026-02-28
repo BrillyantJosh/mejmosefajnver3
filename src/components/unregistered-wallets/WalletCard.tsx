@@ -41,7 +41,8 @@ export default function WalletCard({
   };
 
   const handleSendLana = () => {
-    window.open('https://lanapay.online', '_blank');
+    const balanceStr = balance !== null ? balance.toString() : '0';
+    window.location.href = `/send-lana?walletId=${encodeURIComponent(address)}&balance=${balanceStr}&manualOnly=true`;
   };
 
   const transactionLink = `https://chainz.cryptoid.info/lana/address.dws?${address}.htm`;
