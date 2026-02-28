@@ -1,34 +1,9 @@
-import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
-import { supabase } from "@/integrations/supabase/client";
 import { Loader2, TrendingUp, Calendar, Target, DollarSign, Clock } from "lucide-react";
 
 export default function SplitWatcherGeneral() {
   const { parameters, isLoading } = useSystemParameters();
-  const [maxAmount, setMaxAmount] = useState<number | null>(null);
-
-  useEffect(() => {
-    async function fetchMaxAmount() {
-      try {
-        const { data, error } = await supabase
-          .from("app_settings")
-          .select("value")
-          .eq("key", "inspiration_max_allowed_amount")
-          .single();
-
-        if (!error && data?.value) {
-          const val = typeof data.value === "number"
-            ? data.value
-            : parseInt(String(data.value).replace(/"/g, ""), 10);
-          if (val > 0) setMaxAmount(val);
-        }
-      } catch (err) {
-        console.error("Failed to fetch max amount:", err);
-      }
-    }
-    fetchMaxAmount();
-  }, []);
 
   const formatDate = (isoString: string) => {
     try {
@@ -114,8 +89,8 @@ export default function SplitWatcherGeneral() {
         </CardHeader>
         <CardContent>
           <p className="text-xl md:text-2xl font-semibold">
-            {maxAmount !== null ? (
-              <span>{maxAmount.toLocaleString("en-US")} <span className="text-sm md:text-base text-muted-foreground">LANA</span></span>
+            {parameters?.splitTargetLana ? (
+              <span>{parameters.splitTargetLana.toLocaleString("en-US")} <span className="text-sm md:text-base text-muted-foreground">LANA</span></span>
             ) : (
               "—"
             )}

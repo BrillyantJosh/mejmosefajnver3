@@ -118,8 +118,8 @@ export function seedData(db: Database.Database): void {
     db.prepare(`
       INSERT INTO kind_38888 (
         id, event_id, pubkey, created_at, relays, electrum_servers,
-        exchange_rates, split, version, valid_from, split_started_at, trusted_signers, raw_event
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        exchange_rates, split, version, valid_from, split_started_at, split_target_lana, trusted_signers, raw_event
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       'seed_kind_38888',
       'local_seed_event_' + Date.now(),
@@ -132,6 +132,7 @@ export function seedData(db: Database.Database): void {
       '1.0.0', // version
       Math.floor(Date.now() / 1000), // valid_from
       0, // split_started_at (placeholder — overwritten by first sync)
+      0, // split_target_lana (placeholder — overwritten by first sync)
       JSON.stringify(defaultTrustedSigners),
       rawEvent
     );
@@ -143,6 +144,14 @@ export function seedData(db: Database.Database): void {
   try {
     db.prepare("ALTER TABLE kind_38888 ADD COLUMN split_started_at INTEGER").run();
     console.log('Added split_started_at column to kind_38888');
+  } catch {
+    // Column already exists — ignore
+  }
+
+  // Migration: add split_target_lana column to kind_38888 for existing databases
+  try {
+    db.prepare("ALTER TABLE kind_38888 ADD COLUMN split_target_lana INTEGER").run();
+    console.log('Added split_target_lana column to kind_38888');
   } catch {
     // Column already exists — ignore
   }

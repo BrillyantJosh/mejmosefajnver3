@@ -36,6 +36,7 @@ interface SystemParameters {
   version: string;
   validFrom: string;
   splitStartedAt: string;
+  splitTargetLana: number;
   connectedRelays: number;
   isLoading: boolean;
   trustedSigners: TrustedSigners;
@@ -129,6 +130,7 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
         version: data.version || '',
         validFrom: data.valid_from ? new Date(data.valid_from * 1000).toISOString() : '',
         splitStartedAt: data.split_started_at ? new Date(data.split_started_at * 1000).toISOString() : '',
+        splitTargetLana: data.split_target_lana || 0,
         connectedRelays: relays.length,
         isLoading: false,
         trustedSigners
