@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -350,6 +350,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-amber-500 to-orange-500',
     enabled: true,
     order: 26
+  },
+  {
+    id: 'reportloss',
+    title: 'Report Loss',
+    description: 'Report lost wallets and view the public loss board',
+    icon: AlertTriangle,
+    path: '/report-loss',
+    gradient: 'from-red-500 to-orange-500',
+    enabled: true,
+    order: 27
   }
 ];
 
@@ -410,7 +420,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'tax': 'TAX',
     'lanaexchange': 'OTC LanaCoin',
     'being': 'Sožitje',
-    'splitwatcher': 'SPLIT Watcher'
+    'splitwatcher': 'SPLIT Watcher',
+    'reportloss': 'Report Loss'
   };
   return mapping[id] || id;
 };
@@ -447,7 +458,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'TAX': 'tax',
     'OTC LanaCoin': 'lanaexchange',
     'Sožitje': 'being',
-    'SPLIT Watcher': 'splitwatcher'
+    'SPLIT Watcher': 'splitwatcher',
+    'Report Loss': 'reportloss'
   };
   return mapping[id] || null;
 };

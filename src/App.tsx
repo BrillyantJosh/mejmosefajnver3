@@ -102,6 +102,9 @@ import BeingVoice from "./pages/being/BeingVoice";
 import BeingWorld from "./pages/being/BeingWorld";
 import SplitWatcherLayout from "./pages/split-watcher/SplitWatcherLayout";
 import SplitWatcherGeneral from "./pages/split-watcher/SplitWatcherGeneral";
+import ReportLossLayout from "./pages/report-loss/ReportLossLayout";
+import ReportForm from "./pages/report-loss/ReportForm";
+import LossBoard from "./pages/report-loss/LossBoard";
 
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
@@ -300,6 +303,10 @@ const App = () => (
                   <Route path="/split-watcher" element={<SplitWatcherLayout />}>
                     <Route index element={<SplitWatcherGeneral />} />
                     <Route path="general" element={<SplitWatcherGeneral />} />
+                  </Route>
+                  <Route path="/report-loss" element={<ReportLossLayout />}>
+                    <Route index element={<ReportForm />} />
+                    <Route path="board" element={<LossBoard />} />
                   </Route>
                   <Route
                     path="/admin"
