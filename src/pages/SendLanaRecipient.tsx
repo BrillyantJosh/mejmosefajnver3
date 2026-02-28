@@ -38,6 +38,7 @@ export default function SendLanaRecipient() {
   const currency = searchParams.get("currency") || "";
   const inputAmount = searchParams.get("inputAmount") || "";
   const emptyWallet = searchParams.get("emptyWallet") === "true";
+  const manualOnly = searchParams.get("manualOnly") === "true";
 
   const [recipientWalletId, setRecipientWalletId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -271,23 +272,27 @@ export default function SendLanaRecipient() {
         </CardHeader>
         <CardContent className="space-y-6">
           <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className={`grid w-full ${manualOnly ? 'grid-cols-2' : 'grid-cols-4'}`}>
               <TabsTrigger value="manual">
                 <User className="h-4 w-4 mr-2" />
                 Manual
               </TabsTrigger>
-              <TabsTrigger value="mywallets">
-                <Wallet className="h-4 w-4 mr-2" />
-                My Wallets
-              </TabsTrigger>
+              {!manualOnly && (
+                <TabsTrigger value="mywallets">
+                  <Wallet className="h-4 w-4 mr-2" />
+                  My Wallets
+                </TabsTrigger>
+              )}
               <TabsTrigger value="scan">
                 <Scan className="h-4 w-4 mr-2" />
                 Scan QR
               </TabsTrigger>
-              <TabsTrigger value="search">
-                <Search className="h-4 w-4 mr-2" />
-                Search
-              </TabsTrigger>
+              {!manualOnly && (
+                <TabsTrigger value="search">
+                  <Search className="h-4 w-4 mr-2" />
+                  Search
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="manual" className="space-y-4">

@@ -23,6 +23,7 @@ export default function SendLana() {
 
   const walletId = searchParams.get("walletId") || "";
   const walletBalance = parseFloat(searchParams.get("balance") || "0");
+  const manualOnly = searchParams.get("manualOnly") === "true";
 
   // Send Amount state
   const [selectedCurrency, setSelectedCurrency] = useState<"EUR" | "USD" | "GBP" | "LANA" | "">("");
@@ -100,11 +101,11 @@ export default function SendLana() {
   const handleContinueSend = () => {
     if (!inputAmount || calculatedLana <= 0) { setError("Please enter an amount"); return; }
     if (calculatedLana > walletBalance) { setError(`Insufficient balance. You have ${walletBalance.toFixed(2)} LANA available.`); return; }
-    navigate(`/send-lana/recipient?walletId=${walletId}&amount=${calculatedLana}&currency=${selectedCurrency}&inputAmount=${inputAmount}`);
+    navigate(`/send-lana/recipient?walletId=${walletId}&amount=${calculatedLana}&currency=${selectedCurrency}&inputAmount=${inputAmount}${manualOnly ? '&manualOnly=true' : ''}`);
   };
 
   const handleContinueEmpty = () => {
-    navigate(`/send-lana/recipient?walletId=${walletId}&amount=${netAmountLana}&currency=LANA&inputAmount=${netAmountLana}&emptyWallet=true`);
+    navigate(`/send-lana/recipient?walletId=${walletId}&amount=${netAmountLana}&currency=LANA&inputAmount=${netAmountLana}&emptyWallet=true${manualOnly ? '&manualOnly=true' : ''}`);
   };
 
   const formatNumber = (num: number) => num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
