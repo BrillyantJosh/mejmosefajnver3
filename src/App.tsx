@@ -77,9 +77,6 @@ import CreateProject from "./pages/100millionideas/CreateProject";
 import MyProjects from "./pages/100millionideas/MyProjects";
 import EditProject from "./pages/100millionideas/EditProject";
 import BatchFunding from "./pages/100millionideas/BatchFunding";
-import OfflineLanaLayout from "./pages/offlinelana/OfflineLanaLayout";
-import GenerateWallet from "./pages/offlinelana/GenerateWallet";
-import OfflineWallets from "./pages/offlinelana/OfflineWallets";
 import LanaEventsLayout from "./pages/events/LanaEventsLayout";
 import OnlineEvents from "./pages/events/OnlineEvents";
 import LiveEvents from "./pages/events/LiveEvents";
@@ -136,6 +133,12 @@ import PublicProposal from "./pages/PublicProposal";
 import PublicHome from "./pages/PublicHome";
 
 const queryClient = new QueryClient();
+
+// Redirect to external URL and navigate back to modules
+const ExternalRedirect = ({ url }: { url: string }) => {
+  window.location.href = url;
+  return null;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -245,11 +248,7 @@ const App = () => (
           <Route path="edit-project/:projectId" element={<EditProject />} />
           <Route path="batch-funding" element={<BatchFunding />} />
         </Route>
-        <Route path="/offline-lana" element={<OfflineLanaLayout />}>
-          <Route index element={<Navigate to="/offline-lana/generate" replace />} />
-          <Route path="generate" element={<GenerateWallet />} />
-          <Route path="offline-wallets" element={<OfflineWallets />} />
-        </Route>
+        <Route path="/offline-lana/*" element={<ExternalRedirect url="https://lanapaper.online" />} />
         <Route path="/events" element={<LanaEventsLayout />}>
           <Route index element={<Navigate to="/events/online" replace />} />
           <Route path="online" element={<OnlineEvents />} />
