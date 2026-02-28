@@ -266,6 +266,14 @@ export function initializeSchema(db: Database.Database): void {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS loss_reports (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      nostr_hex_id TEXT NOT NULL,
+      wallet_address TEXT NOT NULL,
+      description TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- =============================================
     -- INDEXES
     -- =============================================
@@ -309,7 +317,9 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_pending_nostr_events_user ON pending_nostr_events(user_pubkey);
     CREATE INDEX IF NOT EXISTS idx_whats_up_created ON whats_up(created_at);
     CREATE INDEX IF NOT EXISTS idx_faq_order ON faq(display_order);
+    CREATE INDEX IF NOT EXISTS idx_loss_reports_nostr ON loss_reports(nostr_hex_id);
+    CREATE INDEX IF NOT EXISTS idx_loss_reports_created ON loss_reports(created_at);
   `);
 
-  console.log('SQLite schema initialized (22 tables + indexes)');
+  console.log('SQLite schema initialized (23 tables + indexes)');
 }
