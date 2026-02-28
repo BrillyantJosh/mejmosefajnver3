@@ -16,16 +16,16 @@ export default function SplitWatcherLayout() {
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-        <div className="container px-3 md:px-4 py-3 md:py-4">
+        <div className="container px-3 md:px-4 py-2 md:py-4">
           <h1 className="text-2xl md:text-3xl font-bold">SPLIT Watcher</h1>
-          <p className="text-sm md:text-base text-muted-foreground mt-1">
+          <p className="text-sm md:text-base text-muted-foreground mt-0.5 md:mt-1">
             Monitor SPLIT parameters and accounts
           </p>
         </div>
       </div>
 
       {/* Content */}
-      <div className="container px-3 md:px-4 py-4 md:py-6">
+      <div className="container px-3 md:px-4 py-3 md:py-6">
         <Outlet />
       </div>
 

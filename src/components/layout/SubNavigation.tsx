@@ -21,7 +21,7 @@ export default function SubNavigation({ items, variant = "top", onActionClick, a
   if (variant === "bottom") {
     return (
       <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 pb-safe">
-        <div className="flex justify-around items-center h-16 max-w-7xl mx-auto">
+        <div className="flex items-center h-16 max-w-7xl mx-auto overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {items.map((item, index) => {
             const isActive = !item.href && location.pathname === item.path;
             const Icon = item.icon;
@@ -49,10 +49,10 @@ export default function SubNavigation({ items, variant = "top", onActionClick, a
                     href={item.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex flex-col items-center justify-center gap-1 px-3 py-2 flex-1 transition-colors text-muted-foreground hover:text-foreground"
+                    className="flex flex-col items-center justify-center gap-0.5 px-2 py-2 min-w-[56px] transition-colors text-muted-foreground hover:text-foreground"
                   >
                     {Icon && <Icon className="h-5 w-5" />}
-                    <span className="text-xs font-medium">{item.title}</span>
+                    <span className="text-[0.65rem] font-medium whitespace-nowrap">{item.title}</span>
                   </a>
                 </div>
               );
@@ -73,14 +73,14 @@ export default function SubNavigation({ items, variant = "top", onActionClick, a
                 )}
                 <Link
                   to={item.path}
-                  className={`flex flex-col items-center justify-center gap-1 px-3 py-2 flex-1 transition-colors ${
+                  className={`flex flex-col items-center justify-center gap-0.5 px-2 py-2 min-w-[56px] transition-colors ${
                     isActive
                       ? "text-orange-600 dark:text-orange-400"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {Icon && <Icon className="h-5 w-5" />}
-                  <span className="text-xs font-medium">{item.title}</span>
+                  <span className="text-[0.65rem] font-medium whitespace-nowrap">{item.title}</span>
                 </Link>
               </div>
             );

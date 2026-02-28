@@ -54,7 +54,7 @@ export default function SplitWatcherGeneral() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-16">
+      <div className="flex justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -65,17 +65,17 @@ export default function SplitWatcherGeneral() {
     : null;
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-4 md:space-y-6 max-w-2xl mx-auto">
       {/* Split Number */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-orange-500" />
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm md:text-base flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-orange-500" />
             Current SPLIT
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-4xl font-bold text-orange-500">
+          <p className="text-3xl md:text-4xl font-bold text-orange-500">
             {parameters?.split || "—"}
           </p>
         </CardContent>
@@ -83,14 +83,14 @@ export default function SplitWatcherGeneral() {
 
       {/* Start Date + Days in Split */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-blue-500" />
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm md:text-base flex items-center gap-2">
+            <Calendar className="h-4 w-4 md:h-5 md:w-5 text-blue-500" />
             Start Date
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-2xl font-semibold">
+        <CardContent className="space-y-2 md:space-y-3">
+          <p className="text-xl md:text-2xl font-semibold">
             {parameters?.splitStartedAt ? formatDate(parameters.splitStartedAt) : "—"}
           </p>
           {daysInSplit !== null && (
@@ -106,16 +106,16 @@ export default function SplitWatcherGeneral() {
 
       {/* Max Amount Target */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Target className="h-5 w-5 text-red-500" />
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm md:text-base flex items-center gap-2">
+            <Target className="h-4 w-4 md:h-5 md:w-5 text-red-500" />
             Max Amount Target
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-2xl font-semibold">
+          <p className="text-xl md:text-2xl font-semibold">
             {maxAmount !== null ? (
-              <span>{maxAmount.toLocaleString("en-US")} <span className="text-base text-muted-foreground">LANA</span></span>
+              <span>{maxAmount.toLocaleString("en-US")} <span className="text-sm md:text-base text-muted-foreground">LANA</span></span>
             ) : (
               "—"
             )}
@@ -125,29 +125,29 @@ export default function SplitWatcherGeneral() {
 
       {/* Exchange Rates */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-green-500" />
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm md:text-base flex items-center gap-2">
+            <DollarSign className="h-4 w-4 md:h-5 md:w-5 text-green-500" />
             Exchange Rates
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-secondary/50 rounded-lg p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">EUR per LANA</p>
-              <p className="text-xl font-bold">
+          <div className="grid grid-cols-3 gap-2 md:gap-4">
+            <div className="bg-secondary/50 rounded-lg p-2.5 md:p-4 text-center">
+              <p className="text-[0.65rem] md:text-xs text-muted-foreground mb-1">EUR / LANA</p>
+              <p className="text-base md:text-xl font-bold">
                 €{parameters?.exchangeRates?.EUR?.toFixed(6) ?? "—"}
               </p>
             </div>
-            <div className="bg-secondary/50 rounded-lg p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">USD per LANA</p>
-              <p className="text-xl font-bold">
+            <div className="bg-secondary/50 rounded-lg p-2.5 md:p-4 text-center">
+              <p className="text-[0.65rem] md:text-xs text-muted-foreground mb-1">USD / LANA</p>
+              <p className="text-base md:text-xl font-bold">
                 ${parameters?.exchangeRates?.USD?.toFixed(6) ?? "—"}
               </p>
             </div>
-            <div className="bg-secondary/50 rounded-lg p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">GBP per LANA</p>
-              <p className="text-xl font-bold">
+            <div className="bg-secondary/50 rounded-lg p-2.5 md:p-4 text-center">
+              <p className="text-[0.65rem] md:text-xs text-muted-foreground mb-1">GBP / LANA</p>
+              <p className="text-base md:text-xl font-bold">
                 £{parameters?.exchangeRates?.GBP?.toFixed(6) ?? "—"}
               </p>
             </div>
