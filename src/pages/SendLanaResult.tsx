@@ -236,6 +236,46 @@ export default function SendLanaResult() {
                 Back to Wallet
               </Button>
             </>
+          ) : error?.includes('TOO_MANY_UTXOS') ? (
+            <>
+              {/* Too Many UTXOs - Consolidation Required */}
+              <Alert variant="destructive">
+                <AlertDescription className="space-y-2">
+                  <p className="font-semibold">Too many UTXOs in your wallet</p>
+                  <p className="text-sm">
+                    Your wallet contains too many unspent transaction outputs (UTXOs).
+                    The network cannot process transactions with this many inputs.
+                  </p>
+                </AlertDescription>
+              </Alert>
+
+              <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                <p className="text-sm font-medium">What to do:</p>
+                <p className="text-sm text-muted-foreground">
+                  Before sending, you need to consolidate your wallet first.
+                  Use the Registrar to combine your UTXOs into fewer, larger ones.
+                  After consolidation, you can retry the transaction.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <Button
+                  className="w-full"
+                  onClick={() => window.open('https://www.lanawatch.us', '_blank')}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open Registrar to Consolidate
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => navigate('/wallet')}
+                >
+                  Back to Wallet
+                </Button>
+              </div>
+            </>
           ) : (
             <>
               {/* Error Details */}
@@ -249,10 +289,10 @@ export default function SendLanaResult() {
               <div className="p-4 bg-muted/50 rounded-lg space-y-3">
                 <p className="text-sm font-medium">Most Common Reason:</p>
                 <p className="text-sm text-muted-foreground">
-                  The previous transaction has not yet been processed in a block. 
+                  The previous transaction has not yet been processed in a block.
                   The network requires the previous block to be confirmed before accepting a new transaction.
                 </p>
-                
+
                 {currentBlockHeight && (
                   <div className="mt-4 pt-4 border-t space-y-2">
                     <div className="flex items-center gap-2">
@@ -261,7 +301,7 @@ export default function SendLanaResult() {
                       <span className="font-mono text-sm">{currentBlockHeight}</span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Block processing can take anywhere from a few minutes to up to 2 hours. 
+                      Block processing can take anywhere from a few minutes to up to 2 hours.
                       You will be able to retry once a new block has been mined.
                     </p>
                   </div>

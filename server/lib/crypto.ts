@@ -465,7 +465,7 @@ interface Recipient {
 }
 
 class UTXOSelector {
-  static MAX_INPUTS = 20;
+  static MAX_INPUTS = 8; // Reduced from 20 — LanaCoin daemon rejects large TXs (>~2KB with uncompressed keys)
   static DUST_THRESHOLD = 500000; // 0.005 LANA = 500,000 satoshis
 
   static selectUTXOs(utxos: UTXO[], totalNeeded: number): { selected: UTXO[]; totalValue: number } {
@@ -928,6 +928,15 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
       const totalBalance = utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0);
       console.log(`💰 Total balance: ${totalBalance} satoshis`);
 
+      // Check if wallet needs consolidation before emptying
+      if (utxos.length > UTXOSelector.MAX_INPUTS) {
+        console.warn(`⚠️ TOO_MANY_UTXOS: wallet has ${utxos.length} UTXOs but max is ${UTXOSelector.MAX_INPUTS}`);
+        return {
+          success: false,
+          error: `TOO_MANY_UTXOS: Your wallet has ${utxos.length} UTXOs but the maximum per transaction is ${UTXOSelector.MAX_INPUTS}. Please consolidate your wallet using Registrar before sending.`
+        };
+      }
+
       const estimatedInputCount = Math.min(utxos.length, UTXOSelector.MAX_INPUTS);
       const outputCount = 1;
       fee = Math.floor((estimatedInputCount * 180 + outputCount * 34 + 10) * 100 * 1.5);
@@ -995,6 +1004,15 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
     }
 
     if (totalSelected < totalAmountSatoshis + fee) {
+      // Check if the wallet has enough total balance but too many small UTXOs
+      const totalBalance = utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0);
+      if (totalBalance >= totalAmountSatoshis + fee && utxos.length > UTXOSelector.MAX_INPUTS) {
+        console.warn(`⚠️ TOO_MANY_UTXOS: wallet has ${utxos.length} UTXOs, selected ${selectedUTXOs.length} but need more`);
+        return {
+          success: false,
+          error: `TOO_MANY_UTXOS: Your wallet has ${utxos.length} UTXOs but the maximum per transaction is ${UTXOSelector.MAX_INPUTS}. Please consolidate your wallet using Registrar before sending.`
+        };
+      }
       throw new Error(`Insufficient funds: need ${totalAmountSatoshis + fee} satoshis, have ${totalSelected}`);
     }
 
@@ -1010,6 +1028,7 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
       servers
     );
     console.log('✍️ Transaction signed successfully');
+    console.log(`📊 Raw TX: ${signedTx.length / 2} bytes`);
 
     // Broadcast
     console.log('🚀 Broadcasting transaction...');
@@ -1179,6 +1198,15 @@ export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Pro
     }
 
     if (totalSelected < totalAmountSatoshis + fee) {
+      // Check if the wallet has enough total balance but too many small UTXOs
+      const totalBalance = utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0);
+      if (totalBalance >= totalAmountSatoshis + fee && utxos.length > UTXOSelector.MAX_INPUTS) {
+        console.warn(`⚠️ TOO_MANY_UTXOS: wallet has ${utxos.length} UTXOs, selected ${selectedUTXOs.length} but need more`);
+        return {
+          success: false,
+          error: `TOO_MANY_UTXOS: Your wallet has ${utxos.length} UTXOs but the maximum per transaction is ${UTXOSelector.MAX_INPUTS}. Please consolidate your wallet using Registrar before sending.`
+        };
+      }
       throw new Error(`Insufficient funds: need ${totalAmountSatoshis + fee} satoshis, have ${totalSelected}`);
     }
 
@@ -1194,6 +1222,7 @@ export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Pro
       servers
     );
     console.log('✍️ Batch transaction signed successfully');
+    console.log(`📊 Raw TX: ${signedTx.length / 2} bytes`);
 
     // Broadcast
     console.log('🚀 Broadcasting batch transaction...');
