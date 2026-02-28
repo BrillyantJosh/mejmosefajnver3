@@ -612,7 +612,8 @@ export async function buildSignedTx(
   recipients: Recipient[],
   fee: number,
   changeAddress: string,
-  servers: Array<{ host: string; port: number }>
+  servers: Array<{ host: string; port: number }>,
+  useCompressed?: boolean
 ): Promise<BuildTxResult> {
   console.log(`🔨 Building transaction with ${selectedUTXOs.length} pre-selected UTXOs...`);
   console.log(`📊 Recipients: ${recipients.length} outputs`);
@@ -631,10 +632,12 @@ export async function buildSignedTx(
     const privateKeyBytes = base58CheckDecode(normalizedKey);
     const privateKeyHex = uint8ArrayToHex(privateKeyBytes.slice(1, 33));
 
-    // Always use UNCOMPRESSED public key (same as working Deno edge function)
-    const publicKey = privateKeyToUncompressedPublicKey(privateKeyHex);
+    // Use compressed or uncompressed public key depending on address format
+    const publicKey = useCompressed
+      ? privateKeyToPublicKey(privateKeyHex)
+      : privateKeyToUncompressedPublicKey(privateKeyHex);
 
-    console.log(`🔑 Public key derived (uncompressed, ${publicKey.length} bytes)`);
+    console.log(`🔑 Public key derived (${useCompressed ? 'compressed' : 'uncompressed'}, ${publicKey.length} bytes)`);
 
     // Build recipient outputs
     const outputs: Uint8Array[] = [];
@@ -877,7 +880,6 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
     }
 
     // Validate private key matches sender address
-    // Use UNCOMPRESSED public key (same as working Deno edge function)
     const normalizedKey = normalizeWif(privateKey);
     const privateKeyBytes = base58CheckDecode(normalizedKey);
     const privateKeyHex = uint8ArrayToHex(privateKeyBytes.slice(1, 33));
@@ -886,6 +888,8 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
 
     console.log(`📍 Expected address from private key (uncompressed): ${expectedAddress}`);
     console.log(`📍 Actual sender address: ${senderAddress}`);
+
+    let useCompressed = false;
 
     if (expectedAddress !== senderAddress) {
       // Also try compressed as fallback
@@ -898,6 +902,8 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
           `Private key does not match sender address. Expected: ${expectedAddress} or ${compressedAddress}, Got: ${senderAddress}`
         );
       }
+      useCompressed = true;
+      console.log('📍 Using COMPRESSED public key for this transaction');
     }
 
     console.log('✅ Private key validation passed');
@@ -1025,7 +1031,8 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
       recipients,
       fee,
       senderAddress,
-      servers
+      servers,
+      useCompressed
     );
     console.log('✍️ Transaction signed successfully');
     console.log(`📊 Raw TX: ${signedTx.length / 2} bytes`);
@@ -1133,6 +1140,8 @@ export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Pro
     const generatedPubKey = privateKeyToUncompressedPublicKey(privateKeyHex);
     const expectedAddress = publicKeyToAddress(generatedPubKey);
 
+    let useCompressed = false;
+
     if (expectedAddress !== senderAddress) {
       const compressedPubKey = privateKeyToPublicKey(privateKeyHex);
       const compressedAddress = publicKeyToAddress(compressedPubKey);
@@ -1141,6 +1150,8 @@ export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Pro
           `Private key does not match sender address. Expected: ${expectedAddress} or ${compressedAddress}, Got: ${senderAddress}`
         );
       }
+      useCompressed = true;
+      console.log('📍 Using COMPRESSED public key for batch transaction');
     }
     console.log('✅ Private key validation passed');
 
@@ -1219,7 +1230,8 @@ export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Pro
       recipients,
       fee,
       senderAddress,
-      servers
+      servers,
+      useCompressed
     );
     console.log('✍️ Batch transaction signed successfully');
     console.log(`📊 Raw TX: ${signedTx.length / 2} bytes`);
