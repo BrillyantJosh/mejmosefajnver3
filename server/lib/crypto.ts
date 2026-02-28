@@ -465,7 +465,7 @@ interface Recipient {
 }
 
 class UTXOSelector {
-  static MAX_INPUTS = 8; // Reduced from 20 — LanaCoin daemon rejects large TXs (>~2KB with uncompressed keys)
+  static MAX_INPUTS = 20;
   static DUST_THRESHOLD = 500000; // 0.005 LANA = 500,000 satoshis
 
   static selectUTXOs(utxos: UTXO[], totalNeeded: number): { selected: UTXO[]; totalValue: number } {
