@@ -6,11 +6,21 @@ import { Label } from "@/components/ui/label";
 import { Copy, Download, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import QRCode from "react-qr-code";
-import { generateRandomPrivateKey, privateKeyToWIF, generateCompressedPublicKey, generateLanaAddress } from "@/lib/crypto";
+import {
+  generateRandomPrivateKey,
+  privateKeyToWIF,
+  generatePublicKey,
+  generateLanaAddress,
+  deriveNostrPublicKey,
+  hexToNpub
+} from "@/lib/crypto";
 
 const GenerateWallet = () => {
   const [privateKeyWIF, setPrivateKeyWIF] = useState("");
+  const [privateKeyHex, setPrivateKeyHex] = useState("");
   const [lanaAddress, setLanaAddress] = useState("");
+  const [nostrHexId, setNostrHexId] = useState("");
+  const [nostrNpubId, setNostrNpubId] = useState("");
   const [description, setDescription] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
@@ -20,20 +30,27 @@ const GenerateWallet = () => {
     setIsGenerating(true);
     try {
       // Generate random 32-byte private key
-      const privateKeyHex = generateRandomPrivateKey();
-      
-      // Convert to WIF format
-      const wif = await privateKeyToWIF(privateKeyHex);
-      
-      // Generate compressed public key (matches server-side address derivation)
-      const publicKeyHex = generateCompressedPublicKey(privateKeyHex);
+      const privKeyHex = generateRandomPrivateKey();
 
-      // Generate LanaCoin address
+      // Convert to WIF format
+      const wif = await privateKeyToWIF(privKeyHex);
+
+      // Generate UNCOMPRESSED public key (matches server-side transaction signing)
+      const publicKeyHex = generatePublicKey(privKeyHex);
+
+      // Generate LanaCoin address from uncompressed public key
       const address = await generateLanaAddress(publicKeyHex);
-      
+
+      // Derive Nostr keys
+      const nostrHex = deriveNostrPublicKey(privKeyHex);
+      const nostrNpub = hexToNpub(nostrHex);
+
       setPrivateKeyWIF(wif);
+      setPrivateKeyHex(privKeyHex);
       setLanaAddress(address);
-      
+      setNostrHexId(nostrHex);
+      setNostrNpubId(nostrNpub);
+
       toast({
         title: "Wallet Generated",
         description: "Your new LanaCoin wallet has been created successfully.",
@@ -90,48 +107,51 @@ const GenerateWallet = () => {
               font-size: 20px;
             }
             .wallet-section {
-              margin: 15px 0;
-              padding: 12px;
+              margin: 12px 0;
+              padding: 10px;
               border: 2px solid #333;
               border-radius: 8px;
               page-break-inside: avoid;
             }
+            .wallet-section.secret {
+              border-color: #c00;
+            }
             .label {
               font-weight: bold;
-              font-size: 12px;
+              font-size: 11px;
               color: #666;
-              margin-bottom: 5px;
+              margin-bottom: 4px;
             }
             .value {
               font-family: monospace;
-              font-size: 10px;
+              font-size: 9px;
               word-break: break-all;
-              margin-bottom: 10px;
-              padding: 8px;
+              margin-bottom: 8px;
+              padding: 6px;
               background: #f5f5f5;
               border-radius: 4px;
             }
             .qr-container {
               display: flex;
               justify-content: center;
-              margin: 10px 0;
-              padding: 8px;
+              margin: 8px 0;
+              padding: 6px;
               background: white;
             }
             .description {
               margin-top: 10px;
-              padding: 10px;
+              padding: 8px;
               background: #fffbea;
               border-radius: 4px;
-              font-size: 12px;
+              font-size: 11px;
             }
             .warning {
-              margin-top: 15px;
-              padding: 10px;
+              margin-top: 12px;
+              padding: 8px;
               background: #fee;
               border: 1px solid #fcc;
               border-radius: 4px;
-              font-size: 10px;
+              font-size: 9px;
             }
             @media print {
               body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -140,9 +160,9 @@ const GenerateWallet = () => {
         </head>
         <body>
           <h1>LanaCoin Paper Wallet</h1>
-          
+
           ${description ? `<div class="description"><strong>Description:</strong> ${description}</div>` : ''}
-          
+
           <div class="wallet-section">
             <div class="label">LanaCoin Address (Public):</div>
             <div class="value">${lanaAddress}</div>
@@ -150,21 +170,36 @@ const GenerateWallet = () => {
               ${printRef.current?.querySelector('#address-qr')?.outerHTML || ''}
             </div>
           </div>
-          
+
           <div class="wallet-section">
+            <div class="label">Nostr Public Key (HEX):</div>
+            <div class="value">${nostrHexId}</div>
+          </div>
+
+          <div class="wallet-section">
+            <div class="label">Nostr Public Key (npub):</div>
+            <div class="value">${nostrNpubId}</div>
+          </div>
+
+          <div class="wallet-section secret">
             <div class="label">Private Key (WIF) - KEEP SECRET:</div>
             <div class="value">${privateKeyWIF}</div>
             <div class="qr-container">
               ${printRef.current?.querySelector('#private-qr')?.outerHTML || ''}
             </div>
           </div>
-          
+
+          <div class="wallet-section secret">
+            <div class="label">Private Key (HEX) - KEEP SECRET:</div>
+            <div class="value">${privateKeyHex}</div>
+          </div>
+
           <div class="warning">
-            <strong>⚠️ SECURITY WARNING:</strong><br>
-            • Store this paper wallet in a secure location<br>
-            • Never share your private key with anyone<br>
-            • Anyone with access to the private key can access your funds<br>
-            • Make backup copies and store them separately
+            <strong>SECURITY WARNING:</strong><br>
+            Store this paper wallet in a secure location.
+            Never share your private keys with anyone.
+            Anyone with access to the private key can access your funds.
+            Make backup copies and store them separately.
           </div>
         </body>
       </html>
@@ -172,7 +207,7 @@ const GenerateWallet = () => {
 
     printWindow.document.write(printContent);
     printWindow.document.close();
-    
+
     // Wait for content to load before printing
     setTimeout(() => {
       printWindow.print();
@@ -182,7 +217,7 @@ const GenerateWallet = () => {
   return (
     <div className="container mx-auto p-4 max-w-4xl">
       <h1 className="text-2xl font-bold mb-6">Generate LanaCoin Wallet</h1>
-      
+
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Offline Paper Wallet Generator</CardTitle>
@@ -198,8 +233,8 @@ const GenerateWallet = () => {
             />
           </div>
 
-          <Button 
-            onClick={handleGenerateWallet} 
+          <Button
+            onClick={handleGenerateWallet}
             disabled={isGenerating}
             className="w-full"
             size="lg"
@@ -212,6 +247,7 @@ const GenerateWallet = () => {
 
       {lanaAddress && privateKeyWIF && (
         <div ref={printRef} className="space-y-6">
+          {/* LanaCoin Address */}
           <Card>
             <CardHeader>
               <CardTitle className="text-green-600">LanaCoin Address (Public)</CardTitle>
@@ -239,6 +275,49 @@ const GenerateWallet = () => {
             </CardContent>
           </Card>
 
+          {/* Nostr Public Key (HEX) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-blue-600">Nostr Public Key (HEX)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="font-mono text-sm break-all bg-muted p-4 rounded-md">
+                {nostrHexId}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => copyToClipboard(nostrHexId, "Nostr Public Key (HEX)")}
+                className="mt-2"
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy Nostr HEX
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Nostr Public Key (npub) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-blue-600">Nostr Public Key (npub)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="font-mono text-sm break-all bg-muted p-4 rounded-md">
+                {nostrNpubId}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => copyToClipboard(nostrNpubId, "Nostr Public Key (npub)")}
+                className="mt-2"
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy npub
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Private Key (WIF) */}
           <Card>
             <CardHeader>
               <CardTitle className="text-red-600">Private Key (WIF) - Keep Secret!</CardTitle>
@@ -252,23 +331,47 @@ const GenerateWallet = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => copyToClipboard(privateKeyWIF, "Private Key")}
+                    onClick={() => copyToClipboard(privateKeyWIF, "Private Key (WIF)")}
                     className="mt-2"
                   >
                     <Copy className="h-4 w-4 mr-2" />
-                    Copy Private Key
+                    Copy WIF
                   </Button>
                 </div>
                 <div id="private-qr" className="bg-white p-4 rounded-lg border">
                   <QRCode value={privateKeyWIF} size={150} />
                 </div>
               </div>
-              <div className="bg-destructive/10 border border-destructive/20 rounded-md p-4 text-sm">
-                <strong className="text-destructive">⚠️ Warning:</strong> Never share your private key with anyone. 
-                Anyone with this key can access and spend your funds.
-              </div>
             </CardContent>
           </Card>
+
+          {/* Private Key (HEX) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-red-600">Private Key (HEX) - Keep Secret!</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="font-mono text-sm break-all bg-muted p-4 rounded-md">
+                {privateKeyHex}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => copyToClipboard(privateKeyHex, "Private Key (HEX)")}
+                className="mt-2"
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy HEX
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Security Warning */}
+          <div className="bg-destructive/10 border border-destructive/20 rounded-md p-4 text-sm">
+            <strong className="text-destructive">⚠️ Warning:</strong> Never share your private keys with anyone.
+            Anyone with the WIF or HEX private key can access and spend your funds.
+            Store your paper wallet in a secure location and make backup copies.
+          </div>
 
           <Button
             onClick={handlePrint}

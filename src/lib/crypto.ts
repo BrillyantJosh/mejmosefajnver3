@@ -171,7 +171,7 @@ export function generateCompressedPublicKey(privateKeyHex: string): string {
 }
 
 // Generate compressed public key for Nostr (x-only)
-function deriveNostrPublicKey(privateKeyHex: string): string {
+export function deriveNostrPublicKey(privateKeyHex: string): string {
   const keyPair = ec.keyFromPrivate(privateKeyHex);
   const pubKeyPoint = keyPair.getPublic();
   
@@ -201,7 +201,7 @@ export async function generateLanaAddress(publicKeyHex: string): Promise<string>
 }
 
 // Convert hex public key to npub format
-function hexToNpub(hexPubKey: string): string {
+export function hexToNpub(hexPubKey: string): string {
   const data = hexToBytes(hexPubKey);
   const words = bech32.toWords(data);
   return bech32.encode('npub', words);
