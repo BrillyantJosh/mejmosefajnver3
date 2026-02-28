@@ -117,6 +117,7 @@ export function initializeSchema(db: Database.Database): void {
       version TEXT,
       valid_from INTEGER,
       split_started_at INTEGER,
+      split_target_lana INTEGER,
       trusted_signers TEXT,
       raw_event TEXT NOT NULL
     );
