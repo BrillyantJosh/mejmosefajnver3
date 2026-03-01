@@ -321,7 +321,14 @@ router.post('/:table', (req: Request, res: Response) => {
 
         try {
           const result = db.prepare(sql).run(...values);
-          results.push({ ...item, _changes: result.changes });
+          // Read back inserted row to get auto-generated fields (like DEFAULT id)
+          if (result.changes > 0) {
+            const rowid = result.lastInsertRowid;
+            const inserted = db.prepare(`SELECT * FROM "${table}" WHERE rowid = ?`).get(rowid);
+            results.push(inserted || { ...item, _changes: result.changes });
+          } else {
+            results.push({ ...item, _changes: result.changes });
+          }
         } catch (insertError: any) {
           // If UNIQUE constraint violation on non-upsert, skip or throw
           if (insertError.message.includes('UNIQUE constraint') && ignoreDuplicates) {
