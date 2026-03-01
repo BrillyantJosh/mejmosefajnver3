@@ -270,6 +270,8 @@ export function initializeSchema(db: Database.Database): void {
       id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
       nostr_hex_id TEXT NOT NULL,
       wallet_address TEXT NOT NULL,
+      wallet_note TEXT DEFAULT '',
+      balance REAL DEFAULT 0,
       description TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -320,6 +322,15 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_loss_reports_nostr ON loss_reports(nostr_hex_id);
     CREATE INDEX IF NOT EXISTS idx_loss_reports_created ON loss_reports(created_at);
   `);
+
+  // Migrations for existing databases
+  const migrations = [
+    `ALTER TABLE loss_reports ADD COLUMN wallet_note TEXT DEFAULT ''`,
+    `ALTER TABLE loss_reports ADD COLUMN balance REAL DEFAULT 0`,
+  ];
+  for (const sql of migrations) {
+    try { db.exec(sql); } catch (_) { /* column already exists */ }
+  }
 
   console.log('SQLite schema initialized (23 tables + indexes)');
 }

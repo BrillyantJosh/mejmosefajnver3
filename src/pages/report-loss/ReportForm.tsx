@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
+import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, AlertTriangle, Send, Wallet } from "lucide-react";
@@ -14,6 +15,8 @@ import { Loader2, AlertTriangle, Send, Wallet } from "lucide-react";
 export default function ReportForm() {
   const { session } = useAuth();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
+  const walletAddresses = wallets.map((w) => w.walletId);
+  const { balances, isLoading: balancesLoading } = useWalletBalances(walletAddresses);
   const [selectedWallets, setSelectedWallets] = useState<Set<string>>(new Set());
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,9 +48,13 @@ export default function ReportForm() {
     try {
       // Insert one row per selected wallet
       for (const walletAddress of selectedWallets) {
+        const wallet = wallets.find(w => w.walletId === walletAddress);
+        const bal = balances.get(walletAddress) || 0;
         const { error } = await supabase.from("loss_reports").insert({
           nostr_hex_id: session.nostrHexId,
           wallet_address: walletAddress,
+          wallet_note: wallet?.note || '',
+          balance: bal,
           description: description.trim(),
         });
         if (error) throw error;
@@ -121,9 +128,23 @@ export default function ReportForm() {
                 />
                 <div className="flex-1 min-w-0">
                   <p className="font-mono text-sm truncate">{wallet.walletId}</p>
-                  {wallet.walletType && (
-                    <p className="text-xs text-muted-foreground capitalize">
-                      {wallet.walletType}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {wallet.walletType && (
+                      <p className="text-xs text-muted-foreground capitalize">
+                        {wallet.walletType}
+                      </p>
+                    )}
+                    {wallet.note && (
+                      <p className="text-xs text-muted-foreground">
+                        · {wallet.note}
+                      </p>
+                    )}
+                  </div>
+                  {!balancesLoading && balances.has(wallet.walletId) && (
+                    <p className="text-xs font-medium mt-0.5">
+                      Balance: <span className="text-primary">
+                        {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balances.get(wallet.walletId) || 0)} LANA
+                      </span>
                     </p>
                   )}
                 </div>
