@@ -16,6 +16,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
+import { useNostrUnregisteredWallets } from "@/hooks/useNostrUnregisteredWallets";
 import { COMMON_TIMEZONES, DEFAULT_TIMEZONE, getTimezoneOffset } from "@/lib/timezones";
 
 const EVENT_TYPES = [
@@ -42,12 +43,18 @@ export default function EditEvent() {
   const { session } = useAuth();
   const { parameters: systemParameters } = useSystemParameters();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
-  
+  const { lists: unregLists, isLoading: unregLoading } = useNostrUnregisteredWallets();
+
   // Filter out excluded wallet types
   const EXCLUDED_WALLET_TYPES = ['LanaPays.Us', 'Knights', 'Lana8Wonder'];
   const availableWallets = wallets.filter(
     w => w.status === 'active' && !EXCLUDED_WALLET_TYPES.includes(w.walletType)
   );
+
+  // Get user's unregistered wallets
+  const myUnregWallets = unregLists
+    .filter(l => l.ownerPubkey === session?.nostrHexId)
+    .flatMap(l => l.wallets);
   
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
@@ -82,6 +89,7 @@ export default function EditEvent() {
   const [coverUrl, setCoverUrl] = useState("");
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState("");
+  const [walletSource, setWalletSource] = useState<'registered' | 'unregistered'>('registered');
   const [donationWallet, setDonationWallet] = useState("");
   const [fiatValue, setFiatValue] = useState("");
   const [attachments, setAttachments] = useState<string[]>([""]);
@@ -167,6 +175,8 @@ export default function EditEvent() {
         setCoverPreview(getTagValue('cover') || '');
       }
       setDonationWallet(getTagValue('donation_wallet') || '');
+      const dwType = getTagValue('donation_wallet_type') as 'registered' | 'unregistered' | undefined;
+      if (dwType) setWalletSource(dwType);
       setFiatValue(getTagValue('fiat_value') || '');
       
       const attachmentUrls = getAllTagValues('attachment');
@@ -392,6 +402,7 @@ export default function EditEvent() {
       }
       if (donationWallet.trim()) {
         tags.push(["donation_wallet", donationWallet.trim()]);
+        tags.push(["donation_wallet_type", walletSource]);
       }
       if (fiatValue.trim()) {
         tags.push(["fiat_value", fiatValue.trim()]);
@@ -848,25 +859,62 @@ export default function EditEvent() {
                 <Wallet className="h-4 w-4" />
                 LANA Donation Wallet
               </Label>
-              <Select 
-                value={donationWallet || "none"} 
+              <div className="flex gap-1 mb-2">
+                <Button
+                  type="button"
+                  variant={walletSource === 'registered' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => { setWalletSource('registered'); setDonationWallet(''); }}
+                  className="flex-1"
+                >
+                  Registered
+                </Button>
+                <Button
+                  type="button"
+                  variant={walletSource === 'unregistered' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => { setWalletSource('unregistered'); setDonationWallet(''); }}
+                  className="flex-1"
+                >
+                  Unregistered
+                </Button>
+              </div>
+              <Select
+                value={donationWallet || "none"}
                 onValueChange={(val) => setDonationWallet(val === "none" ? "" : val)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={walletsLoading ? "Loading wallets..." : "Select wallet"} />
+                  <SelectValue placeholder={
+                    walletSource === 'registered'
+                      ? (walletsLoading ? "Loading wallets..." : "Select registered wallet")
+                      : (unregLoading ? "Loading wallets..." : "Select unregistered wallet")
+                  } />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No wallet</SelectItem>
-                  {availableWallets.map((wallet) => (
-                    <SelectItem key={wallet.walletId} value={wallet.walletId}>
-                      <div className="flex flex-col">
-                        <span className="font-mono text-sm">{wallet.walletId}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {wallet.walletType}{wallet.note ? ` - ${wallet.note}` : ''}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {walletSource === 'registered' ? (
+                    availableWallets.map((wallet) => (
+                      <SelectItem key={wallet.walletId} value={wallet.walletId}>
+                        <div className="flex flex-col">
+                          <span className="font-mono text-sm">{wallet.walletId}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {wallet.walletType}{wallet.note ? ` - ${wallet.note}` : ''}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    myUnregWallets.map((wallet) => (
+                      <SelectItem key={wallet.address} value={wallet.address}>
+                        <div className="flex flex-col">
+                          <span className="font-mono text-sm">{wallet.address}</span>
+                          {wallet.note && (
+                            <span className="text-xs text-muted-foreground">{wallet.note}</span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
