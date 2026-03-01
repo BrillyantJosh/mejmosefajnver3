@@ -99,6 +99,7 @@ function parseEvent(event: any): ParsedEvent | null {
       youtubeUrl: getTagValue('youtube'),
       fiatValue: fiatValueStr ? parseFloat(fiatValueStr) : undefined,
       donationWallet: getTagValue('donation_wallet'),
+      donationWalletUnreg: getTagValue('donation_wallet_unreg'),
       timezone: getTagValue('timezone'),
     };
   } catch (err) {

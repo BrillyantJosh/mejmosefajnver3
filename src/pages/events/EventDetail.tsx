@@ -144,6 +144,7 @@ export default function EventDetail() {
         capacity: capacityStr ? parseInt(capacityStr, 10) : undefined,
         cover: getTagValue('cover'),
         donationWallet: getTagValue('donation_wallet'),
+        donationWalletUnreg: getTagValue('donation_wallet_unreg'),
         donationWalletType: (getTagValue('donation_wallet_type') as 'registered' | 'unregistered') || undefined,
         fiatValue: fiatValueStr ? parseFloat(fiatValueStr) : undefined,
         guests: getAllTagValues('guest'),
@@ -412,7 +413,7 @@ export default function EventDetail() {
           )}
 
           {/* Value and Donation */}
-          {(event.fiatValue || event.donationWallet) && (
+          {(event.fiatValue || event.donationWallet || event.donationWalletUnreg) && (
             <div className="border-t pt-4 space-y-3">
               {event.fiatValue && (
                 <>
@@ -421,7 +422,7 @@ export default function EventDetail() {
                   </div>
                   {/* Dual pricing display */}
                   <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                    {systemParameters?.exchangeRates?.EUR && (
+                    {event.donationWallet && systemParameters?.exchangeRates?.EUR && (
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-muted-foreground">Registered LANA:</span>
                         <span className="font-semibold">
@@ -429,7 +430,7 @@ export default function EventDetail() {
                         </span>
                       </div>
                     )}
-                    {marketRate && (
+                    {event.donationWalletUnreg && marketRate && (
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-muted-foreground">Market LANA:</span>
                         <span className="font-semibold">
@@ -440,12 +441,22 @@ export default function EventDetail() {
                   </div>
                 </>
               )}
-              {event.donationWallet && (
+              {(event.donationWallet || event.donationWalletUnreg) && (
                 <>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Wallet className="h-4 w-4" />
-                    <span className="font-mono">{event.donationWallet}</span>
-                  </div>
+                  {event.donationWallet && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Wallet className="h-4 w-4" />
+                      <span>Registered:</span>
+                      <span className="font-mono truncate">{event.donationWallet}</span>
+                    </div>
+                  )}
+                  {event.donationWalletUnreg && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Wallet className="h-4 w-4" />
+                      <span>Unregistered:</span>
+                      <span className="font-mono truncate">{event.donationWalletUnreg}</span>
+                    </div>
+                  )}
                   {existingTicketId ? (
                     <Button
                       className="w-full"
