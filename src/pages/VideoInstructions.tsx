@@ -87,6 +87,11 @@ const videos = [
     question: "How to Work with Lashes?",
     youtubeId: "OuPgH14L6Z8",
   },
+  {
+    id: "report-lost-wallet",
+    question: "How to Report Lost Wallet?",
+    youtubeId: "E9G_mQdXFCY",
+  },
 ];
 
 export default function VideoInstructions() {
