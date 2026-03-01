@@ -91,6 +91,8 @@ import EventDonatePrivateKey from "./pages/events/EventDonatePrivateKey";
 import EventDonateResult from "./pages/events/EventDonateResult";
 import EventTicket from "./pages/events/EventTicket";
 import EventCheckin from "./pages/events/EventCheckin";
+import MyTickets from "./pages/events/MyTickets";
+import MyCheckins from "./pages/events/MyCheckins";
 import LanaAlignsWorldLayout from "./pages/lanaalignsworld/LanaAlignsWorldLayout";
 import ActiveAlignments from "./pages/lanaalignsworld/ActiveAlignments";
 import LanaAlignsWorldInfo from "./pages/lanaalignsworld/Info";
@@ -269,6 +271,8 @@ const App = () => (
           <Route path="donate-result" element={<EventDonateResult />} />
           <Route path="ticket/:ticketId" element={<EventTicket />} />
           <Route path="checkin/:dTag" element={<EventCheckin />} />
+          <Route path="my-tickets" element={<MyTickets />} />
+          <Route path="my-checkins" element={<MyCheckins />} />
         </Route>
         <Route path="/lana-aligns-world" element={<LanaAlignsWorldLayout />}>
           <Route index element={<Navigate to="/lana-aligns-world/info" replace />} />
