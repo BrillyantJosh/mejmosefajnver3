@@ -89,8 +89,8 @@ export default function EditEvent() {
   const [coverUrl, setCoverUrl] = useState("");
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState("");
-  const [walletSource, setWalletSource] = useState<'registered' | 'unregistered'>('registered');
   const [donationWallet, setDonationWallet] = useState("");
+  const [donationWalletUnreg, setDonationWalletUnreg] = useState("");
   const [fiatValue, setFiatValue] = useState("");
   const [attachments, setAttachments] = useState<string[]>([""]);
   
@@ -174,9 +174,20 @@ export default function EditEvent() {
       if (getTagValue('cover')) {
         setCoverPreview(getTagValue('cover') || '');
       }
-      setDonationWallet(getTagValue('donation_wallet') || '');
+      // Load both wallet types
+      const dwReg = getTagValue('donation_wallet') || '';
+      const dwUnreg = getTagValue('donation_wallet_unreg') || '';
       const dwType = getTagValue('donation_wallet_type') as 'registered' | 'unregistered' | undefined;
-      if (dwType) setWalletSource(dwType);
+
+      // Backward compat: old events stored both types in donation_wallet + donation_wallet_type
+      if (dwReg && !dwUnreg && dwType === 'unregistered') {
+        // Old event with unregistered wallet stored in donation_wallet
+        setDonationWalletUnreg(dwReg);
+        setDonationWallet('');
+      } else {
+        setDonationWallet(dwReg);
+        setDonationWalletUnreg(dwUnreg);
+      }
       setFiatValue(getTagValue('fiat_value') || '');
       
       const attachmentUrls = getAllTagValues('attachment');
@@ -402,7 +413,9 @@ export default function EditEvent() {
       }
       if (donationWallet.trim()) {
         tags.push(["donation_wallet", donationWallet.trim()]);
-        tags.push(["donation_wallet_type", walletSource]);
+      }
+      if (donationWalletUnreg.trim()) {
+        tags.push(["donation_wallet_unreg", donationWalletUnreg.trim()]);
       }
       if (fiatValue.trim()) {
         tags.push(["fiat_value", fiatValue.trim()]);
@@ -855,66 +868,57 @@ export default function EditEvent() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="donationWallet" className="flex items-center gap-2">
+              <Label className="flex items-center gap-2">
                 <Wallet className="h-4 w-4" />
-                LANA Donation Wallet
+                Registered LANA Wallet
               </Label>
-              <div className="flex gap-1 mb-2">
-                <Button
-                  type="button"
-                  variant={walletSource === 'registered' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => { setWalletSource('registered'); setDonationWallet(''); }}
-                  className="flex-1"
-                >
-                  Registered
-                </Button>
-                <Button
-                  type="button"
-                  variant={walletSource === 'unregistered' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => { setWalletSource('unregistered'); setDonationWallet(''); }}
-                  className="flex-1"
-                >
-                  Unregistered
-                </Button>
-              </div>
               <Select
                 value={donationWallet || "none"}
                 onValueChange={(val) => setDonationWallet(val === "none" ? "" : val)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={
-                    walletSource === 'registered'
-                      ? (walletsLoading ? "Loading wallets..." : "Select registered wallet")
-                      : (unregLoading ? "Loading wallets..." : "Select unregistered wallet")
-                  } />
+                  <SelectValue placeholder={walletsLoading ? "Loading wallets..." : "Select registered wallet"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No wallet</SelectItem>
-                  {walletSource === 'registered' ? (
-                    availableWallets.map((wallet) => (
-                      <SelectItem key={wallet.walletId} value={wallet.walletId}>
-                        <div className="flex flex-col">
-                          <span className="font-mono text-sm">{wallet.walletId}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {wallet.walletType}{wallet.note ? ` - ${wallet.note}` : ''}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))
-                  ) : (
-                    myUnregWallets.map((wallet) => (
-                      <SelectItem key={wallet.address} value={wallet.address}>
-                        <div className="flex flex-col">
-                          <span className="font-mono text-sm">{wallet.address}</span>
-                          {wallet.note && (
-                            <span className="text-xs text-muted-foreground">{wallet.note}</span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))
-                  )}
+                  {availableWallets.map((wallet) => (
+                    <SelectItem key={wallet.walletId} value={wallet.walletId}>
+                      <div className="flex flex-col">
+                        <span className="font-mono text-sm">{wallet.walletId}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {wallet.walletType}{wallet.note ? ` - ${wallet.note}` : ''}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Wallet className="h-4 w-4" />
+                Unregistered LANA Wallet
+              </Label>
+              <Select
+                value={donationWalletUnreg || "none"}
+                onValueChange={(val) => setDonationWalletUnreg(val === "none" ? "" : val)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={unregLoading ? "Loading wallets..." : "Select unregistered wallet"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No wallet</SelectItem>
+                  {myUnregWallets.map((wallet) => (
+                    <SelectItem key={wallet.address} value={wallet.address}>
+                      <div className="flex flex-col">
+                        <span className="font-mono text-sm">{wallet.address}</span>
+                        {wallet.note && (
+                          <span className="text-xs text-muted-foreground">{wallet.note}</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

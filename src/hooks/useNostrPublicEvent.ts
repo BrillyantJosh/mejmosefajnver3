@@ -94,6 +94,7 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
           capacity: capacityStr ? parseInt(capacityStr, 10) : undefined,
           cover: getTagValue('cover'),
           donationWallet: getTagValue('donation_wallet'),
+          donationWalletUnreg: getTagValue('donation_wallet_unreg'),
           fiatValue: fiatValueStr ? parseFloat(fiatValueStr) : undefined,
           guests: getAllTagValues('guest'),
           attachments: getAllTagValues('attachment'),

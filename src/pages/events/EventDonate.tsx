@@ -121,6 +121,7 @@ const EventDonate = () => {
         capacity: capacityStr ? parseInt(capacityStr, 10) : undefined,
         cover: getTagValue('cover'),
         donationWallet: getTagValue('donation_wallet'),
+        donationWalletUnreg: getTagValue('donation_wallet_unreg'),
         donationWalletType: (getTagValue('donation_wallet_type') as 'registered' | 'unregistered') || undefined,
         fiatValue: fiatValueStr ? parseFloat(fiatValueStr) : undefined,
         guests: getAllTagValues('guest'),
@@ -161,9 +162,18 @@ const EventDonate = () => {
           const parsed = parseEvent(latestEvent);
           setEvent(parsed);
 
-          // Lock wallet type to match event's donation wallet type (no mixing allowed)
-          if (parsed?.donationWalletType) {
-            setWalletType(parsed.donationWalletType);
+          // Determine available wallet type based on event config
+          if (parsed) {
+            const hasReg = !!parsed.donationWallet;
+            const hasUnreg = !!parsed.donationWalletUnreg;
+            // Backward compat: old events with donationWalletType
+            if (!hasReg && !hasUnreg && parsed.donationWalletType === 'unregistered') {
+              setWalletType('unregistered');
+            } else if (hasUnreg && !hasReg) {
+              setWalletType('unregistered');
+            } else {
+              setWalletType('registered');
+            }
           }
 
           // Pre-fill amount will be recalculated when walletType changes
@@ -269,7 +279,9 @@ const EventDonate = () => {
     : 0;
   
   const hasSufficientBalance = parsedLanaAmount > 0 && selectedWalletBalance >= parsedLanaAmount;
-  const canProceed = selectedWalletId && lanaAmount && parsedLanaAmount > 0 && hasSufficientBalance && !loadingBalances && event?.donationWallet;
+  // Determine the destination wallet based on wallet type
+  const destinationWallet = walletType === 'unregistered' ? event?.donationWalletUnreg : event?.donationWallet;
+  const canProceed = selectedWalletId && lanaAmount && parsedLanaAmount > 0 && hasSufficientBalance && !loadingBalances && destinationWallet;
 
   const handleContinue = async () => {
     if (!selectedWalletId || !lanaAmount || !event) {
@@ -288,7 +300,7 @@ const EventDonate = () => {
         lanaAmount: parsedLanaAmount,
         fiatAmount: fiatAmount.toFixed(2),
         eventTitle: event.title,
-        donationWallet: event.donationWallet,
+        donationWallet: destinationWallet,
         isPay,
         walletType
       }
@@ -319,7 +331,7 @@ const EventDonate = () => {
     );
   }
 
-  if (!event.donationWallet) {
+  if (!event.donationWallet && !event.donationWalletUnreg) {
     return (
       <div className="space-y-4 px-4">
         <Button variant="ghost" onClick={() => navigate(-1)}>
@@ -360,10 +372,10 @@ const EventDonate = () => {
         </CardHeader>
         <CardContent>
           <div className="bg-muted p-3 rounded-md">
-            <p className="font-mono text-sm break-all">{event.donationWallet}</p>
+            <p className="font-mono text-sm break-all">{destinationWallet}</p>
           </div>
           <p className="text-sm text-muted-foreground mt-2">
-            Funds will be sent to this wallet
+            Funds will be sent to this {walletType} wallet
           </p>
         </CardContent>
       </Card>
@@ -374,46 +386,53 @@ const EventDonate = () => {
           <CardTitle className="text-lg">Your Wallet (FROM) *</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Wallet type toggle — locked when event has donation_wallet_type */}
-          {event.donationWalletType ? (
-            <div className="space-y-1">
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  disabled
-                  className="flex-1"
-                >
-                  {event.donationWalletType === 'registered' ? 'Registered' : 'Unregistered'}
-                </Button>
+          {/* Wallet type toggle — based on which wallets the event accepts */}
+          {(() => {
+            const hasReg = !!event.donationWallet;
+            const hasUnreg = !!event.donationWalletUnreg;
+            const hasBoth = hasReg && hasUnreg;
+            const onlyType = hasReg ? 'registered' : 'unregistered';
+
+            if (hasBoth) {
+              // Both wallet types available — buyer can choose
+              return (
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    variant={walletType === 'registered' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => { setWalletType('registered'); setSelectedWalletId(''); }}
+                    className="flex-1"
+                  >
+                    Registered
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={walletType === 'unregistered' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => { setWalletType('unregistered'); setSelectedWalletId(''); }}
+                    className="flex-1"
+                  >
+                    Unregistered
+                  </Button>
+                </div>
+              );
+            }
+
+            // Only one type available — locked
+            return (
+              <div className="space-y-1">
+                <div className="flex gap-1">
+                  <Button type="button" variant="default" size="sm" disabled className="flex-1">
+                    {onlyType === 'registered' ? 'Registered' : 'Unregistered'}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This event only accepts {onlyType} wallets
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                This event only accepts {event.donationWalletType} wallets
-              </p>
-            </div>
-          ) : (
-            <div className="flex gap-1">
-              <Button
-                type="button"
-                variant={walletType === 'registered' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => { setWalletType('registered'); setSelectedWalletId(''); }}
-                className="flex-1"
-              >
-                Registered
-              </Button>
-              <Button
-                type="button"
-                variant={walletType === 'unregistered' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => { setWalletType('unregistered'); setSelectedWalletId(''); }}
-                className="flex-1"
-              >
-                Unregistered
-              </Button>
-            </div>
-          )}
+            );
+          })()}
 
           {walletType === 'registered' ? (
             !availableWallets || availableWallets.length === 0 ? (
