@@ -534,40 +534,77 @@ export default function EventDetail() {
                 {registrations.length} going
               </Badge>
             </div>
-            
-            {userRegistration ? (
-              <div className="space-y-3">
-                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                    <Check className="h-5 w-5" />
-                    <span className="font-medium">You are going!</span>
+
+            {(() => {
+              const isPaidEvent = !!event.fiatValue && (!!event.donationWallet || !!event.donationWalletUnreg);
+
+              if (userRegistration) {
+                // User is already registered (going)
+                return (
+                  <div className="space-y-3">
+                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                      <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                        <Check className="h-5 w-5" />
+                        <span className="font-medium">You are going!</span>
+                      </div>
+                    </div>
+                    {!isPaidEvent && (
+                      <Button
+                        variant="outline"
+                        className="w-full text-destructive hover:bg-destructive/10"
+                        onClick={handleUnregister}
+                        disabled={registering}
+                      >
+                        {registering ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <X className="h-4 w-4 mr-2" />
+                        )}
+                        Cancel Registration
+                      </Button>
+                    )}
                   </div>
-                </div>
-                <Button 
-                  variant="outline" 
-                  className="w-full text-destructive hover:bg-destructive/10"
-                  onClick={handleUnregister}
+                );
+              }
+
+              if (isPaidEvent) {
+                // Paid event, no ticket yet — show message, no "I'm Going" button
+                if (!existingTicketId) {
+                  return (
+                    <div className="bg-muted/50 rounded-lg p-4 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        Purchase a ticket to attend this event
+                      </p>
+                    </div>
+                  );
+                }
+                // Has ticket but no registration (edge case) — shouldn't happen with auto-register
+                return (
+                  <Button
+                    className="w-full"
+                    onClick={handleRegister}
+                    disabled={registering}
+                  >
+                    {registering && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    I'm Going
+                  </Button>
+                );
+              }
+
+              // Free event — show I'm Going button
+              return (
+                <Button
+                  className="w-full"
+                  onClick={handleRegister}
                   disabled={registering}
                 >
-                  {registering ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <X className="h-4 w-4 mr-2" />
-                  )}
-                  Cancel Registration
+                  {registering && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  I'm Going
                 </Button>
-              </div>
-            ) : (
-              <Button 
-                className="w-full"
-                onClick={handleRegister}
-                disabled={registering}
-              >
-                {registering && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                <UserPlus className="h-4 w-4 mr-2" />
-                I'm Going
-              </Button>
-            )}
+              );
+            })()}
           </div>
         </CardContent>
       </Card>
