@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle } from "lucide-react";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, Video } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface WhatsUpItem {
@@ -161,6 +161,15 @@ export default function Home() {
                       </Link>
                     ))}
                   </div>
+
+                  {/* Video Instructions link */}
+                  <Link
+                    to="/video-instructions"
+                    className="flex items-center gap-2 px-3 py-2.5 mt-3 rounded-lg text-sm font-medium border border-dashed border-violet-500/30 hover:bg-violet-500/5 transition-colors group"
+                  >
+                    <Video className="h-4 w-4 text-violet-500 flex-shrink-0 group-hover:scale-110 transition-transform" />
+                    <span>Video Instructions</span>
+                  </Link>
                 </CardContent>
               </Card>
             </div>
