@@ -2044,6 +2044,44 @@ router.post('/publish-dm-event', async (req: Request, res: Response) => {
   }
 });
 
+// Publish KIND 56757 loss report event to relays
+router.post('/publish-loss-report', async (req: Request, res: Response) => {
+  try {
+    const { event } = req.body;
+    if (!event || !event.id || !event.sig || event.kind !== 56757) {
+      return res.status(400).json({ success: false, error: 'Valid signed KIND 56757 event is required' });
+    }
+
+    // Get relays from KIND 38888 in DB
+    const db = getDb();
+    const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+    let relays: string[] = [];
+    if (row?.relays) {
+      relays = typeof row.relays === 'string' ? JSON.parse(row.relays) : row.relays;
+    }
+    if (relays.length === 0) {
+      relays = getRelaysFromDb();
+    }
+
+    console.log(`📤 Publishing KIND 56757 loss report to ${relays.length} relays...`);
+
+    const results = await publishEventToRelays(relays, event, 8000);
+    const successCount = results.filter(r => r.success).length;
+
+    console.log(`✅ Loss report published to ${successCount}/${relays.length} relays`);
+
+    return res.json({
+      success: successCount > 0,
+      publishedTo: successCount,
+      totalRelays: relays.length,
+      results
+    });
+  } catch (error: any) {
+    console.error('❌ Error publishing loss report:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Encrypted Rooms: Fetch room-related events from relays
 router.post('/fetch-room-events', async (req: Request, res: Response) => {
   try {
