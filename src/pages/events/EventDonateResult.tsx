@@ -4,6 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, XCircle, ExternalLink, Ticket } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { SimplePool, finalizeEvent } from "nostr-tools";
 
 interface LocationState {
   success: boolean;
@@ -22,10 +25,73 @@ interface LocationState {
 const EventDonateResult = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { session } = useAuth();
+  const { parameters } = useSystemParameters();
   const state = location.state as LocationState | null;
   const [ticketId, setTicketId] = useState<string | null>(null);
 
-  // Save ticket to DB on successful payment
+  const relays = parameters?.relays || [];
+
+  // Auto-register "going" on Nostr after successful payment
+  const autoRegisterGoing = async (dTag: string) => {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId) {
+      console.log('⚠️ No Nostr session, skipping auto-register going');
+      return;
+    }
+
+    try {
+      const pool = new SimplePool();
+      const privKeyBytes = new Uint8Array(
+        session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
+      );
+
+      const tags: string[][] = [
+        ["event", dTag],
+        ["status", "going"],
+        ["p", session.nostrHexId],
+        ["seats", "1"],
+        ["source", "Lana.app"]
+      ];
+
+      const registrationEvent = finalizeEvent({
+        kind: 53333,
+        created_at: Math.floor(Date.now() / 1000),
+        tags,
+        content: "",
+      }, privKeyBytes);
+
+      console.log('📝 Auto-registering "going" after payment:', registrationEvent.id);
+
+      const publishPromises = pool.publish(relays, registrationEvent);
+      const publishArray = Array.from(publishPromises);
+      let successCount = 0;
+
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          console.log(`⏱️ Auto-register timeout. Success: ${successCount}`);
+          resolve();
+        }, 10000);
+
+        publishArray.forEach((promise) => {
+          promise
+            .then(() => {
+              successCount++;
+              if (successCount === 1) {
+                clearTimeout(timeout);
+                resolve();
+              }
+            })
+            .catch(() => {});
+        });
+      });
+
+      console.log(`✅ Auto-registered "going" to ${successCount}/${relays.length} relay(s)`);
+    } catch (error) {
+      console.error('❌ Error auto-registering going:', error);
+    }
+  };
+
+  // Save ticket to DB on successful payment + auto-register
   useEffect(() => {
     if (!state?.success || !state.txId || !state.nostrHexId || !state.dTag) return;
 
@@ -65,6 +131,9 @@ const EventDonateResult = () => {
         if (data) {
           setTicketId(data.id);
           console.log('🎫 Ticket saved:', data.id);
+
+          // Auto-register "going" after successful ticket save
+          await autoRegisterGoing(state.dTag);
         }
       } catch (e) {
         console.error('Error saving ticket:', e);
@@ -99,7 +168,7 @@ const EventDonateResult = () => {
             <XCircle className="h-16 w-16 text-destructive mx-auto mb-4" />
           )}
           <CardTitle className="text-2xl">
-            {state.success 
+            {state.success
               ? (state.isPay ? 'Payment Successful!' : 'Donation Successful!')
               : (state.isPay ? 'Payment Failed' : 'Donation Failed')
             }
