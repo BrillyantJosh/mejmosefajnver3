@@ -11,6 +11,7 @@ import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, AlertTriangle, Send, Wallet, CheckCircle2 } from "lucide-react";
+import { signNostrEvent } from "@/lib/nostrSigning";
 
 export default function ReportForm() {
   const { session } = useAuth();
@@ -79,6 +80,46 @@ export default function ReportForm() {
           description: description.trim(),
         });
         if (error) throw error;
+      }
+
+      // Publish KIND 56757 loss report to Nostr relays
+      if (session.nostrPrivateKey) {
+        try {
+          const walletTags = Array.from(selectedWallets).map((addr) => {
+            const wallet = wallets.find((w) => w.walletId === addr);
+            const bal = balances.get(addr) || 0;
+            return ["w", addr, wallet?.walletType || "", wallet?.note || "", bal.toString()];
+          });
+
+          const signedEvent = signNostrEvent(
+            session.nostrPrivateKey,
+            56757,
+            description.trim(),
+            walletTags
+          );
+
+          const res = await fetch("/api/functions/publish-loss-report", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ event: signedEvent }),
+          });
+          const result = await res.json();
+
+          if (result.success) {
+            console.log(`📤 Loss report published to ${result.publishedTo}/${result.totalRelays} relays`);
+          } else {
+            // Queue for retry
+            await fetch("/api/functions/queue-relay-event", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ signedEvent, userPubkey: session.nostrHexId }),
+            });
+            console.warn("⚠️ Loss report queued for relay retry");
+          }
+        } catch (e) {
+          console.error("Failed to publish loss report to relays:", e);
+          // Non-blocking — DB save already succeeded
+        }
       }
 
       toast.success(
