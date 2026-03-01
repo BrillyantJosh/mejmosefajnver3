@@ -1,7 +1,9 @@
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, XCircle, ExternalLink } from "lucide-react";
+import { CheckCircle, XCircle, ExternalLink, Ticket } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface LocationState {
   success: boolean;
@@ -12,12 +14,65 @@ interface LocationState {
   isPay: boolean;
   dTag: string;
   error?: string;
+  walletType?: 'registered' | 'unregistered';
+  walletAddress?: string;
+  nostrHexId?: string;
 }
 
 const EventDonateResult = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as LocationState | null;
+  const [ticketId, setTicketId] = useState<string | null>(null);
+
+  // Save ticket to DB on successful payment
+  useEffect(() => {
+    if (!state?.success || !state.txId || !state.nostrHexId || !state.dTag) return;
+
+    const saveTicket = async () => {
+      try {
+        // Check if ticket already exists for this txId (dedup)
+        const { data: existing } = await supabase
+          .from('event_tickets')
+          .select('id')
+          .eq('tx_id', state.txId!)
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          setTicketId(existing[0].id);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('event_tickets')
+          .insert({
+            event_dtag: state.dTag,
+            nostr_hex_id: state.nostrHexId,
+            wallet_address: state.walletAddress || '',
+            tx_id: state.txId,
+            amount_lana: state.amount || 0,
+            amount_eur: parseFloat(state.fiatAmount || '0') || 0,
+            wallet_type: state.walletType || 'registered',
+          })
+          .select('id')
+          .single();
+
+        if (error) {
+          console.error('Error saving ticket:', error);
+          return;
+        }
+
+        if (data) {
+          setTicketId(data.id);
+          console.log('🎫 Ticket saved:', data.id);
+        }
+      } catch (e) {
+        console.error('Error saving ticket:', e);
+      }
+    };
+
+    saveTicket();
+  }, [state?.success, state?.txId]);
 
   if (!state) {
     return (
@@ -96,7 +151,17 @@ const EventDonateResult = () => {
       </Card>
 
       <div className="space-y-2">
+        {ticketId && (
+          <Button
+            onClick={() => navigate(`/events/ticket/${ticketId}`)}
+            className="w-full"
+          >
+            <Ticket className="h-4 w-4 mr-2" />
+            View Ticket
+          </Button>
+        )}
         <Button
+          variant={ticketId ? "outline" : "default"}
           onClick={() => navigate(`/events/detail/${encodeURIComponent(state.dTag)}`)}
           className="w-full"
         >

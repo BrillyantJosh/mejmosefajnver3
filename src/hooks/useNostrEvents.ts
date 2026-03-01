@@ -28,6 +28,7 @@ export interface LanaEvent {
   // Optional fields
   cover?: string;
   donationWallet?: string;
+  donationWalletType?: 'registered' | 'unregistered';
   fiatValue?: number;
   guests: string[];
   attachments: string[];
@@ -120,6 +121,7 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
         capacity: capacityStr ? parseInt(capacityStr, 10) : undefined,
         cover: getTagValue('cover'),
         donationWallet: getTagValue('donation_wallet'),
+        donationWalletType: (getTagValue('donation_wallet_type') as 'registered' | 'unregistered') || undefined,
         fiatValue: fiatValueStr ? parseFloat(fiatValueStr) : undefined,
         guests: getAllTagValues('guest'),
         attachments: getAllTagValues('attachment'),

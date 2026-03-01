@@ -62,6 +62,7 @@
     "elliptic": "^6.6.1",
     "embla-carousel-react": "^8.6.0",
     "express": "^5.2.1",
+    "html-to-image": "^1.11.13",
     "html5-qrcode": "^2.3.8",
     "idb": "^8.0.3",
     "input-otp": "^1.4.2",

@@ -17,6 +17,9 @@ import { useNostrEventRegistrations } from "@/hooks/useNostrEventRegistrations";
 import { toast } from "@/hooks/use-toast";
 import { formatTimeInTimezone, getTimezoneAbbreviation, getUserTimezone } from "@/lib/timezones";
 import { useEventCountdown } from "@/hooks/useEventCountdown";
+import { useCoinGeckoRate } from "@/hooks/useCoinGeckoRate";
+import { supabase } from "@/integrations/supabase/client";
+import { Ticket } from "lucide-react";
 export default function EventDetail() {
   const { dTag: urlDTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
@@ -25,6 +28,8 @@ export default function EventDetail() {
   const [event, setEvent] = useState<LanaEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
+  const [existingTicketId, setExistingTicketId] = useState<string | null>(null);
+  const { rate: marketRate } = useCoinGeckoRate();
 
   // Decode the URL-encoded dTag
   const decodedDTag = urlDTag ? decodeURIComponent(urlDTag) : '';
@@ -35,6 +40,27 @@ export default function EventDetail() {
   const countdown = useEventCountdown(event?.start || new Date());
 
   const relays = systemParameters?.relays || [];
+
+  // Check if user already has a ticket for this event
+  useEffect(() => {
+    if (!session?.nostrHexId || !decodedDTag) return;
+    const checkTicket = async () => {
+      try {
+        const { data } = await supabase
+          .from('event_tickets')
+          .select('id')
+          .eq('event_dtag', decodedDTag)
+          .eq('nostr_hex_id', session.nostrHexId)
+          .limit(1);
+        if (data && data.length > 0) {
+          setExistingTicketId(data[0].id);
+        }
+      } catch (e) {
+        console.error('Error checking ticket:', e);
+      }
+    };
+    checkTicket();
+  }, [session?.nostrHexId, decodedDTag]);
 
   const handleShare = async () => {
     // Use dTag for stable URL
@@ -118,6 +144,7 @@ export default function EventDetail() {
         capacity: capacityStr ? parseInt(capacityStr, 10) : undefined,
         cover: getTagValue('cover'),
         donationWallet: getTagValue('donation_wallet'),
+        donationWalletType: (getTagValue('donation_wallet_type') as 'registered' | 'unregistered') || undefined,
         fiatValue: fiatValueStr ? parseFloat(fiatValueStr) : undefined,
         guests: getAllTagValues('guest'),
         attachments: getAllTagValues('attachment'),
@@ -388,9 +415,30 @@ export default function EventDetail() {
           {(event.fiatValue || event.donationWallet) && (
             <div className="border-t pt-4 space-y-3">
               {event.fiatValue && (
-                <div className="text-lg font-medium text-primary">
-                  Event Value: €{event.fiatValue}
-                </div>
+                <>
+                  <div className="text-lg font-medium text-primary">
+                    Event Value: €{event.fiatValue}
+                  </div>
+                  {/* Dual pricing display */}
+                  <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                    {systemParameters?.exchangeRates?.EUR && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">Registered LANA:</span>
+                        <span className="font-semibold">
+                          {(event.fiatValue / systemParameters.exchangeRates.EUR).toFixed(2)} LANA
+                        </span>
+                      </div>
+                    )}
+                    {marketRate && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">Market LANA:</span>
+                        <span className="font-semibold">
+                          {(event.fiatValue / marketRate).toFixed(2)} LANA
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
               {event.donationWallet && (
                 <>
@@ -398,13 +446,24 @@ export default function EventDetail() {
                     <Wallet className="h-4 w-4" />
                     <span className="font-mono">{event.donationWallet}</span>
                   </div>
-                  <Button 
-                    className="w-full"
-                    onClick={handleDonateClick}
-                  >
-                    <Wallet className="h-4 w-4 mr-2" />
-                    {event.fiatValue ? `Pay €${event.fiatValue}` : 'Donate'}
-                  </Button>
+                  {existingTicketId ? (
+                    <Button
+                      className="w-full"
+                      variant="outline"
+                      onClick={() => navigate(`/events/ticket/${existingTicketId}`)}
+                    >
+                      <Ticket className="h-4 w-4 mr-2" />
+                      View Ticket
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full"
+                      onClick={handleDonateClick}
+                    >
+                      <Wallet className="h-4 w-4 mr-2" />
+                      {event.fiatValue ? `Pay €${event.fiatValue}` : 'Donate'}
+                    </Button>
+                  )}
                 </>
               )}
             </div>

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from '@/components/ui/UserAvatar';
-import { ArrowLeft, Users, Calendar, Edit } from "lucide-react";
+import { ArrowLeft, Users, Calendar, Edit, QrCode } from "lucide-react";
 import { format } from "date-fns";
 import { SimplePool } from "nostr-tools";
 import { useAuth } from "@/contexts/AuthContext";
@@ -230,9 +230,14 @@ export default function EventRegistrations() {
                 <Badge variant="outline">{event.isOnline ? 'Online' : 'Live'}</Badge>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => navigate(`/events/edit/${event.id}`)}>
-              <Edit className="h-4 w-4" />
-            </Button>
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" onClick={() => navigate(`/events/checkin/${encodeURIComponent(event.dTag)}`)}>
+                <QrCode className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate(`/events/edit/${event.id}`)}>
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
