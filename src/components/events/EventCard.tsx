@@ -334,7 +334,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
         )}
 
         {/* Donate/Pay Button */}
-        {event.donationWallet && (
+        {(event.donationWallet || event.donationWalletUnreg) && (
           <div className="mt-2">
             <Button
               variant="outline"
@@ -349,62 +349,70 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
         )}
 
         {/* Registration Section */}
-        <div className="mt-3 pt-2 sm:pt-3 border-t flex items-center justify-between gap-1 sm:gap-2">
-          {showRegistrationCount ? (
-            <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground">
-              <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              <span>{registrations.length}</span>
+        {(() => {
+          const isPaidEvent = !!event.fiatValue && (!!event.donationWallet || !!event.donationWalletUnreg);
+
+          return (
+            <div className="mt-3 pt-2 sm:pt-3 border-t flex items-center justify-between gap-1 sm:gap-2">
+              {showRegistrationCount ? (
+                <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground">
+                  <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  <span>{registrations.length}</span>
+                </div>
+              ) : (
+                <div />
+              )}
+
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 sm:h-8 sm:w-8"
+                  onClick={handleShare}
+                >
+                  <Share2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </Button>
+
+                {userRegistration ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={`h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3 bg-green-500/10 border-green-500/30 text-green-600 ${
+                      !isPaidEvent ? 'hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-600' : ''
+                    }`}
+                    onClick={isPaidEvent ? undefined : handleUnregister}
+                    disabled={isPaidEvent || unregistering}
+                  >
+                    {unregistering ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <>
+                        <Check className="h-3.5 w-3.5 sm:mr-1" />
+                        <span className="hidden sm:inline">Going</span>
+                      </>
+                    )}
+                  </Button>
+                ) : isPaidEvent ? null : (
+                  <Button
+                    size="sm"
+                    className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3"
+                    onClick={handleRegister}
+                    disabled={registering}
+                  >
+                    {registering ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <>
+                        <UserPlus className="h-3.5 w-3.5 sm:mr-1" />
+                        <span className="hidden sm:inline">I'm Going</span>
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
-          ) : (
-            <div />
-          )}
-          
-          <div className="flex items-center gap-1 sm:gap-2">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              className="h-7 w-7 sm:h-8 sm:w-8"
-              onClick={handleShare}
-            >
-              <Share2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            </Button>
-            
-            {userRegistration ? (
-              <Button 
-                variant="outline" 
-                size="sm"
-                className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3 bg-green-500/10 border-green-500/30 text-green-600 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-600"
-                onClick={handleUnregister}
-                disabled={unregistering}
-              >
-                {unregistering ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <>
-                    <Check className="h-3.5 w-3.5 sm:mr-1" />
-                    <span className="hidden sm:inline">Going</span>
-                  </>
-                )}
-              </Button>
-            ) : (
-              <Button 
-                size="sm"
-                className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3"
-                onClick={handleRegister}
-                disabled={registering}
-              >
-                {registering ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <>
-                    <UserPlus className="h-3.5 w-3.5 sm:mr-1" />
-                    <span className="hidden sm:inline">I'm Going</span>
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
-        </div>
+          );
+        })()}
       </CardContent>
     </Card>
   );
