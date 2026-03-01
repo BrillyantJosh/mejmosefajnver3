@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
+import { useNostrUnregisteredWallets } from "@/hooks/useNostrUnregisteredWallets";
+import { useCoinGeckoRate } from "@/hooks/useCoinGeckoRate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,9 +29,12 @@ const EventDonate = () => {
   const { toast } = useToast();
   const { parameters } = useSystemParameters();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
+  const { lists: unregLists, isLoading: unregLoading } = useNostrUnregisteredWallets();
+  const { rate: marketRate } = useCoinGeckoRate();
 
   const [event, setEvent] = useState<LanaEvent | null>(null);
   const [eventLoading, setEventLoading] = useState(true);
+  const [walletType, setWalletType] = useState<'registered' | 'unregistered'>('registered');
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
   const [lanaAmount, setLanaAmount] = useState<string>("0");
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
@@ -44,10 +49,15 @@ const EventDonate = () => {
   const relays = parameters?.relays || [];
 
   // Filter out LanaPays.Us and Lana8Wonder wallets
-  const availableWallets = wallets.filter(wallet => 
-    wallet.walletType !== 'LanaPays.Us' && 
+  const availableWallets = wallets.filter(wallet =>
+    wallet.walletType !== 'LanaPays.Us' &&
     wallet.walletType !== 'Lana8Wonder'
   );
+
+  // Get user's unregistered wallets
+  const myUnregWallets = unregLists
+    .filter(l => l.ownerPubkey === session?.nostrHexId)
+    .flatMap(l => l.wallets);
 
   const parseEvent = useCallback((rawEvent: any): LanaEvent | null => {
     try {
@@ -111,6 +121,7 @@ const EventDonate = () => {
         capacity: capacityStr ? parseInt(capacityStr, 10) : undefined,
         cover: getTagValue('cover'),
         donationWallet: getTagValue('donation_wallet'),
+        donationWalletType: (getTagValue('donation_wallet_type') as 'registered' | 'unregistered') || undefined,
         fiatValue: fiatValueStr ? parseFloat(fiatValueStr) : undefined,
         guests: getAllTagValues('guest'),
         attachments: getAllTagValues('attachment'),
@@ -150,10 +161,11 @@ const EventDonate = () => {
           const parsed = parseEvent(latestEvent);
           setEvent(parsed);
 
-          // Set pre-filled amount if Pay mode
+          // Pre-fill amount will be recalculated when walletType changes
           if (parsed?.fiatValue && preFilledAmount) {
             setLanaAmount(preFilledAmount.toString());
           }
+
         }
       } catch (err) {
         console.error('Error fetching event:', err);
@@ -165,13 +177,15 @@ const EventDonate = () => {
     fetchEvent();
   }, [decodedDTag, relays, parseEvent, preFilledAmount]);
 
-  // Fetch wallet balances
+  // Fetch wallet balances (both registered and unregistered)
   useEffect(() => {
-    if (availableWallets && availableWallets.length > 0) {
-      const walletIds = availableWallets.map(w => w.walletId);
-      fetchWalletBalances(walletIds);
+    const regIds = availableWallets.map(w => w.walletId);
+    const unregIds = myUnregWallets.map(w => w.address);
+    const allIds = [...regIds, ...unregIds];
+    if (allIds.length > 0) {
+      fetchWalletBalances(allIds);
     }
-  }, [availableWallets.length]);
+  }, [availableWallets.length, myUnregWallets.length]);
 
   const fetchWalletBalances = async (walletIds: string[]) => {
     setLoadingBalances(true);
@@ -220,17 +234,27 @@ const EventDonate = () => {
     return balance.toFixed(2);
   };
 
+  // Recalculate pre-filled amount when wallet type changes
+  useEffect(() => {
+    if (!isPay || !event?.fiatValue) return;
+    const rate = walletType === 'unregistered' ? marketRate : (parameters?.exchangeRates?.EUR || null);
+    if (rate && rate > 0) {
+      setLanaAmount((event.fiatValue / rate).toFixed(2));
+    }
+  }, [walletType, event?.fiatValue, marketRate, parameters?.exchangeRates?.EUR, isPay]);
+
+  // Get the active exchange rate based on wallet type
+  const activeRate = walletType === 'unregistered' ? marketRate : (parameters?.exchangeRates?.EUR || null);
+
   // Calculate fiat amount from LANA using exchange rate
-  // Exchange rate format: 1 LANA = X EUR (e.g., 0.004 means 1 LANA = 0.004 EUR)
   const calculateFiatAmount = (): number => {
     const lana = parseFloat(lanaAmount) || 0;
     if (lana === 0) return 0;
-    
-    const exchangeRate = parameters?.exchangeRates?.EUR || 0;
-    if (exchangeRate === 0) return 0;
-    
+
+    if (!activeRate || activeRate === 0) return 0;
+
     // LANA * exchangeRate = EUR (rate is EUR per LANA)
-    return lana * exchangeRate;
+    return lana * activeRate;
   };
 
   const fiatAmount = calculateFiatAmount();
@@ -260,12 +284,13 @@ const EventDonate = () => {
         fiatAmount: fiatAmount.toFixed(2),
         eventTitle: event.title,
         donationWallet: event.donationWallet,
-        isPay
+        isPay,
+        walletType
       }
     });
   };
 
-  if (eventLoading || walletsLoading) {
+  if (eventLoading || walletsLoading || unregLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -305,7 +330,8 @@ const EventDonate = () => {
     );
   }
 
-  const selectedWallet = availableWallets.find(w => w.walletId === selectedWalletId);
+  const selectedRegWallet = availableWallets.find(w => w.walletId === selectedWalletId);
+  const selectedUnregWallet = myUnregWallets.find(w => w.address === selectedWalletId);
 
   return (
     <div className="space-y-4 px-4 pb-24">
@@ -343,75 +369,163 @@ const EventDonate = () => {
           <CardTitle className="text-lg">Your Wallet (FROM) *</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!availableWallets || availableWallets.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No wallets found. Please register a wallet first.
-            </p>
-          ) : (
-            <>
-              <div>
-                <Label htmlFor="wallet-select">Select wallet</Label>
-                <Select value={selectedWalletId} onValueChange={setSelectedWalletId}>
-                  <SelectTrigger id="wallet-select">
-                    <SelectValue placeholder="Select wallet" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableWallets.map((wallet) => (
-                      <SelectItem key={wallet.walletId} value={wallet.walletId}>
-                        <div className="flex flex-col items-start">
-                          <div className="font-mono text-xs">
-                            {wallet.walletId.substring(0, 10)}...{wallet.walletId.substring(wallet.walletId.length - 8)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {wallet.walletType} {wallet.note && `- ${wallet.note.substring(0, 20)}`}
-                          </div>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Select the wallet to send funds from
-                </p>
-              </div>
+          {/* Wallet type toggle */}
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              variant={walletType === 'registered' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => { setWalletType('registered'); setSelectedWalletId(''); }}
+              className="flex-1"
+            >
+              Registered
+            </Button>
+            <Button
+              type="button"
+              variant={walletType === 'unregistered' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => { setWalletType('unregistered'); setSelectedWalletId(''); }}
+              className="flex-1"
+            >
+              Unregistered
+            </Button>
+          </div>
 
-              {selectedWallet && (
-                <div className="bg-muted p-4 rounded-md space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-semibold">Wallet Details</span>
-                  </div>
-                  <div className="space-y-1 text-sm">
-                    <p>
-                      <span className="text-muted-foreground">ID:</span>{' '}
-                      <span className="font-mono">
-                        {selectedWallet.walletId.substring(0, 10)}...{selectedWallet.walletId.substring(selectedWallet.walletId.length - 8)}
-                      </span>
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Type:</span> {selectedWallet.walletType}
-                    </p>
-                    {selectedWallet.note && (
-                      <p>
-                        <span className="text-muted-foreground">Note:</span> {selectedWallet.note}
-                      </p>
-                    )}
-                    <p>
-                      <span className="text-muted-foreground">Balance:</span>{' '}
-                      {loadingBalances ? (
-                        <Loader2 className="h-3 w-3 animate-spin inline" />
-                      ) : (
-                        <span className="font-semibold">
-                          {walletBalances[selectedWallet.walletId] !== undefined
-                            ? `${formatBalance(walletBalances[selectedWallet.walletId])} LANA`
-                            : 'Loading...'}
-                        </span>
-                      )}
-                    </p>
-                  </div>
+          {walletType === 'registered' ? (
+            !availableWallets || availableWallets.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No registered wallets found. Please register a wallet first.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <Label htmlFor="wallet-select">Select wallet</Label>
+                  <Select value={selectedWalletId} onValueChange={setSelectedWalletId}>
+                    <SelectTrigger id="wallet-select">
+                      <SelectValue placeholder="Select registered wallet" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableWallets.map((wallet) => (
+                        <SelectItem key={wallet.walletId} value={wallet.walletId}>
+                          <div className="flex flex-col items-start">
+                            <div className="font-mono text-xs">
+                              {wallet.walletId.substring(0, 10)}...{wallet.walletId.substring(wallet.walletId.length - 8)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {wallet.walletType} {wallet.note && `- ${wallet.note.substring(0, 20)}`}
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
-            </>
+
+                {selectedRegWallet && (
+                  <div className="bg-muted p-4 rounded-md space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-semibold">Wallet Details</span>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <p>
+                        <span className="text-muted-foreground">ID:</span>{' '}
+                        <span className="font-mono">
+                          {selectedRegWallet.walletId.substring(0, 10)}...{selectedRegWallet.walletId.substring(selectedRegWallet.walletId.length - 8)}
+                        </span>
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Type:</span> {selectedRegWallet.walletType}
+                      </p>
+                      {selectedRegWallet.note && (
+                        <p>
+                          <span className="text-muted-foreground">Note:</span> {selectedRegWallet.note}
+                        </p>
+                      )}
+                      <p>
+                        <span className="text-muted-foreground">Balance:</span>{' '}
+                        {loadingBalances ? (
+                          <Loader2 className="h-3 w-3 animate-spin inline" />
+                        ) : (
+                          <span className="font-semibold">
+                            {walletBalances[selectedRegWallet.walletId] !== undefined
+                              ? `${formatBalance(walletBalances[selectedRegWallet.walletId])} LANA`
+                              : 'Loading...'}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )
+          ) : (
+            myUnregWallets.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No unregistered wallets found.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <Label htmlFor="wallet-select">Select wallet</Label>
+                  <Select value={selectedWalletId} onValueChange={setSelectedWalletId}>
+                    <SelectTrigger id="wallet-select">
+                      <SelectValue placeholder="Select unregistered wallet" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {myUnregWallets.map((wallet) => (
+                        <SelectItem key={wallet.address} value={wallet.address}>
+                          <div className="flex flex-col items-start">
+                            <div className="font-mono text-xs">
+                              {wallet.address.substring(0, 10)}...{wallet.address.substring(wallet.address.length - 8)}
+                            </div>
+                            {wallet.note && (
+                              <div className="text-xs text-muted-foreground">
+                                {wallet.note.substring(0, 30)}
+                              </div>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedUnregWallet && (
+                  <div className="bg-muted p-4 rounded-md space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-semibold">Wallet Details</span>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <p>
+                        <span className="text-muted-foreground">Address:</span>{' '}
+                        <span className="font-mono">
+                          {selectedUnregWallet.address.substring(0, 10)}...{selectedUnregWallet.address.substring(selectedUnregWallet.address.length - 8)}
+                        </span>
+                      </p>
+                      {selectedUnregWallet.note && (
+                        <p>
+                          <span className="text-muted-foreground">Note:</span> {selectedUnregWallet.note}
+                        </p>
+                      )}
+                      <p>
+                        <span className="text-muted-foreground">Balance:</span>{' '}
+                        {loadingBalances ? (
+                          <Loader2 className="h-3 w-3 animate-spin inline" />
+                        ) : (
+                          <span className="font-semibold">
+                            {walletBalances[selectedUnregWallet.address] !== undefined
+                              ? `${formatBalance(walletBalances[selectedUnregWallet.address])} LANA`
+                              : 'Loading...'}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )
           )}
         </CardContent>
       </Card>
@@ -468,12 +582,26 @@ const EventDonate = () => {
                   €{fiatAmount.toFixed(2)}
                 </span>
               </div>
-              {parameters?.exchangeRates?.EUR && (
+              {activeRate && (
                 <p className="text-xs text-muted-foreground">
-                  Exchange rate: 1 LANA = {parameters.exchangeRates.EUR} EUR
+                  {walletType === 'unregistered' ? 'Market' : 'Registered'} rate: 1 LANA = {activeRate} EUR
                 </p>
               )}
-              
+
+              {/* Show both rates for comparison */}
+              {event.fiatValue && parameters?.exchangeRates?.EUR && marketRate && (
+                <div className="pt-2 border-t space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Registered: {(event.fiatValue / parameters.exchangeRates.EUR).toFixed(2)} LANA
+                    {walletType === 'registered' && <span className="text-primary ml-1">(active)</span>}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Market: {(event.fiatValue / marketRate).toFixed(2)} LANA
+                    {walletType === 'unregistered' && <span className="text-primary ml-1">(active)</span>}
+                  </p>
+                </div>
+              )}
+
               {/* Balance Check */}
               {selectedWalletId && (
                 <div className="pt-2 border-t">

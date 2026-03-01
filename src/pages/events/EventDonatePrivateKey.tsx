@@ -21,6 +21,7 @@ interface LocationState {
   eventTitle: string;
   donationWallet: string;
   isPay: boolean;
+  walletType: 'registered' | 'unregistered';
 }
 
 const EventDonatePrivateKey = () => {
@@ -108,6 +109,7 @@ const EventDonatePrivateKey = () => {
         ["amount_lana", state!.lanaAmount.toFixed(8)],
         ["from_wallet", state!.selectedWalletId],
         ["to_wallet", state!.donationWallet],
+        ["wallet_type", state!.walletType || 'registered'],
         ["p", session.nostrHexId],
         ["source", "Lana.app"],
         ["attachment", `https://lana.lanablock.com/tx/${txId}`]
@@ -228,7 +230,10 @@ const EventDonatePrivateKey = () => {
             fiatAmount: state.fiatAmount,
             eventTitle: state.eventTitle,
             isPay: state.isPay,
-            dTag: decodedDTag
+            dTag: decodedDTag,
+            walletType: state.walletType,
+            walletAddress: state.selectedWalletId,
+            nostrHexId: session?.nostrHexId
           }
         });
       } else {

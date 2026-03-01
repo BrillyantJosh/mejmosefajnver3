@@ -277,6 +277,30 @@ export function initializeSchema(db: Database.Database): void {
     );
 
     -- =============================================
+    -- EVENT TICKETS & CHECK-INS
+    -- =============================================
+
+    CREATE TABLE IF NOT EXISTS event_tickets (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      event_dtag TEXT NOT NULL,
+      nostr_hex_id TEXT NOT NULL,
+      wallet_address TEXT NOT NULL,
+      tx_id TEXT NOT NULL,
+      amount_lana REAL NOT NULL,
+      amount_eur REAL NOT NULL DEFAULT 0,
+      wallet_type TEXT NOT NULL DEFAULT 'registered' CHECK (wallet_type IN ('registered','unregistered')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS event_checkins (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      ticket_id TEXT NOT NULL,
+      checked_in_at TEXT NOT NULL DEFAULT (datetime('now')),
+      checked_in_by TEXT NOT NULL,
+      FOREIGN KEY (ticket_id) REFERENCES event_tickets(id)
+    );
+
+    -- =============================================
     -- INDEXES
     -- =============================================
 
@@ -321,6 +345,10 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_faq_order ON faq(display_order);
     CREATE INDEX IF NOT EXISTS idx_loss_reports_nostr ON loss_reports(nostr_hex_id);
     CREATE INDEX IF NOT EXISTS idx_loss_reports_created ON loss_reports(created_at);
+    CREATE INDEX IF NOT EXISTS idx_event_tickets_event ON event_tickets(event_dtag);
+    CREATE INDEX IF NOT EXISTS idx_event_tickets_nostr ON event_tickets(nostr_hex_id);
+    CREATE INDEX IF NOT EXISTS idx_event_tickets_txid ON event_tickets(tx_id);
+    CREATE INDEX IF NOT EXISTS idx_event_checkins_ticket ON event_checkins(ticket_id);
   `);
 
   // Migrations for existing databases
@@ -332,5 +360,5 @@ export function initializeSchema(db: Database.Database): void {
     try { db.exec(sql); } catch (_) { /* column already exists */ }
   }
 
-  console.log('SQLite schema initialized (23 tables + indexes)');
+  console.log('SQLite schema initialized (25 tables + indexes)');
 }

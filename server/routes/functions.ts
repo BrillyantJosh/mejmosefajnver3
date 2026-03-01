@@ -118,6 +118,48 @@ router.get('/lana-relays', (req: Request, res: Response) => {
   });
 });
 
+// CoinGecko LANA price proxy (avoids CORS, caches for 60s)
+let coingeckoCacheTime = 0;
+let coingeckoCachedRate: number | null = null;
+
+router.post('/coingecko-lana-price', async (req: Request, res: Response) => {
+  try {
+    const now = Date.now();
+    // Return cached value if less than 60 seconds old
+    if (coingeckoCachedRate !== null && now - coingeckoCacheTime < 60_000) {
+      return res.json({ success: true, eur: coingeckoCachedRate, cached: true });
+    }
+
+    const response = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=lanacoin&vs_currencies=eur'
+    );
+    if (!response.ok) {
+      throw new Error(`CoinGecko API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const eurRate = data?.lanacoin?.eur;
+
+    if (typeof eurRate !== 'number') {
+      throw new Error('Invalid CoinGecko response format');
+    }
+
+    // Cache the result
+    coingeckoCachedRate = eurRate;
+    coingeckoCacheTime = now;
+
+    console.log(`💰 CoinGecko LANA/EUR rate: ${eurRate}`);
+    return res.json({ success: true, eur: eurRate, cached: false });
+  } catch (error: any) {
+    console.error('❌ CoinGecko fetch error:', error.message);
+    // Return cached value if available, even if stale
+    if (coingeckoCachedRate !== null) {
+      return res.json({ success: true, eur: coingeckoCachedRate, cached: true, stale: true });
+    }
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // =============================================
 // SIMPLE FUNCTIONS
 // =============================================
