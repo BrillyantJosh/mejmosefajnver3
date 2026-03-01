@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Calendar, Globe, MapPin, Edit, Users, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { Calendar, Globe, MapPin, Edit, Users, ChevronDown, ChevronUp, Plus, QrCode } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { format } from "date-fns";
@@ -306,10 +306,16 @@ export default function MyEvents() {
           <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
           <h1 className="text-lg sm:text-2xl font-bold">My Events</h1>
         </div>
-        <Button onClick={() => navigate('/events/add')} size="sm">
-          <Plus className="h-4 w-4 mr-1" />
-          Add
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => navigate('/events/my-checkins')} size="sm" variant="outline">
+            <QrCode className="h-4 w-4 mr-1" />
+            Check-in
+          </Button>
+          <Button onClick={() => navigate('/events/add')} size="sm">
+            <Plus className="h-4 w-4 mr-1" />
+            Add
+          </Button>
+        </div>
       </div>
 
       {events.length === 0 ? (
