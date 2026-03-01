@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,7 +10,7 @@ import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, AlertTriangle, Send, Wallet } from "lucide-react";
+import { Loader2, AlertTriangle, Send, Wallet, CheckCircle2 } from "lucide-react";
 
 export default function ReportForm() {
   const { session } = useAuth();
@@ -18,10 +18,31 @@ export default function ReportForm() {
   const walletAddresses = wallets.map((w) => w.walletId);
   const { balances, isLoading: balancesLoading } = useWalletBalances(walletAddresses);
   const [selectedWallets, setSelectedWallets] = useState<Set<string>>(new Set());
+  const [reportedWallets, setReportedWallets] = useState<Set<string>>(new Set());
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Fetch already-reported wallets for this user
+  useEffect(() => {
+    if (!session?.nostrHexId) return;
+    const fetchReported = async () => {
+      try {
+        const { data } = await supabase
+          .from("loss_reports")
+          .select("wallet_address")
+          .eq("nostr_hex_id", session.nostrHexId);
+        if (data) {
+          setReportedWallets(new Set(data.map((r: any) => r.wallet_address)));
+        }
+      } catch (e) {
+        console.error("Error fetching reported wallets:", e);
+      }
+    };
+    fetchReported();
+  }, [session?.nostrHexId]);
+
   const toggleWallet = (walletId: string) => {
+    if (reportedWallets.has(walletId)) return;
     setSelectedWallets((prev) => {
       const next = new Set(prev);
       if (next.has(walletId)) {
@@ -63,6 +84,8 @@ export default function ReportForm() {
       toast.success(
         `Successfully reported ${selectedWallets.size} wallet${selectedWallets.size > 1 ? "s" : ""} as lost`
       );
+      // Mark newly reported wallets so they show as "Already reported"
+      setReportedWallets((prev) => new Set([...prev, ...selectedWallets]));
       setSelectedWallets(new Set());
       setDescription("");
     } catch (error: any) {
@@ -111,46 +134,61 @@ export default function ReportForm() {
           Select lost wallets ({selectedWallets.size} selected)
         </Label>
         <div className="space-y-2">
-          {wallets.map((wallet) => (
-            <Card
-              key={wallet.walletId}
-              className={`cursor-pointer transition-colors ${
-                selectedWallets.has(wallet.walletId)
-                  ? "border-red-500 bg-red-500/5"
-                  : "hover:bg-muted/50"
-              }`}
-              onClick={() => toggleWallet(wallet.walletId)}
-            >
-              <CardContent className="flex items-center gap-3 p-3">
-                <Checkbox
-                  checked={selectedWallets.has(wallet.walletId)}
-                  onCheckedChange={() => toggleWallet(wallet.walletId)}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm truncate">{wallet.walletId}</p>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {wallet.walletType && (
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {wallet.walletType}
+          {wallets.map((wallet) => {
+            const isReported = reportedWallets.has(wallet.walletId);
+            return (
+              <Card
+                key={wallet.walletId}
+                className={`transition-colors ${
+                  isReported
+                    ? "opacity-60 cursor-not-allowed border-muted"
+                    : selectedWallets.has(wallet.walletId)
+                    ? "cursor-pointer border-red-500 bg-red-500/5"
+                    : "cursor-pointer hover:bg-muted/50"
+                }`}
+                onClick={() => toggleWallet(wallet.walletId)}
+              >
+                <CardContent className="flex items-center gap-3 p-3">
+                  {isReported ? (
+                    <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                  ) : (
+                    <Checkbox
+                      checked={selectedWallets.has(wallet.walletId)}
+                      onCheckedChange={() => toggleWallet(wallet.walletId)}
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-mono text-sm truncate">{wallet.walletId}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {wallet.walletType && (
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {wallet.walletType}
+                        </p>
+                      )}
+                      {wallet.note && (
+                        <p className="text-xs text-muted-foreground">
+                          · {wallet.note}
+                        </p>
+                      )}
+                    </div>
+                    {isReported ? (
+                      <p className="text-xs font-medium mt-0.5 text-orange-600 dark:text-orange-400">
+                        Already reported as lost
                       </p>
-                    )}
-                    {wallet.note && (
-                      <p className="text-xs text-muted-foreground">
-                        · {wallet.note}
-                      </p>
+                    ) : (
+                      !balancesLoading && balances.has(wallet.walletId) && (
+                        <p className="text-xs font-medium mt-0.5">
+                          Balance: <span className="text-primary">
+                            {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balances.get(wallet.walletId) || 0)} LANA
+                          </span>
+                        </p>
+                      )
                     )}
                   </div>
-                  {!balancesLoading && balances.has(wallet.walletId) && (
-                    <p className="text-xs font-medium mt-0.5">
-                      Balance: <span className="text-primary">
-                        {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balances.get(wallet.walletId) || 0)} LANA
-                      </span>
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </div>
 
