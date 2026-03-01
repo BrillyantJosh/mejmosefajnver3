@@ -31,7 +31,11 @@ class QueryBuilder {
   }
 
   select(columns?: string) {
-    this.method = 'GET';
+    // Only set to GET if not already in a write context (POST/PATCH/DELETE)
+    // This allows .insert().select() and .update().select() chains to work
+    if (this.method === 'GET' || (!this.body && this.method !== 'DELETE')) {
+      this.method = 'GET';
+    }
     if (columns && columns !== '*') {
       this.selectColumns = columns;
       this.params.set('select', columns);
