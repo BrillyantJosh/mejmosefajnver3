@@ -10,6 +10,8 @@ interface LossReport {
   id: string;
   nostr_hex_id: string;
   wallet_address: string;
+  wallet_note: string;
+  balance: number;
   description: string;
   created_at: string;
 }
@@ -146,6 +148,20 @@ export default function LossBoard() {
                 )}
               </Button>
             </div>
+
+            {/* Wallet Note & Balance */}
+            {(report.wallet_note || report.balance > 0) && (
+              <div className="flex items-center gap-3 flex-wrap text-xs">
+                {report.wallet_note && (
+                  <span className="text-muted-foreground">{report.wallet_note}</span>
+                )}
+                {report.balance > 0 && (
+                  <span className="font-medium text-red-600 dark:text-red-400">
+                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(report.balance)} LANA lost
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Description */}
             <p className="text-sm text-muted-foreground">{report.description}</p>
