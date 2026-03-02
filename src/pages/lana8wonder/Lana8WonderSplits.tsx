@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { SimplePool, Event } from 'nostr-tools';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, TrendingUp, AlertCircle, Euro } from 'lucide-react';
+import { Loader2, TrendingUp, AlertCircle, Euro, Wallet, MoreHorizontal } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface AnnuityLevel {
@@ -49,6 +49,17 @@ interface AccountForecast {
   remainingLanas: number;
 }
 
+interface PassiveSplitEntry {
+  splitNumber: number;
+  price: number;
+  accounts: {
+    accountId: number;
+    levels: AnnuityLevel[];
+    cashOut: number;
+  }[];
+  totalCashOut: number;
+}
+
 // Format number with thousands separators
 const fmt = (n: number, decimals = 2): string => {
   return n.toLocaleString('en-US', {
@@ -61,6 +72,13 @@ const fmtPrice = (price: number): string => {
   if (price < 1) return price.toFixed(6);
   if (price < 100) return fmt(price, 4);
   return fmt(price, 2);
+};
+
+// Calculate which split number a trigger price falls into
+const getSplitForPrice = (triggerPrice: number, currentPrice: number, currentSplit: number): number => {
+  if (triggerPrice <= currentPrice) return currentSplit;
+  const splitsAhead = Math.ceil(Math.log2(triggerPrice / currentPrice));
+  return currentSplit + splitsAhead;
 };
 
 const Lana8WonderSplits = () => {
@@ -148,15 +166,13 @@ const Lana8WonderSplits = () => {
     fetchBalances();
   }, [annuityPlan, parameters?.electrumServers]);
 
-  // Generate forecast until all levels of accounts 1-5 are covered
+  // Generate forecast for accounts 1-5
   const generateForecast = (): SplitForecast[] => {
     if (!annuityPlan || currentPrice <= 0) return [];
 
-    // Only include accounts 1-5
     const includedAccounts = annuityPlan.accounts.filter(acc => acc.account_id <= 5);
     if (includedAccounts.length === 0) return [];
 
-    // Find the highest trigger_price across all levels of accounts 1-5
     let maxTriggerPrice = 0;
     includedAccounts.forEach(acc => {
       acc.levels.forEach(l => {
@@ -164,9 +180,6 @@ const Lana8WonderSplits = () => {
       });
     });
 
-    // Calculate how many splits needed to reach maxTriggerPrice
-    // Each split doubles the price: price_at_split_i = currentPrice * 2^i
-    // We need currentPrice * 2^n >= maxTriggerPrice
     const splitsNeeded = maxTriggerPrice > currentPrice
       ? Math.ceil(Math.log2(maxTriggerPrice / currentPrice))
       : 0;
@@ -225,6 +238,62 @@ const Lana8WonderSplits = () => {
     }
 
     return forecasts;
+  };
+
+  // Generate passive income forecast for accounts 6-8
+  const generatePassiveForecast = (): PassiveSplitEntry[] => {
+    if (!annuityPlan || currentPrice <= 0) return [];
+
+    const passiveAccounts = annuityPlan.accounts.filter(acc => acc.account_id >= 6 && acc.account_id <= 8);
+    if (passiveAccounts.length === 0) return [];
+
+    // Collect all levels with their split numbers, grouped by split
+    const splitMap = new Map<number, { accountId: number; level: AnnuityLevel }[]>();
+
+    passiveAccounts.forEach(acc => {
+      acc.levels.forEach(level => {
+        const splitNum = getSplitForPrice(level.trigger_price, currentPrice, currentSplit);
+        if (!splitMap.has(splitNum)) {
+          splitMap.set(splitNum, []);
+        }
+        splitMap.get(splitNum)!.push({ accountId: acc.account_id, level });
+      });
+    });
+
+    // Convert to sorted array
+    const entries: PassiveSplitEntry[] = Array.from(splitMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([splitNum, items]) => {
+        const price = currentPrice * Math.pow(2, splitNum - currentSplit);
+
+        // Group by account
+        const accountMap = new Map<number, AnnuityLevel[]>();
+        items.forEach(({ accountId, level }) => {
+          if (!accountMap.has(accountId)) {
+            accountMap.set(accountId, []);
+          }
+          accountMap.get(accountId)!.push(level);
+        });
+
+        const accounts = Array.from(accountMap.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([accountId, levels]) => ({
+            accountId,
+            levels: levels.sort((a, b) => a.level_no - b.level_no),
+            cashOut: levels.reduce((sum, l) => sum + l.cash_out, 0),
+          }));
+
+        const totalCashOut = accounts.reduce((sum, a) => sum + a.cashOut, 0);
+
+        return {
+          splitNumber: splitNum,
+          price,
+          accounts,
+          totalCashOut,
+        };
+      });
+
+    return entries;
   };
 
   if (isLoading) {
@@ -292,7 +361,7 @@ const Lana8WonderSplits = () => {
                       </Badge>
                       {i === 0 && (
                         <Badge variant="outline" className="text-xs bg-orange-100 dark:bg-orange-900 border-orange-300">
-                          Current
+                          Up to
                         </Badge>
                       )}
                     </div>
@@ -311,7 +380,9 @@ const Lana8WonderSplits = () => {
 
   // Has annuity plan — full forecast
   const forecasts = generateForecast();
+  const passiveForecasts = generatePassiveForecast();
   const totalAllSplitsCashOut = forecasts.reduce((sum, f) => sum + f.totalCashOut, 0);
+  const totalPassiveCashOut = passiveForecasts.reduce((sum, f) => sum + f.totalCashOut, 0);
   const lastSplit = forecasts.length > 0 ? forecasts[forecasts.length - 1].splitNumber : currentSplit;
   const lastPrice = forecasts.length > 0 ? forecasts[forecasts.length - 1].price : currentPrice;
 
@@ -355,7 +426,7 @@ const Lana8WonderSplits = () => {
         </CardContent>
       </Card>
 
-      {/* Split-by-split forecast */}
+      {/* Split-by-split forecast (Accounts 1-5) */}
       <Card>
         <CardHeader className="p-4 md:p-6">
           <CardTitle className="text-lg md:text-xl flex items-center gap-2">
@@ -397,7 +468,7 @@ const Lana8WonderSplits = () => {
                     </Badge>
                     {isCurrent && (
                       <Badge variant="outline" className="text-xs bg-orange-100 dark:bg-orange-900 border-orange-300">
-                        Current
+                        Up to
                       </Badge>
                     )}
                   </div>
@@ -454,7 +525,7 @@ const Lana8WonderSplits = () => {
         </CardContent>
       </Card>
 
-      {/* Total summary at the bottom */}
+      {/* Total summary for accounts 1-5 */}
       <Card className="border-green-500 bg-green-50 dark:bg-green-950">
         <CardContent className="p-4 md:p-6">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -470,6 +541,114 @@ const Lana8WonderSplits = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Passive Income — Accounts 6-8 */}
+      {passiveForecasts.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 md:gap-3 mt-6 mb-2">
+            <Wallet className="h-6 w-6 md:h-8 md:w-8 text-violet-600 flex-shrink-0" />
+            <div>
+              <h2 className="text-xl md:text-2xl font-bold">Passive Income</h2>
+              <p className="text-sm md:text-base text-muted-foreground">
+                Accounts 6–8 • Principal preserved, payouts continue indefinitely
+              </p>
+            </div>
+          </div>
+
+          <Card className="border-violet-300 dark:border-violet-700">
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-lg md:text-xl flex items-center gap-2 text-violet-700 dark:text-violet-300">
+                <Wallet className="h-5 w-5" />
+                Passive Income by Split
+              </CardTitle>
+              <CardDescription className="text-xs md:text-sm">
+                Recurring payouts • Principal is preserved on the account
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 md:p-6 pt-0 space-y-2">
+              {passiveForecasts.map((entry) => {
+                const multipleAccounts = entry.accounts.length > 1;
+
+                return (
+                  <div
+                    key={entry.splitNumber}
+                    className="rounded-lg border p-3 md:p-4 bg-violet-50 dark:bg-violet-950 border-violet-200 dark:border-violet-800"
+                  >
+                    {/* Header row */}
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="default"
+                          className="text-xs min-w-[70px] justify-center bg-violet-600 hover:bg-violet-700"
+                        >
+                          Split {entry.splitNumber}
+                        </Badge>
+                      </div>
+                      <span className="font-mono font-semibold text-sm">
+                        {fmtPrice(entry.price)} EUR
+                      </span>
+                    </div>
+
+                    {/* Per-account breakdown */}
+                    <div className="mt-2 space-y-1">
+                      {entry.accounts.map(acc => (
+                        <div key={acc.accountId} className="flex items-center justify-between text-xs md:text-sm">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-muted-foreground">Account {acc.accountId}:</span>
+                            {acc.levels.map(l => (
+                              <Badge key={l.row_id} variant="outline" className="text-[10px] px-1.5 py-0 bg-violet-100 dark:bg-violet-900 border-violet-400">
+                                Level {l.level_no}
+                              </Badge>
+                            ))}
+                          </div>
+                          <span className="font-semibold text-violet-600 dark:text-violet-400">
+                            +{fmt(acc.cashOut)} {annuityPlan.currency}
+                          </span>
+                        </div>
+                      ))}
+
+                      {/* Split total when multiple accounts */}
+                      {multipleAccounts && (
+                        <div className="flex items-center justify-between text-xs md:text-sm pt-1 mt-1 border-t border-violet-300 dark:border-violet-700">
+                          <span className="font-semibold">Split total:</span>
+                          <span className="font-bold text-violet-700 dark:text-violet-300">
+                            +{fmt(entry.totalCashOut)} {annuityPlan.currency}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Continuation indicator */}
+              <div className="flex items-center justify-center py-3 text-violet-500 dark:text-violet-400">
+                <MoreHorizontal className="h-5 w-5 mr-2" />
+                <span className="text-sm font-medium">Payouts continue with each subsequent split …</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Passive income total (shown levels) */}
+          <Card className="border-violet-500 bg-violet-50 dark:bg-violet-950">
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-violet-800 dark:text-violet-200">
+                    Passive Income (Accounts 6–8, shown levels)
+                  </p>
+                  <p className="text-xs text-violet-600 dark:text-violet-400">
+                    {passiveForecasts.length} payout {passiveForecasts.length === 1 ? 'split' : 'splits'} shown • continues indefinitely
+                  </p>
+                </div>
+                <p className="text-2xl md:text-3xl font-bold text-violet-700 dark:text-violet-300">
+                  {fmt(totalPassiveCashOut)} {annuityPlan.currency}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 };
