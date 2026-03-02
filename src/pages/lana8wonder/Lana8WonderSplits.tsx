@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { SimplePool, Event } from 'nostr-tools';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, TrendingUp, AlertCircle, Euro, Coins } from 'lucide-react';
+import { Loader2, TrendingUp, AlertCircle, Euro } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface AnnuityLevel {
@@ -35,7 +35,6 @@ interface AnnuityPlan {
 interface SplitForecast {
   splitNumber: number;
   price: number;
-  // Per-account data
   accountForecasts: AccountForecast[];
   totalCashOut: number;
 }
@@ -49,6 +48,20 @@ interface AccountForecast {
   cumulativeCashOut: number;
   remainingLanas: number;
 }
+
+// Format number with thousands separators
+const fmt = (n: number, decimals = 2): string => {
+  return n.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+};
+
+const fmtPrice = (price: number): string => {
+  if (price < 1) return price.toFixed(6);
+  if (price < 100) return fmt(price, 4);
+  return fmt(price, 2);
+};
 
 const Lana8WonderSplits = () => {
   const { session } = useAuth();
@@ -135,43 +148,54 @@ const Lana8WonderSplits = () => {
     fetchBalances();
   }, [annuityPlan, parameters?.electrumServers]);
 
-  // Generate 15-split forecast
+  // Generate forecast until all levels of accounts 1-5 are covered
   const generateForecast = (): SplitForecast[] => {
     if (!annuityPlan || currentPrice <= 0) return [];
 
+    // Only include accounts 1-5
+    const includedAccounts = annuityPlan.accounts.filter(acc => acc.account_id <= 5);
+    if (includedAccounts.length === 0) return [];
+
+    // Find the highest trigger_price across all levels of accounts 1-5
+    let maxTriggerPrice = 0;
+    includedAccounts.forEach(acc => {
+      acc.levels.forEach(l => {
+        if (l.trigger_price > maxTriggerPrice) maxTriggerPrice = l.trigger_price;
+      });
+    });
+
+    // Calculate how many splits needed to reach maxTriggerPrice
+    // Each split doubles the price: price_at_split_i = currentPrice * 2^i
+    // We need currentPrice * 2^n >= maxTriggerPrice
+    const splitsNeeded = maxTriggerPrice > currentPrice
+      ? Math.ceil(Math.log2(maxTriggerPrice / currentPrice))
+      : 0;
+
     const forecasts: SplitForecast[] = [];
-    // Track cumulative cash-out per account
     const cumulativeCashOuts: Record<number, number> = {};
-    annuityPlan.accounts.forEach(acc => {
+    includedAccounts.forEach(acc => {
       cumulativeCashOuts[acc.account_id] = 0;
     });
 
-    // Track which levels were already triggered at previous price
     let previousPrice = 0;
 
-    for (let i = 0; i <= 15; i++) {
-      // Split 0 = current, splits 1-15 = future
-      // Each split doubles the price
+    for (let i = 0; i <= splitsNeeded; i++) {
       const price = i === 0 ? currentPrice : currentPrice * Math.pow(2, i);
 
-      const accountForecasts: AccountForecast[] = annuityPlan.accounts.map(account => {
+      const accountForecasts: AccountForecast[] = includedAccounts.map(account => {
         const balance = accountBalances[account.wallet] || 0;
 
-        // All levels triggered at this price
         const triggeredLevels = account.levels
           .filter(l => price >= l.trigger_price)
           .sort((a, b) => a.level_no - b.level_no);
 
-        // Newly triggered at this split (not triggered at previous price)
         const newlyTriggered = account.levels
           .filter(l => price >= l.trigger_price && previousPrice < l.trigger_price)
           .sort((a, b) => a.level_no - b.level_no);
 
-        // Cash out for newly triggered levels
         const cashOutThisSplit = newlyTriggered.reduce((sum, l) => sum + l.cash_out, 0);
         cumulativeCashOuts[account.account_id] += cashOutThisSplit;
 
-        // Remaining LANAs after highest triggered level
         const highestTriggered = triggeredLevels[triggeredLevels.length - 1];
         const remainingLanas = highestTriggered
           ? highestTriggered.remaining_lanas
@@ -218,15 +242,15 @@ const Lana8WonderSplits = () => {
         <div className="flex items-center gap-2 md:gap-3 mb-4">
           <TrendingUp className="h-6 w-6 md:h-8 md:w-8 text-primary flex-shrink-0" />
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold">Split Prognoza</h1>
-            <p className="text-sm md:text-base text-muted-foreground">Napoved za naslednjih 15 splitov</p>
+            <h1 className="text-2xl md:text-3xl font-bold">Split Forecast</h1>
+            <p className="text-sm md:text-base text-muted-foreground">Price projection per split</p>
           </div>
         </div>
 
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Nimate anuitetnega načrta. Za prikaz prognoze izplačil potrebujete aktiven anuitetni načrt na{' '}
+            You don't have an annuity plan. To view payout projections you need an active annuity plan at{' '}
             <a
               href="https://www.lana8wonder.com"
               target="_blank"
@@ -238,15 +262,15 @@ const Lana8WonderSplits = () => {
           </AlertDescription>
         </Alert>
 
-        {/* Still show price forecast without annuity */}
+        {/* Price-only forecast */}
         <Card>
           <CardHeader className="p-4 md:p-6">
             <CardTitle className="text-lg md:text-xl flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
-              Prognoza cene LANA
+              LANA Price Forecast
             </CardTitle>
             <CardDescription className="text-xs md:text-sm">
-              Trenutna cena: <strong>{currentPrice.toFixed(6)} EUR</strong> • Split: <strong>{currentSplit}</strong>
+              Current price: <strong>{currentPrice.toFixed(6)} EUR</strong> • Split: <strong>{currentSplit}</strong>
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
@@ -268,12 +292,12 @@ const Lana8WonderSplits = () => {
                       </Badge>
                       {i === 0 && (
                         <Badge variant="outline" className="text-xs bg-orange-100 dark:bg-orange-900 border-orange-300">
-                          Trenutni
+                          Current
                         </Badge>
                       )}
                     </div>
                     <span className="font-mono font-semibold text-sm">
-                      {price < 1 ? price.toFixed(6) : price < 100 ? price.toFixed(4) : price.toFixed(2)} EUR
+                      {fmtPrice(price)} EUR
                     </span>
                   </div>
                 );
@@ -288,14 +312,18 @@ const Lana8WonderSplits = () => {
   // Has annuity plan — full forecast
   const forecasts = generateForecast();
   const totalAllSplitsCashOut = forecasts.reduce((sum, f) => sum + f.totalCashOut, 0);
+  const lastSplit = forecasts.length > 0 ? forecasts[forecasts.length - 1].splitNumber : currentSplit;
+  const lastPrice = forecasts.length > 0 ? forecasts[forecasts.length - 1].price : currentPrice;
 
   return (
     <div className="container mx-auto p-3 md:p-4 space-y-4">
       <div className="flex items-center gap-2 md:gap-3 mb-4">
         <TrendingUp className="h-6 w-6 md:h-8 md:w-8 text-primary flex-shrink-0" />
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Split Prognoza</h1>
-          <p className="text-sm md:text-base text-muted-foreground">Napoved za naslednjih 15 splitov</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Split Forecast</h1>
+          <p className="text-sm md:text-base text-muted-foreground">
+            Payout projection for accounts 1–5 ({forecasts.length} splits)
+          </p>
         </div>
       </div>
 
@@ -304,79 +332,46 @@ const Lana8WonderSplits = () => {
         <CardContent className="p-4 md:p-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs text-muted-foreground">Trenutna cena</p>
+              <p className="text-xs text-muted-foreground">Current Price</p>
               <p className="font-bold text-lg">{currentPrice.toFixed(6)} <span className="text-sm font-normal">EUR</span></p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Trenutni split</p>
+              <p className="text-xs text-muted-foreground">Current Split</p>
               <p className="font-bold text-lg">{currentSplit}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Cena po 15 splitih</p>
+              <p className="text-xs text-muted-foreground">Final Price (Split {lastSplit})</p>
               <p className="font-bold text-lg">
-                {(currentPrice * Math.pow(2, 15)).toFixed(2)} <span className="text-sm font-normal">EUR</span>
+                {fmtPrice(lastPrice)} <span className="text-sm font-normal">EUR</span>
               </p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Skupno izplačilo</p>
+              <p className="text-xs text-muted-foreground">Total Payout</p>
               <p className="font-bold text-lg text-green-600">
-                {totalAllSplitsCashOut.toFixed(2)} <span className="text-sm font-normal">{annuityPlan.currency}</span>
+                {fmt(totalAllSplitsCashOut)} <span className="text-sm font-normal">{annuityPlan.currency}</span>
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Per-account summary */}
-      {annuityPlan.accounts.map(account => {
-        const balance = accountBalances[account.wallet];
-        const accountTotalCashOut = forecasts.reduce((sum, f) => {
-          const af = f.accountForecasts.find(a => a.accountId === account.account_id);
-          return sum + (af?.cashOutThisSplit || 0);
-        }, 0);
-
-        return (
-          <Card key={account.account_id}>
-            <CardHeader className="p-4 md:p-6 pb-2 md:pb-3">
-              <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
-                <Coins className="h-4 w-4" />
-                Account {account.account_id}
-                <Badge variant="outline" className="font-mono text-xs truncate max-w-[140px] md:max-w-none">
-                  {account.wallet}
-                </Badge>
-                {loadingBalances ? (
-                  <Badge variant="outline" className="flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  </Badge>
-                ) : balance !== undefined ? (
-                  <Badge variant="default">{balance.toFixed(4)} LANA</Badge>
-                ) : null}
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Skupno izplačilo skozi 15 splitov:{' '}
-                <strong className="text-green-600">{accountTotalCashOut.toFixed(2)} {annuityPlan.currency}</strong>
-                {' • '}{account.levels.length} nivojev
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        );
-      })}
-
       {/* Split-by-split forecast */}
       <Card>
         <CardHeader className="p-4 md:p-6">
           <CardTitle className="text-lg md:text-xl flex items-center gap-2">
             <Euro className="h-5 w-5" />
-            Prognoza po splitih
+            Forecast by Split
           </CardTitle>
           <CardDescription className="text-xs md:text-sm">
-            Vsak split podvoji ceno LANA • Izplačila po anuitetnem načrtu
+            Each split doubles the LANA price • Payouts per annuity plan
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 md:p-6 pt-0 space-y-2">
           {forecasts.map((forecast, i) => {
             const hasNewTriggers = forecast.accountForecasts.some(af => af.newlyTriggered.length > 0);
             const isCurrent = i === 0;
+            const accountsWithPayouts = forecast.accountForecasts.filter(af => af.newlyTriggered.length > 0);
+            const multipleAccountsPay = accountsWithPayouts.length > 1;
 
             return (
               <div
@@ -402,52 +397,55 @@ const Lana8WonderSplits = () => {
                     </Badge>
                     {isCurrent && (
                       <Badge variant="outline" className="text-xs bg-orange-100 dark:bg-orange-900 border-orange-300">
-                        Trenutni
+                        Current
                       </Badge>
                     )}
                   </div>
                   <span className="font-mono font-semibold text-sm">
-                    {forecast.price < 1
-                      ? forecast.price.toFixed(6)
-                      : forecast.price < 100
-                        ? forecast.price.toFixed(4)
-                        : forecast.price.toFixed(2)}{' '}
-                    EUR
+                    {fmtPrice(forecast.price)} EUR
                   </span>
                 </div>
 
                 {/* Cash out info */}
                 {forecast.totalCashOut > 0 && (
                   <div className="mt-2 space-y-1">
-                    {forecast.accountForecasts
-                      .filter(af => af.newlyTriggered.length > 0)
-                      .map(af => (
-                        <div key={af.accountId} className="flex items-center justify-between text-xs md:text-sm">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-muted-foreground">Account {af.accountId}:</span>
-                            {af.newlyTriggered.map(l => (
-                              <Badge key={l.row_id} variant="outline" className="text-[10px] px-1.5 py-0 bg-green-100 dark:bg-green-900 border-green-400">
-                                Nivo {l.level_no}
-                              </Badge>
-                            ))}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-green-600">
-                              +{af.cashOutThisSplit.toFixed(2)} {annuityPlan.currency}
-                            </span>
-                            <span className="text-muted-foreground text-xs">
-                              (Σ {af.cumulativeCashOut.toFixed(2)})
-                            </span>
-                          </div>
+                    {accountsWithPayouts.map(af => (
+                      <div key={af.accountId} className="flex items-center justify-between text-xs md:text-sm">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-muted-foreground">Account {af.accountId}:</span>
+                          {af.newlyTriggered.map(l => (
+                            <Badge key={l.row_id} variant="outline" className="text-[10px] px-1.5 py-0 bg-green-100 dark:bg-green-900 border-green-400">
+                              Level {l.level_no}
+                            </Badge>
+                          ))}
                         </div>
-                      ))}
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-green-600">
+                            +{fmt(af.cashOutThisSplit)} {annuityPlan.currency}
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            (Σ {fmt(af.cumulativeCashOut)})
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Split total when multiple accounts pay out */}
+                    {multipleAccountsPay && (
+                      <div className="flex items-center justify-between text-xs md:text-sm pt-1 mt-1 border-t border-green-300 dark:border-green-700">
+                        <span className="font-semibold">Split total:</span>
+                        <span className="font-bold text-green-700 dark:text-green-300">
+                          +{fmt(forecast.totalCashOut)} {annuityPlan.currency}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Cumulative totals for splits with no new triggers */}
+                {/* No payouts on this split */}
                 {forecast.totalCashOut === 0 && i > 0 && (
                   <div className="mt-1 text-xs text-muted-foreground">
-                    Brez novih izplačil na tem splitu
+                    No new payouts on this split
                   </div>
                 )}
               </div>
@@ -461,13 +459,13 @@ const Lana8WonderSplits = () => {
         <CardContent className="p-4 md:p-6">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <p className="text-sm font-semibold text-green-800 dark:text-green-200">Skupno izplačilo (15 splitov)</p>
+              <p className="text-sm font-semibold text-green-800 dark:text-green-200">Total Payout (Accounts 1–5)</p>
               <p className="text-xs text-green-600 dark:text-green-400">
-                Od splita {currentSplit} do splita {currentSplit + 15}
+                Split {currentSplit} → Split {lastSplit}
               </p>
             </div>
             <p className="text-2xl md:text-3xl font-bold text-green-700 dark:text-green-300">
-              {totalAllSplitsCashOut.toFixed(2)} {annuityPlan.currency}
+              {fmt(totalAllSplitsCashOut)} {annuityPlan.currency}
             </p>
           </div>
         </CardContent>
