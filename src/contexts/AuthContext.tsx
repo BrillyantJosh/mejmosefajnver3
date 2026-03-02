@@ -20,6 +20,7 @@ interface UserSession {
   profileName?: string; // User name from KIND 0 profile
   profileDisplayName?: string; // Display name from KIND 0 profile
   profileLang?: string; // Language from KIND 0 profile
+  profileCountry?: string; // Country code from KIND 0 profile
   profileCurrency?: string; // Currency from KIND 0 profile
   expiresAt: number; // Unix timestamp when session expires
 }
@@ -155,6 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let profileName: string | undefined = undefined;
       let profileDisplayName: string | undefined = undefined;
       let profileLang: string | undefined = undefined;
+      let profileCountry: string | undefined = undefined;
       let profileCurrency: string | undefined = undefined;
       
       // Check if user has a KIND 0 profile on relays
@@ -210,6 +212,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 profileLang = profileContent.lang || profileContent.language;
                 console.log('Profile lang extracted:', profileLang);
               }
+              // Extract country code
+              if (profileContent.country) {
+                profileCountry = profileContent.country;
+                console.log('Profile country extracted:', profileContent.country);
+              }
               // Extract currency
               if (profileContent.currency) {
                 profileCurrency = profileContent.currency;
@@ -260,6 +267,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profileName,
         profileDisplayName,
         profileLang,
+        profileCountry,
         profileCurrency,
         expiresAt
       };

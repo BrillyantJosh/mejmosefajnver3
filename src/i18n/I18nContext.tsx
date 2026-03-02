@@ -12,8 +12,8 @@ const I18nContext = createContext<I18nContextValue>({ lang: DEFAULT_LANG });
  * Resolves a raw profile language string to a SupportedLang.
  * Handles codes like "sl", "slv", "sl-SI", "Slovenian", etc.
  */
-function resolveLang(raw?: string): SupportedLang {
-  if (!raw) return DEFAULT_LANG;
+function resolveLang(raw?: string): SupportedLang | null {
+  if (!raw) return null;
 
   const lower = raw.toLowerCase().trim();
 
@@ -29,7 +29,7 @@ function resolveLang(raw?: string): SupportedLang {
   }
 
   // Common ISO 639-2/3 and full-name mappings
-  const aliases: Record<string, SupportedLang> = {
+  const langAliases: Record<string, SupportedLang> = {
     slv: 'sl', slovenian: 'sl', slovenščina: 'sl', slovenscina: 'sl',
     deu: 'de', ger: 'de', german: 'de', deutsch: 'de',
     hun: 'hu', hungarian: 'hu', magyar: 'hu',
@@ -37,17 +37,39 @@ function resolveLang(raw?: string): SupportedLang {
     eng: 'en', english: 'en',
   };
 
-  return aliases[lower] || DEFAULT_LANG;
+  return langAliases[lower] || null;
+}
+
+/**
+ * Maps an ISO 3166-1 country code to the primary language spoken there.
+ * Only maps countries where we support the language.
+ */
+const COUNTRY_TO_LANG: Record<string, SupportedLang> = {
+  si: 'sl', // Slovenia
+  de: 'de', // Germany
+  at: 'de', // Austria
+  ch: 'de', // Switzerland (German majority)
+  hu: 'hu', // Hungary
+  it: 'it', // Italy
+  gb: 'en', us: 'en', au: 'en', ca: 'en', nz: 'en', ie: 'en',
+};
+
+function resolveCountry(country?: string): SupportedLang | null {
+  if (!country) return null;
+  return COUNTRY_TO_LANG[country.toLowerCase().trim()] || null;
 }
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { session } = useAuth();
 
   const lang = useMemo(() => {
-    const resolved = resolveLang(session?.profileLang);
-    console.log('[i18n] profileLang raw:', JSON.stringify(session?.profileLang), '→ resolved:', resolved);
+    // Priority: 1) explicit lang field, 2) country code fallback, 3) default EN
+    const fromLang = resolveLang(session?.profileLang);
+    const fromCountry = resolveCountry(session?.profileCountry);
+    const resolved = fromLang ?? fromCountry ?? DEFAULT_LANG;
+    console.log('[i18n] lang:', JSON.stringify(session?.profileLang), '| country:', JSON.stringify(session?.profileCountry), '→', resolved);
     return resolved;
-  }, [session?.profileLang]);
+  }, [session?.profileLang, session?.profileCountry]);
 
   return (
     <I18nContext.Provider value={{ lang }}>
