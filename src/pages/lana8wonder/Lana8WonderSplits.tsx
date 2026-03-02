@@ -52,13 +52,25 @@ interface AccountForecast {
 interface PassiveSplitEntry {
   splitNumber: number;
   price: number;
+  phase: 'growing' | 'locked';
   accounts: {
     accountId: number;
-    levels: AnnuityLevel[];
+    phase: 'growing' | 'locked';
+    coinsToGive: number;
     cashOut: number;
+    remainingLanas: number;
+    portfolioValue: number;
+    targetValue: number;
   }[];
   totalCashOut: number;
 }
+
+// Target portfolio values for passive accounts
+const PASSIVE_TARGETS: Record<number, number> = {
+  6: 1_000_000,    // €1M
+  7: 10_000_000,   // €10M
+  8: 88_000_000,   // €88M
+};
 
 // Format number with thousands separators
 const fmt = (n: number, decimals = 2): string => {
@@ -72,13 +84,6 @@ const fmtPrice = (price: number): string => {
   if (price < 1) return price.toFixed(6);
   if (price < 100) return fmt(price, 4);
   return fmt(price, 2);
-};
-
-// Calculate which split number a trigger price falls into
-const getSplitForPrice = (triggerPrice: number, currentPrice: number, currentSplit: number): number => {
-  if (triggerPrice <= currentPrice) return currentSplit;
-  const splitsAhead = Math.ceil(Math.log2(triggerPrice / currentPrice));
-  return currentSplit + splitsAhead;
 };
 
 const Lana8WonderSplits = () => {
@@ -166,7 +171,7 @@ const Lana8WonderSplits = () => {
     fetchBalances();
   }, [annuityPlan, parameters?.electrumServers]);
 
-  // Generate forecast for accounts 1-5
+  // Generate forecast for accounts 1-5 (reads from plan levels)
   const generateForecast = (): SplitForecast[] => {
     if (!annuityPlan || currentPrice <= 0) return [];
 
@@ -241,57 +246,113 @@ const Lana8WonderSplits = () => {
   };
 
   // Generate passive income forecast for accounts 6-8
+  // Uses the actual algorithm from lana-8-wonder:
+  //   Phase 1 (growing): sell 1% of remaining LANA per split
+  //   Phase 2 (locked):  maintain target portfolio value, sell excess as price doubles
   const generatePassiveForecast = (): PassiveSplitEntry[] => {
     if (!annuityPlan || currentPrice <= 0) return [];
 
-    const passiveAccounts = annuityPlan.accounts.filter(acc => acc.account_id >= 6 && acc.account_id <= 8);
+    const passiveAccounts = annuityPlan.accounts.filter(
+      acc => acc.account_id >= 6 && acc.account_id <= 8
+    );
     if (passiveAccounts.length === 0) return [];
 
-    // Collect all levels with their split numbers, grouped by split
-    const splitMap = new Map<number, { accountId: number; level: AnnuityLevel }[]>();
+    // Track state per account across splits
+    const accountState: Record<number, {
+      remaining: number;
+      previousRemaining: number;
+      hasReachedTarget: boolean;
+      targetValue: number;
+    }> = {};
 
     passiveAccounts.forEach(acc => {
-      acc.levels.forEach(level => {
-        const splitNum = getSplitForPrice(level.trigger_price, currentPrice, currentSplit);
-        if (!splitMap.has(splitNum)) {
-          splitMap.set(splitNum, []);
-        }
-        splitMap.get(splitNum)!.push({ accountId: acc.account_id, level });
-      });
+      // Use actual wallet balance, fallback to plan's first level remaining + coins
+      const balance = accountBalances[acc.wallet];
+      const initialLanas = balance !== undefined
+        ? balance
+        : (acc.levels.length > 0
+            ? acc.levels[0].remaining_lanas + acc.levels[0].coins_to_give
+            : 0);
+
+      accountState[acc.account_id] = {
+        remaining: initialLanas,
+        previousRemaining: initialLanas,
+        hasReachedTarget: false,
+        targetValue: PASSIVE_TARGETS[acc.account_id] || 1_000_000,
+      };
     });
 
-    // Convert to sorted array
-    const entries: PassiveSplitEntry[] = Array.from(splitMap.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([splitNum, items]) => {
-        const price = currentPrice * Math.pow(2, splitNum - currentSplit);
+    const entries: PassiveSplitEntry[] = [];
+    // Max 37 splits total (as per lana-8-wonder algorithm)
+    const maxSplits = 37;
 
-        // Group by account
-        const accountMap = new Map<number, AnnuityLevel[]>();
-        items.forEach(({ accountId, level }) => {
-          if (!accountMap.has(accountId)) {
-            accountMap.set(accountId, []);
-          }
-          accountMap.get(accountId)!.push(level);
-        });
+    for (let i = 1; i <= maxSplits; i++) {
+      const splitNum = currentSplit + i;
+      const splitPrice = currentPrice * Math.pow(2, i);
 
-        const accounts = Array.from(accountMap.entries())
-          .sort(([a], [b]) => a - b)
-          .map(([accountId, levels]) => ({
-            accountId,
-            levels: levels.sort((a, b) => a.level_no - b.level_no),
-            cashOut: levels.reduce((sum, l) => sum + l.cash_out, 0),
-          }));
+      let hasAnyPayout = false;
+      const accountEntries: PassiveSplitEntry['accounts'] = [];
 
-        const totalCashOut = accounts.reduce((sum, a) => sum + a.cashOut, 0);
+      passiveAccounts.forEach(acc => {
+        const state = accountState[acc.account_id];
+        if (state.remaining <= 0) return;
 
-        return {
-          splitNumber: splitNum,
-          price,
-          accounts,
-          totalCashOut,
-        };
+        const portfolioValue = state.remaining * splitPrice;
+
+        let coinsToGive: number;
+        let newRemaining: number;
+        let phase: 'growing' | 'locked';
+
+        // Check if we've reached the target
+        if (!state.hasReachedTarget && portfolioValue >= state.targetValue) {
+          state.hasReachedTarget = true;
+        }
+
+        if (state.hasReachedTarget) {
+          // Phase 2: Portfolio locked at target value
+          // Sell enough LANA to bring portfolio back to target
+          newRemaining = state.targetValue / splitPrice;
+          coinsToGive = state.previousRemaining - newRemaining;
+          phase = 'locked';
+        } else {
+          // Phase 1: Growing towards target
+          // Sell 1% of remaining LANA
+          coinsToGive = state.remaining * 0.01;
+          newRemaining = state.remaining - coinsToGive;
+          phase = 'growing';
+        }
+
+        const cashOut = coinsToGive * splitPrice;
+
+        if (coinsToGive > 0.0001) {
+          hasAnyPayout = true;
+          accountEntries.push({
+            accountId: acc.account_id,
+            phase,
+            coinsToGive,
+            cashOut,
+            remainingLanas: newRemaining,
+            portfolioValue: newRemaining * splitPrice,
+            targetValue: state.targetValue,
+          });
+        }
+
+        // Update state for next split
+        state.previousRemaining = newRemaining;
+        state.remaining = newRemaining;
       });
+
+      if (hasAnyPayout) {
+        const totalCashOut = accountEntries.reduce((sum, a) => sum + a.cashOut, 0);
+        entries.push({
+          splitNumber: splitNum,
+          price: splitPrice,
+          phase: accountEntries.every(a => a.phase === 'locked') ? 'locked' : 'growing',
+          accounts: accountEntries,
+          totalCashOut,
+        });
+      }
+    }
 
     return entries;
   };
@@ -562,7 +623,7 @@ const Lana8WonderSplits = () => {
                 Passive Income by Split
               </CardTitle>
               <CardDescription className="text-xs md:text-sm">
-                Recurring payouts • Principal is preserved on the account
+                Phase 1: Sell 1% per split while growing • Phase 2: Maintain target value, sell excess
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 md:p-6 pt-0 space-y-2">
@@ -583,6 +644,11 @@ const Lana8WonderSplits = () => {
                         >
                           Split {entry.splitNumber}
                         </Badge>
+                        {entry.phase === 'locked' && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-violet-100 dark:bg-violet-900 border-violet-400">
+                            Target locked
+                          </Badge>
+                        )}
                       </div>
                       <span className="font-mono font-semibold text-sm">
                         {fmtPrice(entry.price)} EUR
@@ -592,18 +658,29 @@ const Lana8WonderSplits = () => {
                     {/* Per-account breakdown */}
                     <div className="mt-2 space-y-1">
                       {entry.accounts.map(acc => (
-                        <div key={acc.accountId} className="flex items-center justify-between text-xs md:text-sm">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-muted-foreground">Account {acc.accountId}:</span>
-                            {acc.levels.map(l => (
-                              <Badge key={l.row_id} variant="outline" className="text-[10px] px-1.5 py-0 bg-violet-100 dark:bg-violet-900 border-violet-400">
-                                Level {l.level_no}
+                        <div key={acc.accountId} className="text-xs md:text-sm">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-muted-foreground">Account {acc.accountId}:</span>
+                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
+                                acc.phase === 'locked'
+                                  ? 'bg-violet-200 dark:bg-violet-800 border-violet-500'
+                                  : 'bg-violet-100 dark:bg-violet-900 border-violet-400'
+                              }`}>
+                                {acc.phase === 'locked'
+                                  ? `Target €${fmt(acc.targetValue, 0)}`
+                                  : 'Growing'}
                               </Badge>
-                            ))}
+                            </div>
+                            <span className="font-semibold text-violet-600 dark:text-violet-400">
+                              +{fmt(acc.cashOut)} {annuityPlan.currency}
+                            </span>
                           </div>
-                          <span className="font-semibold text-violet-600 dark:text-violet-400">
-                            +{fmt(acc.cashOut)} {annuityPlan.currency}
-                          </span>
+                          <div className="flex items-center gap-3 mt-0.5 text-[10px] md:text-xs text-muted-foreground">
+                            <span>Sell: {acc.coinsToGive < 1 ? acc.coinsToGive.toFixed(4) : fmt(acc.coinsToGive, 2)} LANA</span>
+                            <span>Remaining: {acc.remainingLanas < 1 ? acc.remainingLanas.toFixed(4) : fmt(acc.remainingLanas, 2)} LANA</span>
+                            <span>Portfolio: €{fmt(acc.portfolioValue, 0)}</span>
+                          </div>
                         </div>
                       ))}
 
@@ -629,13 +706,13 @@ const Lana8WonderSplits = () => {
             </CardContent>
           </Card>
 
-          {/* Passive income total (shown levels) */}
+          {/* Passive income total (shown splits) */}
           <Card className="border-violet-500 bg-violet-50 dark:bg-violet-950">
             <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <p className="text-sm font-semibold text-violet-800 dark:text-violet-200">
-                    Passive Income (Accounts 6–8, shown levels)
+                    Passive Income (Accounts 6–8, shown splits)
                   </p>
                   <p className="text-xs text-violet-600 dark:text-violet-400">
                     {passiveForecasts.length} payout {passiveForecasts.length === 1 ? 'split' : 'splits'} shown • continues indefinitely
