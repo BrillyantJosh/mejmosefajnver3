@@ -20,6 +20,8 @@ import {
 import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, Send, Key, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
 import { QRScanner } from '@/components/QRScanner';
+import { useTranslation } from '@/i18n/I18nContext';
+import lana8wonderTranslations from '@/i18n/modules/lana8wonder';
 
 interface LocationState {
   sourceWalletId: string;
@@ -37,6 +39,7 @@ export default function Lana8WonderTransfer() {
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
+  const { t } = useTranslation(lana8wonderTranslations);
 
   const state = location.state as LocationState | undefined;
 
@@ -64,10 +67,10 @@ export default function Lana8WonderTransfer() {
     const timeout = setTimeout(async () => {
       setIsValidatingKey(true);
       setKeyError('');
-      
+
       try {
         const result = await convertWifToIds(privateKey);
-        
+
         // Check both compressed and uncompressed addresses
         const matchesCompressed = result.walletId === state.sourceWalletId;
         const matchesUncompressed = result.walletIdUncompressed === state.sourceWalletId;
@@ -77,7 +80,7 @@ export default function Lana8WonderTransfer() {
           setKeyError('');
         } else {
           setIsKeyValid(false);
-          setKeyError('Private key does not match the source wallet');
+          setKeyError(t('transfer.keyMismatch'));
         }
       } catch (error) {
         setIsKeyValid(false);
@@ -88,7 +91,7 @@ export default function Lana8WonderTransfer() {
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [privateKey, state?.sourceWalletId]);
+  }, [privateKey, state?.sourceWalletId, t]);
 
   const handleSubmit = async () => {
     if (!state || !isKeyValid || !selectedDestination || !session?.nostrHexId) {
@@ -96,7 +99,7 @@ export default function Lana8WonderTransfer() {
     }
 
     if (state.sourceWalletId === selectedDestination) {
-      toast.error('Cannot transfer to the same wallet');
+      toast.error(t('transfer.sameWalletError'));
       return;
     }
 
@@ -116,7 +119,7 @@ export default function Lana8WonderTransfer() {
       if (error) throw error;
 
       if (data?.success) {
-        toast.success('Transfer successful!');
+        toast.success(t('transfer.success'));
         navigate('/lana8wonder', {
           state: {
             transferSuccess: true,
@@ -141,14 +144,14 @@ export default function Lana8WonderTransfer() {
       <div className="container mx-auto p-4 pb-24">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Missing transfer details</AlertTitle>
+          <AlertTitle>{t('transfer.missingDetails')}</AlertTitle>
           <AlertDescription>
-            Please start the transfer from the Lana8Wonder page.
+            {t('transfer.missingDetailsDesc')}
           </AlertDescription>
         </Alert>
         <Button variant="ghost" onClick={() => navigate('/lana8wonder')} className="mt-4">
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Lana8Wonder
+          {t('transfer.back')}
         </Button>
       </div>
     );
@@ -160,26 +163,26 @@ export default function Lana8WonderTransfer() {
     <div className="container mx-auto p-3 md:p-4 pb-24 space-y-4 md:space-y-6">
       <Button variant="ghost" onClick={() => navigate('/lana8wonder')} className="mb-2">
         <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to Lana8Wonder
+        {t('transfer.back')}
       </Button>
 
       <div className="flex items-center gap-2 md:gap-3 mb-4">
         <Send className="h-6 w-6 md:h-8 md:w-8 text-primary flex-shrink-0" />
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Cash Out Transfer</h1>
-          <p className="text-sm md:text-base text-muted-foreground">Account {state.accountId}</p>
+          <h1 className="text-2xl md:text-3xl font-bold">{t('transfer.title')}</h1>
+          <p className="text-sm md:text-base text-muted-foreground">{t('transfer.account', { id: state.accountId })}</p>
         </div>
       </div>
 
       {/* Transfer Summary */}
       <Card>
         <CardHeader className="p-4 md:p-6">
-          <CardTitle className="text-lg md:text-xl">Transfer Details</CardTitle>
+          <CardTitle className="text-lg md:text-xl">{t('transfer.details')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 p-4 md:p-6 pt-0">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-muted/50">
-              <p className="text-sm text-muted-foreground mb-1">Amount to Transfer</p>
+              <p className="text-sm text-muted-foreground mb-1">{t('transfer.amountToTransfer')}</p>
               <p className="text-xl md:text-2xl font-bold text-primary">
                 {state.cashOutAmount.toFixed(4)} LANA
               </p>
@@ -188,7 +191,7 @@ export default function Lana8WonderTransfer() {
               </p>
             </div>
             <div className="p-4 rounded-lg bg-muted/50">
-              <p className="text-sm text-muted-foreground mb-1">From Wallet</p>
+              <p className="text-sm text-muted-foreground mb-1">{t('transfer.fromWallet')}</p>
               <p className="font-mono text-xs md:text-sm break-all">{state.sourceWalletId}</p>
             </div>
           </div>
@@ -198,7 +201,7 @@ export default function Lana8WonderTransfer() {
       {/* Destination Wallet Selection */}
       <Card>
         <CardHeader className="p-4 md:p-6">
-          <CardTitle className="text-lg md:text-xl">Destination Wallet</CardTitle>
+          <CardTitle className="text-lg md:text-xl">{t('transfer.destinationWallet')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 p-4 md:p-6 pt-0">
           {walletsLoading ? (
@@ -208,17 +211,17 @@ export default function Lana8WonderTransfer() {
           ) : destinationWallets.length === 0 ? (
             <Alert>
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>No eligible wallets</AlertTitle>
+              <AlertTitle>{t('transfer.noEligibleWallets')}</AlertTitle>
               <AlertDescription>
-                You need a wallet of type "Wallets" or "Main Wallet" to receive the transfer.
+                {t('transfer.noEligibleWalletsDesc')}
               </AlertDescription>
             </Alert>
           ) : (
             <div className="space-y-2">
-              <Label htmlFor="destination">Select destination wallet</Label>
+              <Label htmlFor="destination">{t('transfer.selectDestination')}</Label>
               <Select value={selectedDestination} onValueChange={setSelectedDestination}>
                 <SelectTrigger id="destination">
-                  <SelectValue placeholder="Choose a wallet" />
+                  <SelectValue placeholder={t('transfer.chooseWallet')} />
                 </SelectTrigger>
                 <SelectContent>
                   {destinationWallets.map(wallet => (
@@ -243,25 +246,25 @@ export default function Lana8WonderTransfer() {
         <CardHeader className="p-4 md:p-6">
           <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
             <Key className="h-5 w-5" />
-            Private Key
+            {t('transfer.privateKey')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 p-4 md:p-6 pt-0">
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="text-xs md:text-sm">
-              Enter the private key (WIF format) for the source wallet to authorize this transfer. Your private key is never stored.
+              {t('transfer.privateKeyHint')}
             </AlertDescription>
           </Alert>
 
           <div className="space-y-2">
-            <Label htmlFor="privateKey">Private Key (WIF)</Label>
+            <Label htmlFor="privateKey">{t('transfer.privateKeyLabel')}</Label>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Input
                   id="privateKey"
                   type="password"
-                  placeholder="Enter your private key"
+                  placeholder={t('transfer.enterPrivateKey')}
                   value={privateKey}
                   onChange={e => setPrivateKey(e.target.value)}
                   className={`pr-10 ${
@@ -285,13 +288,13 @@ export default function Lana8WonderTransfer() {
                 variant="outline"
                 size="icon"
                 onClick={() => setShowQRScanner(true)}
-                title="Scan QR Code"
+                title={t('transfer.scanQr')}
               >
                 <QrCode className="w-4 h-4" />
               </Button>
             </div>
             {keyError && <p className="text-sm text-destructive">{keyError}</p>}
-            {isKeyValid && <p className="text-sm text-green-600">Private key validated ✓</p>}
+            {isKeyValid && <p className="text-sm text-green-600">{t('transfer.keyValidated')}</p>}
           </div>
 
           <QRScanner
@@ -300,7 +303,7 @@ export default function Lana8WonderTransfer() {
             onScan={(data) => {
               setPrivateKey(data);
               setShowQRScanner(false);
-              toast.success('QR Code scanned - Private key loaded');
+              toast.success(t('transfer.qrScanned'));
             }}
           />
         </CardContent>
@@ -316,12 +319,12 @@ export default function Lana8WonderTransfer() {
         {isSubmitting ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Processing Transfer...
+            {t('transfer.processing')}
           </>
         ) : (
           <>
             <Send className="h-4 w-4 mr-2" />
-            Transfer {state.cashOutAmount.toFixed(4)} LANA
+            {t('transfer.transferAmount', { amount: state.cashOutAmount.toFixed(4) })}
           </>
         )}
       </Button>
