@@ -122,6 +122,8 @@ import SellLana from "./pages/SellLana";
 import BuyLana from "./pages/BuyLana";
 import Lana8Wonder from "./pages/Lana8Wonder";
 import Lana8WonderTransfer from "./pages/Lana8WonderTransfer";
+import Lana8WonderLayout from "./pages/lana8wonder/Lana8WonderLayout";
+import Lana8WonderSplits from "./pages/lana8wonder/Lana8WonderSplits";
 import AiAdvisor from "./pages/AiAdvisor";
 import Home from "./pages/Home";
 import FaqDetail from "./pages/FaqDetail";
@@ -295,8 +297,11 @@ const App = () => (
             <Route path="/send-lana/result" element={<SendLanaResult />} />
                   <Route path="/sell-lana" element={<SellLana />} />
                   <Route path="/buy-lana" element={<BuyLana />} />
-                  <Route path="/lana8wonder" element={<Lana8Wonder />} />
-                  <Route path="/lana8wonder/transfer" element={<Lana8WonderTransfer />} />
+                  <Route path="/lana8wonder" element={<Lana8WonderLayout />}>
+                    <Route index element={<Lana8Wonder />} />
+                    <Route path="splits" element={<Lana8WonderSplits />} />
+                    <Route path="transfer" element={<Lana8WonderTransfer />} />
+                  </Route>
                   <Route path="/ai-advisor" element={<AiAdvisor />} />
                   <Route path="/music" element={<LanaMusicLayout />}>
                     <Route index element={<Songs />} />
