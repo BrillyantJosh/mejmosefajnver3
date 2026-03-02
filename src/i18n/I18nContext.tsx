@@ -43,10 +43,11 @@ function resolveLang(raw?: string): SupportedLang {
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { session } = useAuth();
 
-  const lang = useMemo(
-    () => resolveLang(session?.profileLang),
-    [session?.profileLang]
-  );
+  const lang = useMemo(() => {
+    const resolved = resolveLang(session?.profileLang);
+    console.log('[i18n] profileLang raw:', JSON.stringify(session?.profileLang), '→ resolved:', resolved);
+    return resolved;
+  }, [session?.profileLang]);
 
   return (
     <I18nContext.Provider value={{ lang }}>
