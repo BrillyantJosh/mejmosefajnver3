@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Globe, MapPin, CalendarDays, History, Ticket, QrCode } from "lucide-react";
+import { Globe, MapPin, CalendarDays, History, Ticket } from "lucide-react";
 
 const eventsNavItems = [
   {
@@ -22,11 +22,6 @@ const eventsNavItems = [
     title: "Tickets",
     path: "/events/my-tickets",
     icon: Ticket
-  },
-  {
-    title: "Check-in",
-    path: "/events/my-checkins",
-    icon: QrCode
   },
   {
     title: "My Events",
