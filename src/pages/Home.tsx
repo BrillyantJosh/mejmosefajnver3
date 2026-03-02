@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle, Video } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, Video, Calendar, Globe, MapPin } from "lucide-react";
+import { formatDistanceToNow, format, startOfWeek, endOfWeek } from "date-fns";
+import { useNostrEvents, LanaEvent } from "@/hooks/useNostrEvents";
 
 interface WhatsUpItem {
   id: string;
@@ -37,6 +38,22 @@ export default function Home() {
   const [items, setItems] = useState<WhatsUpItem[]>([]);
   const [faqItems, setFaqItems] = useState<FaqItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Fetch events for sidebar
+  const { events: onlineEvents, loading: loadingOnline } = useNostrEvents('online');
+  const { events: liveEvents, loading: loadingLive } = useNostrEvents('live');
+
+  // Filter online events: this week only, upcoming/active
+  const now = new Date();
+  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+  const onlineThisWeek = onlineEvents
+    .filter(e => e.status === 'active' && e.start <= weekEnd && (e.end ? e.end >= now : e.start >= new Date(now.getTime() - 2 * 60 * 60 * 1000)))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  // Filter live events: upcoming/active only
+  const liveUpcoming = liveEvents
+    .filter(e => e.status === 'active' && (e.end ? e.end >= now : e.start >= new Date(now.getTime() - 2 * 60 * 60 * 1000)))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
 
   useEffect(() => {
     async function load() {
@@ -138,9 +155,10 @@ export default function Home() {
             )}
           </div>
 
-          {/* FAQ sidebar — right */}
-          {faqItems.length > 0 && (
-            <div className="w-full lg:w-72 flex-shrink-0">
+          {/* Sidebar — right */}
+          <div className="w-full lg:w-72 flex-shrink-0 space-y-4">
+            {/* FAQ Card */}
+            {faqItems.length > 0 && (
               <Card className="sticky top-20">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -172,8 +190,73 @@ export default function Home() {
                   </Link>
                 </CardContent>
               </Card>
-            </div>
-          )}
+            )}
+
+            {/* Events Card */}
+            {!loadingOnline && !loadingLive && (onlineThisWeek.length > 0 || liveUpcoming.length > 0) && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-indigo-500" />
+                    Events
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 space-y-4">
+                  {/* Online Events — this week */}
+                  {onlineThisWeek.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Globe className="h-3.5 w-3.5 text-blue-500" />
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Online this week</span>
+                      </div>
+                      <div className="space-y-1">
+                        {onlineThisWeek.slice(0, 5).map((ev) => (
+                          <Link
+                            key={ev.id}
+                            to={`/events/detail/${encodeURIComponent(ev.dTag)}`}
+                            className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:bg-secondary/50 transition-colors"
+                          >
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(ev.start, 'EEE HH:mm')}</span>
+                            <span className="truncate">{ev.title}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Live Events */}
+                  {liveUpcoming.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <MapPin className="h-3.5 w-3.5 text-red-500" />
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Live</span>
+                      </div>
+                      <div className="space-y-1">
+                        {liveUpcoming.slice(0, 5).map((ev) => (
+                          <Link
+                            key={ev.id}
+                            to={`/events/detail/${encodeURIComponent(ev.dTag)}`}
+                            className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:bg-secondary/50 transition-colors"
+                          >
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(ev.start, 'dd.MM')}</span>
+                            <span className="truncate">{ev.title}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Link to all events */}
+                  <Link
+                    to="/events"
+                    className="flex items-center justify-center px-3 py-2 rounded-lg text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
+                  >
+                    View all events →
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
       )}
     </div>
