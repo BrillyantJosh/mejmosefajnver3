@@ -207,10 +207,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 profileDisplayName = profileContent.display_name;
                 console.log('Profile display_name extracted:', profileContent.display_name);
               }
-              // Extract language (could be lang or language field)
+              // Extract language: check content fields first, then event tags
               if (profileContent.lang || profileContent.language) {
                 profileLang = profileContent.lang || profileContent.language;
-                console.log('Profile lang extracted:', profileLang);
+                console.log('Profile lang extracted from content:', profileLang);
+              }
+              if (!profileLang && profileEvent.tags) {
+                const langTag = profileEvent.tags.find((tag: string[]) => tag[0] === 'lang');
+                if (langTag && langTag[1]) {
+                  profileLang = langTag[1];
+                  console.log('Profile lang extracted from tags:', profileLang);
+                }
               }
               // Extract country code
               if (profileContent.country) {
