@@ -12,6 +12,8 @@ import { Loader2, ExternalLink, Sparkles, CheckCircle2, AlertCircle, ArrowRightL
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
+import { useTranslation } from '@/i18n/I18nContext';
+import lana8wonderTranslations from '@/i18n/modules/lana8wonder';
 
 interface TransferSuccessState {
   transferSuccess?: boolean;
@@ -49,6 +51,7 @@ const Lana8Wonder = () => {
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
+  const { t } = useTranslation(lana8wonderTranslations);
   const [isLoading, setIsLoading] = useState(true);
   const [annuityPlan, setAnnuityPlan] = useState<AnnuityPlan | null>(null);
   const [eligibleWallets, setEligibleWallets] = useState<string[]>([]);
@@ -71,7 +74,7 @@ const Lana8Wonder = () => {
   const copyTxHash = () => {
     if (successData?.txHash) {
       navigator.clipboard.writeText(successData.txHash);
-      toast.success('Transaction hash copied!');
+      toast.success(t('plan.txCopied'));
     }
   };
 
@@ -87,16 +90,16 @@ const Lana8Wonder = () => {
       }
 
       const pool = new SimplePool();
-      
+
       try {
         console.log('Fetching KIND 88888 for user:', session.nostrHexId);
-        
+
         const events = await Promise.race([
           pool.querySync(relays, {
             kinds: [88888],
             '#p': [session.nostrHexId],
           }),
-          new Promise<Event[]>((_, reject) => 
+          new Promise<Event[]>((_, reject) =>
             setTimeout(() => reject(new Error('Timeout')), 10000)
           )
         ]) as Event[];
@@ -130,7 +133,7 @@ const Lana8Wonder = () => {
 
       // Determine which wallet addresses to fetch
       let walletAddresses: string[] = [];
-      
+
       if (annuityPlan) {
         // Fetch balances for annuity plan accounts
         walletAddresses = annuityPlan.accounts.map(acc => acc.wallet);
@@ -178,22 +181,22 @@ const Lana8Wonder = () => {
 
     wallets.forEach(wallet => {
       // Use balance from Electrum server if available, otherwise fallback to amountUnregistered
-      const balance = accountBalances[wallet.walletId] !== undefined 
+      const balance = accountBalances[wallet.walletId] !== undefined
         ? accountBalances[wallet.walletId]
         : parseFloat(wallet.amountUnregistered || '0') / 100000000;
-      
+
       // Check EUR value
       if (exchangeRates.EUR && balance * exchangeRates.EUR >= threshold) {
         eligible.push(wallet.walletId);
         return;
       }
-      
+
       // Check GBP value
       if (exchangeRates.GBP && balance * exchangeRates.GBP >= threshold) {
         eligible.push(wallet.walletId);
         return;
       }
-      
+
       // Check USD value
       if (exchangeRates.USD && balance * exchangeRates.USD >= threshold) {
         eligible.push(wallet.walletId);
@@ -218,10 +221,10 @@ const Lana8Wonder = () => {
         {showSuccessBanner && successData && (
           <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
             <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <AlertTitle className="text-green-800 dark:text-green-200">Transfer Successful!</AlertTitle>
+            <AlertTitle className="text-green-800 dark:text-green-200">{t('plan.transferSuccess')}</AlertTitle>
             <AlertDescription className="text-green-700 dark:text-green-300">
               <div className="space-y-2">
-                <p>Successfully transferred <strong>{successData.amount.toFixed(4)} LANA</strong></p>
+                <p>{t('plan.transferredAmount', { amount: successData.amount.toFixed(4) })}</p>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs">TX:</span>
                   <code className="font-mono text-xs bg-green-100 dark:bg-green-900 px-2 py-1 rounded break-all">
@@ -266,21 +269,21 @@ const Lana8Wonder = () => {
         <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
           <Sparkles className="h-6 w-6 md:h-8 md:w-8 text-primary flex-shrink-0" />
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold">Lana8Wonder</h1>
-            <p className="text-sm md:text-base text-muted-foreground">Your Annuity Plan</p>
+            <h1 className="text-2xl md:text-3xl font-bold">{t('plan.title')}</h1>
+            <p className="text-sm md:text-base text-muted-foreground">{t('plan.subtitle')}</p>
           </div>
         </div>
 
         <Card>
           <CardHeader className="p-4 md:p-6">
-            <CardTitle className="text-lg md:text-xl">Plan Details</CardTitle>
+            <CardTitle className="text-lg md:text-xl">{t('plan.planDetails')}</CardTitle>
             <CardDescription className="text-xs md:text-sm">
               <div className="flex flex-col sm:flex-row sm:gap-2">
-                <span>Coin: {annuityPlan.coin}</span>
+                <span>{t('plan.coin')}: {annuityPlan.coin}</span>
                 <span className="hidden sm:inline">|</span>
-                <span>Currency: {annuityPlan.currency}</span>
+                <span>{t('plan.currency')}: {annuityPlan.currency}</span>
                 <span className="hidden sm:inline">|</span>
-                <span>Policy: {annuityPlan.policy}</span>
+                <span>{t('plan.policy')}: {annuityPlan.policy}</span>
               </div>
             </CardDescription>
           </CardHeader>
@@ -288,42 +291,42 @@ const Lana8Wonder = () => {
             <Accordion type="single" collapsible className="w-full">
               {annuityPlan.accounts.map(account => {
                 const balance = accountBalances[account.wallet];
-                
+
                 // Find the last triggered level (highest level_no where price >= trigger)
                 const triggeredLevels = account.levels
                   .filter(l => currentPrice >= l.trigger_price)
                   .sort((a, b) => b.level_no - a.level_no);
-                
+
                 const lastTriggeredLevel = triggeredLevels[0];
                 const expectedRemaining = lastTriggeredLevel?.remaining_lanas || 0;
-                
+
                 // Check if user needs to cash out (balance > remaining * 1.02)
                 const needsCashOut = balance !== undefined && lastTriggeredLevel && balance > expectedRemaining * 1.02;
                 const cashOutAmount = needsCashOut ? balance - expectedRemaining : 0;
                 const cashOutFiat = cashOutAmount * currentPrice;
-                
+
                 return (
                   <AccordionItem key={account.account_id} value={`account-${account.account_id}`}>
                     <AccordionTrigger className="hover:no-underline">
                       <div className="flex items-center gap-2 flex-wrap text-left">
-                        <span className="font-semibold text-sm md:text-base">Account {account.account_id}</span>
+                        <span className="font-semibold text-sm md:text-base">{t('plan.account', { id: account.account_id })}</span>
                         <Badge variant="outline" className="text-xs truncate max-w-[140px] md:max-w-none">{account.wallet}</Badge>
-                        <Badge variant="secondary" className="text-xs">{account.levels.length} levels</Badge>
+                        <Badge variant="secondary" className="text-xs">{t('plan.levels', { count: account.levels.length })}</Badge>
                         {loadingBalances ? (
                           <Badge variant="outline" className="flex items-center gap-1">
                             <Loader2 className="h-3 w-3 animate-spin" />
-                            Loading...
+                            {t('plan.loading')}
                           </Badge>
                         ) : balance !== undefined ? (
                           <Badge variant="default">{balance.toFixed(4)} LANA</Badge>
                         ) : null}
                         {needsCashOut && !loadingBalances && (
-                          <Badge 
-                            variant="destructive" 
+                          <Badge
+                            variant="destructive"
                             className="flex items-center gap-1 text-xs"
                           >
                             <AlertCircle className="h-3 w-3" />
-                            <span className="hidden sm:inline">Cash Out:</span>
+                            <span className="hidden sm:inline">{t('plan.cashOutBadge')}</span>
                             {cashOutAmount.toFixed(2)} LANA
                           </Badge>
                         )}
@@ -336,9 +339,13 @@ const Lana8Wonder = () => {
                             <div className="flex items-start gap-2">
                               <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                               <div>
-                                <AlertTitle className="text-sm md:text-base">Cash Out Required</AlertTitle>
+                                <AlertTitle className="text-sm md:text-base">{t('plan.cashOutRequired')}</AlertTitle>
                                 <AlertDescription className="text-xs md:text-sm">
-                                  You need to cash out <strong>{cashOutAmount.toFixed(4)} LANA</strong> (≈{cashOutFiat.toFixed(2)} {annuityPlan.currency}) from this account before the next split.
+                                  {t('plan.cashOutDescription', {
+                                    amount: cashOutAmount.toFixed(4),
+                                    fiat: cashOutFiat.toFixed(2),
+                                    currency: annuityPlan.currency,
+                                  })}
                                 </AlertDescription>
                               </div>
                             </div>
@@ -357,70 +364,66 @@ const Lana8Wonder = () => {
                               })}
                             >
                               <ArrowRightLeft className="h-4 w-4 mr-2" />
-                              Transfer
+                              {t('plan.transfer')}
                             </Button>
                           </Alert>
                         )}
                         {account.levels.map(level => {
                           const isLevelTriggered = currentPrice >= level.trigger_price;
-                          
-                          // Določi status izplačila za ta nivo
-                          // Nivo je izplačan če je triggered IN je balance <= remaining_lanas za ta nivo (z 2% toleranco)
-                          const isLevelPaidOut = isLevelTriggered && 
-                            balance !== undefined && 
+
+                          const isLevelPaidOut = isLevelTriggered &&
+                            balance !== undefined &&
                             balance <= level.remaining_lanas * 1.02;
-                          
-                          // Nivo čaka izplačilo če je triggered AMPAK balance > remaining_lanas
-                          const isLevelPendingCashOut = isLevelTriggered && 
-                            balance !== undefined && 
+
+                          const isLevelPendingCashOut = isLevelTriggered &&
+                            balance !== undefined &&
                             balance > level.remaining_lanas * 1.02;
-                          
-                          // Določi CSS razrede glede na status
+
                           let cardClassName = 'p-3 md:p-4';
                           if (isLevelPaidOut) {
                             cardClassName += ' border-green-500 bg-green-50 dark:bg-green-950';
                           } else if (isLevelPendingCashOut) {
                             cardClassName += ' border-orange-500 bg-orange-50 dark:bg-orange-950';
                           }
-                          
+
                           return (
-                            <Card 
-                              key={level.row_id} 
+                            <Card
+                              key={level.row_id}
                               className={cardClassName}
                             >
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 text-xs md:text-sm">
                                 <div>
-                                  <span className="text-muted-foreground">Level:</span>
+                                  <span className="text-muted-foreground">{t('plan.level')}</span>
                                   <div className="flex items-center gap-2">
                                     <p className="font-semibold">{level.level_no}</p>
                                     {isLevelPaidOut && (
                                       <Badge variant="default" className="bg-green-500 text-white text-[10px] px-1.5 py-0">
                                         <CheckCircle2 className="h-3 w-3 mr-0.5" />
-                                        Paid Out
+                                        {t('plan.paidOut')}
                                       </Badge>
                                     )}
                                     {isLevelPendingCashOut && (
                                       <Badge variant="default" className="bg-orange-500 text-white text-[10px] px-1.5 py-0">
                                         <AlertCircle className="h-3 w-3 mr-0.5" />
-                                        Pending
+                                        {t('plan.pending')}
                                       </Badge>
                                     )}
                                   </div>
                                 </div>
                                 <div>
-                                  <span className="text-muted-foreground">Trigger Price:</span>
+                                  <span className="text-muted-foreground">{t('plan.triggerPrice')}</span>
                                   <p className="font-semibold">{level.trigger_price.toFixed(4)} {annuityPlan.currency}</p>
                                 </div>
                                 <div>
-                                  <span className="text-muted-foreground">Coins to Give:</span>
+                                  <span className="text-muted-foreground">{t('plan.coinsToGive')}</span>
                                   <p className="font-semibold">{level.coins_to_give.toFixed(4)}</p>
                                 </div>
                                 <div>
-                                  <span className="text-muted-foreground">Cash Out:</span>
+                                  <span className="text-muted-foreground">{t('plan.cashOut')}</span>
                                   <p className="font-semibold">{level.cash_out.toFixed(2)} {annuityPlan.currency}</p>
                                 </div>
                                 <div className="col-span-2 md:col-span-4">
-                                  <span className="text-muted-foreground">Remaining LANAs:</span>
+                                  <span className="text-muted-foreground">{t('plan.remainingLanas')}</span>
                                   <p className="font-semibold">{level.remaining_lanas.toFixed(4)}</p>
                                 </div>
                               </div>
@@ -445,32 +448,32 @@ const Lana8Wonder = () => {
       <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
         <Sparkles className="h-6 w-6 md:h-8 md:w-8 text-primary flex-shrink-0" />
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Lana8Wonder</h1>
-          <p className="text-sm md:text-base text-muted-foreground">Check Your Eligibility</p>
+          <h1 className="text-2xl md:text-3xl font-bold">{t('plan.title')}</h1>
+          <p className="text-sm md:text-base text-muted-foreground">{t('plan.checkEligibility')}</p>
         </div>
       </div>
 
       <Card>
         <CardHeader className="p-4 md:p-6">
-          <CardTitle className="text-lg md:text-xl">Your Wallets</CardTitle>
+          <CardTitle className="text-lg md:text-xl">{t('plan.yourWallets')}</CardTitle>
           <CardDescription className="text-xs md:text-sm">
-            Wallets with ≥100 EUR/GBP/USD equivalent are eligible for Lana8Wonder enrollment
+            {t('plan.walletsEligibility')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 md:space-y-4 p-4 md:p-6">
           {wallets.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">No wallets found</p>
+            <p className="text-muted-foreground text-center py-8">{t('plan.noWallets')}</p>
           ) : (
             wallets.map(wallet => {
               // Use balance from Electrum server if available, otherwise fallback to amountUnregistered
-              const balance = accountBalances[wallet.walletId] !== undefined 
+              const balance = accountBalances[wallet.walletId] !== undefined
                 ? accountBalances[wallet.walletId]
                 : parseFloat(wallet.amountUnregistered || '0') / 100000000;
               const isEligible = eligibleWallets.includes(wallet.walletId);
-              
+
               let fiatValue = 0;
               let currency = 'EUR';
-              
+
               if (exchangeRates) {
                 if (exchangeRates.EUR) {
                   fiatValue = balance * exchangeRates.EUR;
@@ -495,7 +498,7 @@ const Lana8Wonder = () => {
                             <>
                               <CheckCircle2 className="h-5 w-5 text-green-500" />
                               <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-                                Eligible for Lana8Wonder
+                                {t('plan.eligible')}
                               </Badge>
                             </>
                           )}
@@ -511,13 +514,13 @@ const Lana8Wonder = () => {
                       </div>
                       {isEligible && (
                         <Button variant="default" size="sm" asChild className="w-full sm:w-auto">
-                          <a 
-                            href="https://www.lana8wonder.com" 
-                            target="_blank" 
+                          <a
+                            href="https://www.lana8wonder.com"
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center justify-center gap-2"
                           >
-                            Enroll Now
+                            {t('plan.enrollNow')}
                             <ExternalLink className="h-4 w-4" />
                           </a>
                         </Button>
@@ -537,9 +540,12 @@ const Lana8Wonder = () => {
             <div className="flex items-start gap-2 md:gap-3">
               <CheckCircle2 className="h-5 w-5 md:h-6 md:w-6 text-green-500 mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-base md:text-lg">You're Eligible!</h3>
+                <h3 className="font-semibold text-base md:text-lg">{t('plan.youreEligible')}</h3>
                 <p className="text-xs md:text-sm text-muted-foreground mt-1">
-                  {eligibleWallets.length} {eligibleWallets.length === 1 ? 'wallet has' : 'wallets have'} sufficient balance for Lana8Wonder enrollment.
+                  {eligibleWallets.length === 1
+                    ? t('plan.walletHas', { count: eligibleWallets.length })
+                    : t('plan.walletsHave', { count: eligibleWallets.length })
+                  }
                 </p>
               </div>
             </div>

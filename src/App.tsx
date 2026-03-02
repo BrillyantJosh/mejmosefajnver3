@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ModulesProvider } from "./contexts/ModulesContext";
 import { AdminProvider } from "./contexts/AdminContext";
 import { AuthProvider } from "./contexts/AuthContext";
+import { I18nProvider } from "./i18n/I18nContext";
 import { SystemParametersProvider } from "./contexts/SystemParametersContext";
 import { AdminProtectedRoute, ProtectedRoute } from "./components/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
@@ -154,6 +155,7 @@ const App = () => (
     <BrowserRouter>
       <SystemParametersProvider>
         <AuthProvider>
+          <I18nProvider>
           <AdminProvider>
             <ModulesProvider>
               <TooltipProvider>
@@ -344,6 +346,7 @@ const App = () => (
             </TooltipProvider>
           </ModulesProvider>
         </AdminProvider>
+          </I18nProvider>
       </AuthProvider>
       </SystemParametersProvider>
     </BrowserRouter>

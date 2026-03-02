@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Loader2, TrendingUp, AlertCircle, Euro, Wallet } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useTranslation } from '@/i18n/I18nContext';
+import lana8wonderTranslations from '@/i18n/modules/lana8wonder';
 
 interface AnnuityLevel {
   row_id: string;
@@ -66,6 +68,7 @@ const fmtPrice = (price: number): string => {
 const Lana8WonderSplits = () => {
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
+  const { t } = useTranslation(lana8wonderTranslations);
   const [isLoading, setIsLoading] = useState(true);
   const [annuityPlan, setAnnuityPlan] = useState<AnnuityPlan | null>(null);
   const [accountBalances, setAccountBalances] = useState<Record<string, number>>({});
@@ -237,15 +240,15 @@ const Lana8WonderSplits = () => {
         <div className="flex items-center gap-2 md:gap-3 mb-4">
           <TrendingUp className="h-6 w-6 md:h-8 md:w-8 text-primary flex-shrink-0" />
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold">Split Forecast</h1>
-            <p className="text-sm md:text-base text-muted-foreground">Price projection per split</p>
+            <h1 className="text-2xl md:text-3xl font-bold">{t('splits.title')}</h1>
+            <p className="text-sm md:text-base text-muted-foreground">{t('splits.priceProjection')}</p>
           </div>
         </div>
 
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            You don't have an annuity plan. To view payout projections you need an active annuity plan at{' '}
+            {t('splits.noPlan')}{' '}
             <a
               href="https://www.lana8wonder.com"
               target="_blank"
@@ -262,10 +265,10 @@ const Lana8WonderSplits = () => {
           <CardHeader className="p-4 md:p-6">
             <CardTitle className="text-lg md:text-xl flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
-              LANA Price Forecast
+              {t('splits.priceForecast')}
             </CardTitle>
             <CardDescription className="text-xs md:text-sm">
-              Current price: <strong>{currentPrice.toFixed(6)} EUR</strong> • Split: <strong>{currentSplit}</strong>
+              {t('splits.currentPriceLabel')} <strong>{currentPrice.toFixed(6)} EUR</strong> • {t('splits.splitLabel')} <strong>{currentSplit}</strong>
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
@@ -283,11 +286,11 @@ const Lana8WonderSplits = () => {
                   >
                     <div className="flex items-center gap-2">
                       <Badge variant={i === 0 ? 'default' : 'secondary'} className="text-xs min-w-[70px] justify-center">
-                        Split {currentSplit + i}
+                        {t('splits.split', { n: currentSplit + i })}
                       </Badge>
                       {i === 0 && (
                         <Badge variant="outline" className="text-xs bg-orange-100 dark:bg-orange-900 border-orange-300">
-                          Up to
+                          {t('splits.upTo')}
                         </Badge>
                       )}
                     </div>
@@ -315,9 +318,9 @@ const Lana8WonderSplits = () => {
       <div className="flex items-center gap-2 md:gap-3 mb-4">
         <TrendingUp className="h-6 w-6 md:h-8 md:w-8 text-primary flex-shrink-0" />
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Split Forecast</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">{t('splits.title')}</h1>
           <p className="text-sm md:text-base text-muted-foreground">
-            Payout projection for accounts 1–5 ({forecasts.length} splits)
+            {t('splits.payoutSubtitle', { count: String(forecasts.length) })}
           </p>
         </div>
       </div>
@@ -327,21 +330,21 @@ const Lana8WonderSplits = () => {
         <CardContent className="p-4 md:p-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs text-muted-foreground">Current Price</p>
+              <p className="text-xs text-muted-foreground">{t('splits.currentPrice')}</p>
               <p className="font-bold text-lg">{currentPrice.toFixed(6)} <span className="text-sm font-normal">EUR</span></p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Current Split</p>
+              <p className="text-xs text-muted-foreground">{t('splits.currentSplit')}</p>
               <p className="font-bold text-lg">{currentSplit}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Final Price (Split {lastSplit})</p>
+              <p className="text-xs text-muted-foreground">{t('splits.finalPrice', { n: lastSplit })}</p>
               <p className="font-bold text-lg">
                 {fmtPrice(lastPrice)} <span className="text-sm font-normal">EUR</span>
               </p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Total Payout</p>
+              <p className="text-xs text-muted-foreground">{t('splits.totalPayout')}</p>
               <p className="font-bold text-lg text-green-600">
                 {fmt(totalAllSplitsCashOut)} <span className="text-sm font-normal">{annuityPlan.currency}</span>
               </p>
@@ -355,10 +358,10 @@ const Lana8WonderSplits = () => {
         <CardHeader className="p-4 md:p-6">
           <CardTitle className="text-lg md:text-xl flex items-center gap-2">
             <Euro className="h-5 w-5" />
-            Forecast by Split
+            {t('splits.forecastBySplit')}
           </CardTitle>
           <CardDescription className="text-xs md:text-sm">
-            Each split doubles the LANA price • Payouts per annuity plan
+            {t('splits.forecastDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 md:p-6 pt-0 space-y-2">
@@ -388,11 +391,11 @@ const Lana8WonderSplits = () => {
                         hasNewTriggers && !isCurrent ? 'bg-green-600 hover:bg-green-700' : ''
                       }`}
                     >
-                      Split {forecast.splitNumber}
+                      {t('splits.split', { n: forecast.splitNumber })}
                     </Badge>
                     {isCurrent && (
                       <Badge variant="outline" className="text-xs bg-orange-100 dark:bg-orange-900 border-orange-300">
-                        Up to
+                        {t('splits.upTo')}
                       </Badge>
                     )}
                   </div>
@@ -407,10 +410,10 @@ const Lana8WonderSplits = () => {
                     {accountsWithPayouts.map(af => (
                       <div key={af.accountId} className="flex items-center justify-between text-xs md:text-sm">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-muted-foreground">Account {af.accountId}:</span>
+                          <span className="text-muted-foreground">{t('splits.accountLabel', { id: af.accountId })}</span>
                           {af.newlyTriggered.map(l => (
                             <Badge key={l.row_id} variant="outline" className="text-[10px] px-1.5 py-0 bg-green-100 dark:bg-green-900 border-green-400">
-                              Level {l.level_no}
+                              {t('splits.levelBadge', { n: l.level_no })}
                             </Badge>
                           ))}
                         </div>
@@ -428,7 +431,7 @@ const Lana8WonderSplits = () => {
                     {/* Split total when multiple accounts pay out */}
                     {multipleAccountsPay && (
                       <div className="flex items-center justify-between text-xs md:text-sm pt-1 mt-1 border-t border-green-300 dark:border-green-700">
-                        <span className="font-semibold">Split total:</span>
+                        <span className="font-semibold">{t('splits.splitTotal')}</span>
                         <span className="font-bold text-green-700 dark:text-green-300">
                           +{fmt(forecast.totalCashOut)} {annuityPlan.currency}
                         </span>
@@ -440,7 +443,7 @@ const Lana8WonderSplits = () => {
                 {/* No payouts on this split */}
                 {forecast.totalCashOut === 0 && i > 0 && (
                   <div className="mt-1 text-xs text-muted-foreground">
-                    No new payouts on this split
+                    {t('splits.noPayouts')}
                   </div>
                 )}
               </div>
@@ -454,9 +457,9 @@ const Lana8WonderSplits = () => {
         <CardContent className="p-4 md:p-6">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <p className="text-sm font-semibold text-green-800 dark:text-green-200">Total Payout (Accounts 1–5)</p>
+              <p className="text-sm font-semibold text-green-800 dark:text-green-200">{t('splits.totalPayoutAccounts')}</p>
               <p className="text-xs text-green-600 dark:text-green-400">
-                Split {currentSplit} → Split {lastSplit}
+                {t('splits.split', { n: currentSplit })} → {t('splits.split', { n: lastSplit })}
               </p>
             </div>
             <p className="text-2xl md:text-3xl font-bold text-green-700 dark:text-green-300">
@@ -473,22 +476,14 @@ const Lana8WonderSplits = () => {
             <div className="flex items-start gap-3 mb-4">
               <Wallet className="h-6 w-6 text-violet-600 flex-shrink-0 mt-0.5" />
               <h2 className="text-xl md:text-2xl font-bold text-violet-800 dark:text-violet-200">
-                Passive Income
+                {t('splits.passiveTitle')}
               </h2>
             </div>
             <div className="space-y-4 text-sm md:text-base text-violet-900/80 dark:text-violet-200/80 leading-relaxed">
-              <p>
-                Accounts 6, 7 and 8 follow the logic of passive income, where your principal is preserved.
-                The amounts generated are beyond ordinary — and that is by design.
-              </p>
-              <p>
-                From this point forward, the most important thing is that you stop thinking about money.
-                Money, from here on, becomes like air. It simply is — and you use it just as naturally
-                as you breathe.
-              </p>
+              <p>{t('splits.passiveP1')}</p>
+              <p>{t('splits.passiveP2')}</p>
               <p className="font-medium text-violet-800 dark:text-violet-200">
-                This is true Abundance. Not defined by what you can buy, but by living in the feeling
-                that you are taken care of — completely, effortlessly, and forever.
+                {t('splits.passiveP3')}
               </p>
             </div>
           </CardContent>
