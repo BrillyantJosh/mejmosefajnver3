@@ -209,22 +209,21 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
   useEffect(() => {
     if (!enabled) {
       setLoading(false);
+      fetchStartedRef.current = false;
       return;
     }
 
-    // Only fetch once when enabled
+    // Skip if no session or relays yet
+    if (!session || relays.length === 0) {
+      return;
+    }
+
+    // Only fetch once per stable dependency set
     if (!fetchStartedRef.current) {
       fetchStartedRef.current = true;
       fetchEvents();
     }
-  }, [enabled, fetchEvents]);
-
-  // Reset fetch started ref when enabled changes to false
-  useEffect(() => {
-    if (!enabled) {
-      fetchStartedRef.current = false;
-    }
-  }, [enabled]);
+  }, [enabled, fetchEvents, session, relays]);
 
   return { events, loading: enabled ? loading : false, error, refetch: fetchEvents };
 }
