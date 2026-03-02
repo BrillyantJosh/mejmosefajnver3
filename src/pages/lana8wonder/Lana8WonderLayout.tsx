@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Sparkles, TrendingUp, ArrowRightLeft } from "lucide-react";
+import { Sparkles, TrendingUp } from "lucide-react";
 
 const lana8wonderNavItems = [
   {
@@ -12,11 +12,6 @@ const lana8wonderNavItems = [
     title: "Splits",
     path: "/lana8wonder/splits",
     icon: TrendingUp
-  },
-  {
-    title: "Transfer",
-    path: "/lana8wonder/transfer",
-    icon: ArrowRightLeft
   }
 ];
 
