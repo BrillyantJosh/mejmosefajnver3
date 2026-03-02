@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { SimplePool, Event } from 'nostr-tools';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, TrendingUp, AlertCircle, Euro, Wallet, MoreHorizontal } from 'lucide-react';
+import { Loader2, TrendingUp, AlertCircle, Euro, Wallet } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface AnnuityLevel {
@@ -48,29 +48,6 @@ interface AccountForecast {
   cumulativeCashOut: number;
   remainingLanas: number;
 }
-
-interface PassiveSplitEntry {
-  splitNumber: number;
-  price: number;
-  phase: 'growing' | 'locked';
-  accounts: {
-    accountId: number;
-    phase: 'growing' | 'locked';
-    coinsToGive: number;
-    cashOut: number;
-    remainingLanas: number;
-    portfolioValue: number;
-    targetValue: number;
-  }[];
-  totalCashOut: number;
-}
-
-// Target portfolio values for passive accounts
-const PASSIVE_TARGETS: Record<number, number> = {
-  6: 1_000_000,    // €1M
-  7: 10_000_000,   // €10M
-  8: 88_000_000,   // €88M
-};
 
 // Format number with thousands separators
 const fmt = (n: number, decimals = 2): string => {
@@ -245,118 +222,6 @@ const Lana8WonderSplits = () => {
     return forecasts;
   };
 
-  // Generate passive income forecast for accounts 6-8
-  // Uses the actual algorithm from lana-8-wonder:
-  //   Phase 1 (growing): sell 1% of remaining LANA per split
-  //   Phase 2 (locked):  maintain target portfolio value, sell excess as price doubles
-  const generatePassiveForecast = (): PassiveSplitEntry[] => {
-    if (!annuityPlan || currentPrice <= 0) return [];
-
-    const passiveAccounts = annuityPlan.accounts.filter(
-      acc => acc.account_id >= 6 && acc.account_id <= 8
-    );
-    if (passiveAccounts.length === 0) return [];
-
-    // Track state per account across splits
-    const accountState: Record<number, {
-      remaining: number;
-      previousRemaining: number;
-      hasReachedTarget: boolean;
-      targetValue: number;
-    }> = {};
-
-    passiveAccounts.forEach(acc => {
-      // Use actual wallet balance, fallback to plan's first level remaining + coins
-      const balance = accountBalances[acc.wallet];
-      const initialLanas = balance !== undefined
-        ? balance
-        : (acc.levels.length > 0
-            ? acc.levels[0].remaining_lanas + acc.levels[0].coins_to_give
-            : 0);
-
-      accountState[acc.account_id] = {
-        remaining: initialLanas,
-        previousRemaining: initialLanas,
-        hasReachedTarget: false,
-        targetValue: PASSIVE_TARGETS[acc.account_id] || 1_000_000,
-      };
-    });
-
-    const entries: PassiveSplitEntry[] = [];
-    // Max 37 splits total (as per lana-8-wonder algorithm)
-    const maxSplits = 37;
-
-    for (let i = 1; i <= maxSplits; i++) {
-      const splitNum = currentSplit + i;
-      const splitPrice = currentPrice * Math.pow(2, i);
-
-      let hasAnyPayout = false;
-      const accountEntries: PassiveSplitEntry['accounts'] = [];
-
-      passiveAccounts.forEach(acc => {
-        const state = accountState[acc.account_id];
-        if (state.remaining <= 0) return;
-
-        const portfolioValue = state.remaining * splitPrice;
-
-        let coinsToGive: number;
-        let newRemaining: number;
-        let phase: 'growing' | 'locked';
-
-        // Check if we've reached the target
-        if (!state.hasReachedTarget && portfolioValue >= state.targetValue) {
-          state.hasReachedTarget = true;
-        }
-
-        if (state.hasReachedTarget) {
-          // Phase 2: Portfolio locked at target value
-          // Sell enough LANA to bring portfolio back to target
-          newRemaining = state.targetValue / splitPrice;
-          coinsToGive = state.previousRemaining - newRemaining;
-          phase = 'locked';
-        } else {
-          // Phase 1: Growing towards target
-          // Sell 1% of remaining LANA
-          coinsToGive = state.remaining * 0.01;
-          newRemaining = state.remaining - coinsToGive;
-          phase = 'growing';
-        }
-
-        const cashOut = coinsToGive * splitPrice;
-
-        if (coinsToGive > 0.0001) {
-          hasAnyPayout = true;
-          accountEntries.push({
-            accountId: acc.account_id,
-            phase,
-            coinsToGive,
-            cashOut,
-            remainingLanas: newRemaining,
-            portfolioValue: newRemaining * splitPrice,
-            targetValue: state.targetValue,
-          });
-        }
-
-        // Update state for next split
-        state.previousRemaining = newRemaining;
-        state.remaining = newRemaining;
-      });
-
-      if (hasAnyPayout) {
-        const totalCashOut = accountEntries.reduce((sum, a) => sum + a.cashOut, 0);
-        entries.push({
-          splitNumber: splitNum,
-          price: splitPrice,
-          phase: accountEntries.every(a => a.phase === 'locked') ? 'locked' : 'growing',
-          accounts: accountEntries,
-          totalCashOut,
-        });
-      }
-    }
-
-    return entries;
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -441,9 +306,7 @@ const Lana8WonderSplits = () => {
 
   // Has annuity plan — full forecast
   const forecasts = generateForecast();
-  const passiveForecasts = generatePassiveForecast();
   const totalAllSplitsCashOut = forecasts.reduce((sum, f) => sum + f.totalCashOut, 0);
-  const totalPassiveCashOut = passiveForecasts.reduce((sum, f) => sum + f.totalCashOut, 0);
   const lastSplit = forecasts.length > 0 ? forecasts[forecasts.length - 1].splitNumber : currentSplit;
   const lastPrice = forecasts.length > 0 ? forecasts[forecasts.length - 1].price : currentPrice;
 
@@ -604,127 +467,32 @@ const Lana8WonderSplits = () => {
       </Card>
 
       {/* Passive Income — Accounts 6-8 */}
-      {passiveForecasts.length > 0 && (
-        <>
-          <div className="flex items-center gap-2 md:gap-3 mt-6 mb-2">
-            <Wallet className="h-6 w-6 md:h-8 md:w-8 text-violet-600 flex-shrink-0" />
-            <div>
-              <h2 className="text-xl md:text-2xl font-bold">Passive Income</h2>
-              <p className="text-sm md:text-base text-muted-foreground">
-                Accounts 6–8 • Principal preserved, payouts continue indefinitely
+      {annuityPlan.accounts.some(acc => acc.account_id >= 6 && acc.account_id <= 8) && (
+        <Card className="border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950 mt-6">
+          <CardContent className="p-5 md:p-8">
+            <div className="flex items-start gap-3 mb-4">
+              <Wallet className="h-6 w-6 text-violet-600 flex-shrink-0 mt-0.5" />
+              <h2 className="text-xl md:text-2xl font-bold text-violet-800 dark:text-violet-200">
+                Passive Income
+              </h2>
+            </div>
+            <div className="space-y-4 text-sm md:text-base text-violet-900/80 dark:text-violet-200/80 leading-relaxed">
+              <p>
+                Accounts 6, 7 and 8 follow the logic of passive income, where your principal is preserved.
+                The amounts generated are beyond ordinary — and that is by design.
+              </p>
+              <p>
+                From this point forward, the most important thing is that you stop thinking about money.
+                Money, from here on, becomes like air. It simply is — and you use it just as naturally
+                as you breathe.
+              </p>
+              <p className="font-medium text-violet-800 dark:text-violet-200">
+                This is true Abundance. Not defined by what you can buy, but by living in the feeling
+                that you are taken care of — completely, effortlessly, and forever.
               </p>
             </div>
-          </div>
-
-          <Card className="border-violet-300 dark:border-violet-700">
-            <CardHeader className="p-4 md:p-6">
-              <CardTitle className="text-lg md:text-xl flex items-center gap-2 text-violet-700 dark:text-violet-300">
-                <Wallet className="h-5 w-5" />
-                Passive Income by Split
-              </CardTitle>
-              <CardDescription className="text-xs md:text-sm">
-                Phase 1: Sell 1% per split while growing • Phase 2: Maintain target value, sell excess
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 md:p-6 pt-0 space-y-2">
-              {passiveForecasts.map((entry) => {
-                const multipleAccounts = entry.accounts.length > 1;
-
-                return (
-                  <div
-                    key={entry.splitNumber}
-                    className="rounded-lg border p-3 md:p-4 bg-violet-50 dark:bg-violet-950 border-violet-200 dark:border-violet-800"
-                  >
-                    {/* Header row */}
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant="default"
-                          className="text-xs min-w-[70px] justify-center bg-violet-600 hover:bg-violet-700"
-                        >
-                          Split {entry.splitNumber}
-                        </Badge>
-                        {entry.phase === 'locked' && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-violet-100 dark:bg-violet-900 border-violet-400">
-                            Target locked
-                          </Badge>
-                        )}
-                      </div>
-                      <span className="font-mono font-semibold text-sm">
-                        {fmtPrice(entry.price)} EUR
-                      </span>
-                    </div>
-
-                    {/* Per-account breakdown */}
-                    <div className="mt-2 space-y-1">
-                      {entry.accounts.map(acc => (
-                        <div key={acc.accountId} className="text-xs md:text-sm">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-muted-foreground">Account {acc.accountId}:</span>
-                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
-                                acc.phase === 'locked'
-                                  ? 'bg-violet-200 dark:bg-violet-800 border-violet-500'
-                                  : 'bg-violet-100 dark:bg-violet-900 border-violet-400'
-                              }`}>
-                                {acc.phase === 'locked'
-                                  ? `Target €${fmt(acc.targetValue, 0)}`
-                                  : 'Growing'}
-                              </Badge>
-                            </div>
-                            <span className="font-semibold text-violet-600 dark:text-violet-400">
-                              +{fmt(acc.cashOut)} {annuityPlan.currency}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 mt-0.5 text-[10px] md:text-xs text-muted-foreground">
-                            <span>Sell: {acc.coinsToGive < 1 ? acc.coinsToGive.toFixed(4) : fmt(acc.coinsToGive, 2)} LANA</span>
-                            <span>Remaining: {acc.remainingLanas < 1 ? acc.remainingLanas.toFixed(4) : fmt(acc.remainingLanas, 2)} LANA</span>
-                            <span>Portfolio: €{fmt(acc.portfolioValue, 0)}</span>
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* Split total when multiple accounts */}
-                      {multipleAccounts && (
-                        <div className="flex items-center justify-between text-xs md:text-sm pt-1 mt-1 border-t border-violet-300 dark:border-violet-700">
-                          <span className="font-semibold">Split total:</span>
-                          <span className="font-bold text-violet-700 dark:text-violet-300">
-                            +{fmt(entry.totalCashOut)} {annuityPlan.currency}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Continuation indicator */}
-              <div className="flex items-center justify-center py-3 text-violet-500 dark:text-violet-400">
-                <MoreHorizontal className="h-5 w-5 mr-2" />
-                <span className="text-sm font-medium">Payouts continue with each subsequent split …</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Passive income total (shown splits) */}
-          <Card className="border-violet-500 bg-violet-50 dark:bg-violet-950">
-            <CardContent className="p-4 md:p-6">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-violet-800 dark:text-violet-200">
-                    Passive Income (Accounts 6–8, shown splits)
-                  </p>
-                  <p className="text-xs text-violet-600 dark:text-violet-400">
-                    {passiveForecasts.length} payout {passiveForecasts.length === 1 ? 'split' : 'splits'} shown • continues indefinitely
-                  </p>
-                </div>
-                <p className="text-2xl md:text-3xl font-bold text-violet-700 dark:text-violet-300">
-                  {fmt(totalPassiveCashOut)} {annuityPlan.currency}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
