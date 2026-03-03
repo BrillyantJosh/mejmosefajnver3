@@ -13,6 +13,7 @@ export interface CachedProfile {
   about?: string;
   lana_wallet_id?: string;
   last_fetched_at: string;
+  raw_metadata?: Record<string, any>;
 }
 
 export const useNostrProfileCache = (pubkey: string | null) => {
@@ -49,6 +50,7 @@ export const useNostrProfileCache = (pubkey: string | null) => {
             about: content.about,
             lana_wallet_id: content.lanaWalletID,
             last_fetched_at: new Date().toISOString(),
+            raw_metadata: content,
           };
         } catch (error) {
           console.error('Error parsing profile:', error);
@@ -76,6 +78,7 @@ export const useNostrProfileCache = (pubkey: string | null) => {
           lana_wallet_id: profileData.lana_wallet_id,
           last_fetched_at: profileData.last_fetched_at,
           updated_at: new Date().toISOString(),
+          raw_metadata: profileData.raw_metadata || null,
         }, { onConflict: 'nostr_hex_id' });
 
       if (error) {
