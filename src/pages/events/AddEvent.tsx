@@ -72,6 +72,7 @@ export default function AddEvent() {
   // Online fields
   const [onlineUrl, setOnlineUrl] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeRecordingUrl, setYoutubeRecordingUrl] = useState("");
   
   // Physical fields
   const [location, setLocation] = useState("");
@@ -291,9 +292,6 @@ export default function AddEvent() {
       // Add location-specific tags
       if (isOnline) {
         tags.push(["online", onlineUrl.trim()]);
-        if (youtubeUrl.trim()) {
-          tags.push(["youtube", youtubeUrl.trim()]);
-        }
       } else {
         tags.push(["lat", lat.trim()]);
         tags.push(["lon", lon.trim()]);
@@ -303,6 +301,18 @@ export default function AddEvent() {
         if (capacity.trim()) {
           tags.push(["capacity", capacity.trim()]);
         }
+      }
+
+      // YouTube tags (both online and physical events)
+      if (youtubeUrl.trim()) {
+        tags.push(["youtube", youtubeUrl.trim()]);
+      }
+      let recordingUrl = youtubeRecordingUrl.trim();
+      if (recordingUrl && !recordingUrl.startsWith('http://') && !recordingUrl.startsWith('https://')) {
+        recordingUrl = 'https://' + recordingUrl;
+      }
+      if (recordingUrl) {
+        tags.push(["youtube_recording", recordingUrl]);
       }
 
       // Optional tags
@@ -380,6 +390,7 @@ export default function AddEvent() {
       setSchedule([{ date: '', startTime: '', endTime: '' }]);
       setOnlineUrl("");
       setYoutubeUrl("");
+      setYoutubeRecordingUrl("");
       setLocation("");
       setLat("");
       setLon("");
@@ -603,17 +614,6 @@ export default function AddEvent() {
                   required={isOnline}
                 />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="youtubeUrl">{t('form.youtubeUrl')}</Label>
-                <Input
-                  id="youtubeUrl"
-                  type="url"
-                  value={youtubeUrl}
-                  onChange={(e) => setYoutubeUrl(e.target.value)}
-                  placeholder="https://youtu.be/..."
-                />
-              </div>
             </CardContent>
           </Card>
         ) : (
@@ -671,6 +671,35 @@ export default function AddEvent() {
             </CardContent>
           </Card>
         )}
+
+        {/* YouTube URLs — available for both online and physical events */}
+        <Card className="mb-4">
+          <CardContent className="space-y-4 pt-6">
+            <div className="space-y-2">
+              <Label htmlFor="youtubeUrl">{t('form.youtubePromoUrl')}</Label>
+              <Input
+                id="youtubeUrl"
+                type="url"
+                value={youtubeUrl}
+                onChange={(e) => setYoutubeUrl(e.target.value)}
+                placeholder="https://youtu.be/..."
+              />
+              <p className="text-xs text-muted-foreground">{t('form.youtubePromoHint')}</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="youtubeRecordingUrl">{t('form.youtubeRecordingUrl')}</Label>
+              <Input
+                id="youtubeRecordingUrl"
+                type="url"
+                value={youtubeRecordingUrl}
+                onChange={(e) => setYoutubeRecordingUrl(e.target.value)}
+                placeholder="https://youtu.be/XYZ123"
+              />
+              <p className="text-xs text-muted-foreground">{t('form.youtubeRecordingHint')}</p>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="mb-4">
           <CardHeader>
