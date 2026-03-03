@@ -335,14 +335,14 @@ export default function EventDetail() {
                 <div className="flex items-center gap-2 text-lg">
                   <Calendar className="h-5 w-5 text-primary" />
                   <span className="font-medium">
-                    {format(event.schedule[0].start, 'dd.MM')} – {format(event.schedule[event.schedule.length - 1].start, 'dd.MM.yyyy')}
+                    {format(event.schedule[0].start, 'dd.MM.')} – {format(event.schedule[event.schedule.length - 1].start, 'dd.MM.yyyy')}
                   </span>
                   <span className="text-sm text-muted-foreground">({t('card.days', { count: event.schedule.length })})</span>
                 </div>
                 <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                   {event.schedule.map((entry, idx) => (
                     <div key={idx} className="flex items-center gap-3">
-                      <span className="font-medium min-w-[90px]">{format(entry.start, 'EEE dd.MM')}</span>
+                      <span className="font-medium min-w-[90px]">{format(entry.start, 'EEE dd.MM.')}</span>
                       <Clock className="h-4 w-4 text-primary shrink-0" />
                       <span>
                         {formatTimeInTimezone(entry.start, event.timezone || 'Europe/Ljubljana')}
@@ -361,7 +361,7 @@ export default function EventDetail() {
                     <div className="text-sm text-muted-foreground mb-1">{t('detail.yourLocalTime', { tz: getTimezoneAbbreviation(event.start, getUserTimezone()) })}</div>
                     {event.schedule.map((entry, idx) => (
                       <div key={idx} className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <span className="min-w-[90px]">{format(entry.start, 'EEE dd.MM')}</span>
+                        <span className="min-w-[90px]">{format(entry.start, 'EEE dd.MM.')}</span>
                         <Clock className="h-3 w-3 shrink-0" />
                         <span>
                           {formatTimeInTimezone(entry.start, getUserTimezone())}
