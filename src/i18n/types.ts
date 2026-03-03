@@ -2,7 +2,7 @@ export type SupportedLang = 'en' | 'sl' | 'de' | 'hu' | 'it';
 
 export const SUPPORTED_LANGS: SupportedLang[] = ['en', 'sl', 'de', 'hu', 'it'];
 
-export const DEFAULT_LANG: SupportedLang = 'en';
+export const DEFAULT_LANG: SupportedLang = 'sl';
 
 /**
  * A translation dictionary keyed by language.
