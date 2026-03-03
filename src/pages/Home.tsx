@@ -308,7 +308,7 @@ export default function Home() {
                             to={`/events/detail/${encodeURIComponent(ev.dTag)}`}
                             className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:bg-secondary/50 transition-colors"
                           >
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(ev.start, 'dd.MM')}</span>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(ev.start, 'dd.MM.')}</span>
                             <span className="truncate">{ev.title}</span>
                           </Link>
                         ))}

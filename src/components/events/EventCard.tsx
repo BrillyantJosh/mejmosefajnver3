@@ -264,7 +264,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
               <div className="flex items-center gap-2">
                 <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                 <span className="font-medium text-foreground">
-                  {format(event.schedule[0].start, 'dd.MM')} – {format(event.schedule[event.schedule.length - 1].start, 'dd.MM.yyyy')}
+                  {format(event.schedule[0].start, 'dd.MM.')} – {format(event.schedule[event.schedule.length - 1].start, 'dd.MM.yyyy')}
                 </span>
                 <span className="text-muted-foreground">
                   ({t('card.days', { count: event.schedule.length })})
@@ -272,7 +272,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
               </div>
               {event.schedule.map((entry, idx) => (
                 <div key={idx} className="flex items-center gap-2 ml-6">
-                  <span className="text-muted-foreground">{format(entry.start, 'dd.MM')}</span>
+                  <span className="text-muted-foreground">{format(entry.start, 'dd.MM.')}</span>
                   <Clock className="h-3 w-3 shrink-0" />
                   <span>
                     {formatTimeInTimezone(entry.start, event.timezone || 'Europe/Ljubljana')}
