@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  Calendar, Clock, MapPin, Globe, Users, ArrowLeft, 
+import {
+  Calendar, Clock, MapPin, Globe, Users, ArrowLeft,
   ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2, X, Share2, AlertTriangle, Timer
 } from "lucide-react";
 import { format } from "date-fns";
@@ -20,6 +20,8 @@ import { useEventCountdown } from "@/hooks/useEventCountdown";
 import { useCoinGeckoRate } from "@/hooks/useCoinGeckoRate";
 import { supabase } from "@/integrations/supabase/client";
 import { Ticket } from "lucide-react";
+import { useTranslation } from '@/i18n/I18nContext';
+import eventsTranslations from '@/i18n/modules/events';
 export default function EventDetail() {
   const { dTag: urlDTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
@@ -30,6 +32,7 @@ export default function EventDetail() {
   const [registering, setRegistering] = useState(false);
   const [existingTicketId, setExistingTicketId] = useState<string | null>(null);
   const { rate: marketRate } = useCoinGeckoRate();
+  const { t } = useTranslation(eventsTranslations);
 
   // Decode the URL-encoded dTag
   const decodedDTag = urlDTag ? decodeURIComponent(urlDTag) : '';
@@ -69,12 +72,12 @@ export default function EventDetail() {
     try {
       await navigator.clipboard.writeText(shareUrl);
       toast({
-        title: "Link copied!",
-        description: "Share this link with anyone"
+        title: t('card.linkCopied'),
+        description: t('card.shareDescription')
       });
     } catch (err) {
       toast({
-        title: "Copy failed",
+        title: t('card.copyFailed'),
         description: shareUrl,
         variant: "destructive"
       });
@@ -244,11 +247,11 @@ export default function EventDetail() {
       <div className="space-y-4 px-4">
         <Button variant="ghost" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
+          {t('detail.back')}
         </Button>
         <Card>
           <CardContent className="p-6">
-            <p className="text-muted-foreground">Event not found</p>
+            <p className="text-muted-foreground">{t('detail.eventNotFound')}</p>
           </CardContent>
         </Card>
       </div>
@@ -262,7 +265,7 @@ export default function EventDetail() {
       <div className="flex items-center justify-between">
         <Button variant="ghost" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
+          {t('detail.back')}
         </Button>
         <Button variant="outline" size="icon" onClick={handleShare}>
           <Share2 className="h-4 w-4" />
@@ -284,7 +287,7 @@ export default function EventDetail() {
                   : 'bg-amber-500 text-white'
               }`}
             >
-              {status === 'happening-now' ? 'HAPPENING NOW' : 'TODAY'}
+              {status === 'happening-now' ? t('status.happeningNow') : t('status.today')}
             </Badge>
           )}
         </div>
@@ -308,7 +311,7 @@ export default function EventDetail() {
                   : 'bg-amber-500 text-white'
               }`}
             >
-              {status === 'happening-now' ? 'HAPPENING NOW' : 'TODAY'}
+              {status === 'happening-now' ? t('status.happeningNow') : t('status.today')}
             </Badge>
           )}
         </CardHeader>
@@ -319,7 +322,7 @@ export default function EventDetail() {
             <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 flex items-center justify-center gap-3">
               <Timer className="h-5 w-5 text-primary animate-pulse" />
               <span className="text-lg font-semibold text-primary">
-                Starts in {countdown.displayString}
+                {t('card.startsIn', { time: countdown.displayString })}
               </span>
             </div>
           )}
@@ -334,7 +337,7 @@ export default function EventDetail() {
                   <span className="font-medium">
                     {format(event.schedule[0].start, 'dd.MM')} – {format(event.schedule[event.schedule.length - 1].start, 'dd.MM.yyyy')}
                   </span>
-                  <span className="text-sm text-muted-foreground">({event.schedule.length} dni)</span>
+                  <span className="text-sm text-muted-foreground">({t('card.days', { count: event.schedule.length })})</span>
                 </div>
                 <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                   {event.schedule.map((entry, idx) => (
@@ -348,14 +351,14 @@ export default function EventDetail() {
                     </div>
                   ))}
                   <div className="text-sm text-muted-foreground pt-1">
-                    Timezone: {getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')}
+                    {t('detail.timezone')} {getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')}
                   </div>
                 </div>
 
                 {/* Show user's local time if different timezone */}
                 {(event.timezone || 'Europe/Ljubljana') !== getUserTimezone() && (
                   <div className="bg-muted/50 rounded-lg p-3 space-y-1">
-                    <div className="text-sm text-muted-foreground mb-1">Your local time ({getTimezoneAbbreviation(event.start, getUserTimezone())}):</div>
+                    <div className="text-sm text-muted-foreground mb-1">{t('detail.yourLocalTime', { tz: getTimezoneAbbreviation(event.start, getUserTimezone()) })}</div>
                     {event.schedule.map((entry, idx) => (
                       <div key={idx} className="flex items-center gap-3 text-sm text-muted-foreground">
                         <span className="min-w-[90px]">{format(entry.start, 'EEE dd.MM')}</span>
@@ -392,7 +395,7 @@ export default function EventDetail() {
                   <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
                     <Clock className="h-4 w-4" />
                     <span>
-                      Your local time: {formatTimeInTimezone(event.start, getUserTimezone())}
+                      {t('detail.yourLocalTimeSingle')} {formatTimeInTimezone(event.start, getUserTimezone())}
                       {event.end && ` - ${formatTimeInTimezone(event.end, getUserTimezone())}`}
                       {' '}({getTimezoneAbbreviation(event.start, getUserTimezone())})
                     </span>
@@ -404,7 +407,7 @@ export default function EventDetail() {
             {!event.timezone && (
               <div className="flex items-center gap-2 text-sm text-amber-500">
                 <AlertTriangle className="h-4 w-4" />
-                <span>Legacy event - timezone not specified (assumed Europe/Ljubljana)</span>
+                <span>{t('detail.legacyTimezone')}</span>
               </div>
             )}
           </div>
@@ -414,7 +417,7 @@ export default function EventDetail() {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Globe className="h-5 w-5 text-blue-500" />
-                <span className="font-medium text-blue-500">Online Event</span>
+                <span className="font-medium text-blue-500">{t('detail.onlineEvent')}</span>
               </div>
               {event.onlineUrl && (
                 <Button 
@@ -423,7 +426,7 @@ export default function EventDetail() {
                   onClick={() => window.open(event.onlineUrl, '_blank')}
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
-                  Join Event
+                  {t('detail.joinEvent')}
                 </Button>
               )}
               {event.youtubeRecordingUrl && (
@@ -433,7 +436,7 @@ export default function EventDetail() {
                   onClick={() => window.open(event.youtubeRecordingUrl, '_blank')}
                 >
                   <Youtube className="h-4 w-4 mr-2" />
-                  Posnetek dogodka
+                  {t('detail.eventRecording')}
                 </Button>
               )}
               {event.youtubeUrl && (
@@ -443,7 +446,7 @@ export default function EventDetail() {
                   onClick={() => window.open(event.youtubeUrl, '_blank')}
                 >
                   <Youtube className="h-4 w-4 mr-2" />
-                  Promo Video
+                  {t('detail.promoVideo')}
                 </Button>
               )}
             </div>
@@ -462,13 +465,13 @@ export default function EventDetail() {
                   onClick={() => window.open(`https://www.google.com/maps?q=${event.lat},${event.lon}`, '_blank')}
                 >
                   <MapPin className="h-4 w-4 mr-2" />
-                  Open in Maps
+                  {t('detail.openInMaps')}
                 </Button>
               )}
               {event.capacity && (
                 <div className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  <span>Capacity: {event.capacity} people</span>
+                  <span>{t('detail.capacity', { count: String(event.capacity) })}</span>
                 </div>
               )}
             </div>
@@ -480,13 +483,13 @@ export default function EventDetail() {
               {event.fiatValue && (
                 <>
                   <div className="text-lg font-medium text-primary">
-                    Event Value: €{event.fiatValue}
+                    {t('detail.eventValue', { amount: String(event.fiatValue) })}
                   </div>
                   {/* Dual pricing display */}
                   <div className="bg-muted/50 rounded-lg p-3 space-y-2">
                     {event.donationWallet && systemParameters?.exchangeRates?.EUR && (
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground">Registered LANA:</span>
+                        <span className="text-muted-foreground">{t('detail.registeredLana')}</span>
                         <span className="font-semibold">
                           {(event.fiatValue / systemParameters.exchangeRates.EUR).toFixed(2)} LANA
                         </span>
@@ -494,7 +497,7 @@ export default function EventDetail() {
                     )}
                     {event.donationWalletUnreg && marketRate && (
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground">Market LANA:</span>
+                        <span className="text-muted-foreground">{t('detail.marketLana')}</span>
                         <span className="font-semibold">
                           {(event.fiatValue / marketRate).toFixed(2)} LANA
                         </span>
@@ -508,14 +511,14 @@ export default function EventDetail() {
                   {event.donationWallet && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Wallet className="h-4 w-4" />
-                      <span>Registered:</span>
+                      <span>{t('detail.registered')}</span>
                       <span className="font-mono truncate">{event.donationWallet}</span>
                     </div>
                   )}
                   {event.donationWalletUnreg && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Wallet className="h-4 w-4" />
-                      <span>Unregistered:</span>
+                      <span>{t('detail.unregistered')}</span>
                       <span className="font-mono truncate">{event.donationWalletUnreg}</span>
                     </div>
                   )}
@@ -526,7 +529,7 @@ export default function EventDetail() {
                       onClick={() => navigate(`/events/ticket/${existingTicketId}`)}
                     >
                       <Ticket className="h-4 w-4 mr-2" />
-                      View Ticket
+                      {t('detail.viewTicket')}
                     </Button>
                   ) : (
                     <Button
@@ -534,7 +537,7 @@ export default function EventDetail() {
                       onClick={handleDonateClick}
                     >
                       <Wallet className="h-4 w-4 mr-2" />
-                      {event.fiatValue ? `Pay €${event.fiatValue}` : 'Donate'}
+                      {event.fiatValue ? t('card.pay', { amount: String(event.fiatValue) }) : t('card.donate')}
                     </Button>
                   )}
                 </>
@@ -545,7 +548,7 @@ export default function EventDetail() {
           {/* Description */}
           {event.content && (
             <div className="border-t pt-4">
-              <h3 className="font-semibold mb-2">Description</h3>
+              <h3 className="font-semibold mb-2">{t('detail.description')}</h3>
               <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
                 {event.content}
               </div>
@@ -555,7 +558,7 @@ export default function EventDetail() {
           {/* Attachments */}
           {event.attachments.length > 0 && (
             <div className="border-t pt-4">
-              <h3 className="font-semibold mb-2">Attachments</h3>
+              <h3 className="font-semibold mb-2">{t('detail.attachments')}</h3>
               <div className="space-y-2">
                 {event.attachments.map((url, index) => (
                   <Button 
@@ -565,7 +568,7 @@ export default function EventDetail() {
                     onClick={() => window.open(url, '_blank')}
                   >
                     <FileText className="h-4 w-4 mr-2" />
-                    {url.split('/').pop() || `Attachment ${index + 1}`}
+                    {url.split('/').pop() || t('detail.attachment', { index: String(index + 1) })}
                   </Button>
                 ))}
               </div>
@@ -575,14 +578,14 @@ export default function EventDetail() {
           {/* Recording */}
           {event.recording && (
             <div className="border-t pt-4">
-              <h3 className="font-semibold mb-2">Recording</h3>
+              <h3 className="font-semibold mb-2">{t('detail.recording')}</h3>
               <Button 
                 variant="outline" 
                 className="w-full"
                 onClick={() => window.open(event.recording, '_blank')}
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
-                Watch Recording
+                {t('detail.watchRecording')}
               </Button>
             </div>
           )}
@@ -590,10 +593,10 @@ export default function EventDetail() {
           {/* Registration Section */}
           <div className="border-t pt-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Registration</h3>
+              <h3 className="font-semibold">{t('reg.registration')}</h3>
               <Badge variant="secondary">
                 <Users className="h-3 w-3 mr-1" />
-                {registrations.length} going
+                {t('reg.going', { count: String(registrations.length) })}
               </Badge>
             </div>
 
@@ -607,7 +610,7 @@ export default function EventDetail() {
                     <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
                       <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
                         <Check className="h-5 w-5" />
-                        <span className="font-medium">You are going!</span>
+                        <span className="font-medium">{t('reg.youAreGoing')}</span>
                       </div>
                     </div>
                     {!isPaidEvent && (
@@ -622,7 +625,7 @@ export default function EventDetail() {
                         ) : (
                           <X className="h-4 w-4 mr-2" />
                         )}
-                        Cancel Registration
+                        {t('reg.cancelRegistration')}
                       </Button>
                     )}
                   </div>
@@ -635,7 +638,7 @@ export default function EventDetail() {
                   return (
                     <div className="bg-muted/50 rounded-lg p-4 text-center">
                       <p className="text-sm text-muted-foreground">
-                        Purchase a ticket to attend this event
+                        {t('reg.purchaseTicket')}
                       </p>
                     </div>
                   );
@@ -649,7 +652,7 @@ export default function EventDetail() {
                   >
                     {registering && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                     <UserPlus className="h-4 w-4 mr-2" />
-                    I'm Going
+                    {t('card.imGoing')}
                   </Button>
                 );
               }
@@ -663,7 +666,7 @@ export default function EventDetail() {
                 >
                   {registering && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   <UserPlus className="h-4 w-4 mr-2" />
-                  I'm Going
+                  {t('card.imGoing')}
                 </Button>
               );
             })()}
@@ -676,8 +679,8 @@ export default function EventDetail() {
   async function handleRegister() {
     if (!session?.nostrPrivateKey || !session?.nostrHexId || !event?.dTag) {
       toast({
-        title: "Error",
-        description: "You must be logged in to register",
+        title: t('reg.error'),
+        description: t('reg.loginRequired'),
         variant: "destructive"
       });
       return;
@@ -733,8 +736,8 @@ export default function EventDetail() {
       });
 
       toast({
-        title: "Registered!",
-        description: "You're going to this event!"
+        title: t('reg.registered'),
+        description: t('reg.registeredDesc')
       });
 
       refetchRegistrations();
@@ -742,8 +745,8 @@ export default function EventDetail() {
     } catch (error) {
       console.error('Error registering:', error);
       toast({
-        title: "Error registering",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t('reg.errorRegistering'),
+        description: error instanceof Error ? error.message : t('reg.unknownError'),
         variant: "destructive"
       });
     } finally {
@@ -800,8 +803,8 @@ export default function EventDetail() {
       });
 
       toast({
-        title: "Unregistered",
-        description: "Your registration has been cancelled"
+        title: t('reg.unregistered'),
+        description: t('reg.unregisteredDesc')
       });
 
       refetchRegistrations();
@@ -809,8 +812,8 @@ export default function EventDetail() {
     } catch (error) {
       console.error('Error unregistering:', error);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t('reg.error'),
+        description: error instanceof Error ? error.message : t('reg.unknownError'),
         variant: "destructive"
       });
     } finally {
