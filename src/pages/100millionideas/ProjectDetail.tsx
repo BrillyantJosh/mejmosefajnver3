@@ -59,7 +59,7 @@ const ProjectDetail = () => {
 
   const fundingGoal = parseFloat(project.fiatGoal);
   const percentageFunded = fundingGoal > 0 ? (totalRaised / fundingGoal) * 100 : 0;
-  const isFullyFunded = totalRaised >= fundingGoal;
+  const isFullyFunded = fundingGoal > 0 && totalRaised >= fundingGoal * 0.99;
 
   return (
     <div className="min-h-screen bg-background">

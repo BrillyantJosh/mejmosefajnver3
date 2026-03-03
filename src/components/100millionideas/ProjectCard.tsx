@@ -31,7 +31,7 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
   const goalAmount = parseFloat(project.fiatGoal) || 0;
   const backers = donations.length;
   const fundedPercentage = goalAmount > 0 ? Math.min(Math.round((currentFunding / goalAmount) * 100), 100) : 0;
-  const isFullyFunded = currentFunding >= goalAmount && goalAmount > 0;
+  const isFullyFunded = goalAmount > 0 && currentFunding >= goalAmount * 0.99;
 
   const handleSupportProject = () => {
     navigate(`/100millionideas/project/${project.id}`);
