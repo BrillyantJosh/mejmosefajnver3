@@ -182,8 +182,6 @@ export default function EditEvent() {
       if (onlineUrlValue) {
         setIsOnline(true);
         setOnlineUrl(onlineUrlValue);
-        setYoutubeUrl(getTagValue('youtube') || '');
-        setYoutubeRecordingUrl(getTagValue('youtube_recording') || '');
       } else {
         setIsOnline(false);
         setLat(getTagValue('lat') || '');
@@ -191,6 +189,10 @@ export default function EditEvent() {
         setLocation(getTagValue('location') || '');
         setCapacity(getTagValue('capacity') || '');
       }
+
+      // YouTube URLs — loaded for both online and physical events
+      setYoutubeUrl(getTagValue('youtube') || '');
+      setYoutubeRecordingUrl(getTagValue('youtube_recording') || '');
 
       setCoverUrl(getTagValue('cover') || '');
       if (getTagValue('cover')) {
@@ -428,17 +430,6 @@ export default function EditEvent() {
 
       if (isOnline) {
         tags.push(["online", onlineUrl.trim()]);
-        if (youtubeUrl.trim()) {
-          tags.push(["youtube", youtubeUrl.trim()]);
-        }
-        // Add youtube_recording with auto-correct for missing protocol
-        let recordingUrl = youtubeRecordingUrl.trim();
-        if (recordingUrl && !recordingUrl.startsWith('http://') && !recordingUrl.startsWith('https://')) {
-          recordingUrl = 'https://' + recordingUrl;
-        }
-        if (recordingUrl) {
-          tags.push(["youtube_recording", recordingUrl]);
-        }
       } else {
         tags.push(["lat", lat.trim()]);
         tags.push(["lon", lon.trim()]);
@@ -448,6 +439,18 @@ export default function EditEvent() {
         if (capacity.trim()) {
           tags.push(["capacity", capacity.trim()]);
         }
+      }
+
+      // YouTube tags (both online and physical events)
+      if (youtubeUrl.trim()) {
+        tags.push(["youtube", youtubeUrl.trim()]);
+      }
+      let recordingUrl = youtubeRecordingUrl.trim();
+      if (recordingUrl && !recordingUrl.startsWith('http://') && !recordingUrl.startsWith('https://')) {
+        recordingUrl = 'https://' + recordingUrl;
+      }
+      if (recordingUrl) {
+        tags.push(["youtube_recording", recordingUrl]);
       }
 
       if (finalCoverUrl && finalCoverUrl.trim()) {
@@ -759,30 +762,6 @@ export default function EditEvent() {
                   required={isOnline}
                 />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="youtubeUrl">{t('form.youtubePromoUrl')}</Label>
-                <Input
-                  id="youtubeUrl"
-                  type="url"
-                  value={youtubeUrl}
-                  onChange={(e) => setYoutubeUrl(e.target.value)}
-                  placeholder="https://youtu.be/..."
-                />
-                <p className="text-xs text-muted-foreground">{t('form.youtubePromoHint')}</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="youtubeRecordingUrl">{t('form.youtubeRecordingUrl')}</Label>
-                <Input
-                  id="youtubeRecordingUrl"
-                  type="url"
-                  value={youtubeRecordingUrl}
-                  onChange={(e) => setYoutubeRecordingUrl(e.target.value)}
-                  placeholder="https://youtu.be/XYZ123"
-                />
-                <p className="text-xs text-muted-foreground">{t('form.youtubeRecordingHint')}</p>
-              </div>
             </CardContent>
           </Card>
         ) : (
@@ -840,6 +819,35 @@ export default function EditEvent() {
             </CardContent>
           </Card>
         )}
+
+        {/* YouTube URLs — available for both online and physical events */}
+        <Card className="mb-4">
+          <CardContent className="space-y-4 pt-6">
+            <div className="space-y-2">
+              <Label htmlFor="youtubeUrl">{t('form.youtubePromoUrl')}</Label>
+              <Input
+                id="youtubeUrl"
+                type="url"
+                value={youtubeUrl}
+                onChange={(e) => setYoutubeUrl(e.target.value)}
+                placeholder="https://youtu.be/..."
+              />
+              <p className="text-xs text-muted-foreground">{t('form.youtubePromoHint')}</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="youtubeRecordingUrl">{t('form.youtubeRecordingUrl')}</Label>
+              <Input
+                id="youtubeRecordingUrl"
+                type="url"
+                value={youtubeRecordingUrl}
+                onChange={(e) => setYoutubeRecordingUrl(e.target.value)}
+                placeholder="https://youtu.be/XYZ123"
+              />
+              <p className="text-xs text-muted-foreground">{t('form.youtubeRecordingHint')}</p>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="mb-4">
           <CardHeader>
