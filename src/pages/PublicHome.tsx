@@ -3,9 +3,11 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle, LogIn } from "lucide-react";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, LogIn, Share2, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import logoImage from "@/assets/lana-logo.png";
+import { toast } from "sonner";
+import { Toaster as Sonner } from "@/components/ui/sonner";
 
 interface WhatsUpItem {
   id: string;
@@ -35,11 +37,14 @@ function extractYouTubeId(url: string): string | null {
   return null;
 }
 
+const ITEMS_PER_PAGE = 3;
+
 export default function PublicHome() {
   const [items, setItems] = useState<WhatsUpItem[]>([]);
   const [faqItems, setFaqItems] = useState<FaqItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [appName, setAppName] = useState("Lana");
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -80,6 +85,30 @@ export default function PublicHome() {
     load();
   }, []);
 
+  // Pagination
+  const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
+  const paginatedItems = items.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+
+  const handleShare = async (item: WhatsUpItem) => {
+    const publicUrl = `${window.location.origin}/video/${item.id}`;
+    const shareText = item.body ? `${item.title}\n\n${item.body}` : item.title;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: item.title, text: shareText, url: publicUrl });
+      } catch {
+        // User cancelled
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(`${shareText}\n\n${publicUrl}`);
+        toast.success("Link copied!");
+      } catch {
+        toast.error("Failed to copy link");
+      }
+    }
+  };
+
   const formatTime = (dateStr: string) => {
     try {
       return formatDistanceToNow(new Date(dateStr + "Z"), { addSuffix: true });
@@ -90,6 +119,7 @@ export default function PublicHome() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Sonner />
       {/* Header with logo, app name, and login button */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-[env(safe-area-inset-top)]">
         <div className="container flex h-16 items-center justify-between px-4 max-w-6xl mx-auto">
@@ -140,37 +170,79 @@ export default function PublicHome() {
                   <p className="text-muted-foreground text-lg">No news yet. Stay tuned!</p>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {items.map((item) => {
-                    const ytId = item.youtube_url ? extractYouTubeId(item.youtube_url) : null;
-                    return (
-                      <Card key={item.id} className="overflow-hidden">
-                        {ytId && (
-                          <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-                            <iframe
-                              className="absolute top-0 left-0 w-full h-full"
-                              src={`https://www.youtube.com/embed/${ytId}`}
-                              title={item.title}
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                            />
-                          </div>
-                        )}
-                        <CardContent className={ytId ? "pt-4" : "pt-6"}>
-                          <h2 className="text-xl font-bold">{item.title}</h2>
-                          {item.body && (
-                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">
-                              {item.body}
-                            </p>
+                <>
+                  <div className="space-y-6">
+                    {paginatedItems.map((item) => {
+                      const ytId = item.youtube_url ? extractYouTubeId(item.youtube_url) : null;
+                      return (
+                        <Card key={item.id} className="overflow-hidden">
+                          {ytId && (
+                            <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+                              <iframe
+                                className="absolute top-0 left-0 w-full h-full"
+                                src={`https://www.youtube.com/embed/${ytId}`}
+                                title={item.title}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                              />
+                            </div>
                           )}
-                          <p className="text-xs text-muted-foreground mt-3">
-                            {formatTime(item.created_at)}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
+                          <CardContent className={ytId ? "pt-4" : "pt-6"}>
+                            <h2 className="text-xl font-bold">{item.title}</h2>
+                            {item.body && (
+                              <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">
+                                {item.body}
+                              </p>
+                            )}
+                            <div className="flex items-center justify-between mt-3">
+                              <p className="text-xs text-muted-foreground">
+                                {formatTime(item.created_at)}
+                              </p>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1.5 text-muted-foreground hover:text-foreground"
+                                onClick={() => handleShare(item)}
+                              >
+                                <Share2 className="h-4 w-4" />
+                                <span className="text-xs">Share</span>
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-8">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.max(0, p - 1))}
+                        disabled={page === 0}
+                        className="gap-1"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <span className="text-sm text-muted-foreground px-3">
+                        {page + 1} / {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                        disabled={page >= totalPages - 1}
+                        className="gap-1"
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 

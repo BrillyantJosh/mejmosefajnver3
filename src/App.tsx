@@ -141,6 +141,7 @@ import PublicPost from "./pages/PublicPost";
 import PublicEvent from "./pages/PublicEvent";
 import PublicProposal from "./pages/PublicProposal";
 import PublicHome from "./pages/PublicHome";
+import PublicVideo from "./pages/PublicVideo";
 
 const queryClient = new QueryClient();
 
@@ -167,6 +168,7 @@ const App = () => (
                 <Route path="/post/:eventId" element={<PublicPost />} />
                 <Route path="/event/:dTag" element={<PublicEvent />} />
                 <Route path="/proposal/:dTag" element={<PublicProposal />} />
+                <Route path="/video/:id" element={<PublicVideo />} />
                 <Route element={
                   <ProtectedRoute>
                     <MainLayout />
