@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Button } from "@/components/ui/button";
-import { MapPin, X } from "lucide-react";
+import { MapPin, X, LocateFixed, Loader2 } from "lucide-react";
 
 // KRITIČNO: Fix za ikone markerjev
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -28,35 +28,73 @@ interface LocationPickerProps {
     selected?: string;
     cancel?: string;
     confirm?: string;
+    myLocation?: string;
+    locating?: string;
   };
 }
+
+const FALLBACK_LAT = 46.0569;
+const FALLBACK_LNG = 14.5058;
 
 const LocationPicker = ({
   onLocationSelect,
   onClose,
-  initialLat = 46.0569,
-  initialLng = 14.5058,
+  initialLat,
+  initialLng,
   labels
 }: LocationPickerProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [selectedPosition, setSelectedPosition] = useState<{ lat: number; lng: number } | null>(
-    { lat: initialLat, lng: initialLng }
+    initialLat && initialLng ? { lat: initialLat, lng: initialLng } : null
   );
+  const [locating, setLocating] = useState(false);
+  const geoAttemptedRef = useRef(false);
 
   const titleText = labels?.title || 'Select Location on Map';
   const hintText = labels?.hint || 'Click on the map or drag the marker to select a location';
   const selectedText = labels?.selected || 'Selected';
   const cancelText = labels?.cancel || 'Cancel';
   const confirmText = labels?.confirm || 'Confirm Location';
+  const myLocationText = labels?.myLocation || 'My Location';
+  const locatingText = labels?.locating || 'Locating...';
+
+  // Determine starting coordinates for the map
+  const startLat = initialLat || FALLBACK_LAT;
+  const startLng = initialLng || FALLBACK_LNG;
+
+  const panToLocation = (lat: number, lng: number) => {
+    if (mapRef.current && markerRef.current) {
+      const latlng = L.latLng(lat, lng);
+      markerRef.current.setLatLng(latlng);
+      mapRef.current.setView(latlng, 15);
+      setSelectedPosition({ lat, lng });
+    }
+  };
+
+  const handleGeolocation = () => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        panToLocation(lat, lng);
+        setLocating(false);
+      },
+      () => {
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   useEffect(() => {
-    // Prepreči ponovno inicializacijo, če zemljevid že obstaja
     if (!mapContainerRef.current || mapRef.current) return;
 
     // 1. Inicializiraj zemljevid
-    const map = L.map(mapContainerRef.current).setView([initialLat, initialLng], 13);
+    const map = L.map(mapContainerRef.current).setView([startLat, startLng], 13);
 
     // 2. Dodaj tile layer (OpenStreetMap)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -64,7 +102,7 @@ const LocationPicker = ({
     }).addTo(map);
 
     // 3. Dodaj marker z možnostjo vlečenja
-    const marker = L.marker([initialLat, initialLng], {
+    const marker = L.marker([startLat, startLng], {
       icon: defaultIcon,
       draggable: true
     }).addTo(map);
@@ -84,14 +122,37 @@ const LocationPicker = ({
     mapRef.current = map;
     markerRef.current = marker;
 
-    // 6. Cleanup funkcija
+    // 6. Auto-geolocation: če ni podanih initialnih koordinat, poskusi najti uporabnika
+    if (!initialLat && !initialLng && !geoAttemptedRef.current) {
+      geoAttemptedRef.current = true;
+      if (navigator.geolocation) {
+        setLocating(true);
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const latlng = L.latLng(lat, lng);
+            marker.setLatLng(latlng);
+            map.setView(latlng, 15);
+            setSelectedPosition({ lat, lng });
+            setLocating(false);
+          },
+          () => {
+            setLocating(false);
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      }
+    }
+
+    // 7. Cleanup funkcija
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
     };
-  }, [initialLat, initialLng]);
+  }, [startLat, startLng, initialLat, initialLng]);
 
   const handleConfirm = () => {
     if (selectedPosition) {
@@ -114,9 +175,26 @@ const LocationPicker = ({
         </div>
 
         <div className="flex-1 p-4 space-y-3 overflow-y-auto">
-          <p className="text-sm text-muted-foreground">
-            {hintText}
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              {hintText}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleGeolocation}
+              disabled={locating}
+              className="shrink-0 ml-2"
+            >
+              {locating ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <LocateFixed className="h-4 w-4 mr-1" />
+              )}
+              {locating ? locatingText : myLocationText}
+            </Button>
+          </div>
 
           {/* Kontejner za zemljevid */}
           <div className="rounded-lg overflow-hidden border border-border h-[400px]">

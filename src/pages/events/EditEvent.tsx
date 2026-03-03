@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { useNostrUnregisteredWallets } from "@/hooks/useNostrUnregisteredWallets";
+import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { COMMON_TIMEZONES, DEFAULT_TIMEZONE, getTimezoneOffset } from "@/lib/timezones";
 import { useTranslation } from '@/i18n/I18nContext';
 import eventsTranslations from '@/i18n/modules/events';
@@ -47,7 +48,12 @@ export default function EditEvent() {
   const { parameters: systemParameters } = useSystemParameters();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
   const { lists: unregLists, isLoading: unregLoading } = useNostrUnregisteredWallets();
+  const { profile: userProfile } = useNostrProfileCache(session?.nostrHexId || null);
   const { t } = useTranslation(eventsTranslations);
+
+  // User's profile location as fallback for map picker
+  const profileLat = userProfile?.raw_metadata?.latitude as number | undefined;
+  const profileLng = userProfile?.raw_metadata?.longitude as number | undefined;
 
   // Filter out excluded wallet types
   const EXCLUDED_WALLET_TYPES = ['LanaPays.Us', 'Knights', 'Lana8Wonder'];
@@ -835,14 +841,16 @@ export default function EditEvent() {
         {/* Map Picker Modal */}
         {showMapPicker && (
           <LocationPicker
-            initialLat={lat ? parseFloat(lat) : undefined}
-            initialLng={lon ? parseFloat(lon) : undefined}
+            initialLat={lat ? parseFloat(lat) : (profileLat || undefined)}
+            initialLng={lon ? parseFloat(lon) : (profileLng || undefined)}
             labels={{
               title: t('form.mapTitle'),
               hint: t('form.mapHint'),
               selected: t('form.mapSelected'),
               cancel: t('form.mapCancel'),
               confirm: t('form.mapConfirm'),
+              myLocation: t('form.mapMyLocation'),
+              locating: t('form.mapLocating'),
             }}
             onLocationSelect={(latitude, longitude) => {
               setLat(latitude.toFixed(6));
