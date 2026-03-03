@@ -61,10 +61,10 @@ export default function AddEvent() {
   const [eventType, setEventType] = useState("awareness");
   const [language, setLanguage] = useState("sl");
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
-  const [startDate, setStartDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [endTime, setEndTime] = useState("");
+  // Schedule: array of {date, startTime, endTime} for multi-day support
+  const [schedule, setSchedule] = useState<Array<{date: string; startTime: string; endTime: string}>>([
+    { date: '', startTime: '', endTime: '' }
+  ]);
   
   // Online fields
   const [onlineUrl, setOnlineUrl] = useState("");
@@ -211,8 +211,10 @@ export default function AddEvent() {
       toast({ title: "Error", description: "Title is required", variant: "destructive" });
       return;
     }
-    if (!startDate || !startTime) {
-      toast({ title: "Error", description: "Start date and time are required", variant: "destructive" });
+    // Validate schedule entries
+    const validSchedule = schedule.filter(s => s.date && s.startTime);
+    if (validSchedule.length === 0) {
+      toast({ title: "Error", description: "At least one date with start time is required", variant: "destructive" });
       return;
     }
     if (isOnline && !onlineUrl.trim()) {
@@ -241,11 +243,18 @@ export default function AddEvent() {
 
       // Generate unique event ID
       const eventSlug = `event:${Date.now()}-${Math.random().toString(36).substring(7)}`;
-      
-      // Format datetime with timezone offset
-      const tzOffset = getTimezoneOffset(timezone, new Date(`${startDate}T${startTime}`));
-      const startDateTime = `${startDate}T${startTime}:00${tzOffset}`;
-      const endDateTime = endDate && endTime ? `${endDate}T${endTime}:00${tzOffset}` : null;
+
+      // Sort valid schedule entries by date
+      const sortedSchedule = [...validSchedule].sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+
+      // Derive overall start/end from first/last schedule entries
+      const firstEntry = sortedSchedule[0];
+      const lastEntry = sortedSchedule[sortedSchedule.length - 1];
+      const tzOffset = getTimezoneOffset(timezone, new Date(`${firstEntry.date}T${firstEntry.startTime}`));
+      const startDateTime = `${firstEntry.date}T${firstEntry.startTime}:00${tzOffset}`;
+      const endDateTime = lastEntry.endTime
+        ? `${lastEntry.date}T${lastEntry.endTime}:00${tzOffset}`
+        : null;
 
       // Build tags
       const tags: string[][] = [
@@ -262,6 +271,18 @@ export default function AddEvent() {
       // Add end time if provided
       if (endDateTime) {
         tags.push(["end", endDateTime]);
+      }
+
+      // Add schedule tags for multi-day events (or single day with explicit schedule)
+      if (sortedSchedule.length > 1) {
+        for (const entry of sortedSchedule) {
+          const entryTzOffset = getTimezoneOffset(timezone, new Date(`${entry.date}T${entry.startTime}`));
+          const scheduleTag: string[] = ["schedule", `${entry.date}T${entry.startTime}:00${entryTzOffset}`];
+          if (entry.endTime) {
+            scheduleTag.push(`${entry.date}T${entry.endTime}:00${entryTzOffset}`);
+          }
+          tags.push(scheduleTag);
+        }
       }
 
       // Add location-specific tags
@@ -353,10 +374,7 @@ export default function AddEvent() {
       // Reset form
       setTitle("");
       setContent("");
-      setStartDate("");
-      setStartTime("");
-      setEndDate("");
-      setEndTime("");
+      setSchedule([{ date: '', startTime: '', endTime: '' }]);
       setOnlineUrl("");
       setYoutubeUrl("");
       setLocation("");
@@ -488,49 +506,77 @@ export default function AddEvent() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="startDate">Start Date *</Label>
-                <Input
-                  id="startDate"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  required
-                />
+            {schedule.map((entry, idx) => (
+              <div key={idx} className="border rounded-lg p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">
+                    {schedule.length > 1 ? `Dan ${idx + 1}` : 'Datum'}
+                  </Label>
+                  {schedule.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => setSchedule(schedule.filter((_, i) => i !== idx))}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Date *</Label>
+                    <Input
+                      type="date"
+                      value={entry.date}
+                      onChange={(e) => {
+                        const updated = [...schedule];
+                        updated[idx] = { ...updated[idx], date: e.target.value };
+                        setSchedule(updated);
+                      }}
+                      required={idx === 0}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Start *</Label>
+                    <Input
+                      type="time"
+                      value={entry.startTime}
+                      onChange={(e) => {
+                        const updated = [...schedule];
+                        updated[idx] = { ...updated[idx], startTime: e.target.value };
+                        setSchedule(updated);
+                      }}
+                      required={idx === 0}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">End</Label>
+                    <Input
+                      type="time"
+                      value={entry.endTime}
+                      onChange={(e) => {
+                        const updated = [...schedule];
+                        updated[idx] = { ...updated[idx], endTime: e.target.value };
+                        setSchedule(updated);
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="startTime">Start Time *</Label>
-                <Input
-                  id="startTime"
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
+            ))}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="endDate">End Date</Label>
-                <Input
-                  id="endDate"
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="endTime">End Time</Label>
-                <Input
-                  id="endTime"
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                />
-              </div>
-            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSchedule([...schedule, { date: '', startTime: '', endTime: '' }])}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Dodaj dan
+            </Button>
           </CardContent>
         </Card>
 
