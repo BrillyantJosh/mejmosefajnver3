@@ -315,33 +315,9 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
           )}
           
           {event.isOnline ? (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-500 shrink-0" />
-                <span className="text-blue-500">{t('card.online')}</span>
-              </div>
-              {event.youtubeUrl && (() => {
-                const getYouTubeId = (url: string): string | null => {
-                  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-                  const match = url.match(regExp);
-                  return match && match[2].length === 11 ? match[2] : null;
-                };
-                const videoId = getYouTubeId(event.youtubeUrl);
-                return videoId ? (
-                  <div 
-                    className="aspect-video w-full rounded-lg overflow-hidden"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <iframe
-                      src={`https://www.youtube.com/embed/${videoId}`}
-                      title="YouTube video"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      className="w-full h-full"
-                    />
-                  </div>
-                ) : null;
-              })()}
+            <div className="flex items-center gap-2">
+              <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-500 shrink-0" />
+              <span className="text-blue-500">{t('card.online')}</span>
             </div>
           ) : (
             event.location && (
@@ -351,6 +327,30 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
               </div>
             )
           )}
+
+          {/* YouTube video embed — shown for both online and physical events */}
+          {event.youtubeUrl && (() => {
+            const getYouTubeId = (url: string): string | null => {
+              const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+              const match = url.match(regExp);
+              return match && match[2].length === 11 ? match[2] : null;
+            };
+            const videoId = getYouTubeId(event.youtubeUrl);
+            return videoId ? (
+              <div
+                className="aspect-video w-full rounded-lg overflow-hidden mt-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <iframe
+                  src={`https://www.youtube.com/embed/${videoId}`}
+                  title="YouTube video"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="w-full h-full"
+                />
+              </div>
+            ) : null;
+          })()}
         </div>
         
         {event.content && (

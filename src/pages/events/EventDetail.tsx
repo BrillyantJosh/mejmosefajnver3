@@ -420,33 +420,13 @@ export default function EventDetail() {
                 <span className="font-medium text-blue-500">{t('detail.onlineEvent')}</span>
               </div>
               {event.onlineUrl && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full"
                   onClick={() => window.open(event.onlineUrl, '_blank')}
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
                   {t('detail.joinEvent')}
-                </Button>
-              )}
-              {event.youtubeRecordingUrl && (
-                <Button 
-                  variant="default" 
-                  className="w-full"
-                  onClick={() => window.open(event.youtubeRecordingUrl, '_blank')}
-                >
-                  <Youtube className="h-4 w-4 mr-2" />
-                  {t('detail.eventRecording')}
-                </Button>
-              )}
-              {event.youtubeUrl && (
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={() => window.open(event.youtubeUrl, '_blank')}
-                >
-                  <Youtube className="h-4 w-4 mr-2" />
-                  {t('detail.promoVideo')}
                 </Button>
               )}
             </div>
@@ -459,8 +439,8 @@ export default function EventDetail() {
                 </div>
               )}
               {event.lat && event.lon && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full"
                   onClick={() => window.open(`https://www.google.com/maps?q=${event.lat},${event.lon}`, '_blank')}
                 >
@@ -476,6 +456,59 @@ export default function EventDetail() {
               )}
             </div>
           )}
+
+          {/* YouTube Videos — shown for both online and physical events */}
+          {(event.youtubeUrl || event.youtubeRecordingUrl) && (() => {
+            const getYouTubeId = (url: string): string | null => {
+              const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+              const match = url.match(regExp);
+              return match && match[2].length === 11 ? match[2] : null;
+            };
+
+            const promoId = event.youtubeUrl ? getYouTubeId(event.youtubeUrl) : null;
+            const recordingId = event.youtubeRecordingUrl ? getYouTubeId(event.youtubeRecordingUrl) : null;
+
+            if (!promoId && !recordingId) return null;
+
+            return (
+              <div className="space-y-3">
+                {recordingId && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Youtube className="h-4 w-4 text-red-500" />
+                      <span>{t('detail.eventRecording')}</span>
+                    </div>
+                    <div className="aspect-video w-full rounded-lg overflow-hidden">
+                      <iframe
+                        src={`https://www.youtube.com/embed/${recordingId}`}
+                        title={t('detail.eventRecording')}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full"
+                      />
+                    </div>
+                  </div>
+                )}
+                {promoId && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Youtube className="h-4 w-4 text-red-500" />
+                      <span>{t('detail.promoVideo')}</span>
+                    </div>
+                    <div className="aspect-video w-full rounded-lg overflow-hidden">
+                      <iframe
+                        src={`https://www.youtube.com/embed/${promoId}`}
+                        title={t('detail.promoVideo')}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Value and Donation */}
           {(event.fiatValue || event.donationWallet || event.donationWalletUnreg) && (
