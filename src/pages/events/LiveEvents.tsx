@@ -4,16 +4,19 @@ import { MapPin, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNostrEvents } from "@/hooks/useNostrEvents";
 import { EventCard } from "@/components/events/EventCard";
+import { useTranslation } from '@/i18n/I18nContext';
+import eventsTranslations from '@/i18n/modules/events';
 
 export default function LiveEvents() {
   const { events, loading, error, refetch } = useNostrEvents('live');
+  const { t } = useTranslation(eventsTranslations);
 
   return (
     <div className="space-y-3 px-3 sm:px-4 pb-24">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-          <h1 className="text-lg sm:text-2xl font-bold">Live Events</h1>
+          <h1 className="text-lg sm:text-2xl font-bold">{t('live.title')}</h1>
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={refetch} disabled={loading}>
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -39,11 +42,11 @@ export default function LiveEvents() {
       {!loading && !error && events.length === 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">No Upcoming Live Events</CardTitle>
+            <CardTitle className="text-lg">{t('live.noEvents')}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">
-              There are no upcoming live/physical events. Be the first to add one!
+              {t('live.noEventsDesc')}
             </p>
           </CardContent>
         </Card>

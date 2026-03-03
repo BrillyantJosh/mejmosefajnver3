@@ -18,6 +18,8 @@ import { format } from "date-fns";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { useNostrUnregisteredWallets } from "@/hooks/useNostrUnregisteredWallets";
 import { COMMON_TIMEZONES, DEFAULT_TIMEZONE, getTimezoneOffset } from "@/lib/timezones";
+import { useTranslation } from '@/i18n/I18nContext';
+import eventsTranslations from '@/i18n/modules/events';
 
 const EVENT_TYPES = [
   { value: 'governance', label: 'Governance' },
@@ -44,6 +46,7 @@ export default function EditEvent() {
   const { parameters: systemParameters } = useSystemParameters();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
   const { lists: unregLists, isLoading: unregLoading } = useNostrUnregisteredWallets();
+  const { t } = useTranslation(eventsTranslations);
 
   // Filter out excluded wallet types
   const EXCLUDED_WALLET_TYPES = ['LanaPays.Us', 'Knights', 'Lana8Wonder'];
@@ -109,7 +112,7 @@ export default function EditEvent() {
       });
 
       if (rawEvents.length === 0) {
-        toast({ title: "Event not found", variant: "destructive" });
+        toast({ title: t('toast.eventNotFound'), variant: "destructive" });
         navigate('/events/my');
         return;
       }
@@ -118,7 +121,7 @@ export default function EditEvent() {
       
       // Check ownership
       if (event.pubkey !== session.nostrHexId) {
-        toast({ title: "You can only edit your own events", variant: "destructive" });
+        toast({ title: t('toast.onlyEditOwn'), variant: "destructive" });
         navigate('/events/my');
         return;
       }
@@ -214,7 +217,7 @@ export default function EditEvent() {
 
     } catch (err) {
       console.error('Error fetching event:', err);
-      toast({ title: "Error loading event", variant: "destructive" });
+      toast({ title: t('toast.errorLoading'), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -308,8 +311,8 @@ export default function EditEvent() {
     } catch (error) {
       console.error('Error uploading cover:', error);
       toast({
-        title: "Error uploading cover image",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t('toast.errorUploadingCover'),
+        description: error instanceof Error ? error.message : t('reg.unknownError'),
         variant: "destructive"
       });
       return null;
@@ -337,34 +340,34 @@ export default function EditEvent() {
     
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
       toast({
-        title: "Error",
-        description: "You must be logged in to update an event",
+        title: t('reg.error'),
+        description: t('toast.loginToUpdate'),
         variant: "destructive"
       });
       return;
     }
 
     if (!originalDTag) {
-      toast({ title: "Error", description: "Could not find original event", variant: "destructive" });
+      toast({ title: t('reg.error'), description: t('toast.originalNotFound'), variant: "destructive" });
       return;
     }
 
     // Validation
     if (!title.trim()) {
-      toast({ title: "Error", description: "Title is required", variant: "destructive" });
+      toast({ title: t('reg.error'), description: t('toast.titleRequired'), variant: "destructive" });
       return;
     }
     const validSchedule = schedule.filter(s => s.date && s.startTime);
     if (validSchedule.length === 0) {
-      toast({ title: "Error", description: "At least one date with start time is required", variant: "destructive" });
+      toast({ title: t('reg.error'), description: t('toast.dateRequired'), variant: "destructive" });
       return;
     }
     if (isOnline && !onlineUrl.trim()) {
-      toast({ title: "Error", description: "Online URL is required for online events", variant: "destructive" });
+      toast({ title: t('reg.error'), description: t('toast.onlineUrlRequired'), variant: "destructive" });
       return;
     }
     if (!isOnline && (!lat.trim() || !lon.trim())) {
-      toast({ title: "Error", description: "Coordinates are required for physical events", variant: "destructive" });
+      toast({ title: t('reg.error'), description: t('toast.coordsRequired'), variant: "destructive" });
       return;
     }
 
@@ -509,8 +512,8 @@ export default function EditEvent() {
       });
 
       toast({
-        title: "Event Updated!",
-        description: "Your event was successfully updated"
+        title: t('toast.eventUpdated'),
+        description: t('toast.eventUpdatedDesc')
       });
 
       navigate('/events/my');
@@ -518,8 +521,8 @@ export default function EditEvent() {
     } catch (error) {
       console.error('Error publishing event:', error);
       toast({
-        title: "Error updating event",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t('toast.errorUpdating'),
+        description: error instanceof Error ? error.message : t('reg.unknownError'),
         variant: "destructive"
       });
     } finally {
@@ -544,7 +547,7 @@ export default function EditEvent() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <Calendar className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Edit Event</h1>
+        <h1 className="text-2xl font-bold">{t('form.editEvent')}</h1>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -552,7 +555,7 @@ export default function EditEvent() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <div className="flex items-center gap-4">
-                <span>Event Type</span>
+                <span>{t('form.eventType')}</span>
                 <div className="flex items-center gap-2">
                   <MapPin className={`h-4 w-4 ${!isOnline ? 'text-primary' : 'text-muted-foreground'}`} />
                   <Switch
@@ -562,26 +565,26 @@ export default function EditEvent() {
                   <Globe className={`h-4 w-4 ${isOnline ? 'text-primary' : 'text-muted-foreground'}`} />
                 </div>
                 <span className="text-sm text-muted-foreground">
-                  {isOnline ? 'Online' : 'Physical'}
+                  {isOnline ? t('form.online') : t('form.physical')}
                 </span>
               </div>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="title">Title *</Label>
+              <Label htmlFor="title">{t('form.title')}</Label>
               <Input
                 id="title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Event title"
+                placeholder={t('form.titlePlaceholder')}
                 required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="eventType">Event Category *</Label>
+                <Label htmlFor="eventType">{t('form.eventCategory')}</Label>
                 <Select value={eventType} onValueChange={setEventType}>
                   <SelectTrigger>
                     <SelectValue />
@@ -597,7 +600,7 @@ export default function EditEvent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="language">Language *</Label>
+                <Label htmlFor="language">{t('form.language')}</Label>
                 <Select value={language} onValueChange={setLanguage}>
                   <SelectTrigger>
                     <SelectValue />
@@ -614,26 +617,26 @@ export default function EditEvent() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
+              <Label htmlFor="status">{t('form.status')}</Label>
               <Select value={status} onValueChange={(v) => setStatus(v as 'active' | 'archived' | 'canceled')}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                  <SelectItem value="canceled">Canceled</SelectItem>
+                  <SelectItem value="active">{t('form.statusActive')}</SelectItem>
+                  <SelectItem value="archived">{t('form.statusArchived')}</SelectItem>
+                  <SelectItem value="canceled">{t('form.statusCanceled')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="content">Description</Label>
+              <Label htmlFor="content">{t('form.description')}</Label>
               <Textarea
                 id="content"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Event description, agenda, instructions..."
+                placeholder={t('form.descriptionPlaceholder')}
                 rows={10}
                 className="min-h-[200px]"
               />
@@ -643,11 +646,11 @@ export default function EditEvent() {
 
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle className="text-lg">Date & Time</CardTitle>
+            <CardTitle className="text-lg">{t('form.dateTime')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="timezone">Timezone *</Label>
+              <Label htmlFor="timezone">{t('form.timezone')}</Label>
               <Select value={timezone} onValueChange={setTimezone}>
                 <SelectTrigger>
                   <SelectValue />
@@ -666,7 +669,7 @@ export default function EditEvent() {
               <div key={idx} className="border rounded-lg p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">
-                    {schedule.length > 1 ? `Dan ${idx + 1}` : 'Datum'}
+                    {schedule.length > 1 ? t('form.dayN', { n: String(idx + 1) }) : t('form.date')}
                   </Label>
                   {schedule.length > 1 && (
                     <Button
@@ -682,7 +685,7 @@ export default function EditEvent() {
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-xs">Date *</Label>
+                    <Label className="text-xs">{t('form.dateRequired')}</Label>
                     <Input
                       type="date"
                       value={entry.date}
@@ -695,7 +698,7 @@ export default function EditEvent() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Start *</Label>
+                    <Label className="text-xs">{t('form.startRequired')}</Label>
                     <Input
                       type="time"
                       value={entry.startTime}
@@ -708,7 +711,7 @@ export default function EditEvent() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">End</Label>
+                    <Label className="text-xs">{t('form.end')}</Label>
                     <Input
                       type="time"
                       value={entry.endTime}
@@ -731,7 +734,7 @@ export default function EditEvent() {
               className="gap-2"
             >
               <Plus className="h-4 w-4" />
-              Dodaj dan
+              {t('form.addDay')}
             </Button>
           </CardContent>
         </Card>
@@ -741,12 +744,12 @@ export default function EditEvent() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Globe className="h-5 w-5" />
-                Online Details
+                {t('form.onlineDetails')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="onlineUrl">Event URL *</Label>
+                <Label htmlFor="onlineUrl">{t('form.eventUrlEdit')}</Label>
                 <Input
                   id="onlineUrl"
                   type="url"
@@ -758,7 +761,7 @@ export default function EditEvent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="youtubeUrl">YouTube Promo URL (optional)</Label>
+                <Label htmlFor="youtubeUrl">{t('form.youtubePromoUrl')}</Label>
                 <Input
                   id="youtubeUrl"
                   type="url"
@@ -766,11 +769,11 @@ export default function EditEvent() {
                   onChange={(e) => setYoutubeUrl(e.target.value)}
                   placeholder="https://youtu.be/..."
                 />
-                <p className="text-xs text-muted-foreground">Promo video pred dogodkom</p>
+                <p className="text-xs text-muted-foreground">{t('form.youtubePromoHint')}</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="youtubeRecordingUrl">YouTube Recording Link (optional)</Label>
+                <Label htmlFor="youtubeRecordingUrl">{t('form.youtubeRecordingUrl')}</Label>
                 <Input
                   id="youtubeRecordingUrl"
                   type="url"
@@ -778,7 +781,7 @@ export default function EditEvent() {
                   onChange={(e) => setYoutubeRecordingUrl(e.target.value)}
                   placeholder="https://youtu.be/XYZ123"
                 />
-                <p className="text-xs text-muted-foreground">Use this only after the event has ended. This is the final recording participants can rewatch.</p>
+                <p className="text-xs text-muted-foreground">{t('form.youtubeRecordingHint')}</p>
               </div>
             </CardContent>
           </Card>
@@ -787,12 +790,12 @@ export default function EditEvent() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <MapPin className="h-5 w-5" />
-                Location Details
+                {t('form.locationDetails')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="location">Location Name</Label>
+                <Label htmlFor="location">{t('form.locationName')}</Label>
                 <Input
                   id="location"
                   value={location}
@@ -803,7 +806,7 @@ export default function EditEvent() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="lat">Latitude *</Label>
+                  <Label htmlFor="lat">{t('form.latitude')}</Label>
                   <Input
                     id="lat"
                     value={lat}
@@ -813,7 +816,7 @@ export default function EditEvent() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lon">Longitude *</Label>
+                  <Label htmlFor="lon">{t('form.longitude')}</Label>
                   <Input
                     id="lon"
                     value={lon}
@@ -825,7 +828,7 @@ export default function EditEvent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="capacity">Capacity</Label>
+                <Label htmlFor="capacity">{t('form.capacity')}</Label>
                 <Input
                   id="capacity"
                   type="number"
@@ -842,7 +845,7 @@ export default function EditEvent() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <ImagePlus className="h-5 w-5" />
-              Cover Image
+              {t('form.coverImage')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -866,16 +869,16 @@ export default function EditEvent() {
             ) : (
               <>
                 <div className="space-y-2">
-                  <Label>Upload Image</Label>
+                  <Label>{t('form.uploadImage')}</Label>
                   <Input
                     type="file"
                     accept="image/*"
                     onChange={handleCoverSelect}
                   />
                 </div>
-                <div className="text-center text-muted-foreground text-sm">or</div>
+                <div className="text-center text-muted-foreground text-sm">{t('form.or')}</div>
                 <div className="space-y-2">
-                  <Label htmlFor="coverUrl">Image URL</Label>
+                  <Label htmlFor="coverUrl">{t('form.imageUrl')}</Label>
                   <Input
                     id="coverUrl"
                     type="url"
@@ -893,7 +896,7 @@ export default function EditEvent() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Link2 className="h-5 w-5" />
-              Attachments
+              {t('form.attachments')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -924,30 +927,30 @@ export default function EditEvent() {
               className="gap-2"
             >
               <Plus className="h-4 w-4" />
-              Add Attachment
+              {t('form.addAttachment')}
             </Button>
           </CardContent>
         </Card>
 
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle className="text-lg">Optional Details</CardTitle>
+            <CardTitle className="text-lg">{t('form.optionalDetails')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <Wallet className="h-4 w-4" />
-                Registered LANA Wallet
+                {t('form.registeredWallet')}
               </Label>
               <Select
                 value={donationWallet || "none"}
                 onValueChange={(val) => setDonationWallet(val === "none" ? "" : val)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={walletsLoading ? "Loading wallets..." : "Select registered wallet"} />
+                  <SelectValue placeholder={walletsLoading ? t('form.loadingWallets') : t('form.selectRegisteredWallet')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No wallet</SelectItem>
+                  <SelectItem value="none">{t('form.noWallet')}</SelectItem>
                   {availableWallets.map((wallet) => (
                     <SelectItem key={wallet.walletId} value={wallet.walletId}>
                       <div className="flex flex-col">
@@ -965,17 +968,17 @@ export default function EditEvent() {
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <Wallet className="h-4 w-4" />
-                Unregistered LANA Wallet
+                {t('form.unregisteredWallet')}
               </Label>
               <Select
                 value={donationWalletUnreg || "none"}
                 onValueChange={(val) => setDonationWalletUnreg(val === "none" ? "" : val)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={unregLoading ? "Loading wallets..." : "Select unregistered wallet"} />
+                  <SelectValue placeholder={unregLoading ? t('form.loadingWallets') : t('form.selectUnregisteredWallet')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No wallet</SelectItem>
+                  <SelectItem value="none">{t('form.noWallet')}</SelectItem>
                   {myUnregWallets.map((wallet) => (
                     <SelectItem key={wallet.address} value={wallet.address}>
                       <div className="flex flex-col">
@@ -991,7 +994,7 @@ export default function EditEvent() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="fiatValue">Event Value (EUR)</Label>
+              <Label htmlFor="fiatValue">{t('form.eventValueEur')}</Label>
               <Input
                 id="fiatValue"
                 type="number"
@@ -1009,7 +1012,7 @@ export default function EditEvent() {
           disabled={publishing || uploading}
         >
           {(publishing || uploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {uploading ? 'Uploading...' : publishing ? 'Saving...' : 'Save Changes'}
+          {uploading ? t('form.uploading') : publishing ? t('form.saving') : t('form.saveChanges')}
         </Button>
       </form>
     </div>

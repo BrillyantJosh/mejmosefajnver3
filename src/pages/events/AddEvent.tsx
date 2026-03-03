@@ -15,6 +15,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { useNostrUnregisteredWallets } from "@/hooks/useNostrUnregisteredWallets";
 import { COMMON_TIMEZONES, DEFAULT_TIMEZONE, getTimezoneOffset } from "@/lib/timezones";
+import { useTranslation } from '@/i18n/I18nContext';
+import eventsTranslations from '@/i18n/modules/events';
 
 const EVENT_TYPES = [
   { value: 'governance', label: 'Governance' },
@@ -37,6 +39,7 @@ const LANGUAGES = [
 export default function AddEvent() {
   const { session } = useAuth();
   const { parameters: systemParameters } = useSystemParameters();
+  const { t } = useTranslation(eventsTranslations);
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
   const { lists: unregLists, isLoading: unregLoading } = useNostrUnregisteredWallets();
 
@@ -170,8 +173,8 @@ export default function AddEvent() {
     } catch (error) {
       console.error('Error uploading cover:', error);
       toast({
-        title: "Error uploading cover image",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t('toast.errorUploadingCover'),
+        description: error instanceof Error ? error.message : t('reg.unknownError'),
         variant: "destructive"
       });
       return null;
@@ -199,8 +202,8 @@ export default function AddEvent() {
     
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
       toast({
-        title: "Error",
-        description: "You must be logged in to create an event",
+        title: t('reg.error'),
+        description: t('toast.loginToCreate'),
         variant: "destructive"
       });
       return;
@@ -208,21 +211,21 @@ export default function AddEvent() {
 
     // Validation
     if (!title.trim()) {
-      toast({ title: "Error", description: "Title is required", variant: "destructive" });
+      toast({ title: t('reg.error'), description: t('toast.titleRequired'), variant: "destructive" });
       return;
     }
     // Validate schedule entries
     const validSchedule = schedule.filter(s => s.date && s.startTime);
     if (validSchedule.length === 0) {
-      toast({ title: "Error", description: "At least one date with start time is required", variant: "destructive" });
+      toast({ title: t('reg.error'), description: t('toast.dateRequired'), variant: "destructive" });
       return;
     }
     if (isOnline && !onlineUrl.trim()) {
-      toast({ title: "Error", description: "Online URL is required for online events", variant: "destructive" });
+      toast({ title: t('reg.error'), description: t('toast.onlineUrlRequired'), variant: "destructive" });
       return;
     }
     if (!isOnline && (!lat.trim() || !lon.trim())) {
-      toast({ title: "Error", description: "Coordinates are required for physical events", variant: "destructive" });
+      toast({ title: t('reg.error'), description: t('toast.coordsRequired'), variant: "destructive" });
       return;
     }
 
@@ -367,8 +370,8 @@ export default function AddEvent() {
       });
 
       toast({
-        title: "Event Published!",
-        description: "Your event was successfully published to the network"
+        title: t('toast.eventPublished'),
+        description: t('toast.eventPublishedDesc')
       });
 
       // Reset form
@@ -390,8 +393,8 @@ export default function AddEvent() {
     } catch (error) {
       console.error('Error publishing event:', error);
       toast({
-        title: "Error publishing event",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t('toast.errorPublishing'),
+        description: error instanceof Error ? error.message : t('reg.unknownError'),
         variant: "destructive"
       });
     } finally {
@@ -403,7 +406,7 @@ export default function AddEvent() {
     <div className="space-y-4 px-4">
       <div className="flex items-center gap-2 mb-6">
         <Calendar className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Add Event</h1>
+        <h1 className="text-2xl font-bold">{t('form.addEvent')}</h1>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -411,7 +414,7 @@ export default function AddEvent() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <div className="flex items-center gap-4">
-                <span>Event Type</span>
+                <span>{t('form.eventType')}</span>
                 <div className="flex items-center gap-2">
                   <MapPin className={`h-4 w-4 ${!isOnline ? 'text-primary' : 'text-muted-foreground'}`} />
                   <Switch
@@ -421,26 +424,26 @@ export default function AddEvent() {
                   <Globe className={`h-4 w-4 ${isOnline ? 'text-primary' : 'text-muted-foreground'}`} />
                 </div>
                 <span className="text-sm text-muted-foreground">
-                  {isOnline ? 'Online' : 'Physical'}
+                  {isOnline ? t('form.online') : t('form.physical')}
                 </span>
               </div>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="title">Title *</Label>
+              <Label htmlFor="title">{t('form.title')}</Label>
               <Input
                 id="title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Event title"
+                placeholder={t('form.titlePlaceholder')}
                 required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="eventType">Event Category *</Label>
+                <Label htmlFor="eventType">{t('form.eventCategory')}</Label>
                 <Select value={eventType} onValueChange={setEventType}>
                   <SelectTrigger>
                     <SelectValue />
@@ -456,7 +459,7 @@ export default function AddEvent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="language">Language *</Label>
+                <Label htmlFor="language">{t('form.language')}</Label>
                 <Select value={language} onValueChange={setLanguage}>
                   <SelectTrigger>
                     <SelectValue />
@@ -473,12 +476,12 @@ export default function AddEvent() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="content">Description</Label>
+              <Label htmlFor="content">{t('form.description')}</Label>
               <Textarea
                 id="content"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Event description, agenda, instructions..."
+                placeholder={t('form.descriptionPlaceholder')}
                 rows={5}
               />
             </div>
@@ -487,11 +490,11 @@ export default function AddEvent() {
 
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle className="text-lg">Date & Time</CardTitle>
+            <CardTitle className="text-lg">{t('form.dateTime')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="timezone">Timezone *</Label>
+              <Label htmlFor="timezone">{t('form.timezone')}</Label>
               <Select value={timezone} onValueChange={setTimezone}>
                 <SelectTrigger>
                   <SelectValue />
@@ -510,7 +513,7 @@ export default function AddEvent() {
               <div key={idx} className="border rounded-lg p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">
-                    {schedule.length > 1 ? `Dan ${idx + 1}` : 'Datum'}
+                    {schedule.length > 1 ? t('form.dayN', { n: String(idx + 1) }) : t('form.date')}
                   </Label>
                   {schedule.length > 1 && (
                     <Button
@@ -526,7 +529,7 @@ export default function AddEvent() {
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-xs">Date *</Label>
+                    <Label className="text-xs">{t('form.dateRequired')}</Label>
                     <Input
                       type="date"
                       value={entry.date}
@@ -539,7 +542,7 @@ export default function AddEvent() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Start *</Label>
+                    <Label className="text-xs">{t('form.startRequired')}</Label>
                     <Input
                       type="time"
                       value={entry.startTime}
@@ -552,7 +555,7 @@ export default function AddEvent() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">End</Label>
+                    <Label className="text-xs">{t('form.end')}</Label>
                     <Input
                       type="time"
                       value={entry.endTime}
@@ -575,7 +578,7 @@ export default function AddEvent() {
               className="gap-2"
             >
               <Plus className="h-4 w-4" />
-              Dodaj dan
+              {t('form.addDay')}
             </Button>
           </CardContent>
         </Card>
@@ -585,12 +588,12 @@ export default function AddEvent() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Globe className="h-5 w-5" />
-                Online Details
+                {t('form.onlineDetails')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="onlineUrl">Google Meet / Event URL *</Label>
+                <Label htmlFor="onlineUrl">{t('form.eventUrl')}</Label>
                 <Input
                   id="onlineUrl"
                   type="url"
@@ -602,7 +605,7 @@ export default function AddEvent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="youtubeUrl">YouTube URL (optional)</Label>
+                <Label htmlFor="youtubeUrl">{t('form.youtubeUrl')}</Label>
                 <Input
                   id="youtubeUrl"
                   type="url"
@@ -618,12 +621,12 @@ export default function AddEvent() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <MapPin className="h-5 w-5" />
-                Location Details
+                {t('form.locationDetails')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="location">Location Name</Label>
+                <Label htmlFor="location">{t('form.locationName')}</Label>
                 <Input
                   id="location"
                   value={location}
@@ -634,7 +637,7 @@ export default function AddEvent() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="lat">Latitude *</Label>
+                  <Label htmlFor="lat">{t('form.latitude')}</Label>
                   <Input
                     id="lat"
                     value={lat}
@@ -644,7 +647,7 @@ export default function AddEvent() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lon">Longitude *</Label>
+                  <Label htmlFor="lon">{t('form.longitude')}</Label>
                   <Input
                     id="lon"
                     value={lon}
@@ -656,7 +659,7 @@ export default function AddEvent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="capacity">Capacity</Label>
+                <Label htmlFor="capacity">{t('form.capacity')}</Label>
                 <Input
                   id="capacity"
                   type="number"
@@ -673,7 +676,7 @@ export default function AddEvent() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <ImagePlus className="h-5 w-5" />
-              Cover Image
+              {t('form.coverImage')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -697,16 +700,16 @@ export default function AddEvent() {
             ) : (
               <>
                 <div className="space-y-2">
-                  <Label>Upload Image</Label>
+                  <Label>{t('form.uploadImage')}</Label>
                   <Input
                     type="file"
                     accept="image/*"
                     onChange={handleCoverSelect}
                   />
                 </div>
-                <div className="text-center text-muted-foreground text-sm">or</div>
+                <div className="text-center text-muted-foreground text-sm">{t('form.or')}</div>
                 <div className="space-y-2">
-                  <Label htmlFor="coverUrl">Image URL</Label>
+                  <Label htmlFor="coverUrl">{t('form.imageUrl')}</Label>
                   <Input
                     id="coverUrl"
                     type="url"
@@ -724,7 +727,7 @@ export default function AddEvent() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Link2 className="h-5 w-5" />
-              Attachments
+              {t('form.attachments')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -755,30 +758,30 @@ export default function AddEvent() {
               className="gap-2"
             >
               <Plus className="h-4 w-4" />
-              Add Attachment
+              {t('form.addAttachment')}
             </Button>
           </CardContent>
         </Card>
 
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle className="text-lg">Optional Details</CardTitle>
+            <CardTitle className="text-lg">{t('form.optionalDetails')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <Wallet className="h-4 w-4" />
-                Registered LANA Wallet
+                {t('form.registeredWallet')}
               </Label>
               <Select
                 value={donationWallet || "none"}
                 onValueChange={(val) => setDonationWallet(val === "none" ? "" : val)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={walletsLoading ? "Loading wallets..." : "Select registered wallet"} />
+                  <SelectValue placeholder={walletsLoading ? t('form.loadingWallets') : t('form.selectRegisteredWallet')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No wallet</SelectItem>
+                  <SelectItem value="none">{t('form.noWallet')}</SelectItem>
                   {availableWallets.map((wallet) => (
                     <SelectItem key={wallet.walletId} value={wallet.walletId}>
                       <div className="flex flex-col">
@@ -796,17 +799,17 @@ export default function AddEvent() {
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <Wallet className="h-4 w-4" />
-                Unregistered LANA Wallet
+                {t('form.unregisteredWallet')}
               </Label>
               <Select
                 value={donationWalletUnreg || "none"}
                 onValueChange={(val) => setDonationWalletUnreg(val === "none" ? "" : val)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={unregLoading ? "Loading wallets..." : "Select unregistered wallet"} />
+                  <SelectValue placeholder={unregLoading ? t('form.loadingWallets') : t('form.selectUnregisteredWallet')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No wallet</SelectItem>
+                  <SelectItem value="none">{t('form.noWallet')}</SelectItem>
                   {myUnregWallets.map((wallet) => (
                     <SelectItem key={wallet.address} value={wallet.address}>
                       <div className="flex flex-col">
@@ -822,7 +825,7 @@ export default function AddEvent() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="fiatValue">Event Value (EUR)</Label>
+              <Label htmlFor="fiatValue">{t('form.eventValueEur')}</Label>
               <Input
                 id="fiatValue"
                 type="number"
@@ -840,7 +843,7 @@ export default function AddEvent() {
           disabled={publishing || uploading}
         >
           {(publishing || uploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {uploading ? 'Uploading...' : publishing ? 'Publishing...' : 'Publish Event'}
+          {uploading ? t('form.uploading') : publishing ? t('form.publishing') : t('form.publishEvent')}
         </Button>
       </form>
     </div>

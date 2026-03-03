@@ -14,12 +14,15 @@ import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { getEventStatus } from "@/hooks/useNostrEvents";
 import { toast } from "@/hooks/use-toast";
 import { getTimezoneAbbreviation, getUserTimezone, formatTimeInTimezone } from "@/lib/timezones";
+import { useTranslation } from '@/i18n/I18nContext';
+import eventsTranslations from '@/i18n/modules/events';
 
 export default function PublicEvent() {
   const { dTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
   const { parameters } = useSystemParameters();
-  
+  const { t } = useTranslation(eventsTranslations);
+
   // Decode the URL-encoded dTag
   const decodedDTag = dTag ? decodeURIComponent(dTag) : '';
   
@@ -36,12 +39,12 @@ export default function PublicEvent() {
     try {
       await navigator.clipboard.writeText(shareUrl);
       toast({
-        title: "Link copied!",
-        description: "Share this link with anyone"
+        title: t('card.linkCopied'),
+        description: t('card.shareDescription')
       });
     } catch (err) {
       toast({
-        title: "Copy failed",
+        title: t('card.copyFailed'),
         description: shareUrl,
         variant: "destructive"
       });
@@ -60,7 +63,7 @@ export default function PublicEvent() {
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-          <p className="text-sm text-muted-foreground">Loading event from Nostr relays...</p>
+          <p className="text-sm text-muted-foreground">{t('public.loadingRelays')}</p>
         </div>
       </div>
     );
@@ -73,14 +76,14 @@ export default function PublicEvent() {
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {error || 'Event not found'}
+              {error || t('detail.eventNotFound')}
             </AlertDescription>
           </Alert>
           <Button 
             onClick={() => window.location.reload()} 
             className="w-full"
           >
-            Try Again
+            {t('public.tryAgain')}
           </Button>
           <Button 
             variant="outline"
@@ -88,7 +91,7 @@ export default function PublicEvent() {
             className="w-full"
           >
             <LogIn className="h-4 w-4 mr-2" />
-            Log in to Lana.app
+            {t('public.loginLana')}
           </Button>
         </div>
       </div>
@@ -102,8 +105,8 @@ export default function PublicEvent() {
       <div className="max-w-2xl mx-auto space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Lana Event</h1>
-            <p className="text-sm text-muted-foreground">Public event details</p>
+            <h1 className="text-2xl font-bold">{t('public.title')}</h1>
+            <p className="text-sm text-muted-foreground">{t('public.subtitle')}</p>
           </div>
           <Button variant="outline" size="icon" onClick={handleShare}>
             <Share2 className="h-4 w-4" />
@@ -125,7 +128,7 @@ export default function PublicEvent() {
                     : 'bg-amber-500 text-white'
                 }`}
               >
-                {status === 'happening-now' ? 'HAPPENING NOW' : 'TODAY'}
+                {status === 'happening-now' ? t('status.happeningNow') : t('status.today')}
               </Badge>
             )}
           </div>
@@ -140,16 +143,16 @@ export default function PublicEvent() {
                 <Badge variant="outline">{event.language.toUpperCase()}</Badge>
               </div>
             </div>
-            
+
             {!event.cover && status !== 'upcoming' && (
-              <Badge 
+              <Badge
                 className={`w-fit ${
-                  status === 'happening-now' 
-                    ? 'bg-green-500 text-white animate-pulse' 
+                  status === 'happening-now'
+                    ? 'bg-green-500 text-white animate-pulse'
                     : 'bg-amber-500 text-white'
                 }`}
               >
-                {status === 'happening-now' ? 'HAPPENING NOW' : 'TODAY'}
+                {status === 'happening-now' ? t('status.happeningNow') : t('status.today')}
               </Badge>
             )}
           </CardHeader>
@@ -159,7 +162,7 @@ export default function PublicEvent() {
             <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
               <UserAvatar pubkey={event?.organizerPubkey} picture={profile?.picture} name={getDisplayName()} />
               <div>
-                <p className="text-sm text-muted-foreground">Organized by</p>
+                <p className="text-sm text-muted-foreground">{t('public.organizedBy')}</p>
                 <p className="font-semibold">{getDisplayName()}</p>
               </div>
             </div>
@@ -174,7 +177,7 @@ export default function PublicEvent() {
                     <span className="font-medium">
                       {format(event.schedule[0].start, 'dd.MM')} – {format(event.schedule[event.schedule.length - 1].start, 'dd.MM.yyyy')}
                     </span>
-                    <span className="text-sm text-muted-foreground">({event.schedule.length} dni)</span>
+                    <span className="text-sm text-muted-foreground">({t('card.days', { count: event.schedule.length })})</span>
                   </div>
                   <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                     {event.schedule.map((entry, idx) => (
@@ -188,14 +191,14 @@ export default function PublicEvent() {
                       </div>
                     ))}
                     <div className="text-sm text-muted-foreground pt-1">
-                      Timezone: {getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')}
+                      {t('detail.timezone')} {getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')}
                     </div>
                   </div>
 
                   {/* Show user's local time if different timezone */}
                   {(event.timezone || 'Europe/Ljubljana') !== getUserTimezone() && (
                     <div className="bg-muted/50 rounded-lg p-3 space-y-1">
-                      <div className="text-sm text-muted-foreground mb-1">Your local time ({getTimezoneAbbreviation(event.start, getUserTimezone())}):</div>
+                      <div className="text-sm text-muted-foreground mb-1">{t('detail.yourLocalTime', { tz: getTimezoneAbbreviation(event.start, getUserTimezone()) })}</div>
                       {event.schedule.map((entry, idx) => (
                         <div key={idx} className="flex items-center gap-3 text-sm text-muted-foreground">
                           <span className="min-w-[90px]">{format(entry.start, 'EEE dd.MM')}</span>
@@ -232,7 +235,7 @@ export default function PublicEvent() {
                     <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
                       <Clock className="h-4 w-4" />
                       <span>
-                        Your local time: {formatTimeInTimezone(event.start, getUserTimezone())}
+                        {t('detail.yourLocalTimeSingle')} {formatTimeInTimezone(event.start, getUserTimezone())}
                         {event.end && ` - ${formatTimeInTimezone(event.end, getUserTimezone())}`}
                         {' '}({getTimezoneAbbreviation(event.start, getUserTimezone())})
                       </span>
@@ -244,7 +247,7 @@ export default function PublicEvent() {
               {!event.timezone && (
                 <div className="flex items-center gap-2 text-sm text-amber-500">
                   <AlertTriangle className="h-4 w-4" />
-                  <span>Legacy event - timezone not specified (assumed Europe/Ljubljana)</span>
+                  <span>{t('detail.legacyTimezone')}</span>
                 </div>
               )}
             </div>
@@ -254,7 +257,7 @@ export default function PublicEvent() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Globe className="h-5 w-5 text-blue-500" />
-                  <span className="font-medium text-blue-500">Online Event</span>
+                  <span className="font-medium text-blue-500">{t('detail.onlineEvent')}</span>
                 </div>
                 {event.youtubeUrl && (() => {
                   const getYouTubeId = (url: string): string | null => {
@@ -282,7 +285,7 @@ export default function PublicEvent() {
                     onClick={() => window.open(event.onlineUrl, '_blank')}
                   >
                     <ExternalLink className="h-4 w-4 mr-2" />
-                    Join Event
+                    {t('detail.joinEvent')}
                   </Button>
                 )}
                 {event.youtubeUrl && (
@@ -292,7 +295,7 @@ export default function PublicEvent() {
                     onClick={() => window.open(event.youtubeUrl, '_blank')}
                   >
                     <Youtube className="h-4 w-4 mr-2" />
-                    Open on YouTube
+                    {t('public.openYouTube')}
                   </Button>
                 )}
               </div>
@@ -311,13 +314,13 @@ export default function PublicEvent() {
                     onClick={() => window.open(`https://www.google.com/maps?q=${event.lat},${event.lon}`, '_blank')}
                   >
                     <MapPin className="h-4 w-4 mr-2" />
-                    Open in Maps
+                    {t('detail.openInMaps')}
                   </Button>
                 )}
                 {event.capacity && (
                   <div className="flex items-center gap-2">
                     <Users className="h-5 w-5" />
-                    <span>Capacity: {event.capacity} people</span>
+                    <span>{t('detail.capacity', { count: String(event.capacity) })}</span>
                   </div>
                 )}
               </div>
@@ -328,7 +331,7 @@ export default function PublicEvent() {
               <div className="border-t pt-4 space-y-3">
                 {event.fiatValue && (
                   <div className="text-lg font-medium text-primary">
-                    Event Value: €{event.fiatValue}
+                    {t('detail.eventValue', { amount: String(event.fiatValue) })}
                   </div>
                 )}
                 {event.donationWallet && (
@@ -342,7 +345,7 @@ export default function PublicEvent() {
                       onClick={() => navigate('/login')}
                     >
                       <Wallet className="h-4 w-4 mr-2" />
-                      {event.fiatValue ? `Pay €${event.fiatValue}` : 'Donate'} (Login required)
+                      {event.fiatValue ? t('card.pay', { amount: String(event.fiatValue) }) : t('card.donate')} {t('public.loginRequired')}
                     </Button>
                   </>
                 )}
@@ -352,7 +355,7 @@ export default function PublicEvent() {
             {/* Description */}
             {event.content && (
               <div className="border-t pt-4">
-                <h3 className="font-semibold mb-2">Description</h3>
+                <h3 className="font-semibold mb-2">{t('detail.description')}</h3>
                 <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
                   {event.content}
                 </div>
@@ -362,7 +365,7 @@ export default function PublicEvent() {
             {/* Attachments */}
             {event.attachments && event.attachments.length > 0 && (
               <div className="border-t pt-4">
-                <h3 className="font-semibold mb-2">Attachments</h3>
+                <h3 className="font-semibold mb-2">{t('detail.attachments')}</h3>
                 <div className="space-y-2">
                   {event.attachments.map((url, index) => (
                     <Button 
@@ -372,7 +375,7 @@ export default function PublicEvent() {
                       onClick={() => window.open(url, '_blank')}
                     >
                       <FileText className="h-4 w-4 mr-2" />
-                      {url.split('/').pop() || `Attachment ${index + 1}`}
+                      {url.split('/').pop() || t('detail.attachment', { index: String(index + 1) })}
                     </Button>
                   ))}
                 </div>
@@ -389,7 +392,7 @@ export default function PublicEvent() {
               const videoId = getYouTubeId(event.youtubeRecordingUrl);
               return (
                 <div className="border-t pt-4">
-                  <h3 className="font-semibold mb-2">Event Recording</h3>
+                  <h3 className="font-semibold mb-2">{t('detail.eventRecording')}</h3>
                   {videoId ? (
                     <div className="aspect-video w-full rounded-lg overflow-hidden">
                       <iframe
@@ -407,7 +410,7 @@ export default function PublicEvent() {
                       onClick={() => window.open(event.youtubeRecordingUrl, '_blank')}
                     >
                       <Youtube className="h-4 w-4 mr-2" />
-                      Watch Recording
+                      {t('detail.watchRecording')}
                     </Button>
                   )}
                 </div>
@@ -417,14 +420,14 @@ export default function PublicEvent() {
             {/* Recording (legacy field) */}
             {event.recording && !event.youtubeRecordingUrl && (
               <div className="border-t pt-4">
-                <h3 className="font-semibold mb-2">Recording</h3>
+                <h3 className="font-semibold mb-2">{t('detail.recording')}</h3>
                 <Button 
                   variant="outline" 
                   className="w-full"
                   onClick={() => window.open(event.recording, '_blank')}
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
-                  Watch Recording
+                  {t('detail.watchRecording')}
                 </Button>
               </div>
             )}
@@ -432,14 +435,14 @@ export default function PublicEvent() {
             {/* CTA for non-logged in users */}
             <div className="border-t pt-6">
               <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 text-center space-y-3">
-                <p className="font-medium">Want to register for this event?</p>
-                <p className="text-sm text-muted-foreground">Log in to Lana.app to register and attend</p>
+                <p className="font-medium">{t('public.wantToRegister')}</p>
+                <p className="text-sm text-muted-foreground">{t('public.loginToRegister')}</p>
                 <Button 
                   className="w-full"
                   onClick={() => navigate('/login')}
                 >
                   <LogIn className="h-4 w-4 mr-2" />
-                  Log in to Register
+                  {t('public.loginButton')}
                 </Button>
               </div>
             </div>

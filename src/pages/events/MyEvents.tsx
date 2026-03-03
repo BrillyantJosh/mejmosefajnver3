@@ -14,17 +14,20 @@ import { format } from "date-fns";
 import { LanaEvent, ScheduleEntry, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNostrEventRegistrationsBatch, EventRegistration } from "@/hooks/useNostrEventRegistrations";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
+import { useTranslation } from '@/i18n/I18nContext';
+import eventsTranslations from '@/i18n/modules/events';
 
 function AttendeeRow({ registration }: { registration: EventRegistration }) {
   const { profile } = useNostrProfileCache(registration.pubkey);
+  const { t } = useTranslation(eventsTranslations);
   const displayName = profile?.display_name || profile?.full_name || registration.pubkey.slice(0, 8) + '...';
-  
+
   return (
     <div className="flex items-center gap-2 py-2">
       <UserAvatar pubkey={registration.pubkey} picture={profile?.picture} name={displayName} className="h-8 w-8" />
       <span className="text-sm flex-1 truncate">{displayName}</span>
       <Badge variant={registration.status === 'going' ? 'default' : 'secondary'} className="text-xs">
-        {registration.status === 'going' ? 'Going' : 'Interested'}
+        {registration.status === 'going' ? t('my.goingStatus') : t('my.interestedStatus')}
       </Badge>
     </div>
   );
@@ -38,6 +41,7 @@ interface EventCardWithRegistrationsProps {
 
 function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardWithRegistrationsProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const { t } = useTranslation(eventsTranslations);
   const status = getEventStatus(event);
   const isPast = event.end ? event.end < new Date() : new Date(event.start.getTime() + 2 * 60 * 60 * 1000) < new Date();
   
@@ -83,15 +87,15 @@ function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardW
 
               <div className="flex gap-2 mt-2 flex-wrap">
                 {status === 'happening-now' && (
-                  <Badge className="bg-green-500 hover:bg-green-600 text-white">NOW</Badge>
+                  <Badge className="bg-green-500 hover:bg-green-600 text-white">{t('status.now')}</Badge>
                 )}
                 {status === 'today' && (
-                  <Badge className="bg-amber-500 hover:bg-amber-600 text-white">TODAY</Badge>
+                  <Badge className="bg-amber-500 hover:bg-amber-600 text-white">{t('status.today')}</Badge>
                 )}
-                {isPast && <Badge variant="secondary">PAST</Badge>}
-                {event.status === 'canceled' && <Badge variant="destructive">CANCELED</Badge>}
+                {isPast && <Badge variant="secondary">{t('status.past')}</Badge>}
+                {event.status === 'canceled' && <Badge variant="destructive">{t('status.canceled')}</Badge>}
                 <Badge variant="outline" className="text-xs">
-                  {event.isOnline ? 'Online' : 'Live'}
+                  {event.isOnline ? t('card.online') : t('nav.live')}
                 </Badge>
               </div>
             </div>
@@ -105,13 +109,13 @@ function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardW
                   <div className="flex items-center gap-1">
                     <Users className="h-4 w-4 text-primary" />
                     <span className="font-medium">{registrations.length}</span>
-                    <span className="text-sm text-muted-foreground">registered</span>
+                    <span className="text-sm text-muted-foreground">{t('my.registered')}</span>
                   </div>
                   {goingCount > 0 && (
-                    <Badge variant="default" className="text-xs">{goingCount} going</Badge>
+                    <Badge variant="default" className="text-xs">{t('my.goingBadge', { count: String(goingCount) })}</Badge>
                   )}
                   {interestedCount > 0 && (
-                    <Badge variant="secondary" className="text-xs">{interestedCount} interested</Badge>
+                    <Badge variant="secondary" className="text-xs">{t('my.interestedBadge', { count: String(interestedCount) })}</Badge>
                   )}
                 </div>
                 {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -122,7 +126,7 @@ function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardW
           <CollapsibleContent>
             <div className="mt-3 max-h-64 overflow-y-auto">
               {registrations.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No registrations yet</p>
+                <p className="text-sm text-muted-foreground text-center py-4">{t('my.noRegistrations')}</p>
               ) : (
                 <div className="divide-y">
                   {registrations.map(reg => (
@@ -141,6 +145,7 @@ function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardW
 export default function MyEvents() {
   const navigate = useNavigate();
   const { session } = useAuth();
+  const { t } = useTranslation(eventsTranslations);
   const { parameters: systemParameters } = useSystemParameters();
   const [events, setEvents] = useState<LanaEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -295,7 +300,7 @@ export default function MyEvents() {
       <div className="space-y-3 px-3 sm:px-4">
         <div className="flex items-center gap-2 mb-4">
           <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-          <h1 className="text-lg sm:text-2xl font-bold">My Events</h1>
+          <h1 className="text-lg sm:text-2xl font-bold">{t('my.title')}</h1>
         </div>
         {[1, 2, 3].map(i => (
           <Skeleton key={i} className="h-32 sm:h-40 w-full" />
@@ -307,7 +312,7 @@ export default function MyEvents() {
   if (!session) {
     return (
       <div className="px-3 sm:px-4 text-center py-12">
-        <p className="text-muted-foreground text-sm sm:text-base">Please log in to see your events</p>
+        <p className="text-muted-foreground text-sm sm:text-base">{t('my.loginRequired')}</p>
       </div>
     );
   }
@@ -317,23 +322,23 @@ export default function MyEvents() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-          <h1 className="text-lg sm:text-2xl font-bold">My Events</h1>
+          <h1 className="text-lg sm:text-2xl font-bold">{t('my.title')}</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={() => navigate('/events/my-checkins')} size="sm" variant="outline">
             <QrCode className="h-4 w-4 mr-1" />
-            Check-in
+            {t('my.checkin')}
           </Button>
           <Button onClick={() => navigate('/events/add')} size="sm">
             <Plus className="h-4 w-4 mr-1" />
-            Add
+            {t('my.add')}
           </Button>
         </div>
       </div>
 
       {events.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">You haven't created any events yet</p>
+          <p className="text-muted-foreground">{t('my.noEvents')}</p>
         </div>
       ) : (
         <div className="space-y-4">

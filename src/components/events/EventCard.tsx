@@ -13,6 +13,8 @@ import { SimplePool, finalizeEvent } from "nostr-tools";
 import { toast } from "@/hooks/use-toast";
 import { getTimezoneAbbreviation, getUserTimezone, formatTimeInTimezone } from "@/lib/timezones";
 import { useEventCountdown } from "@/hooks/useEventCountdown";
+import { useTranslation } from '@/i18n/I18nContext';
+import eventsTranslations from '@/i18n/modules/events';
 
 interface EventCardProps {
   event: LanaEvent;
@@ -25,7 +27,8 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
   const { parameters: systemParameters } = useSystemParameters();
   const [registering, setRegistering] = useState(false);
   const [unregistering, setUnregistering] = useState(false);
-  
+  const { t } = useTranslation(eventsTranslations);
+
   const { registrations, userRegistration, refetch } = useNostrEventRegistrations(event.dTag);
   
   const relays = systemParameters?.relays || [];
@@ -60,8 +63,8 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
     
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
       toast({
-        title: "Error",
-        description: "You must be logged in to register",
+        title: t('reg.error'),
+        description: t('reg.loginRequired'),
         variant: "destructive"
       });
       return;
@@ -115,8 +118,8 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
       });
 
       toast({
-        title: "Registered!",
-        description: "You're going to this event!"
+        title: t('reg.registered'),
+        description: t('reg.registeredDesc')
       });
 
       refetch();
@@ -124,8 +127,8 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
     } catch (error) {
       console.error('Error registering:', error);
       toast({
-        title: "Error registering",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t('reg.errorRegistering'),
+        description: error instanceof Error ? error.message : t('reg.unknownError'),
         variant: "destructive"
       });
     } finally {
@@ -184,8 +187,8 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
       });
 
       toast({
-        title: "Unregistered",
-        description: "Your registration has been cancelled"
+        title: t('reg.unregistered'),
+        description: t('reg.unregisteredDesc')
       });
 
       refetch();
@@ -193,8 +196,8 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
     } catch (error) {
       console.error('Error unregistering:', error);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t('reg.error'),
+        description: error instanceof Error ? error.message : t('reg.unknownError'),
         variant: "destructive"
       });
     } finally {
@@ -228,7 +231,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
                   : 'bg-amber-500 text-white'
               }`}
             >
-              {status === 'happening-now' ? 'NOW' : 'TODAY'}
+              {status === 'happening-now' ? t('status.now') : t('status.today')}
             </Badge>
           )}
         </div>
@@ -243,7 +246,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
                 : 'bg-amber-500 text-white'
             }`}
           >
-            {status === 'happening-now' ? 'NOW' : 'TODAY'}
+            {status === 'happening-now' ? t('status.now') : t('status.today')}
           </Badge>
         )}
         
@@ -264,7 +267,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
                   {format(event.schedule[0].start, 'dd.MM')} – {format(event.schedule[event.schedule.length - 1].start, 'dd.MM.yyyy')}
                 </span>
                 <span className="text-muted-foreground">
-                  ({event.schedule.length} dni)
+                  ({t('card.days', { count: event.schedule.length })})
                 </span>
               </div>
               {event.schedule.map((entry, idx) => (
@@ -300,14 +303,14 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
           {countdown.isWithin12Hours && !countdown.isStarted && (
             <div className="flex items-center gap-1 text-primary">
               <Timer className="h-3 w-3 animate-pulse" />
-              <span className="text-xs font-medium">Starts in {countdown.displayString}</span>
+              <span className="text-xs font-medium">{t('card.startsIn', { time: countdown.displayString })}</span>
             </div>
           )}
           
           {!event.timezone && (
             <div className="flex items-center gap-1 text-amber-500">
               <AlertTriangle className="h-3 w-3" />
-              <span className="text-xs">Legacy event (no timezone)</span>
+              <span className="text-xs">{t('card.legacyEvent')}</span>
             </div>
           )}
           
@@ -315,7 +318,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-500 shrink-0" />
-                <span className="text-blue-500">Online</span>
+                <span className="text-blue-500">{t('card.online')}</span>
               </div>
               {event.youtubeUrl && (() => {
                 const getYouTubeId = (url: string): string | null => {
@@ -372,7 +375,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
               onClick={handleDonateClick}
             >
               <Wallet className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
-              {event.fiatValue ? `Pay €${event.fiatValue}` : 'Donate'}
+              {event.fiatValue ? t('card.pay', { amount: String(event.fiatValue) }) : t('card.donate')}
             </Button>
           </div>
         )}
@@ -417,7 +420,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
                     ) : (
                       <>
                         <Check className="h-3.5 w-3.5 sm:mr-1" />
-                        <span className="hidden sm:inline">Going</span>
+                        <span className="hidden sm:inline">{t('card.going')}</span>
                       </>
                     )}
                   </Button>
@@ -433,7 +436,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
                     ) : (
                       <>
                         <UserPlus className="h-3.5 w-3.5 sm:mr-1" />
-                        <span className="hidden sm:inline">I'm Going</span>
+                        <span className="hidden sm:inline">{t('card.imGoing')}</span>
                       </>
                     )}
                   </Button>
@@ -453,12 +456,12 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
     
     navigator.clipboard.writeText(shareUrl).then(() => {
       toast({
-        title: "Link copied!",
-        description: "Share this link with anyone"
+        title: t('card.linkCopied'),
+        description: t('card.shareDescription')
       });
     }).catch(() => {
       toast({
-        title: "Copy failed",
+        title: t('card.copyFailed'),
         description: shareUrl,
         variant: "destructive"
       });

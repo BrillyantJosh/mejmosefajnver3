@@ -8,6 +8,8 @@ import { Globe, MapPin, Calendar, Play, Share2 } from "lucide-react";
 import { useNostrPastEvents } from "@/hooks/useNostrPastEvents";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
+import { useTranslation } from '@/i18n/I18nContext';
+import eventsTranslations from '@/i18n/modules/events';
 
 const LANGUAGES = [
   { value: 'all', label: 'All Languages' },
@@ -25,25 +27,26 @@ function getYouTubeId(url: string): string | null {
   return (match && match[2].length === 11) ? match[2] : null;
 }
 
-function handleShare(dTag: string) {
-  const shareUrl = `${window.location.origin}/event/${encodeURIComponent(dTag)}`;
-  
-  navigator.clipboard.writeText(shareUrl).then(() => {
-    toast({
-      title: "Link copied!",
-      description: "Share this link with anyone"
-    });
-  }).catch(() => {
-    toast({
-      title: "Copy failed",
-      description: shareUrl,
-      variant: "destructive"
-    });
-  });
-}
-
 export default function PastEvents() {
   const { events, loading, error } = useNostrPastEvents();
+  const { t } = useTranslation(eventsTranslations);
+
+  function handleShare(dTag: string) {
+    const shareUrl = `${window.location.origin}/event/${encodeURIComponent(dTag)}`;
+
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      toast({
+        title: t('card.linkCopied'),
+        description: t('card.shareDescription')
+      });
+    }).catch(() => {
+      toast({
+        title: t('card.copyFailed'),
+        description: shareUrl,
+        variant: "destructive"
+      });
+    });
+  }
   const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
 
   const filteredEvents = useMemo(() => {
@@ -55,7 +58,7 @@ export default function PastEvents() {
     return (
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Past Events</h1>
+          <h1 className="text-2xl font-bold">{t('past.title')}</h1>
           <Skeleton className="h-10 w-40" />
         </div>
         {[1, 2, 3].map((i) => (
@@ -76,7 +79,7 @@ export default function PastEvents() {
       <div className="p-4">
         <Card className="border-destructive">
           <CardContent className="p-4 text-destructive">
-            Error loading past events: {error}
+            {t('past.errorLoading')} {error}
           </CardContent>
         </Card>
       </div>
@@ -87,7 +90,7 @@ export default function PastEvents() {
     return (
       <div className="p-4">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Past Events</h1>
+          <h1 className="text-2xl font-bold">{t('past.title')}</h1>
           <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
             <SelectTrigger className="w-40 bg-background">
               <SelectValue placeholder="Language" />
@@ -95,7 +98,7 @@ export default function PastEvents() {
             <SelectContent className="bg-background border shadow-lg z-50">
               {LANGUAGES.map(lang => (
                 <SelectItem key={lang.value} value={lang.value}>
-                  {lang.label}
+                  {lang.value === 'all' ? t('past.allLanguages') : lang.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -104,9 +107,9 @@ export default function PastEvents() {
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
             <Play className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>{selectedLanguage === 'all' 
-              ? 'No past events with recordings available yet.' 
-              : 'No past events with recordings in this language.'}</p>
+            <p>{selectedLanguage === 'all'
+              ? t('past.noRecordings')
+              : t('past.noRecordingsLang')}</p>
           </CardContent>
         </Card>
       </div>
@@ -116,7 +119,7 @@ export default function PastEvents() {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Past Events</h1>
+        <h1 className="text-2xl font-bold">{t('past.title')}</h1>
         <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
           <SelectTrigger className="w-40 bg-background">
             <SelectValue placeholder="Language" />
@@ -124,7 +127,7 @@ export default function PastEvents() {
           <SelectContent className="bg-background border shadow-lg z-50">
             {LANGUAGES.map(lang => (
               <SelectItem key={lang.value} value={lang.value}>
-                {lang.label}
+                {lang.value === 'all' ? t('past.allLanguages') : lang.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -190,7 +193,7 @@ export default function PastEvents() {
                   className="flex items-center gap-2 text-primary hover:underline"
                 >
                   <Play className="h-4 w-4" />
-                  Watch Recording
+                  {t('past.watchRecording')}
                 </a>
               )}
             </CardContent>
