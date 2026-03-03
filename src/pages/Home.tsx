@@ -96,17 +96,16 @@ export default function Home() {
 
   const handleShare = async (item: WhatsUpItem) => {
     const publicUrl = `${window.location.origin}/video/${item.id}`;
-    const shareText = item.body ? `${item.title}\n\n${item.body}` : item.title;
 
     if (navigator.share) {
       try {
-        await navigator.share({ title: item.title, text: shareText, url: publicUrl });
+        await navigator.share({ title: item.title, text: item.body || item.title, url: publicUrl });
       } catch {
         // User cancelled
       }
     } else {
       try {
-        await navigator.clipboard.writeText(`${shareText}\n\n${publicUrl}`);
+        await navigator.clipboard.writeText(publicUrl);
         toast.success("Link copied!");
       } catch {
         toast.error("Failed to copy link");

@@ -32,7 +32,9 @@ function extractYouTubeId(url: string): string | null {
 }
 
 export default function PublicVideo() {
-  const { id } = useParams<{ id: string }>();
+  const { id: rawId } = useParams<{ id: string }>();
+  // Extract just the 32-char hex ID in case extra text was pasted into the URL
+  const id = rawId?.match(/^[a-f0-9]{32}/i)?.[0] || rawId;
   const [item, setItem] = useState<WhatsUpItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [appName, setAppName] = useState("Lana");
@@ -78,20 +80,16 @@ export default function PublicVideo() {
     }
   };
 
-  const shareUrl = window.location.href;
+  // Always use clean URL (not window.location.href which might have extra text)
+  const shareUrl = `${window.location.origin}/video/${id}`;
 
   const handleShare = async () => {
     if (!item) return;
-    const shareData = {
-      title: item.title,
-      text: item.body ? `${item.title}\n\n${item.body}` : item.title,
-      url: shareUrl,
-    };
 
     if (navigator.share) {
       try {
-        await navigator.share(shareData);
-      } catch (err) {
+        await navigator.share({ title: item.title, text: item.body || item.title, url: shareUrl });
+      } catch {
         // User cancelled or share failed - ignore
       }
     } else {
@@ -101,10 +99,7 @@ export default function PublicVideo() {
 
   const handleCopy = async () => {
     try {
-      const text = item
-        ? `${item.title}${item.body ? `\n\n${item.body}` : ""}\n\n${shareUrl}`
-        : shareUrl;
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       toast.success("Link copied!");
       setTimeout(() => setCopied(false), 2000);
