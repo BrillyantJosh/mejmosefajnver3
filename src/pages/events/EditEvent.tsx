@@ -68,10 +68,9 @@ export default function EditEvent() {
   const [eventType, setEventType] = useState("awareness");
   const [language, setLanguage] = useState("sl");
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
-  const [startDate, setStartDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [endTime, setEndTime] = useState("");
+  const [schedule, setSchedule] = useState<Array<{date: string; startTime: string; endTime: string}>>([
+    { date: '', startTime: '', endTime: '' }
+  ]);
   const [status, setStatus] = useState<'active' | 'archived' | 'canceled'>('active');
   
   // Online fields
@@ -142,18 +141,38 @@ export default function EditEvent() {
       setTimezone(getTagValue('timezone') || DEFAULT_TIMEZONE);
       setStatus((getTagValue('status') as 'active' | 'archived' | 'canceled') || 'active');
 
-      const startStr = getTagValue('start');
-      if (startStr) {
-        const startDt = new Date(startStr);
-        setStartDate(format(startDt, 'yyyy-MM-dd'));
-        setStartTime(format(startDt, 'HH:mm'));
-      }
-
-      const endStr = getTagValue('end');
-      if (endStr) {
-        const endDt = new Date(endStr);
-        setEndDate(format(endDt, 'yyyy-MM-dd'));
-        setEndTime(format(endDt, 'HH:mm'));
+      // Load schedule entries
+      const scheduleTags = tags.filter((t: string[]) => t[0] === 'schedule');
+      if (scheduleTags.length > 0) {
+        const loadedSchedule = scheduleTags
+          .map((t: string[]) => {
+            const s = new Date(t[1]);
+            if (isNaN(s.getTime())) return null;
+            const e = t[2] ? new Date(t[2]) : undefined;
+            return {
+              date: format(s, 'yyyy-MM-dd'),
+              startTime: format(s, 'HH:mm'),
+              endTime: e && !isNaN(e.getTime()) ? format(e, 'HH:mm') : ''
+            };
+          })
+          .filter((e): e is {date: string; startTime: string; endTime: string} => e !== null)
+          .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+        if (loadedSchedule.length > 0) {
+          setSchedule(loadedSchedule);
+        }
+      } else {
+        // Fallback: load from start/end for legacy events
+        const startStr = getTagValue('start');
+        if (startStr) {
+          const startDt = new Date(startStr);
+          const endStr = getTagValue('end');
+          const endDt = endStr ? new Date(endStr) : undefined;
+          setSchedule([{
+            date: format(startDt, 'yyyy-MM-dd'),
+            startTime: format(startDt, 'HH:mm'),
+            endTime: endDt && !isNaN(endDt.getTime()) ? format(endDt, 'HH:mm') : ''
+          }]);
+        }
       }
 
       const onlineUrlValue = getTagValue('online');
@@ -335,8 +354,9 @@ export default function EditEvent() {
       toast({ title: "Error", description: "Title is required", variant: "destructive" });
       return;
     }
-    if (!startDate || !startTime) {
-      toast({ title: "Error", description: "Start date and time are required", variant: "destructive" });
+    const validSchedule = schedule.filter(s => s.date && s.startTime);
+    if (validSchedule.length === 0) {
+      toast({ title: "Error", description: "At least one date with start time is required", variant: "destructive" });
       return;
     }
     if (isOnline && !onlineUrl.trim()) {
@@ -363,10 +383,17 @@ export default function EditEvent() {
       const pool = new SimplePool();
       const privKeyBytes = new Uint8Array(session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
 
-      // Use the original d tag to make this a replaceable event
-      const tzOffset = getTimezoneOffset(timezone, new Date(`${startDate}T${startTime}`));
-      const startDateTime = `${startDate}T${startTime}:00${tzOffset}`;
-      const endDateTime = endDate && endTime ? `${endDate}T${endTime}:00${tzOffset}` : null;
+      // Sort valid schedule entries
+      const sortedSchedule = [...validSchedule].sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+
+      // Derive overall start/end from first/last schedule entries
+      const firstEntry = sortedSchedule[0];
+      const lastEntry = sortedSchedule[sortedSchedule.length - 1];
+      const tzOffset = getTimezoneOffset(timezone, new Date(`${firstEntry.date}T${firstEntry.startTime}`));
+      const startDateTime = `${firstEntry.date}T${firstEntry.startTime}:00${tzOffset}`;
+      const endDateTime = lastEntry.endTime
+        ? `${lastEntry.date}T${lastEntry.endTime}:00${tzOffset}`
+        : null;
 
       // Build tags
       const tags: string[][] = [
@@ -382,6 +409,18 @@ export default function EditEvent() {
 
       if (endDateTime) {
         tags.push(["end", endDateTime]);
+      }
+
+      // Add schedule tags for multi-day events
+      if (sortedSchedule.length > 1) {
+        for (const entry of sortedSchedule) {
+          const entryTzOffset = getTimezoneOffset(timezone, new Date(`${entry.date}T${entry.startTime}`));
+          const scheduleTag: string[] = ["schedule", `${entry.date}T${entry.startTime}:00${entryTzOffset}`];
+          if (entry.endTime) {
+            scheduleTag.push(`${entry.date}T${entry.endTime}:00${entryTzOffset}`);
+          }
+          tags.push(scheduleTag);
+        }
       }
 
       if (isOnline) {
@@ -623,49 +662,77 @@ export default function EditEvent() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="startDate">Start Date *</Label>
-                <Input
-                  id="startDate"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  required
-                />
+            {schedule.map((entry, idx) => (
+              <div key={idx} className="border rounded-lg p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">
+                    {schedule.length > 1 ? `Dan ${idx + 1}` : 'Datum'}
+                  </Label>
+                  {schedule.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => setSchedule(schedule.filter((_, i) => i !== idx))}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Date *</Label>
+                    <Input
+                      type="date"
+                      value={entry.date}
+                      onChange={(e) => {
+                        const updated = [...schedule];
+                        updated[idx] = { ...updated[idx], date: e.target.value };
+                        setSchedule(updated);
+                      }}
+                      required={idx === 0}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Start *</Label>
+                    <Input
+                      type="time"
+                      value={entry.startTime}
+                      onChange={(e) => {
+                        const updated = [...schedule];
+                        updated[idx] = { ...updated[idx], startTime: e.target.value };
+                        setSchedule(updated);
+                      }}
+                      required={idx === 0}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">End</Label>
+                    <Input
+                      type="time"
+                      value={entry.endTime}
+                      onChange={(e) => {
+                        const updated = [...schedule];
+                        updated[idx] = { ...updated[idx], endTime: e.target.value };
+                        setSchedule(updated);
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="startTime">Start Time *</Label>
-                <Input
-                  id="startTime"
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
+            ))}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="endDate">End Date</Label>
-                <Input
-                  id="endDate"
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="endTime">End Time</Label>
-                <Input
-                  id="endTime"
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                />
-              </div>
-            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSchedule([...schedule, { date: '', startTime: '', endTime: '' }])}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Dodaj dan
+            </Button>
           </CardContent>
         </Card>
 

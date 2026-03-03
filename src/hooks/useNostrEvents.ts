@@ -3,6 +3,11 @@ import { SimplePool } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
+export interface ScheduleEntry {
+  start: Date;
+  end?: Date;
+}
+
 export interface LanaEvent {
   id: string;
   pubkey: string;
@@ -40,6 +45,8 @@ export interface LanaEvent {
   dTag: string;
   // Timezone (IANA format)
   timezone?: string;
+  // Multi-day schedule (empty = single-session using start/end)
+  schedule: ScheduleEntry[];
 }
 
 type EventFilter = 'online' | 'live';
@@ -100,6 +107,18 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
       const fiatValueStr = getTagValue('fiat_value');
       const maxGuestsStr = getTagValue('max_guests');
 
+      // Parse schedule tags for multi-day events
+      const scheduleTags = tags.filter((t: string[]) => t[0] === 'schedule');
+      const schedule: ScheduleEntry[] = scheduleTags
+        .map((t: string[]) => {
+          const s = new Date(t[1]);
+          if (isNaN(s.getTime())) return null;
+          const e = t[2] ? new Date(t[2]) : undefined;
+          return { start: s, end: e && !isNaN(e.getTime()) ? e : undefined };
+        })
+        .filter((entry): entry is ScheduleEntry => entry !== null)
+        .sort((a, b) => a.start.getTime() - b.start.getTime());
+
       return {
         id: event.id,
         pubkey: event.pubkey,
@@ -132,6 +151,7 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
         maxGuests: maxGuestsStr ? parseInt(maxGuestsStr, 10) : undefined,
         dTag,
         timezone: getTagValue('timezone'),
+        schedule,
       };
     } catch (err) {
       console.error('Error parsing event:', err);
@@ -180,9 +200,17 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
       const now = new Date();
       const filteredEvents = parsedEvents.filter(event => {
         // Only show upcoming events (start time is in the future OR currently happening)
-        const eventEnd = event.end || new Date(event.start.getTime() + 2 * 60 * 60 * 1000); // Default 2 hour duration
-        const isUpcoming = event.start > now || eventEnd > now;
-        
+        // For multi-day events, check if any schedule entry is still upcoming
+        let isUpcoming: boolean;
+        if (event.schedule.length > 0) {
+          const lastEntry = event.schedule[event.schedule.length - 1];
+          const lastEnd = lastEntry.end || new Date(lastEntry.start.getTime() + 2 * 60 * 60 * 1000);
+          isUpcoming = lastEnd > now;
+        } else {
+          const eventEnd = event.end || new Date(event.start.getTime() + 2 * 60 * 60 * 1000);
+          isUpcoming = event.start > now || eventEnd > now;
+        }
+
         if (!isUpcoming) return false;
 
         if (filter === 'online') {
@@ -230,25 +258,33 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
 
 export function getEventStatus(event: LanaEvent): 'happening-now' | 'today' | 'upcoming' {
   const now = new Date();
-  const eventEnd = event.end || new Date(event.start.getTime() + 2 * 60 * 60 * 1000);
-  
-  // Check if happening now (started and not ended, OR starts in less than 15 minutes)
   const fifteenMinutesFromNow = new Date(now.getTime() + 15 * 60 * 1000);
-  const isHappeningNow = (event.start <= now && eventEnd > now) || 
-                          (event.start > now && event.start <= fifteenMinutesFromNow);
-  
-  if (isHappeningNow) {
-    return 'happening-now';
-  }
-
-  // Check if today
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-  const isToday = event.start >= today && event.start < tomorrow;
-  
-  if (isToday) {
-    return 'today';
+
+  // For multi-day events, check each schedule entry
+  if (event.schedule.length > 0) {
+    for (const entry of event.schedule) {
+      const entryEnd = entry.end || new Date(entry.start.getTime() + 2 * 60 * 60 * 1000);
+      const isNow = (entry.start <= now && entryEnd > now) ||
+                    (entry.start > now && entry.start <= fifteenMinutesFromNow);
+      if (isNow) return 'happening-now';
+    }
+    for (const entry of event.schedule) {
+      if (entry.start >= today && entry.start < tomorrow) return 'today';
+    }
+    return 'upcoming';
   }
+
+  // Single-session event (legacy)
+  const eventEnd = event.end || new Date(event.start.getTime() + 2 * 60 * 60 * 1000);
+  const isHappeningNow = (event.start <= now && eventEnd > now) ||
+                          (event.start > now && event.start <= fifteenMinutesFromNow);
+
+  if (isHappeningNow) return 'happening-now';
+
+  const isToday = event.start >= today && event.start < tomorrow;
+  if (isToday) return 'today';
 
   return 'upcoming';
 }

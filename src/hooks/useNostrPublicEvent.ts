@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { SimplePool } from "nostr-tools";
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
-import { LanaEvent } from "./useNostrEvents";
+import { LanaEvent, ScheduleEntry } from "./useNostrEvents";
 
 interface NostrProfile {
   name?: string;
@@ -72,6 +72,18 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
         const fiatValueStr = getTagValue('fiat_value');
         const maxGuestsStr = getTagValue('max_guests');
 
+        // Parse schedule tags for multi-day events
+        const scheduleTags = tags.filter((t: string[]) => t[0] === 'schedule');
+        const schedule: ScheduleEntry[] = scheduleTags
+          .map((t: string[]) => {
+            const s = new Date(t[1]);
+            if (isNaN(s.getTime())) return null;
+            const e = t[2] ? new Date(t[2]) : undefined;
+            return { start: s, end: e && !isNaN(e.getTime()) ? e : undefined };
+          })
+          .filter((entry): entry is ScheduleEntry => entry !== null)
+          .sort((a, b) => a.start.getTime() - b.start.getTime());
+
         return {
           id: rawEvent.id,
           pubkey: rawEvent.pubkey,
@@ -103,6 +115,7 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
           maxGuests: maxGuestsStr ? parseInt(maxGuestsStr, 10) : undefined,
           dTag,
           timezone: getTagValue('timezone'),
+          schedule,
         };
       } catch (err) {
         console.error('Error parsing event:', err);

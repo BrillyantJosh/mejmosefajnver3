@@ -166,33 +166,81 @@ export default function PublicEvent() {
 
             {/* Date and Time */}
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-lg">
-                <Calendar className="h-5 w-5 text-primary" />
-                <span className="font-medium">{format(event.start, 'PPPP')}</span>
-              </div>
-            <div className="flex items-center gap-2 text-lg">
-              <Clock className="h-5 w-5 text-primary" />
-              <span>
-                {formatTimeInTimezone(event.start, event.timezone || 'Europe/Ljubljana')}
-                {event.end && ` - ${formatTimeInTimezone(event.end, event.timezone || 'Europe/Ljubljana')}`}
-                <span className="ml-2 text-muted-foreground">
-                  ({getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')})
-                </span>
-              </span>
-            </div>
-              
-            {/* Show user's local time if different timezone */}
-            {(event.timezone || 'Europe/Ljubljana') !== getUserTimezone() && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
-                <Clock className="h-4 w-4" />
-                <span>
-                  Your local time: {formatTimeInTimezone(event.start, getUserTimezone())}
-                  {event.end && ` - ${formatTimeInTimezone(event.end, getUserTimezone())}`}
-                  {' '}({getTimezoneAbbreviation(event.start, getUserTimezone())})
-                </span>
-              </div>
-            )}
-              
+              {event.schedule.length > 1 ? (
+                /* Multi-day schedule */
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-lg">
+                    <Calendar className="h-5 w-5 text-primary" />
+                    <span className="font-medium">
+                      {format(event.schedule[0].start, 'dd.MM')} – {format(event.schedule[event.schedule.length - 1].start, 'dd.MM.yyyy')}
+                    </span>
+                    <span className="text-sm text-muted-foreground">({event.schedule.length} dni)</span>
+                  </div>
+                  <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+                    {event.schedule.map((entry, idx) => (
+                      <div key={idx} className="flex items-center gap-3">
+                        <span className="font-medium min-w-[90px]">{format(entry.start, 'EEE dd.MM')}</span>
+                        <Clock className="h-4 w-4 text-primary shrink-0" />
+                        <span>
+                          {formatTimeInTimezone(entry.start, event.timezone || 'Europe/Ljubljana')}
+                          {entry.end && ` – ${formatTimeInTimezone(entry.end, event.timezone || 'Europe/Ljubljana')}`}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="text-sm text-muted-foreground pt-1">
+                      Timezone: {getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')}
+                    </div>
+                  </div>
+
+                  {/* Show user's local time if different timezone */}
+                  {(event.timezone || 'Europe/Ljubljana') !== getUserTimezone() && (
+                    <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+                      <div className="text-sm text-muted-foreground mb-1">Your local time ({getTimezoneAbbreviation(event.start, getUserTimezone())}):</div>
+                      {event.schedule.map((entry, idx) => (
+                        <div key={idx} className="flex items-center gap-3 text-sm text-muted-foreground">
+                          <span className="min-w-[90px]">{format(entry.start, 'EEE dd.MM')}</span>
+                          <Clock className="h-3 w-3 shrink-0" />
+                          <span>
+                            {formatTimeInTimezone(entry.start, getUserTimezone())}
+                            {entry.end && ` – ${formatTimeInTimezone(entry.end, getUserTimezone())}`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Single-day event */
+                <>
+                  <div className="flex items-center gap-2 text-lg">
+                    <Calendar className="h-5 w-5 text-primary" />
+                    <span className="font-medium">{format(event.start, 'PPPP')}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-lg">
+                    <Clock className="h-5 w-5 text-primary" />
+                    <span>
+                      {formatTimeInTimezone(event.start, event.timezone || 'Europe/Ljubljana')}
+                      {event.end && ` - ${formatTimeInTimezone(event.end, event.timezone || 'Europe/Ljubljana')}`}
+                      <span className="ml-2 text-muted-foreground">
+                        ({getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')})
+                      </span>
+                    </span>
+                  </div>
+
+                  {/* Show user's local time if different timezone */}
+                  {(event.timezone || 'Europe/Ljubljana') !== getUserTimezone() && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+                      <Clock className="h-4 w-4" />
+                      <span>
+                        Your local time: {formatTimeInTimezone(event.start, getUserTimezone())}
+                        {event.end && ` - ${formatTimeInTimezone(event.end, getUserTimezone())}`}
+                        {' '}({getTimezoneAbbreviation(event.start, getUserTimezone())})
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+
               {!event.timezone && (
                 <div className="flex items-center gap-2 text-sm text-amber-500">
                   <AlertTriangle className="h-4 w-4" />

@@ -255,18 +255,47 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
         </div>
         
         <div className="space-y-1.5 text-xs sm:text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-            <span className="truncate">{format(event.start, 'dd.MM.yyyy')}</span>
-            <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 ml-1" />
-            <span>
-              {formatTimeInTimezone(event.start, event.timezone || 'Europe/Ljubljana')}
-              {event.end && ` - ${formatTimeInTimezone(event.end, event.timezone || 'Europe/Ljubljana')}`}
-              <span className="ml-1 text-muted-foreground">
+          {event.schedule.length > 1 ? (
+            /* Multi-day event: show date range */
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                <span className="font-medium text-foreground">
+                  {format(event.schedule[0].start, 'dd.MM')} – {format(event.schedule[event.schedule.length - 1].start, 'dd.MM.yyyy')}
+                </span>
+                <span className="text-muted-foreground">
+                  ({event.schedule.length} dni)
+                </span>
+              </div>
+              {event.schedule.map((entry, idx) => (
+                <div key={idx} className="flex items-center gap-2 ml-6">
+                  <span className="text-muted-foreground">{format(entry.start, 'dd.MM')}</span>
+                  <Clock className="h-3 w-3 shrink-0" />
+                  <span>
+                    {formatTimeInTimezone(entry.start, event.timezone || 'Europe/Ljubljana')}
+                    {entry.end && ` - ${formatTimeInTimezone(entry.end, event.timezone || 'Europe/Ljubljana')}`}
+                  </span>
+                </div>
+              ))}
+              <div className="ml-6 text-muted-foreground">
                 ({getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')})
+              </div>
+            </div>
+          ) : (
+            /* Single-day event: original layout */
+            <div className="flex items-center gap-2">
+              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+              <span className="truncate">{format(event.start, 'dd.MM.yyyy')}</span>
+              <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 ml-1" />
+              <span>
+                {formatTimeInTimezone(event.start, event.timezone || 'Europe/Ljubljana')}
+                {event.end && ` - ${formatTimeInTimezone(event.end, event.timezone || 'Europe/Ljubljana')}`}
+                <span className="ml-1 text-muted-foreground">
+                  ({getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')})
+                </span>
               </span>
-            </span>
-          </div>
+            </div>
+          )}
           
           {countdown.isWithin12Hours && !countdown.isStarted && (
             <div className="flex items-center gap-1 text-primary">
