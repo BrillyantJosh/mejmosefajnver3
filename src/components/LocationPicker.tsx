@@ -22,13 +22,21 @@ interface LocationPickerProps {
   onClose: () => void;
   initialLat?: number;
   initialLng?: number;
+  labels?: {
+    title?: string;
+    hint?: string;
+    selected?: string;
+    cancel?: string;
+    confirm?: string;
+  };
 }
 
-const LocationPicker = ({ 
-  onLocationSelect, 
-  onClose, 
+const LocationPicker = ({
+  onLocationSelect,
+  onClose,
   initialLat = 46.0569,
-  initialLng = 14.5058 
+  initialLng = 14.5058,
+  labels
 }: LocationPickerProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -37,20 +45,26 @@ const LocationPicker = ({
     { lat: initialLat, lng: initialLng }
   );
 
+  const titleText = labels?.title || 'Select Location on Map';
+  const hintText = labels?.hint || 'Click on the map or drag the marker to select a location';
+  const selectedText = labels?.selected || 'Selected';
+  const cancelText = labels?.cancel || 'Cancel';
+  const confirmText = labels?.confirm || 'Confirm Location';
+
   useEffect(() => {
     // Prepreči ponovno inicializacijo, če zemljevid že obstaja
     if (!mapContainerRef.current || mapRef.current) return;
 
     // 1. Inicializiraj zemljevid
     const map = L.map(mapContainerRef.current).setView([initialLat, initialLng], 13);
-    
+
     // 2. Dodaj tile layer (OpenStreetMap)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
     // 3. Dodaj marker z možnostjo vlečenja
-    const marker = L.marker([initialLat, initialLng], { 
+    const marker = L.marker([initialLat, initialLng], {
       icon: defaultIcon,
       draggable: true
     }).addTo(map);
@@ -92,28 +106,28 @@ const LocationPicker = ({
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <MapPin className="h-5 w-5" />
-            Select Location on Map
+            {titleText}
           </h3>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
-        
+
         <div className="flex-1 p-4 space-y-3 overflow-y-auto">
           <p className="text-sm text-muted-foreground">
-            Click on the map or drag the marker to select a location
+            {hintText}
           </p>
-          
+
           {/* Kontejner za zemljevid */}
           <div className="rounded-lg overflow-hidden border border-border h-[400px]">
             <div ref={mapContainerRef} className="w-full h-full" />
           </div>
-          
+
           {/* Prikaz izbranih koordinat */}
           {selectedPosition && (
             <div className="p-3 bg-muted rounded-md">
               <p className="text-sm">
-                <span className="font-medium">Selected:</span>{" "}
+                <span className="font-medium">{selectedText}:</span>{" "}
                 {selectedPosition.lat.toFixed(6)}, {selectedPosition.lng.toFixed(6)}
               </p>
             </div>
@@ -122,10 +136,10 @@ const LocationPicker = ({
 
         <div className="flex justify-end gap-2 p-4 border-t border-border">
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {cancelText}
           </Button>
           <Button onClick={handleConfirm} disabled={!selectedPosition}>
-            Confirm Location
+            {confirmText}
           </Button>
         </div>
       </div>

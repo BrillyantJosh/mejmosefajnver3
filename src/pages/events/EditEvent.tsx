@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, Plus, X, Calendar, MapPin, Globe, Link2, ImagePlus, ArrowLeft, Wallet } from "lucide-react";
+import { Loader2, Plus, X, Calendar, MapPin, Globe, Link2, ImagePlus, ArrowLeft, Wallet, Map } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import LocationPicker from "@/components/LocationPicker";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { SimplePool, finalizeEvent } from "nostr-tools";
 import { toast } from "@/hooks/use-toast";
@@ -86,7 +87,8 @@ export default function EditEvent() {
   const [lat, setLat] = useState("");
   const [lon, setLon] = useState("");
   const [capacity, setCapacity] = useState("");
-  
+  const [showMapPicker, setShowMapPicker] = useState(false);
+
   // Optional fields
   const [coverUrl, setCoverUrl] = useState("");
   const [coverFile, setCoverFile] = useState<File | null>(null);
@@ -783,6 +785,16 @@ export default function EditEvent() {
                 />
               </div>
 
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowMapPicker(true)}
+              >
+                <Map className="h-4 w-4 mr-2" />
+                {t('form.selectOnMap')}
+              </Button>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="lat">{t('form.latitude')}</Label>
@@ -818,6 +830,26 @@ export default function EditEvent() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Map Picker Modal */}
+        {showMapPicker && (
+          <LocationPicker
+            initialLat={lat ? parseFloat(lat) : undefined}
+            initialLng={lon ? parseFloat(lon) : undefined}
+            labels={{
+              title: t('form.mapTitle'),
+              hint: t('form.mapHint'),
+              selected: t('form.mapSelected'),
+              cancel: t('form.mapCancel'),
+              confirm: t('form.mapConfirm'),
+            }}
+            onLocationSelect={(latitude, longitude) => {
+              setLat(latitude.toFixed(6));
+              setLon(longitude.toFixed(6));
+            }}
+            onClose={() => setShowMapPicker(false)}
+          />
         )}
 
         {/* YouTube URLs — available for both online and physical events */}
