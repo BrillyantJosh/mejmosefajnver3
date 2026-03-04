@@ -256,6 +256,14 @@ export default function SendLanaResult() {
                   Use the Registrar to combine your UTXOs into fewer, larger ones.
                   After consolidation, you can retry the transaction.
                 </p>
+                <a
+                  href="https://youtu.be/kBi4MKcc4qM"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline hover:no-underline"
+                >
+                  📺 Watch: How to consolidate UTXOs
+                </a>
               </div>
 
               <div className="space-y-3">
