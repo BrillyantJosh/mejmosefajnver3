@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, Square, Send, X, Play, Pause } from "lucide-react";
+import { Mic, Square, Send, X, Play, Pause, RotateCcw, Loader2 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
@@ -12,11 +12,11 @@ interface OwnAudioRecorderProps {
   compact?: boolean;
 }
 
-export default function OwnAudioRecorder({ 
-  processEventId, 
-  senderPubkey, 
+export default function OwnAudioRecorder({
+  processEventId,
+  senderPubkey,
   onSendAudio,
-  compact = false 
+  compact = false
 }: OwnAudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -25,6 +25,8 @@ export default function OwnAudioRecorder({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [uploadFailed, setUploadFailed] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -54,7 +56,7 @@ export default function OwnAudioRecorder({
       'audio/ogg;codecs=opus',
       'audio/mp4',
     ];
-    
+
     for (const type of types) {
       if (MediaRecorder.isTypeSupported(type)) {
         return type;
@@ -65,7 +67,7 @@ export default function OwnAudioRecorder({
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -73,7 +75,7 @@ export default function OwnAudioRecorder({
         },
       });
       streamRef.current = stream;
-      
+
       const mimeType = getSupportedMimeType();
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
@@ -90,7 +92,7 @@ export default function OwnAudioRecorder({
         audioBlobRef.current = audioBlob;
         const audioUrl = URL.createObjectURL(audioBlob);
         setAudioPreview(audioUrl);
-        
+
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
         }
@@ -126,13 +128,14 @@ export default function OwnAudioRecorder({
       return;
     }
 
-    const maxSize = 50 * 1024 * 1024; // 50MB - supports ~15+ min recordings
+    const maxSize = 50 * 1024 * 1024; // 50MB
     if (audioBlobRef.current.size > maxSize) {
       toast.error("Recording too large (max 50MB / ~15 min)");
       return;
     }
 
     setIsUploading(true);
+    setUploadFailed(false);
     try {
       const timestamp = Date.now();
       const randomStr = Math.random().toString(36).substring(7);
@@ -153,6 +156,7 @@ export default function OwnAudioRecorder({
         filePath,
         size: audioBlobRef.current.size,
         type: mimeType,
+        attempt: retryCount + 1,
       });
 
       const { error: uploadError } = await ownSupabase.storage
@@ -165,19 +169,32 @@ export default function OwnAudioRecorder({
 
       if (uploadError) {
         console.error("Upload error:", uploadError);
-        toast.error(`Upload error: ${uploadError.message}`);
+        setUploadFailed(true);
+        setRetryCount(prev => prev + 1);
+        toast.error("Upload failed — tap retry to try again");
         return;
       }
 
       // Send the audio path to the chat (Nostr content uses "audio:" prefix)
-      await onSendAudio(`audio:${filePath}`);
-      
-      // Cleanup
+      // Include duration metadata so it shows immediately in chat
+      const durSuffix = recordingTime > 0 ? `|dur:${recordingTime}` : '';
+      const sent = await onSendAudio(`audio:${filePath}${durSuffix}`);
+
+      if (!sent) {
+        setUploadFailed(true);
+        setRetryCount(prev => prev + 1);
+        toast.error("Sending failed — tap retry to try again");
+        return;
+      }
+
+      // Success — cleanup
       handleDiscardPreview();
       toast.success("Recording sent");
     } catch (error) {
       console.error('Error uploading audio:', error);
-      toast.error("Error sending recording");
+      setUploadFailed(true);
+      setRetryCount(prev => prev + 1);
+      toast.error("Network error — tap retry to try again");
     } finally {
       setIsUploading(false);
     }
@@ -199,9 +216,15 @@ export default function OwnAudioRecorder({
     setCurrentTime(0);
     setDuration(0);
     setRecordingTime(0);
+    setUploadFailed(false);
+    setRetryCount(0);
   };
 
   const handleSendAudio = async () => {
+    await uploadAudio();
+  };
+
+  const handleRetry = async () => {
     await uploadAudio();
   };
 
@@ -209,15 +232,15 @@ export default function OwnAudioRecorder({
   useEffect(() => {
     if (audioPreview && audioElementRef.current) {
       const audio = audioElementRef.current;
-      
+
       const handleLoadedMetadata = () => {
         setDuration(audio.duration);
       };
-      
+
       const handleTimeUpdate = () => {
         setCurrentTime(audio.currentTime);
       };
-      
+
       const handleEnded = () => {
         setIsPlaying(false);
         setCurrentTime(0);
@@ -254,6 +277,7 @@ export default function OwnAudioRecorder({
   };
 
   const formatTime = (seconds: number) => {
+    if (!isFinite(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -287,6 +311,16 @@ export default function OwnAudioRecorder({
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
         </div>
+
+        {/* Upload failed — show retry + discard */}
+        {uploadFailed && !isUploading && (
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-xs text-destructive flex-1">
+              ⚠ Sending failed{retryCount > 1 ? ` (${retryCount}×)` : ''}
+            </span>
+          </div>
+        )}
+
         <div className="flex items-center justify-end gap-2">
           <Button
             size="sm"
@@ -298,15 +332,31 @@ export default function OwnAudioRecorder({
             <X className="h-4 w-4 mr-1" />
             Discard
           </Button>
-          <Button
-            size="sm"
-            onClick={handleSendAudio}
-            disabled={isUploading}
-            className="h-8"
-          >
-            <Send className="h-4 w-4 mr-1" />
-            Send
-          </Button>
+          {uploadFailed && !isUploading ? (
+            <Button
+              size="sm"
+              onClick={handleRetry}
+              variant="destructive"
+              className="h-8 gap-1"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Retry
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleSendAudio}
+              disabled={isUploading}
+              className="h-8"
+            >
+              {isUploading ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4 mr-1" />
+              )}
+              {isUploading ? 'Sending...' : 'Send'}
+            </Button>
+          )}
         </div>
       </div>
     );

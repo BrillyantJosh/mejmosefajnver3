@@ -295,9 +295,18 @@ export default function Own() {
     const text = msg.text.trim();
     const userRole = getUserRole(msg.senderPubkey);
 
-    // 1) New structure: "audio:<relative-path>"
+    // 1) New structure: "audio:<relative-path>" or "audio:<path>|dur:<seconds>"
     if (text.startsWith("audio:")) {
-      const path = text.slice("audio:".length).trim();
+      const raw = text.slice("audio:".length).trim();
+
+      // Parse optional duration metadata: "path|dur:45"
+      let path = raw;
+      let audioDuration: number | undefined;
+      const durMatch = raw.match(/^(.+)\|dur:(\d+)$/);
+      if (durMatch) {
+        path = durMatch[1];
+        audioDuration = parseInt(durMatch[2], 10);
+      }
 
       const audioUrl = path.startsWith("http")
         ? path
@@ -307,6 +316,7 @@ export default function Own() {
         originalText: text.length > 50 ? text.substring(0, 50) + "..." : text,
         audioPath: path,
         audioUrl,
+        audioDuration,
       });
 
       return {
@@ -317,6 +327,7 @@ export default function Own() {
         timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
         type: "audio" as const,
         audioUrl,
+        audioDuration,
         isCurrentUser: msg.senderPubkey === session?.nostrHexId,
       };
     }
