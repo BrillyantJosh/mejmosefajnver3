@@ -10,6 +10,7 @@ interface ChatMessageProps {
   type: 'text' | 'audio';
   content?: string;
   audioUrl?: string;
+  audioDuration?: number;
   isCurrentUser?: boolean;
   messageId?: string;
   isLashed?: boolean;
@@ -18,13 +19,14 @@ interface ChatMessageProps {
   lashCount?: number;
 }
 
-export default function ChatMessage({ 
-  sender, 
-  role, 
-  timestamp, 
-  type, 
-  content, 
-  audioUrl, 
+export default function ChatMessage({
+  sender,
+  role,
+  timestamp,
+  type,
+  content,
+  audioUrl,
+  audioDuration,
   isCurrentUser = false,
   messageId,
   isLashed = false,
@@ -73,7 +75,7 @@ export default function ChatMessage({
         <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
           {showLashButton && <LashButton />}
           <Card className={`p-2 md:p-3 flex-1 min-w-0 ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
-            <AudioPlayer audioUrl={audioUrl} />
+            <AudioPlayer audioUrl={audioUrl} initialDuration={audioDuration} />
           </Card>
         </div>
       </div>
