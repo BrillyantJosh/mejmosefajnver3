@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react';
-import { SimplePool } from 'nostr-tools';
-import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 interface Kind0Profile {
   pubkey: string;
@@ -16,72 +14,36 @@ interface Kind0Profile {
   created_at?: number; // Unix timestamp when profile was created/updated
 }
 
+const API_URL = import.meta.env.VITE_API_URL ?? '';
+
 export const useNostrKind0Profiles = () => {
   const [profiles, setProfiles] = useState<Kind0Profile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { parameters } = useSystemParameters();
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      if (!parameters?.relays || parameters.relays.length === 0) {
-        console.warn('No relays available');
-        setIsLoading(false);
-        return;
-      }
-
-      const relays = parameters.relays;
-
-      const pool = new SimplePool();
-      
       try {
-        const events = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [0],
-            limit: 1000
-          }),
-          new Promise<any[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Fetch timeout')), 10000)
-          )
-        ]);
-
-        const profileMap = new Map<string, Kind0Profile>();
-        
-        events.forEach((event: any) => {
-          try {
-            const content = JSON.parse(event.content);
-            const existing = profileMap.get(event.pubkey);
-            
-            if (!existing || event.created_at > (existing as any).created_at) {
-              profileMap.set(event.pubkey, {
-                pubkey: event.pubkey,
-                name: content.name,
-                display_name: content.display_name,
-                about: content.about,
-                picture: content.picture,
-                location: content.location,
-                country: content.country,
-                currency: content.currency,
-                lanaWalletID: content.lanaWalletID,
-                language: content.language,
-                created_at: event.created_at,
-              });
-            }
-          } catch (e) {
-            console.error('Failed to parse profile:', e);
-          }
+        // Fetch ALL profiles from the local DB — no relay limit
+        const res = await fetch(`${API_URL}/api/functions/list-profiles`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
         });
 
-        setProfiles(Array.from(profileMap.values()));
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        setProfiles(data.profiles || []);
+        console.log(`📋 Loaded ${data.total} profiles from DB`);
       } catch (error) {
-        console.error('Error fetching profiles:', error);
+        console.error('Error fetching profiles from DB:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 
     fetchProfiles();
-  }, [parameters]);
+  }, []);
 
   return { profiles, isLoading };
 };
