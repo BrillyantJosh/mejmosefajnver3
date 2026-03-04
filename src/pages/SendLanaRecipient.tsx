@@ -9,8 +9,6 @@ import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Html5Qrcode } from "html5-qrcode";
-import { useSystemParameters } from "@/contexts/SystemParametersContext";
-import { SimplePool } from "nostr-tools";
 import { validateLanaWalletIdWithMessage } from "@/lib/lanaWalletValidation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
@@ -30,7 +28,6 @@ interface SearchResult {
 export default function SendLanaRecipient() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { parameters } = useSystemParameters();
   const { session } = useAuth();
 
   const walletId = searchParams.get("walletId") || "";
@@ -50,7 +47,6 @@ export default function SendLanaRecipient() {
   
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
-  const relays = parameters?.relays || [];
 
   // Fetch user's own wallets
   const { wallets: userWallets, isLoading: isLoadingWallets } = useNostrUserWallets(session?.nostrHexId || null);
@@ -139,77 +135,30 @@ export default function SendLanaRecipient() {
       return;
     }
     
-    if (relays.length === 0) {
-      setError("No relays available");
-      return;
-    }
-
     setIsSearching(true);
     setError("");
     setSearchResults([]);
 
+    const API_URL = import.meta.env.VITE_API_URL ?? '';
+
     try {
-      const pool = new SimplePool();
-      const events = await Promise.race([
-        pool.querySync(relays, {
-          kinds: [0],
-          limit: 1000,
-        }),
-        new Promise<any[]>((_, reject) => 
-          setTimeout(() => reject(new Error('Search timeout')), 10000)
-        )
-      ]);
+      // Search profiles from the local DB (no relay limit, finds ALL profiles)
+      const res = await fetch(`${API_URL}/api/functions/search-recipient`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: searchQuery.trim() }),
+      });
 
-      const matchingProfiles = events
-        .map((event) => {
-          try {
-            const profile = JSON.parse(event.content);
-            const name = profile.name?.toLowerCase() || "";
-            const displayName = profile.display_name?.toLowerCase() || "";
-            const query = searchQuery.toLowerCase();
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-            if (name.includes(query) || displayName.includes(query)) {
-              return {
-                pubkey: event.pubkey,
-                name: profile.name || "",
-                display_name: profile.display_name || "",
-                picture: profile.picture,
-              };
-            }
-          } catch (e) {
-            return null;
-          }
-          return null;
-        })
-        .filter(Boolean);
-
-      // Fetch wallets for matching profiles
-      const results: SearchResult[] = [];
-      for (const profile of matchingProfiles) {
-        if (!profile) continue;
-
-        const walletEvents = await pool.querySync(relays, {
-          kinds: [30889],
-          "#d": [profile.pubkey],
-          limit: 10,
-        });
-
-        const wallets = walletEvents.flatMap((event) => {
-          const wTags = event.tags.filter((tag) => tag[0] === "w");
-          return wTags.map((tag) => ({
-            walletId: tag[1] || "",
-            walletType: tag[2] || "",
-            note: tag[4] || "",
-          }));
-        });
-
-        if (wallets.length > 0) {
-          results.push({
-            ...profile,
-            wallets,
-          });
-        }
-      }
+      const data = await res.json();
+      const results: SearchResult[] = (data.results || []).map((r: any) => ({
+        pubkey: r.pubkey,
+        name: r.name || '',
+        display_name: r.displayName || r.name || '',
+        picture: r.picture,
+        wallets: r.wallets || [],
+      }));
 
       setSearchResults(results);
       if (results.length === 0) {

@@ -293,6 +293,151 @@ router.post('/search-recipient', async (req: Request, res: Response) => {
   }
 });
 
+// list-profiles — returns ALL profiles from the local DB (no relay limit)
+router.post('/list-profiles', async (req: Request, res: Response) => {
+  try {
+    const { walletOnly, search } = req.body;
+    const db = getDb();
+
+    let sql = `
+      SELECT nostr_hex_id, full_name, display_name, picture, about, lana_wallet_id, raw_metadata
+      FROM nostr_profiles
+    `;
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (walletOnly) {
+      conditions.push("lana_wallet_id IS NOT NULL AND lana_wallet_id != ''");
+    }
+    if (search && search.trim()) {
+      conditions.push("(full_name LIKE ? OR display_name LIKE ? OR about LIKE ? OR nostr_hex_id LIKE ?)");
+      const q = `%${search.trim()}%`;
+      params.push(q, q, q, q);
+    }
+
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+    sql += ' ORDER BY full_name ASC';
+
+    const rows = db.prepare(sql).all(...params) as any[];
+
+    const profiles = rows.map((r: any) => {
+      let rawMeta: any = {};
+      try { rawMeta = JSON.parse(r.raw_metadata || '{}'); } catch {}
+      return {
+        pubkey: r.nostr_hex_id,
+        name: r.full_name,
+        display_name: r.display_name,
+        about: r.about,
+        picture: r.picture,
+        location: rawMeta.location,
+        country: rawMeta.country,
+        currency: rawMeta.currency,
+        lanaWalletID: r.lana_wallet_id,
+        language: rawMeta.language || rawMeta.lang,
+        created_at: rawMeta.created_at,
+      };
+    });
+
+    return res.json({ profiles, total: profiles.length });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// discover-profiles — fetch ALL KIND 0 profiles from relays (no time limit) and save to DB
+router.post('/discover-profiles', async (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const relays = getRelaysFromDb();
+
+    if (relays.length === 0) {
+      return res.status(400).json({ error: 'No relays configured' });
+    }
+
+    console.log(`🔍 Discover profiles: fetching ALL KIND 0 from ${relays.length} relays (no time filter)`);
+
+    // Fetch ALL KIND 0 events — no since/until/limit filters
+    const events = await queryEventsFromRelays(relays, {
+      kinds: [0],
+    }, 30000);
+
+    console.log(`📥 Discover: received ${events.length} KIND 0 events from relays`);
+
+    // Deduplicate — keep newest per pubkey
+    const latestEvents = new Map<string, typeof events[0]>();
+    for (const event of events) {
+      const existing = latestEvents.get(event.pubkey);
+      if (!existing || event.created_at > existing.created_at) {
+        latestEvents.set(event.pubkey, event);
+      }
+    }
+
+    console.log(`🔄 Discover: ${latestEvents.size} unique profiles after dedup`);
+
+    // Upsert all into DB
+    let upserted = 0;
+    let errors = 0;
+
+    const upsertStmt = db.prepare(`
+      INSERT INTO nostr_profiles (nostr_hex_id, full_name, display_name, picture, about, lana_wallet_id, raw_metadata, last_fetched_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ON CONFLICT(nostr_hex_id) DO UPDATE SET
+        full_name = excluded.full_name,
+        display_name = excluded.display_name,
+        picture = excluded.picture,
+        about = excluded.about,
+        lana_wallet_id = excluded.lana_wallet_id,
+        raw_metadata = excluded.raw_metadata,
+        last_fetched_at = datetime('now'),
+        updated_at = datetime('now')
+    `);
+
+    for (const [pubkey, event] of latestEvents) {
+      try {
+        const content = JSON.parse(event.content);
+        const langTag = event.tags?.find((t: string[]) => t[0] === 'lang')?.[1];
+        const interests = event.tags?.filter((t: string[]) => t[0] === 't').map((t: string[]) => t[1]) || [];
+        const intimateInterests = event.tags?.filter((t: string[]) => t[0] === 'o').map((t: string[]) => t[1]) || [];
+
+        const rawMetadata = {
+          ...content,
+          ...(langTag ? { lang: langTag } : {}),
+          ...(interests.length > 0 ? { interests } : {}),
+          ...(intimateInterests.length > 0 ? { intimateInterests } : {}),
+        };
+
+        upsertStmt.run(
+          pubkey,
+          content.name || null,
+          content.display_name || null,
+          content.picture || null,
+          content.about || null,
+          content.lanaWalletID || null,
+          JSON.stringify(rawMetadata)
+        );
+        upserted++;
+      } catch {
+        errors++;
+      }
+    }
+
+    console.log(`✅ Discover done: ${upserted} upserted, ${errors} errors`);
+
+    return res.json({
+      success: true,
+      fetched: events.length,
+      unique: latestEvents.size,
+      upserted,
+      errors,
+    });
+  } catch (error: any) {
+    console.error('❌ Error in discover-profiles:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // check-send-eligibility — checks if sender can send in current block
 router.post('/check-send-eligibility', async (req: Request, res: Response) => {
   try {
