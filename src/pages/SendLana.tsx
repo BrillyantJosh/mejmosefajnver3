@@ -142,9 +142,19 @@ export default function SendLana() {
       {!utxoLoading && tooManyUtxos && (
         <Alert variant="destructive" className="mb-6">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            This wallet has <strong>{utxoCount} UTXOs</strong> which exceeds the maximum of {maxInputs} inputs per transaction.
-            Please consolidate your wallet first by sending smaller amounts to yourself before emptying it.
+          <AlertDescription className="space-y-2">
+            <p>
+              This wallet has <strong>{utxoCount} UTXOs</strong> which exceeds the maximum of {maxInputs} inputs per transaction.
+              Please consolidate your wallet first by sending smaller amounts to yourself before emptying it.
+            </p>
+            <a
+              href="https://youtu.be/kBi4MKcc4qM"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-medium underline hover:no-underline"
+            >
+              📺 Watch: How to consolidate UTXOs
+            </a>
           </AlertDescription>
         </Alert>
       )}
