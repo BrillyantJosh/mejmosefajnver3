@@ -268,12 +268,20 @@ router.post('/search-recipient', async (req: Request, res: Response) => {
     if (!query) return res.status(400).json({ error: 'query required' });
 
     const db = getDb();
+    // Split query into words so "Heart Voice" matches "HeartVoice"
+    const words = query.trim().split(/\s+/).filter((w: string) => w.length > 0);
+    const wordConditions = words.map(() => "(display_name LIKE ? OR full_name LIKE ?)").join(' AND ');
+    const params: string[] = [];
+    for (const word of words) {
+      params.push(`%${word}%`, `%${word}%`);
+    }
+
     const rows = db.prepare(`
       SELECT nostr_hex_id, full_name, display_name, picture, lana_wallet_id
       FROM nostr_profiles
-      WHERE (display_name LIKE ? OR full_name LIKE ?) AND lana_wallet_id IS NOT NULL AND lana_wallet_id != ''
+      WHERE ${wordConditions} AND lana_wallet_id IS NOT NULL AND lana_wallet_id != ''
       LIMIT 20
-    `).all(`%${query}%`, `%${query}%`) as any[];
+    `).all(...params) as any[];
 
     const results = rows.map((r: any) => ({
       pubkey: r.nostr_hex_id,
@@ -310,9 +318,13 @@ router.post('/list-profiles', async (req: Request, res: Response) => {
       conditions.push("lana_wallet_id IS NOT NULL AND lana_wallet_id != ''");
     }
     if (search && search.trim()) {
-      conditions.push("(full_name LIKE ? OR display_name LIKE ? OR about LIKE ? OR nostr_hex_id LIKE ?)");
-      const q = `%${search.trim()}%`;
-      params.push(q, q, q, q);
+      // Split search into words so "Heart Voice" matches "HeartVoice"
+      const words = search.trim().split(/\s+/).filter((w: string) => w.length > 0);
+      for (const word of words) {
+        conditions.push("(full_name LIKE ? OR display_name LIKE ? OR about LIKE ? OR nostr_hex_id LIKE ?)");
+        const q = `%${word}%`;
+        params.push(q, q, q, q);
+      }
     }
 
     if (conditions.length > 0) {

@@ -23,14 +23,14 @@ export default function Profiles() {
       result = result.filter(p => !!p.lanaWalletID);
     }
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(profile =>
-        profile.name?.toLowerCase().includes(query) ||
-        profile.display_name?.toLowerCase().includes(query) ||
-        profile.location?.toLowerCase().includes(query) ||
-        profile.about?.toLowerCase().includes(query) ||
-        profile.pubkey?.toLowerCase().includes(query)
-      );
+      const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
+      result = result.filter(profile => {
+        const searchable = [
+          profile.name, profile.display_name, profile.location,
+          profile.about, profile.pubkey,
+        ].filter(Boolean).join(' ').toLowerCase();
+        return words.every(word => searchable.includes(word));
+      });
     }
     return result;
   }, [profiles, searchQuery, walletOnly]);
