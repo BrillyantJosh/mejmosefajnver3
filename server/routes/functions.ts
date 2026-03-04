@@ -1576,11 +1576,134 @@ router.post('/publish-knowledge', async (req: Request, res: Response) => {
   }
 });
 
-// sync-room-posts
+// sync-room-posts — fetch latest posts for each room from relays, cache in DB
 router.post('/sync-room-posts', async (req: Request, res: Response) => {
   try {
-    return res.json({ synced: 0, note: 'Room posts sync from relays not yet implemented on server' });
+    const db = getDb();
+    const relays = getRelaysFromDb();
+    if (relays.length === 0) {
+      return res.status(400).json({ error: 'No relays configured' });
+    }
+
+    const ROOMS_PUBKEY = 'b66ccf84bc6cf1a56ba9941f29932824f4986803358a0bed03769a1cbf480101';
+
+    console.log('🔄 sync-room-posts: fetching rooms manifest...');
+
+    // 1. Fetch rooms manifest (KIND 38889)
+    const manifestEvents = await queryEventsFromRelays(relays, {
+      kinds: [38889],
+      authors: [ROOMS_PUBKEY],
+      '#d': ['rooms'],
+      limit: 1,
+    }, 15000);
+
+    if (manifestEvents.length === 0) {
+      return res.json({ success: true, roomsProcessed: 0, message: 'No rooms manifest found' });
+    }
+
+    // Get latest manifest
+    const manifest = manifestEvents.reduce((latest, event) =>
+      !latest || event.created_at > latest.created_at ? event : latest
+    , manifestEvents[0]);
+
+    // Parse room slugs
+    const roomTags = manifest.tags.filter((t: string[]) => t[0] === 'room');
+    const roomsToProcess = roomTags.map((tag: string[]) => ({
+      slug: tag[1],
+      title: tag[2] || tag[1],
+    }));
+
+    console.log(`📝 sync-room-posts: processing ${roomsToProcess.length} rooms`);
+
+    // 2. For each room, fetch latest posts
+    const thirtyDaysAgo = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
+
+    const upsertStmt = db.prepare(`
+      INSERT INTO room_latest_posts (id, room_slug, post_event_id, content, author_pubkey, created_at, image_url, post_count, fetched_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(room_slug) DO UPDATE SET
+        post_event_id = excluded.post_event_id,
+        content = excluded.content,
+        author_pubkey = excluded.author_pubkey,
+        created_at = excluded.created_at,
+        image_url = excluded.image_url,
+        post_count = excluded.post_count,
+        fetched_at = datetime('now'),
+        updated_at = datetime('now')
+    `);
+
+    let synced = 0;
+
+    for (const room of roomsToProcess) {
+      try {
+        // Fetch posts with #t tag
+        const postsT = await queryEventsFromRelays(relays, {
+          kinds: [1],
+          '#t': [room.slug],
+          limit: 50,
+        }, 10000);
+
+        // Also fetch with #a tag
+        const postsA = await queryEventsFromRelays(relays, {
+          kinds: [1],
+          '#a': [room.slug],
+          limit: 50,
+        }, 10000);
+
+        // Combine and dedupe
+        const allMap = new Map<string, any>();
+        for (const p of [...postsT, ...postsA]) {
+          if (!allMap.has(p.id)) allMap.set(p.id, p);
+        }
+
+        const uniquePosts = Array.from(allMap.values())
+          .sort((a, b) => b.created_at - a.created_at);
+
+        const postCount = uniquePosts.filter(p => p.created_at >= thirtyDaysAgo).length;
+        const latestPost = uniquePosts[0];
+
+        if (latestPost) {
+          // Extract image URL from content
+          let imageUrl: string | null = null;
+          for (const post of uniquePosts.slice(0, 5)) {
+            // Check image tag
+            const imgTag = post.tags?.find((t: string[]) => t[0] === 'image');
+            if (imgTag?.[1]) { imageUrl = imgTag[1]; break; }
+            // Check r tags
+            const rTag = post.tags?.find((t: string[]) => t[0] === 'r' && /\.(jpg|jpeg|png|gif|webp|avif)(\?.*)?$/i.test(t[1] || ''));
+            if (rTag?.[1]) { imageUrl = rTag[1]; break; }
+            // Check content for YouTube thumbnail
+            const ytMatch = post.content?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+            if (ytMatch) { imageUrl = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`; break; }
+            // Check content for direct image URL
+            const imgMatch = post.content?.match(/(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|avif)(?:\?[^\s]*)?)/i);
+            if (imgMatch) { imageUrl = imgMatch[1]; break; }
+          }
+
+          const id = Math.random().toString(36).substring(2) + Date.now().toString(36);
+          upsertStmt.run(
+            id,
+            room.slug,
+            latestPost.id,
+            (latestPost.content || '').substring(0, 500),
+            latestPost.pubkey,
+            latestPost.created_at,
+            imageUrl,
+            postCount,
+          );
+          synced++;
+          console.log(`   ✅ ${room.slug}: ${uniquePosts.length} posts, latest ${new Date(latestPost.created_at * 1000).toISOString().substring(0, 16)}`);
+        }
+      } catch (roomErr) {
+        console.error(`   ❌ Error processing room ${room.slug}:`, roomErr);
+      }
+    }
+
+    console.log(`✅ sync-room-posts done: ${synced}/${roomsToProcess.length} rooms synced`);
+
+    return res.json({ success: true, roomsProcessed: synced, total: roomsToProcess.length });
   } catch (error: any) {
+    console.error('❌ Error in sync-room-posts:', error);
     return res.status(500).json({ error: error.message });
   }
 });
