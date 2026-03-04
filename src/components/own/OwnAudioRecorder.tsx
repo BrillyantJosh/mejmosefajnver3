@@ -24,12 +24,14 @@ export default function OwnAudioRecorder({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [recordingTime, setRecordingTime] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const audioBlobRef = useRef<Blob | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     return () => {
@@ -38,6 +40,9 @@ export default function OwnAudioRecorder({
       }
       if (audioPreview) {
         URL.revokeObjectURL(audioPreview);
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
       }
     };
   }, [audioPreview]);
@@ -93,6 +98,10 @@ export default function OwnAudioRecorder({
 
       mediaRecorder.start();
       setIsRecording(true);
+      setRecordingTime(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
       toast.info("Recording audio...");
     } catch (error) {
       console.error('Error accessing microphone:', error);
@@ -104,6 +113,10 @@ export default function OwnAudioRecorder({
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
     }
   };
 
@@ -172,6 +185,7 @@ export default function OwnAudioRecorder({
 
   const handleCancel = () => {
     stopRecording();
+    setRecordingTime(0);
     toast.info("Recording cancelled");
   };
 
@@ -184,6 +198,7 @@ export default function OwnAudioRecorder({
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
+    setRecordingTime(0);
   };
 
   const handleSendAudio = async () => {
@@ -301,6 +316,12 @@ export default function OwnAudioRecorder({
   if (isRecording) {
     return (
       <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 px-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+          <span className="text-sm font-mono text-red-500 font-medium min-w-[40px]">
+            {formatTime(recordingTime)}
+          </span>
+        </div>
         <Button
           size={compact ? "sm" : "default"}
           variant="destructive"
