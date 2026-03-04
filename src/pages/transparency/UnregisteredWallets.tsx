@@ -30,12 +30,16 @@ export default function TransparencyUnregisteredWallets() {
 
   const { totalBalance, isLoading: balancesLoading } = useWalletBalances(walletAddresses);
 
-  const filteredProfiles = profiles.filter(
-    (profile) =>
-      profile.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      profile.display_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      profile.pubkey?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProfiles = useMemo(() => {
+    if (!searchTerm.trim()) return profiles;
+    const words = searchTerm.toLowerCase().split(/\s+/).filter(Boolean);
+    return profiles.filter((profile) => {
+      const searchable = [
+        profile.name, profile.display_name, profile.pubkey,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return words.every(word => searchable.includes(word));
+    });
+  }, [profiles, searchTerm]);
 
   const formatBalance = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
