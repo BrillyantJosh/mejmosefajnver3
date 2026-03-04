@@ -223,10 +223,7 @@ async function publicKeyToAddress(publicKey: Uint8Array): Promise<string> {
   payload.set(hash160, 1);
   // Step 4: Base58Check encode
   const address = await base58CheckEncode(payload);
-  console.log('🔑 Public Key (first 16 bytes):', uint8ArrayToHex(publicKey.slice(0, 16)));
-  console.log('📝 SHA-256 hash:', uint8ArrayToHex(sha256Hash));
-  console.log('📝 RIPEMD-160 hash:', uint8ArrayToHex(hash160));
-  console.log('📍 Generated address:', address);
+  console.log('📍 Address generated successfully');
   return address;
 }
 
@@ -735,13 +732,13 @@ serve(async (req) => {
         .map((b) => b.toString(16).padStart(2, '0'))
         .join('')
         .slice(0, 16);
-      console.log('🔑 Private key hash (first 16 chars):', hashHex);
+      console.log('🔑 Private key hash computed');
       
       const normalizedKey = normalizeWif(privateKey);
       const privateKeyBytes = base58CheckDecode(normalizedKey);
       const privateKeyHex = uint8ArrayToHex(privateKeyBytes.slice(1));
       const generatedPubKey = privateKeyToPublicKey(privateKeyHex);
-      console.log('🔓 Generated public key:', uint8ArrayToHex(generatedPubKey).slice(0, 32) + '...');
+      console.log('🔓 Public key generated successfully');
       
       const expectedAddress = await publicKeyToAddress(generatedPubKey);
       console.log('📍 Expected sender address from private key:', expectedAddress);

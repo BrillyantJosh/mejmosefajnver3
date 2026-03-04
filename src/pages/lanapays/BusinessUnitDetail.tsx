@@ -270,7 +270,7 @@ export default function BusinessUnitDetail() {
                     loading="lazy"
                     allowFullScreen
                     referrerPolicy="no-referrer-when-downgrade"
-                    src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${unit.latitude},${unit.longitude}&zoom=15`}
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${Number(unit.longitude) - 0.005},${Number(unit.latitude) - 0.003},${Number(unit.longitude) + 0.005},${Number(unit.latitude) + 0.003}&layer=mapnik&marker=${unit.latitude},${unit.longitude}`}
                   />
                 </div>
                 <Button

@@ -58,7 +58,7 @@ async function wifToHex(wif: string): Promise<string> {
   // Normalize WIF - remove whitespace and invisible characters
   const normalizedWif = wif.replace(/[\s\u200B-\u200D\uFEFF\r\n\t]/g, '').trim();
   
-  console.log('Decoding WIF, length:', normalizedWif.length);
+  console.log('Decoding WIF key...');
   
   // Decode Base58
   const decoded = base58Decode(normalizedWif);
@@ -96,7 +96,7 @@ async function wifToHex(wif: string): Promise<string> {
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
   
-  console.log('Private key extracted, length:', privateKeyHex.length);
+  console.log('Private key extracted successfully');
   
   return privateKeyHex;
 }
@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
       throw new Error('Invalid WIF format in app_settings');
     }
 
-    console.log('WIF key loaded, first chars:', wif.substring(0, 4) + '...');
+    console.log('WIF key loaded successfully');
 
     // Convert WIF to hex private key (LanaCoin format with 0xb0 version byte)
     const privateKeyHex = await wifToHex(wif);
@@ -193,7 +193,7 @@ Deno.serve(async (req) => {
       privateKeyHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
     );
 
-    console.log('Secret key derived, length:', secretKey.length);
+    console.log('Secret key derived successfully');
 
     // Build the content JSON
     const contentJson = {
