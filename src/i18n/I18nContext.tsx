@@ -59,15 +59,37 @@ function resolveCountry(country?: string): SupportedLang | null {
   return COUNTRY_TO_LANG[country.toLowerCase().trim()] || null;
 }
 
+/**
+ * Detects the user's preferred language from the browser/OS settings.
+ * Checks navigator.languages (array) and navigator.language (single).
+ */
+function detectBrowserLang(): SupportedLang | null {
+  if (typeof navigator === 'undefined') return null;
+
+  // navigator.languages is an ordered list of preferred languages
+  const candidates = [
+    ...(navigator.languages || []),
+    navigator.language,
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const resolved = resolveLang(candidate);
+    if (resolved) return resolved;
+  }
+
+  return null;
+}
+
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { session } = useAuth();
 
   const lang = useMemo(() => {
-    // Priority: 1) explicit lang field, 2) country code fallback, 3) default EN
+    // Priority: 1) explicit profile lang, 2) country code, 3) browser/OS lang, 4) default (sl)
     const fromLang = resolveLang(session?.profileLang);
     const fromCountry = resolveCountry(session?.profileCountry);
-    const resolved = fromLang ?? fromCountry ?? DEFAULT_LANG;
-    console.log('[i18n] lang:', JSON.stringify(session?.profileLang), '| country:', JSON.stringify(session?.profileCountry), '→', resolved);
+    const fromBrowser = detectBrowserLang();
+    const resolved = fromLang ?? fromCountry ?? fromBrowser ?? DEFAULT_LANG;
+    console.log('[i18n] lang:', JSON.stringify(session?.profileLang), '| country:', JSON.stringify(session?.profileCountry), '| browser:', fromBrowser, '→', resolved);
     return resolved;
   }, [session?.profileLang, session?.profileCountry]);
 
