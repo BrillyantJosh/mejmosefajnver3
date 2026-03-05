@@ -71,19 +71,40 @@ export default function OwnAudioRecorder({
 
   const startRecording = async () => {
     try {
+      // Check browser support
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error("Your browser does not support audio recording. Please use a newer browser.");
+        return;
+      }
+      if (typeof MediaRecorder === 'undefined') {
+        toast.error("Audio recording is not supported on this device. Please update your browser.");
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          sampleRate: 44100,
         },
       });
       streamRef.current = stream;
 
       const mimeType = getSupportedMimeType();
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+      // Try creating MediaRecorder with preferred mimeType, fall back to default
+      let mediaRecorder: MediaRecorder;
+      try {
+        mediaRecorder = new MediaRecorder(stream, { mimeType });
+      } catch {
+        // Fallback for old browsers that don't support the mimeType option
+        mediaRecorder = new MediaRecorder(stream);
+      }
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+
+      const actualMimeType = mediaRecorder.mimeType || mimeType;
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -92,7 +113,7 @@ export default function OwnAudioRecorder({
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
         audioBlobRef.current = audioBlob;
         const audioUrl = URL.createObjectURL(audioBlob);
         setAudioPreview(audioUrl);
@@ -102,7 +123,8 @@ export default function OwnAudioRecorder({
         }
       };
 
-      mediaRecorder.start();
+      // Record in 5-second chunks for better memory management on older devices
+      mediaRecorder.start(5000);
       setIsRecording(true);
       setRecordingTime(0);
       setShowTimeWarning(false);
@@ -133,9 +155,17 @@ export default function OwnAudioRecorder({
         });
       }, 1000);
       toast.info("Recording... (max 5 min)");
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error accessing microphone:', error);
-      toast.error("Error accessing microphone");
+      if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
+        toast.error("Microphone access denied. Please allow microphone in browser settings.");
+      } else if (error?.name === 'NotFoundError' || error?.name === 'DevicesNotFoundError') {
+        toast.error("No microphone found on this device.");
+      } else if (error?.name === 'NotReadableError' || error?.name === 'TrackStartError') {
+        toast.error("Microphone is in use by another app. Close it and try again.");
+      } else {
+        toast.error("Could not start recording. Please try a different browser.");
+      }
     }
   };
 
