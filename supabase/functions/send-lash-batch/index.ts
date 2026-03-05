@@ -251,13 +251,13 @@ class UTXOSelector {
     if (!utxos || utxos.length === 0) {
       throw new Error('No UTXOs available for selection');
     }
-    console.log(`🔍 UTXO Selection: Need ${totalNeeded} satoshis from ${utxos.length} UTXOs`);
+    console.log(`🔍 UTXO Selection: Need ${totalNeeded} lanoshis from ${utxos.length} UTXOs`);
     const totalAvailable = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
-    console.log(`💰 Total available: ${totalAvailable} satoshis (${(totalAvailable / 100000000).toFixed(8)} LANA)`);
+    console.log(`💰 Total available: ${totalAvailable} lanoshis (${(totalAvailable / 100000000).toFixed(8)} LANA)`);
     
     if (totalAvailable < totalNeeded) {
       throw new Error(
-        `Insufficient total UTXO value: ${totalAvailable} < ${totalNeeded} satoshis. ` +
+        `Insufficient total UTXO value: ${totalAvailable} < ${totalNeeded} lanoshis. ` +
         `Available: ${(totalAvailable / 100000000).toFixed(8)} LANA, ` +
         `Needed: ${(totalNeeded / 100000000).toFixed(8)} LANA`
       );

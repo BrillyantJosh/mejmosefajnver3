@@ -2501,22 +2501,22 @@ router.post('/send-unconditional-payment', async (req: Request, res: Response) =
       return res.status(400).json({ success: false, error: 'Missing required parameters' });
     }
 
-    // Convert amounts from LANA to satoshis (same as Supabase edge function)
-    const recipientsInSatoshis = recipients.map((r: any) => {
+    // Convert amounts from LANA to lanoshis (same as Supabase edge function)
+    const recipientsInLanoshis = recipients.map((r: any) => {
       if (!r.address || typeof r.amount !== 'number') {
         throw new Error('Invalid recipient format: must have address and amount');
       }
       return { address: r.address, amount: Math.round(r.amount * 100000000) };
     });
 
-    console.log(`📦 Unconditional payment: ${recipientsInSatoshis.length} outputs from ${sender_address}`);
-    recipientsInSatoshis.forEach((r: any, i: number) => {
+    console.log(`📦 Unconditional payment: ${recipientsInLanoshis.length} outputs from ${sender_address}`);
+    recipientsInLanoshis.forEach((r: any, i: number) => {
       console.log(`  ${i + 1}. ${r.address}: ${(r.amount / 100000000).toFixed(8)} LANA`);
     });
 
     const result = await sendBatchLanaTransaction({
       senderAddress: sender_address,
-      recipients: recipientsInSatoshis,
+      recipients: recipientsInLanoshis,
       privateKey: private_key,
       electrumServers: electrum_servers
     });

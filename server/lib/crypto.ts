@@ -466,20 +466,20 @@ interface Recipient {
 
 class UTXOSelector {
   static MAX_INPUTS = 20;
-  static DUST_THRESHOLD = 500000; // 0.005 LANA = 500,000 satoshis
+  static DUST_THRESHOLD = 500000; // 0.005 LANA = 500,000 lanoshis
 
   static selectUTXOs(utxos: UTXO[], totalNeeded: number): { selected: UTXO[]; totalValue: number } {
     if (!utxos || utxos.length === 0) {
       throw new Error('No UTXOs available for selection');
     }
 
-    console.log(`🔍 UTXO Selection: Need ${totalNeeded} satoshis from ${utxos.length} UTXOs`);
+    console.log(`🔍 UTXO Selection: Need ${totalNeeded} lanoshis from ${utxos.length} UTXOs`);
     const totalAvailable = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
-    console.log(`💰 Total available: ${totalAvailable} satoshis (${(totalAvailable / 100000000).toFixed(8)} LANA)`);
+    console.log(`💰 Total available: ${totalAvailable} lanoshis (${(totalAvailable / 100000000).toFixed(8)} LANA)`);
 
     if (totalAvailable < totalNeeded) {
       throw new Error(
-        `Insufficient total UTXO value: ${totalAvailable} < ${totalNeeded} satoshis. ` +
+        `Insufficient total UTXO value: ${totalAvailable} < ${totalNeeded} lanoshis. ` +
         `Available: ${(totalAvailable / 100000000).toFixed(8)} LANA, ` +
         `Needed: ${(totalNeeded / 100000000).toFixed(8)} LANA`
       );
@@ -932,7 +932,7 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
 
     if (emptyWallet) {
       const totalBalance = utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0);
-      console.log(`💰 Total balance: ${totalBalance} satoshis`);
+      console.log(`💰 Total balance: ${totalBalance} lanoshis`);
 
       // Check if wallet needs consolidation before emptying
       if (utxos.length > UTXOSelector.MAX_INPUTS) {
@@ -953,7 +953,7 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
       }
 
       recipients = [{ address: recipientAddress, amount: amountSatoshis }];
-      console.log(`🚨 Empty wallet mode: sending ${amountSatoshis} satoshis`);
+      console.log(`🚨 Empty wallet mode: sending ${amountSatoshis} lanoshis`);
     } else {
       amountSatoshis = Math.floor(amount! * 100000000);
 
@@ -976,7 +976,7 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
         console.log(`💰 Split mode: ${projectAmountSatoshis} to project, ${mentorAmountSatoshis} to mentor (${mentorPercent}%)`);
       } else {
         recipients = [{ address: recipientAddress, amount: amountSatoshis }];
-        console.log(`💰 Normal mode: sending ${amountSatoshis} satoshis`);
+        console.log(`💰 Normal mode: sending ${amountSatoshis} lanoshis`);
       }
     }
 
@@ -993,7 +993,7 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
     let baseFee = (selectedUTXOs.length * 180 + actualOutputCount * 34 + 10) * 100;
     fee = Math.floor(baseFee * 1.5); // 50% safety buffer
 
-    console.log(`💸 Fee: ${fee} satoshis (base: ${baseFee}, 1.5x buffer) for ${selectedUTXOs.length} inputs, ${actualOutputCount} outputs`);
+    console.log(`💸 Fee: ${fee} lanoshis (base: ${baseFee}, 1.5x buffer) for ${selectedUTXOs.length} inputs, ${actualOutputCount} outputs`);
 
     // Step 3: Iteratively add more UTXOs if needed
     let iterations = 0;
@@ -1019,7 +1019,7 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
           error: `TOO_MANY_UTXOS: Your wallet has ${utxos.length} UTXOs but the maximum per transaction is ${UTXOSelector.MAX_INPUTS}. Please consolidate your wallet using Registrar before sending.`
         };
       }
-      throw new Error(`Insufficient funds: need ${totalAmountSatoshis + fee} satoshis, have ${totalSelected}`);
+      throw new Error(`Insufficient funds: need ${totalAmountSatoshis + fee} lanoshis, have ${totalSelected}`);
     }
 
     console.log(`✅ Final: ${selectedUTXOs.length} UTXOs, total: ${totalSelected}, amount: ${totalAmountSatoshis}, fee: ${fee}`);
@@ -1101,7 +1101,7 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
 
 export interface SendBatchLanaParams {
   senderAddress: string;
-  recipients: Recipient[]; // [{address, amount}] — amounts in satoshis
+  recipients: Recipient[]; // [{address, amount}] — amounts in lanoshis
   privateKey: string;
   electrumServers?: Array<{ host: string; port: number }>;
 }
@@ -1180,7 +1180,7 @@ export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Pro
     console.log(`📦 Found ${utxos.length} UTXOs`);
 
     const totalAmountSatoshis = recipients.reduce((sum, r) => sum + r.amount, 0);
-    console.log(`💰 Total to send: ${totalAmountSatoshis} satoshis (${(totalAmountSatoshis / 100000000).toFixed(8)} LANA) across ${recipients.length} outputs`);
+    console.log(`💰 Total to send: ${totalAmountSatoshis} lanoshis (${(totalAmountSatoshis / 100000000).toFixed(8)} LANA) across ${recipients.length} outputs`);
 
     recipients.forEach((r, i) => {
       console.log(`  ${i + 1}. ${r.address}: ${(r.amount / 100000000).toFixed(8)} LANA`);
@@ -1196,7 +1196,7 @@ export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Pro
     let baseFee = (selectedUTXOs.length * 180 + actualOutputCount * 34 + 10) * 100;
     let fee = Math.floor(baseFee * 1.5);
 
-    console.log(`💸 Fee: ${fee} satoshis for ${selectedUTXOs.length} inputs, ${actualOutputCount} outputs`);
+    console.log(`💸 Fee: ${fee} lanoshis for ${selectedUTXOs.length} inputs, ${actualOutputCount} outputs`);
 
     let iterations = 0;
     while (totalSelected < totalAmountSatoshis + fee && selectedUTXOs.length < utxos.length && iterations < 10) {
@@ -1218,7 +1218,7 @@ export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Pro
           error: `TOO_MANY_UTXOS: Your wallet has ${utxos.length} UTXOs but the maximum per transaction is ${UTXOSelector.MAX_INPUTS}. Please consolidate your wallet using Registrar before sending.`
         };
       }
-      throw new Error(`Insufficient funds: need ${totalAmountSatoshis + fee} satoshis, have ${totalSelected}`);
+      throw new Error(`Insufficient funds: need ${totalAmountSatoshis + fee} lanoshis, have ${totalSelected}`);
     }
 
     console.log(`✅ Final: ${selectedUTXOs.length} UTXOs, total: ${totalSelected}, amount: ${totalAmountSatoshis}, fee: ${fee}`);

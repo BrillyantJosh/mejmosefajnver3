@@ -266,13 +266,13 @@ class UTXOSelector {
     if (!utxos || utxos.length === 0) {
       throw new Error('No UTXOs available for selection');
     }
-    console.log(`🔍 UTXO Selection: Need ${totalNeeded} satoshis from ${utxos.length} UTXOs`);
+    console.log(`🔍 UTXO Selection: Need ${totalNeeded} lanoshis from ${utxos.length} UTXOs`);
     const totalAvailable = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
-    console.log(`💰 Total available: ${totalAvailable} satoshis (${(totalAvailable / 100000000).toFixed(8)} LANA)`);
+    console.log(`💰 Total available: ${totalAvailable} lanoshis (${(totalAvailable / 100000000).toFixed(8)} LANA)`);
     
     if (totalAvailable < totalNeeded) {
       throw new Error(
-        `Insufficient total UTXO value: ${totalAvailable} < ${totalNeeded} satoshis. ` +
+        `Insufficient total UTXO value: ${totalAvailable} < ${totalNeeded} lanoshis. ` +
         `Available: ${(totalAvailable / 100000000).toFixed(8)} LANA, ` +
         `Needed: ${(totalNeeded / 100000000).toFixed(8)} LANA`
       );
@@ -284,7 +284,7 @@ class UTXOSelector {
     // Log top 10 largest UTXOs
     console.log('🏆 Top 10 largest UTXOs:');
     sortedUTXOs.slice(0, 10).forEach((utxo, i) => {
-      console.log(`  ${i + 1}. ${utxo.value} satoshis (${(utxo.value / 100000000).toFixed(8)} LANA) - ${utxo.tx_hash}:${utxo.tx_pos}`);
+      console.log(`  ${i + 1}. ${utxo.value} lanoshis (${(utxo.value / 100000000).toFixed(8)} LANA) - ${utxo.tx_hash}:${utxo.tx_pos}`);
     });
     
     // Strategy 1: Single UTXO solution
@@ -481,7 +481,7 @@ async function buildSignedTx(
     const totalNeeded = totalAmount + fee;
     const { selected: selectedUTXOs, totalValue } = UTXOSelector.selectUTXOs(utxos, totalNeeded);
     
-    console.log(`💰 Selected ${selectedUTXOs.length} UTXOs with total value: ${totalValue} satoshis`);
+    console.log(`💰 Selected ${selectedUTXOs.length} UTXOs with total value: ${totalValue} lanoshis`);
     console.log(`💸 Transaction breakdown: Amount=${totalAmount}, Fee=${fee}, Change=${totalValue - totalNeeded}`);
     
     // Decode private key (normalize first to remove invisible chars)
@@ -780,23 +780,23 @@ serve(async (req) => {
     
     if (emptyWallet) {
       const totalBalance = utxos.reduce((sum: number, utxo: any) => sum + utxo.value, 0);
-      console.log(`💰 Total balance: ${totalBalance} satoshis (${(totalBalance / 100000000).toFixed(8)} LANA)`);
+      console.log(`💰 Total balance: ${totalBalance} lanoshis (${(totalBalance / 100000000).toFixed(8)} LANA)`);
       
       // Calculate dynamic fee based on UTXO count
       const estimatedInputCount = Math.min(utxos.length, 500);
       const outputCount = 1;
       fee = (estimatedInputCount * 180 + outputCount * 34 + 10) * 100;
-      console.log(`💸 Calculated dynamic fee: ${fee} satoshis for ${estimatedInputCount} inputs, ${outputCount} outputs`);
+      console.log(`💸 Calculated dynamic fee: ${fee} lanoshis for ${estimatedInputCount} inputs, ${outputCount} outputs`);
       
       amountSatoshis = totalBalance - fee;
       if (amountSatoshis <= 0) {
         throw new Error(
-          `Insufficient funds to empty wallet. Total balance: ${totalBalance} satoshis, Required fee: ${fee} satoshis`
+          `Insufficient funds to empty wallet. Total balance: ${totalBalance} lanoshis, Required fee: ${fee} lanoshis`
         );
       }
       
       recipients = [{ address: recipientAddress, amount: amountSatoshis }];
-      console.log(`🚨 Empty wallet mode: sending ${amountSatoshis} satoshis (${(amountSatoshis / 100000000).toFixed(8)} LANA)`);
+      console.log(`🚨 Empty wallet mode: sending ${amountSatoshis} lanoshis (${(amountSatoshis / 100000000).toFixed(8)} LANA)`);
     } else {
       amountSatoshis = Math.floor(amount * 100000000);
       
@@ -804,10 +804,10 @@ serve(async (req) => {
       const estimatedInputCount = Math.min(5, utxos.length);
       const outputCount = 2;
       fee = (estimatedInputCount * 180 + outputCount * 34 + 10) * 100;
-      console.log(`💸 Calculated dynamic fee: ${fee} satoshis for estimated ${estimatedInputCount} inputs, ${outputCount} outputs`);
+      console.log(`💸 Calculated dynamic fee: ${fee} lanoshis for estimated ${estimatedInputCount} inputs, ${outputCount} outputs`);
       
       recipients = [{ address: recipientAddress, amount: amountSatoshis }];
-      console.log(`💰 Normal mode: sending ${amountSatoshis} satoshis (${(amountSatoshis / 100000000).toFixed(8)} LANA)`);
+      console.log(`💰 Normal mode: sending ${amountSatoshis} lanoshis (${(amountSatoshis / 100000000).toFixed(8)} LANA)`);
     }
     
     const { txHex: signedTx, inputCount, outputCount, selectedUTXOs } = await buildSignedTx(
