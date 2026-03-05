@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,77 +26,79 @@ export default function SendLanaResult() {
   const [isCheckingBlock, setIsCheckingBlock] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [canRetry, setCanRetry] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  // Fetch initial block height and start monitoring
   useEffect(() => {
     if (!success && error) {
-      // Set checking state immediately and fetch block height
       setIsCheckingBlock(true);
-      fetchBlockHeight().then(() => {
-        // Auto-start block monitoring after fetching initial height
-        startBlockMonitoring();
-      });
+
+      const startMonitoring = async () => {
+        try {
+          const { data, error: blockError } = await supabase.functions.invoke('get-block-height', {
+            body: { electrumServers: parameters?.electrumServers || [] }
+          });
+
+          if (blockError) throw blockError;
+
+          if (data?.success && data.blockHeight) {
+            const initialBlock = data.blockHeight;
+            setCurrentBlockHeight(initialBlock);
+
+            // Poll every 30 seconds for new block
+            intervalRef.current = setInterval(async () => {
+              try {
+                const { data: pollData, error: pollError } = await supabase.functions.invoke('get-block-height', {
+                  body: { electrumServers: parameters?.electrumServers || [] }
+                });
+
+                if (pollError) throw pollError;
+
+                if (pollData?.success && pollData.blockHeight) {
+                  setCurrentBlockHeight(pollData.blockHeight);
+
+                  if (pollData.blockHeight > initialBlock) {
+                    setCanRetry(true);
+                    setIsCheckingBlock(false);
+                    if (intervalRef.current) clearInterval(intervalRef.current);
+                    toast.success("New block has been mined! You can now retry the transaction.");
+                  }
+                }
+              } catch (err) {
+                console.error("Error monitoring block:", err);
+              }
+            }, 30000);
+
+            // Auto-stop after 2 hours
+            timeoutRef.current = setTimeout(() => {
+              if (intervalRef.current) clearInterval(intervalRef.current);
+              setIsCheckingBlock(false);
+              setCanRetry(true);
+            }, 2 * 60 * 60 * 1000);
+          } else {
+            // Could not get block height — allow retry immediately
+            setIsCheckingBlock(false);
+            setCanRetry(true);
+          }
+        } catch (err) {
+          console.error("Error fetching block height:", err);
+          setIsCheckingBlock(false);
+          setCanRetry(true);
+        }
+      };
+
+      startMonitoring();
     }
   }, [success, error]);
-
-  const fetchBlockHeight = async () => {
-    try {
-      const { data, error: blockError } = await supabase.functions.invoke('get-block-height', {
-        body: {
-          electrumServers: parameters?.electrumServers || []
-        }
-      });
-
-      if (blockError) throw blockError;
-
-      if (data?.success && data.blockHeight) {
-        setCurrentBlockHeight(data.blockHeight);
-      }
-    } catch (err) {
-      console.error("Error fetching block height:", err);
-      setIsCheckingBlock(false);
-    }
-  };
-
-  const startBlockMonitoring = async () => {
-    if (!currentBlockHeight) return;
-
-    setIsCheckingBlock(true);
-    const initialBlock = currentBlockHeight;
-
-    // Check every 30 seconds for new block
-    const interval = setInterval(async () => {
-      try {
-        const { data, error: blockError } = await supabase.functions.invoke('get-block-height', {
-          body: {
-            electrumServers: parameters?.electrumServers || []
-          }
-        });
-
-        if (blockError) throw blockError;
-
-        if (data?.success && data.blockHeight) {
-          setCurrentBlockHeight(data.blockHeight);
-          
-          // If block has changed, allow retry
-          if (data.blockHeight > initialBlock) {
-            setCanRetry(true);
-            setIsCheckingBlock(false);
-            clearInterval(interval);
-            toast.success("New block has been mined! You can now retry the transaction.");
-          }
-        }
-      } catch (err) {
-        console.error("Error monitoring block:", err);
-      }
-    }, 30000); // Check every 30 seconds
-
-    // Auto-stop after 2 hours
-    setTimeout(() => {
-      clearInterval(interval);
-      setIsCheckingBlock(false);
-      setCanRetry(true);
-    }, 2 * 60 * 60 * 1000);
-  };
 
   const handleRetry = async () => {
     try {
