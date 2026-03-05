@@ -38,6 +38,7 @@ export default function OwnAudioRecorder({
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const audioBlobRef = useRef<Blob | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingTimeRef = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -127,10 +128,12 @@ export default function OwnAudioRecorder({
       mediaRecorder.start(5000);
       setIsRecording(true);
       setRecordingTime(0);
+      recordingTimeRef.current = 0;
       setShowTimeWarning(false);
       recordingTimerRef.current = setInterval(() => {
         setRecordingTime(prev => {
           const next = prev + 1;
+          recordingTimeRef.current = next;
           // Warning at 4 minutes
           if (next === WARNING_SECONDS) {
             setShowTimeWarning(true);
@@ -293,8 +296,23 @@ export default function OwnAudioRecorder({
     if (audioPreview && audioElementRef.current) {
       const audio = audioElementRef.current;
 
+      const setAudioDuration = () => {
+        if (isFinite(audio.duration) && audio.duration > 0) {
+          setDuration(audio.duration);
+        } else if (recordingTimeRef.current > 0) {
+          // WebM from MediaRecorder often reports Infinity duration.
+          // Fall back to the recording time we tracked ourselves.
+          setDuration(recordingTimeRef.current);
+        }
+      };
+
       const handleLoadedMetadata = () => {
-        setDuration(audio.duration);
+        setAudioDuration();
+      };
+
+      const handleDurationChange = () => {
+        // Browser may update duration after initial load (e.g. after seeking)
+        setAudioDuration();
       };
 
       const handleTimeUpdate = () => {
@@ -307,11 +325,13 @@ export default function OwnAudioRecorder({
       };
 
       audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.addEventListener('durationchange', handleDurationChange);
       audio.addEventListener('timeupdate', handleTimeUpdate);
       audio.addEventListener('ended', handleEnded);
 
       return () => {
         audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audio.removeEventListener('durationchange', handleDurationChange);
         audio.removeEventListener('timeupdate', handleTimeUpdate);
         audio.removeEventListener('ended', handleEnded);
       };
