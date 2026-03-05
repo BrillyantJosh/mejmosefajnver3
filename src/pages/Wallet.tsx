@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import QRCode from "react-qr-code";
 import lana8wonderBg from "@/assets/lana8wonder-bg.png";
 import knightsBg from "@/assets/knights-bg.png";
+import { UnregisteredLanaAlert } from "@/components/wallet/UnregisteredLanaAlert";
+import { useUnregisteredLana } from "@/hooks/useUnregisteredLana";
 
 interface WalletWithBalance {
   walletId: string;
@@ -30,6 +32,7 @@ export default function Wallet() {
   const { wallets, isLoading } = useNostrWallets();
   const { parameters, refetch: refetchParameters } = useSystemParameters();
   const { profile } = useNostrProfile();
+  const { records: unregRecords, count: unregCount } = useUnregisteredLana();
   const [walletsWithBalances, setWalletsWithBalances] = useState<WalletWithBalance[]>([]);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [selectedWalletForQr, setSelectedWalletForQr] = useState<string>("");
@@ -122,6 +125,11 @@ export default function Wallet() {
           Register New Wallet
         </Button>
       </div>
+
+      {/* Unregistered LANA Warning */}
+      {unregCount > 0 && (
+        <UnregisteredLanaAlert records={unregRecords} count={unregCount} />
+      )}
 
       {/* Total Balance Summary */}
       {!isLoading && walletsWithBalances.length > 0 && (

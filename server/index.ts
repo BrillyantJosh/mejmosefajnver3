@@ -13,6 +13,7 @@ import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnecte
 import functionsRoutes, { retryPendingNostrEvents } from './routes/functions';
 import voiceRoutes from './routes/voice';
 import { processPendingTasks, setSSEHandlers } from './lib/aiTasks';
+import { syncUnregisteredLana } from './lib/unregisteredLana';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -160,9 +161,18 @@ const heartbeatTimer = setInterval(async () => {
       console.error('❌ Error refreshing stale profiles:', err);
     }
   }
+
+  // Sync unregistered LANA (KIND 87003/87009) every 10 heartbeats (= every 10 minutes)
+  if (heartbeatCount % 10 === 0) {
+    try {
+      await syncUnregisteredLana(db);
+    } catch (err) {
+      console.error('❌ Error syncing unregistered LANA:', err);
+    }
+  }
 }, HEARTBEAT_INTERVAL);
 
-console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute, relay retry every 5min, profile refresh every 30min)`);
+console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute, relay retry every 5min, unreg LANA every 10min, profile refresh every 30min)`);
 
 // =============================================
 // API Routes
