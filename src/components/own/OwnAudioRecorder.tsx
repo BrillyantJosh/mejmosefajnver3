@@ -12,6 +12,9 @@ interface OwnAudioRecorderProps {
   compact?: boolean;
 }
 
+const MAX_RECORDING_SECONDS = 300; // 5 minutes
+const WARNING_SECONDS = 240; // warn at 4 minutes (1 min left)
+
 export default function OwnAudioRecorder({
   processEventId,
   senderPubkey,
@@ -27,6 +30,7 @@ export default function OwnAudioRecorder({
   const [recordingTime, setRecordingTime] = useState(0);
   const [uploadFailed, setUploadFailed] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [showTimeWarning, setShowTimeWarning] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -101,10 +105,34 @@ export default function OwnAudioRecorder({
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingTime(0);
+      setShowTimeWarning(false);
       recordingTimerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
+        setRecordingTime(prev => {
+          const next = prev + 1;
+          // Warning at 4 minutes
+          if (next === WARNING_SECONDS) {
+            setShowTimeWarning(true);
+            toast.warning("1 minute left — recording will stop at 5:00");
+          }
+          // Auto-stop at 5 minutes
+          if (next >= MAX_RECORDING_SECONDS) {
+            // Use setTimeout to avoid calling stopRecording inside setRecordingTime
+            setTimeout(() => {
+              if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                mediaRecorderRef.current.stop();
+                setIsRecording(false);
+                if (recordingTimerRef.current) {
+                  clearInterval(recordingTimerRef.current);
+                  recordingTimerRef.current = null;
+                }
+                toast.info("Maximum recording time reached (5:00)");
+              }
+            }, 0);
+          }
+          return next;
+        });
       }, 1000);
-      toast.info("Recording audio...");
+      toast.info("Recording... (max 5 min)");
     } catch (error) {
       console.error('Error accessing microphone:', error);
       toast.error("Error accessing microphone");
@@ -203,6 +231,7 @@ export default function OwnAudioRecorder({
   const handleCancel = () => {
     stopRecording();
     setRecordingTime(0);
+    setShowTimeWarning(false);
     toast.info("Recording cancelled");
   };
 
@@ -218,6 +247,7 @@ export default function OwnAudioRecorder({
     setRecordingTime(0);
     setUploadFailed(false);
     setRetryCount(0);
+    setShowTimeWarning(false);
   };
 
   const handleSendAudio = async () => {
@@ -364,30 +394,40 @@ export default function OwnAudioRecorder({
 
   // Recording UI
   if (isRecording) {
+    const remainingSeconds = MAX_RECORDING_SECONDS - recordingTime;
+    const isNearLimit = recordingTime >= WARNING_SECONDS;
     return (
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5 px-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-sm font-mono text-red-500 font-medium min-w-[40px]">
-            {formatTime(recordingTime)}
-          </span>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2">
+            <span className={`h-2.5 w-2.5 rounded-full ${isNearLimit ? 'bg-orange-500' : 'bg-red-500'} animate-pulse`} />
+            <span className={`text-sm font-mono font-medium min-w-[40px] ${isNearLimit ? 'text-orange-500' : 'text-red-500'}`}>
+              {formatTime(recordingTime)}
+            </span>
+            <span className="text-xs text-muted-foreground">/ {formatTime(MAX_RECORDING_SECONDS)}</span>
+          </div>
+          <Button
+            size={compact ? "sm" : "default"}
+            variant="destructive"
+            onClick={stopRecording}
+            className="gap-2"
+          >
+            <Square className="h-4 w-4 fill-current" />
+            Stop
+          </Button>
+          <Button
+            size={compact ? "sm" : "default"}
+            variant="ghost"
+            onClick={handleCancel}
+          >
+            Cancel
+          </Button>
         </div>
-        <Button
-          size={compact ? "sm" : "default"}
-          variant="destructive"
-          onClick={stopRecording}
-          className="gap-2"
-        >
-          <Square className="h-4 w-4 fill-current" />
-          Stop
-        </Button>
-        <Button
-          size={compact ? "sm" : "default"}
-          variant="ghost"
-          onClick={handleCancel}
-        >
-          Cancel
-        </Button>
+        {isNearLimit && (
+          <p className="text-xs text-orange-500 px-2 animate-pulse">
+            ⏱ {formatTime(remainingSeconds)} remaining
+          </p>
+        )}
       </div>
     );
   }
