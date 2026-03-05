@@ -301,6 +301,27 @@ export function initializeSchema(db: Database.Database): void {
     );
 
     -- =============================================
+    -- UNREGISTERED LANA MONITORING (KIND 87003 / 87009)
+    -- =============================================
+
+    CREATE TABLE IF NOT EXISTS unregistered_lana (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      event_id_87003 TEXT NOT NULL UNIQUE,
+      pubkey TEXT NOT NULL,
+      wallet_id TEXT NOT NULL,
+      tx_id TEXT DEFAULT '',
+      linked_event TEXT DEFAULT '',
+      amount_lanoshis INTEGER NOT NULL DEFAULT 0,
+      registrar_pubkey TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      fetched_at TEXT DEFAULT (datetime('now')),
+      resolved INTEGER NOT NULL DEFAULT 0,
+      resolved_event_id TEXT DEFAULT '',
+      resolved_tx_id TEXT DEFAULT '',
+      resolved_at TEXT DEFAULT ''
+    );
+
+    -- =============================================
     -- INDEXES
     -- =============================================
 
@@ -349,6 +370,10 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_event_tickets_nostr ON event_tickets(nostr_hex_id);
     CREATE INDEX IF NOT EXISTS idx_event_tickets_txid ON event_tickets(tx_id);
     CREATE INDEX IF NOT EXISTS idx_event_checkins_ticket ON event_checkins(ticket_id);
+    CREATE INDEX IF NOT EXISTS idx_unreg_lana_pubkey ON unregistered_lana(pubkey);
+    CREATE INDEX IF NOT EXISTS idx_unreg_lana_wallet ON unregistered_lana(wallet_id);
+    CREATE INDEX IF NOT EXISTS idx_unreg_lana_resolved ON unregistered_lana(resolved);
+    CREATE INDEX IF NOT EXISTS idx_unreg_lana_event ON unregistered_lana(event_id_87003);
   `);
 
   // Migrations for existing databases
@@ -360,5 +385,5 @@ export function initializeSchema(db: Database.Database): void {
     try { db.exec(sql); } catch (_) { /* column already exists */ }
   }
 
-  console.log('SQLite schema initialized (25 tables + indexes)');
+  console.log('SQLite schema initialized (26 tables + indexes)');
 }

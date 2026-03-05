@@ -2899,4 +2899,45 @@ export async function retryPendingNostrEvents(db: any): Promise<void> {
   }
 }
 
+// =============================================
+// UNREGISTERED LANA — Fetch user's unresolved records
+// =============================================
+
+router.post('/unregistered-lana', async (req: Request, res: Response) => {
+  try {
+    const { userPubkey } = req.body;
+    if (!userPubkey) {
+      return res.json({ success: false, error: 'Missing userPubkey' });
+    }
+
+    const db = getDb();
+
+    // Unresolved records (outstanding)
+    const unresolvedRecords = db.prepare(`
+      SELECT * FROM unregistered_lana
+      WHERE pubkey = ? AND resolved = 0
+      ORDER BY created_at DESC
+    `).all(userPubkey);
+
+    // Resolved records (history, last 20)
+    const resolvedRecords = db.prepare(`
+      SELECT * FROM unregistered_lana
+      WHERE pubkey = ? AND resolved = 1
+      ORDER BY resolved_at DESC
+      LIMIT 20
+    `).all(userPubkey);
+
+    res.json({
+      success: true,
+      records: unresolvedRecords,
+      resolvedRecords,
+      count: unresolvedRecords.length,
+      resolvedCount: resolvedRecords.length,
+    });
+  } catch (error) {
+    console.error('Error fetching unregistered LANA:', error);
+    res.json({ success: false, error: 'Internal error' });
+  }
+});
+
 export default router;
