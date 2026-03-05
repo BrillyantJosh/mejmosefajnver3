@@ -247,13 +247,13 @@ class UTXOSelector {
     if (!utxos || utxos.length === 0) {
       throw new Error('No UTXOs available for selection');
     }
-    console.log(`🔍 UTXO Selection: Need ${totalNeeded} satoshis from ${utxos.length} UTXOs`);
+    console.log(`🔍 UTXO Selection: Need ${totalNeeded} lanoshis from ${utxos.length} UTXOs`);
     const totalAvailable = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
-    console.log(`💰 Total available: ${totalAvailable} satoshis (${(totalAvailable / 100000000).toFixed(8)} LANA)`);
+    console.log(`💰 Total available: ${totalAvailable} lanoshis (${(totalAvailable / 100000000).toFixed(8)} LANA)`);
     
     if (totalAvailable < totalNeeded) {
       throw new Error(
-        `Insufficient total UTXO value: ${totalAvailable} < ${totalNeeded} satoshis. ` +
+        `Insufficient total UTXO value: ${totalAvailable} < ${totalNeeded} lanoshis. ` +
         `Available: ${(totalAvailable / 100000000).toFixed(8)} LANA, ` +
         `Needed: ${(totalNeeded / 100000000).toFixed(8)} LANA`
       );
@@ -263,13 +263,13 @@ class UTXOSelector {
     
     console.log('🏆 Top 10 largest UTXOs:');
     sortedUTXOs.slice(0, 10).forEach((utxo, i) => {
-      console.log(`  ${i + 1}. ${utxo.value} satoshis (${(utxo.value / 100000000).toFixed(8)} LANA) - ${utxo.tx_hash}:${utxo.tx_pos}`);
+      console.log(`  ${i + 1}. ${utxo.value} lanoshis (${(utxo.value / 100000000).toFixed(8)} LANA) - ${utxo.tx_hash}:${utxo.tx_pos}`);
     });
     
     const nonDustUtxos = sortedUTXOs.filter(u => u.value >= this.DUST_THRESHOLD);
     
     if (nonDustUtxos.length < sortedUTXOs.length) {
-      console.log(`⚠️ Filtered out ${sortedUTXOs.length - nonDustUtxos.length} dust UTXOs (< ${this.DUST_THRESHOLD} satoshis = ${(this.DUST_THRESHOLD / 100000000).toFixed(8)} LANA)`);
+      console.log(`⚠️ Filtered out ${sortedUTXOs.length - nonDustUtxos.length} dust UTXOs (< ${this.DUST_THRESHOLD} lanoshis = ${(this.DUST_THRESHOLD / 100000000).toFixed(8)} LANA)`);
     }
     
     const workingSet = nonDustUtxos.length > 0 ? nonDustUtxos : sortedUTXOs;
@@ -465,7 +465,7 @@ async function buildSignedTx(
     if (fee <= 0) throw new Error('Invalid fee: must be positive');
     
     const totalValue = selectedUTXOs.reduce((sum: number, utxo: any) => sum + utxo.value, 0);
-    console.log(`💰 Total input value from ${selectedUTXOs.length} UTXOs: ${totalValue} satoshis (${(totalValue / 100000000).toFixed(8)} LANA)`);
+    console.log(`💰 Total input value from ${selectedUTXOs.length} UTXOs: ${totalValue} lanoshis (${(totalValue / 100000000).toFixed(8)} LANA)`);
     console.log(`💸 Transaction breakdown: Amount=${totalAmount}, Fee=${fee}, Change=${totalValue - totalAmount - fee}`);
     
     const normalizedPrivateKey = normalizeWif(privateKeyWIF);
@@ -724,22 +724,22 @@ serve(async (req) => {
     console.log(`📦 Found ${utxos.length} UTXOs`);
     
     const totalAmountSatoshis = recipientsInSatoshis.reduce((sum: number, r: any) => sum + r.amount, 0);
-    console.log(`💰 Total to send: ${totalAmountSatoshis} satoshis (${(totalAmountSatoshis / 100000000).toFixed(8)} LANA)`);
+    console.log(`💰 Total to send: ${totalAmountSatoshis} lanoshis (${(totalAmountSatoshis / 100000000).toFixed(8)} LANA)`);
     
     const totalAvailable = utxos.reduce((sum: number, utxo: any) => sum + utxo.value, 0);
-    console.log(`💰 Total available: ${totalAvailable} satoshis (${(totalAvailable / 100000000).toFixed(8)} LANA)`);
+    console.log(`💰 Total available: ${totalAvailable} lanoshis (${(totalAvailable / 100000000).toFixed(8)} LANA)`);
     
     let initialSelection = UTXOSelector.selectUTXOs(utxos, totalAmountSatoshis);
     let selectedUTXOs = initialSelection.selected;
     let totalSelected = initialSelection.totalValue;
     
-    console.log(`📊 Initial selection: ${selectedUTXOs.length} UTXOs with ${totalSelected} satoshis`);
+    console.log(`📊 Initial selection: ${selectedUTXOs.length} UTXOs with ${totalSelected} lanoshis`);
     
     const actualOutputCount = recipientsInSatoshis.length + 1;
     let baseFee = (selectedUTXOs.length * 180 + actualOutputCount * 34 + 10) * 100;
     let fee = Math.floor(baseFee * 1.5);
     
-    console.log(`💸 Calculated fee: ${fee} satoshis (base: ${baseFee}, 50% buffer) for ${selectedUTXOs.length} inputs, ${actualOutputCount} outputs`);
+    console.log(`💸 Calculated fee: ${fee} lanoshis (base: ${baseFee}, 50% buffer) for ${selectedUTXOs.length} inputs, ${actualOutputCount} outputs`);
     
     let iterations = 0;
     const maxIterations = 10;
@@ -747,7 +747,7 @@ serve(async (req) => {
     while (totalSelected < totalAmountSatoshis + fee && selectedUTXOs.length < utxos.length && iterations < maxIterations) {
       iterations++;
       const needed = totalAmountSatoshis + fee;
-      console.log(`🔄 Iteration ${iterations}: Need ${needed} satoshis, have ${totalSelected} satoshis, reselecting...`);
+      console.log(`🔄 Iteration ${iterations}: Need ${needed} lanoshis, have ${totalSelected} lanoshis, reselecting...`);
       
       const reSelection = UTXOSelector.selectUTXOs(utxos, needed);
       selectedUTXOs = reSelection.selected;
@@ -756,14 +756,14 @@ serve(async (req) => {
       baseFee = (selectedUTXOs.length * 180 + actualOutputCount * 34 + 10) * 100;
       fee = Math.floor(baseFee * 1.5);
       
-      console.log(`   → Selected ${selectedUTXOs.length} UTXOs, total: ${totalSelected} satoshis, new fee: ${fee} satoshis`);
+      console.log(`   → Selected ${selectedUTXOs.length} UTXOs, total: ${totalSelected} lanoshis, new fee: ${fee} lanoshis`);
     }
     
     if (totalSelected < totalAmountSatoshis + fee) {
-      throw new Error(`Insufficient funds: need ${totalAmountSatoshis + fee} satoshis, have ${totalSelected} satoshis`);
+      throw new Error(`Insufficient funds: need ${totalAmountSatoshis + fee} lanoshis, have ${totalSelected} lanoshis`);
     }
     
-    console.log(`✅ Final selection: ${selectedUTXOs.length} UTXOs with ${totalSelected} satoshis`);
+    console.log(`✅ Final selection: ${selectedUTXOs.length} UTXOs with ${totalSelected} lanoshis`);
     console.log(`💸 Transaction breakdown: Amount=${totalAmountSatoshis}, Fee=${fee}, Change=${totalSelected - totalAmountSatoshis - fee}`);
     
     const signedTx = await buildSignedTx(selectedUTXOs, private_key, recipientsInSatoshis, fee, sender_address, servers);
