@@ -256,7 +256,10 @@ export default function SendLanaPrivateKey() {
             
             <div className="p-3 bg-primary/5 rounded-lg">
               <p className="text-sm">
-                Amount: <span className="font-bold text-primary">{amount} {currency}</span>
+                Amount: <span className="font-bold text-primary">{Number(amount).toLocaleString()} LANA</span>
+                {currency && currency !== "LANA" && inputAmount && (
+                  <span className="text-muted-foreground ml-1">(≈ {inputAmount} {currency})</span>
+                )}
               </p>
             </div>
           </div>
