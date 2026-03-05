@@ -37,6 +37,7 @@ export default function SendLana() {
   const [estimatedFee, setEstimatedFee] = useState(0);
   const [totalBalanceSat, setTotalBalanceSat] = useState(0);
   const maxInputs = 20;
+  const [utxoWarningDismissed, setUtxoWarningDismissed] = useState(false);
 
   const exchangeRates = parameters?.exchangeRates;
 
@@ -139,13 +140,13 @@ export default function SendLana() {
       </Card>
 
       {/* UTXO Consolidation Warning */}
-      {!utxoLoading && tooManyUtxos && (
+      {!utxoLoading && tooManyUtxos && !utxoWarningDismissed && (
         <Alert variant="destructive" className="mb-6">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="space-y-2">
+          <AlertDescription className="space-y-3">
             <p>
               This wallet has <strong>{utxoCount} UTXOs</strong> which exceeds the maximum of {maxInputs} inputs per transaction.
-              Please consolidate your wallet first by sending smaller amounts to yourself before emptying it.
+              You cannot empty the wallet until you consolidate. However, you can still send smaller amounts.
             </p>
             <a
               href="https://youtu.be/kBi4MKcc4qM"
@@ -155,6 +156,22 @@ export default function SendLana() {
             >
               📺 Watch: How to consolidate UTXOs
             </a>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full mt-2 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              onClick={() => setUtxoWarningDismissed(true)}
+            >
+              Proceed Anyway — Send a Smaller Amount
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {!utxoLoading && tooManyUtxos && utxoWarningDismissed && (
+        <Alert className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="text-sm">
+            <strong>{utxoCount} UTXOs</strong> — emptying wallet is disabled. You can send specific amounts below.
           </AlertDescription>
         </Alert>
       )}
