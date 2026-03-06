@@ -2105,6 +2105,23 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
     const paidCount = filteredProposals.filter((p: any) => p.isPaid).length;
     console.log(`📊 Proposals for user: ${filteredProposals.length} total (${pendingCount} pending, ${paidCount} paid)`);
 
+    // DEBUG: Log matching details for pending proposals
+    if (pendingCount > 0 && userPubkey) {
+      const pendingOnes = filteredProposals.filter((p: any) => !p.isPaid);
+      for (const p of pendingOnes.slice(0, 3)) {
+        console.log(`🔍 PENDING proposal d=${p.d}, eventId=${p.eventId?.slice(0,16)}..., service=${p.service}`);
+        console.log(`   matchByDTag=${paidByDTag.has(p.d)}, matchByEventId=${paidByEventId.has(p.eventId)}`);
+      }
+      // Log sample confirmation tags
+      const sampleConfirmations = confirmationEvents.slice(0, 3);
+      for (const c of sampleConfirmations) {
+        const proposalTag = c.tags.find((t: string[]) => t[0] === 'proposal')?.[1] || 'NONE';
+        const eTag = c.tags.find((t: string[]) => t[0] === 'e')?.[1] || 'NONE';
+        const eTagMarker = c.tags.find((t: string[]) => t[0] === 'e')?.[3] || 'NONE';
+        console.log(`   CONFIRM sample: proposal_tag=${proposalTag}, e_tag=${eTag?.slice(0,16)}..., e_marker=${eTagMarker}`);
+      }
+    }
+
     return res.json({ success: true, proposals: filteredProposals });
   } catch (error: any) {
     console.error('❌ Error fetching donation proposals:', error);
