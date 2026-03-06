@@ -60,27 +60,46 @@ const upload = multer({
 });
 
 // POST /api/storage/:bucket/upload - Upload file
-router.post('/:bucket/upload', upload.single('file'), (req: Request, res: Response) => {
-  const { bucket } = req.params;
+router.post('/:bucket/upload', (req: Request, res: Response, next) => {
+  const startTime = Date.now();
+  console.log(`📤 Upload request received: bucket=${req.params.bucket}, content-length=${req.headers['content-length'] || 'unknown'}`);
 
-  if (!ALLOWED_BUCKETS.includes(bucket)) {
-    return res.status(400).json({ error: `Invalid bucket: ${bucket}` });
-  }
+  // Handle multer errors (e.g. file too large)
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      const elapsed = Date.now() - startTime;
+      console.error(`❌ Upload multer error after ${elapsed}ms:`, err.message);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'File too large (max 50MB)', message: 'File too large (max 50MB)' });
+      }
+      return res.status(500).json({ error: err.message, message: err.message });
+    }
 
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file provided' });
-  }
+    const { bucket } = req.params;
 
-  const filePath = req.file.filename;
-  const publicUrl = `/api/storage/${bucket}/${filePath}`;
+    if (!ALLOWED_BUCKETS.includes(bucket)) {
+      return res.status(400).json({ error: `Invalid bucket: ${bucket}` });
+    }
 
-  return res.json({
-    data: {
-      path: filePath,
-      fullPath: `${bucket}/${filePath}`,
-      publicUrl
-    },
-    error: null
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file provided' });
+    }
+
+    const elapsed = Date.now() - startTime;
+    const filePath = req.file.filename;
+    const publicUrl = `/api/storage/${bucket}/${filePath}`;
+    const sizeMB = (req.file.size / (1024 * 1024)).toFixed(2);
+
+    console.log(`✅ Upload success: ${bucket}/${filePath} (${sizeMB} MB, ${elapsed}ms)`);
+
+    return res.json({
+      data: {
+        path: filePath,
+        fullPath: `${bucket}/${filePath}`,
+        publicUrl
+      },
+      error: null
+    });
   });
 });
 
