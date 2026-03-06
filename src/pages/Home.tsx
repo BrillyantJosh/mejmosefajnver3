@@ -3,13 +3,39 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle, Video, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, Video, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format, startOfWeek, endOfWeek } from "date-fns";
 import { useNostrEvents, LanaEvent } from "@/hooks/useNostrEvents";
 import { useNostrDMs } from "@/hooks/useNostrDMs";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+
+const API_URL = import.meta.env.VITE_API_URL ?? '';
+
+interface ActiveVotingProposal {
+  id: string;
+  dTag: string;
+  title: string;
+  shortPerspective: string;
+  level: string;
+  start: number;
+  end: number;
+  img: string | null;
+  youtube: string | null;
+}
+
+function getVotingTimeRemaining(endTimestamp: number): string {
+  const now = Math.floor(Date.now() / 1000);
+  const diff = endTimestamp - now;
+  if (diff <= 0) return 'Ended';
+  const days = Math.floor(diff / 86400);
+  const hours = Math.floor((diff % 86400) / 3600);
+  const minutes = Math.floor((diff % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h remaining`;
+  if (hours > 0) return `${hours}h ${minutes}m remaining`;
+  return `${minutes}m remaining`;
+}
 
 interface WhatsUpItem {
   id: string;
@@ -50,6 +76,19 @@ export default function Home() {
   // Fetch events for sidebar
   const { events: onlineEvents, loading: loadingOnline } = useNostrEvents('online');
   const { events: liveEvents, loading: loadingLive } = useNostrEvents('live');
+
+  // Fetch active voting proposals from server
+  const [activeVoting, setActiveVoting] = useState<ActiveVotingProposal[]>([]);
+  useEffect(() => {
+    fetch(`${API_URL}/api/functions/active-voting`)
+      .then(r => r.json())
+      .then(data => {
+        if (data?.success && data.proposals?.length > 0) {
+          setActiveVoting(data.proposals);
+        }
+      })
+      .catch(err => console.error('Failed to fetch active voting:', err));
+  }, []);
 
   // Fetch DMs for sidebar
   const { session } = useAuth();
@@ -136,6 +175,59 @@ export default function Home() {
 
   return (
     <div className="max-w-6xl mx-auto">
+      {/* Active Voting Banner */}
+      {activeVoting.length > 0 && (
+        <div className="mb-6">
+          {activeVoting.map((proposal) => (
+            <Link
+              key={proposal.id}
+              to="/lana-aligns-world/align"
+              className="block group"
+            >
+              <Card className="overflow-hidden border-2 border-violet-500/30 bg-gradient-to-r from-violet-500/5 via-indigo-500/5 to-blue-500/5 hover:border-violet-500/50 hover:shadow-lg transition-all">
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
+                      <Vote className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant="default" className="bg-violet-500 text-[10px] px-1.5 animate-pulse">
+                          Active Voting
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px] px-1.5">
+                          {proposal.level === 'global' ? (
+                            <><Globe className="h-2.5 w-2.5 mr-0.5" /> Global</>
+                          ) : (
+                            <><MapPin className="h-2.5 w-2.5 mr-0.5" /> Local</>
+                          )}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                          <Calendar className="h-2.5 w-2.5" />
+                          {getVotingTimeRemaining(proposal.end)}
+                        </span>
+                      </div>
+                      <h3 className="text-base sm:text-lg font-bold leading-tight group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+                        {proposal.title}
+                      </h3>
+                      {proposal.shortPerspective && (
+                        <p className="text-xs sm:text-sm text-muted-foreground mt-1 line-clamp-2">
+                          {proposal.shortPerspective}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-1 mt-2 text-xs font-medium text-violet-600 dark:text-violet-400">
+                        Cast your vote
+                        <ArrowRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
+
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500 bg-clip-text text-transparent flex items-center justify-center gap-2">

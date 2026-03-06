@@ -2986,4 +2986,55 @@ router.post('/check-own-active', async (req: Request, res: Response) => {
   }
 });
 
+// =============================================
+// CHECK ACTIVE VOTING PROPOSALS (KIND 38883)
+// =============================================
+router.get('/active-voting', async (_req: Request, res: Response) => {
+  try {
+    const relays = getRelaysFromDb();
+    if (relays.length === 0) {
+      return res.json({ success: true, proposals: [] });
+    }
+
+    const events = await queryEventsFromRelays(relays, { kinds: [38883] }, 12000);
+    const now = Math.floor(Date.now() / 1000);
+
+    // Deduplicate by d-tag (keep newest), filter to active status + not ended
+    const proposalMap = new Map<string, any>();
+    for (const event of events) {
+      const getTag = (name: string) => event.tags?.find((t: string[]) => t[0] === name)?.[1] || '';
+      const dTag = getTag('d');
+      const status = getTag('status');
+      const title = getTag('title');
+      const end = parseInt(getTag('end')) || 0;
+
+      if (!dTag || !title || status !== 'active' || end <= now) continue;
+
+      const existing = proposalMap.get(dTag);
+      if (!existing || existing.createdAt < event.created_at) {
+        proposalMap.set(dTag, {
+          id: event.id,
+          dTag,
+          title,
+          shortPerspective: getTag('s_perspective'),
+          level: getTag('level') || 'global',
+          start: parseInt(getTag('start')) || 0,
+          end,
+          img: getTag('img') || null,
+          youtube: getTag('youtube') || null,
+          createdAt: event.created_at,
+        });
+      }
+    }
+
+    const proposals = Array.from(proposalMap.values()).sort((a, b) => a.end - b.end);
+    console.log(`[active-voting] Found ${events.length} KIND 38883 events, ${proposals.length} active proposals`);
+
+    res.json({ success: true, proposals });
+  } catch (error) {
+    console.error('Error checking active voting proposals:', error);
+    res.json({ success: false, error: 'Internal error', proposals: [] });
+  }
+});
+
 export default router;
