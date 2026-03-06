@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
@@ -12,12 +11,10 @@ interface HeaderWarnings {
   cashOutCount: number;
 }
 
-const timeout = <T>(ms: number): Promise<T[]> =>
-  new Promise((_, reject) => setTimeout(() => reject(new Error('Relay timeout')), ms));
-
 /**
  * Single hook that checks ALL relay-based header warnings.
- * OWN uses a server endpoint (reliable), SELL + Lana8Wonder use a single SimplePool.
+ * ALL relay queries run server-side via /check-header-warnings — NO SimplePool in browser.
+ * This eliminates WebSocket connection issues that caused badges to fail.
  */
 export function useHeaderRelayWarnings() {
   const { session } = useAuth();
@@ -42,137 +39,85 @@ export function useHeaderRelayWarnings() {
     let cancelled = false;
 
     const checkAll = async () => {
-      // --- 1. OWN: use server endpoint (reliable, no browser WebSocket issues) ---
-      const ownPromise = fetch(`${API_URL}/api/functions/check-own-active`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userPubkey: pubkey }),
-      })
-        .then(r => r.json())
-        .then(data => data?.hasActive === true)
-        .catch(err => {
-          console.error('[HeaderWarnings] OWN check error:', err);
-          return false;
+      try {
+        // Single server call — ALL relay queries happen server-side
+        const res = await fetch(`${API_URL}/api/functions/check-header-warnings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userPubkey: pubkey }),
         });
+        const data = await res.json();
 
-      // --- 2+3. SELL: use SimplePool for KIND 91991 + 91993 ---
-      const sellPromise = (async () => {
-        const pool = new SimplePool();
-        try {
-          const [sellEvents, confirmEvents] = await Promise.all([
-            Promise.race([
-              pool.querySync(relays, { kinds: [91991], authors: [pubkey] }),
-              timeout<Event>(12000),
-            ]),
-            Promise.race([
-              pool.querySync(relays, { kinds: [91993], authors: [pubkey] }),
-              timeout<Event>(12000),
-            ]),
-          ]);
+        if (cancelled || !data?.success) return;
 
-          const confirmedSellIds = new Set<string>();
-          confirmEvents.forEach((event: Event) => {
-            const sellTag = event.tags.find(t => t[0] === 'sell')?.[1];
-            if (sellTag) confirmedSellIds.add(sellTag);
-            event.tags.forEach(tag => {
-              if (tag[0] === 'e' && tag[3] === 'sell') confirmedSellIds.add(tag[1]);
-            });
-          });
+        const ownActive = data.ownActive || false;
+        const sellCount = data.sellCount || 0;
 
-          return sellEvents.filter((e: Event) => !confirmedSellIds.has(e.id)).length;
-        } catch (err) {
-          console.error('[HeaderWarnings] SELL check error:', err);
-          return 0;
-        } finally {
-          pool.close(relays);
-        }
-      })();
-
-      // --- 4. Lana8Wonder: use server endpoint for relay query too ---
-      const cashOutPromise = (async () => {
+        // --- Lana8Wonder cash-out: process server-fetched events client-side ---
+        // (needs exchange rates + wallet balances which are available here)
+        let cashOutCount = 0;
         try {
           const currentPrice = parameters.exchangeRates?.EUR || 0;
-          if (currentPrice <= 0) return 0;
+          const lana8Events = data.lana8WonderEvents || [];
 
-          // Query KIND 88888 via server relay query
-          const pool = new SimplePool();
-          let cashOutEvents: Event[] = [];
-          try {
-            cashOutEvents = await Promise.race([
-              pool.querySync(relays, { kinds: [88888], limit: 50 }),
-              timeout<Event>(12000),
-            ]);
-          } finally {
-            pool.close(relays);
-          }
+          if (currentPrice > 0 && lana8Events.length > 0) {
+            // Get latest event
+            const latestEvent = lana8Events.sort(
+              (a: any, b: any) => b.created_at - a.created_at
+            )[0];
+            const plan = JSON.parse(latestEvent.content);
 
-          const userEvents = cashOutEvents.filter((event: Event) =>
-            event.tags.some(t => t[0] === 'p' && t[1] === pubkey)
-          );
+            if (plan.accounts && plan.accounts.length > 0) {
+              const walletAddresses = plan.accounts.map((acc: any) => acc.wallet);
 
-          if (userEvents.length === 0) return 0;
+              const balanceRes = await fetch(
+                `${API_URL}/api/functions/get-wallet-balances`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    wallet_addresses: walletAddresses,
+                    electrum_servers: parameters.electrumServers,
+                  }),
+                }
+              );
 
-          const latestEvent = userEvents.sort(
-            (a: Event, b: Event) => b.created_at - a.created_at
-          )[0];
-          const plan = JSON.parse(latestEvent.content);
+              if (balanceRes.ok) {
+                const balanceData = await balanceRes.json();
+                const balances: Record<string, number> = {};
+                if (balanceData?.wallets) {
+                  balanceData.wallets.forEach((w: any) => {
+                    balances[w.wallet_id] = w.balance;
+                  });
+                }
 
-          if (!plan.accounts || plan.accounts.length === 0) return 0;
-
-          const walletAddresses = plan.accounts.map((acc: any) => acc.wallet);
-          const balanceRes = await fetch(
-            `${API_URL}/api/functions/get-wallet-balances`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                wallet_addresses: walletAddresses,
-                electrum_servers: parameters.electrumServers,
-              }),
-            }
-          );
-
-          if (!balanceRes.ok) return 0;
-
-          const balanceData = await balanceRes.json();
-          const balances: Record<string, number> = {};
-          if (balanceData?.wallets) {
-            balanceData.wallets.forEach((w: any) => {
-              balances[w.wallet_id] = w.balance;
-            });
-          }
-
-          let count = 0;
-          for (const account of plan.accounts) {
-            const balance = balances[account.wallet];
-            if (balance === undefined) continue;
-            const triggeredLevels = account.levels
-              .filter((l: any) => currentPrice >= l.trigger_price)
-              .sort((a: any, b: any) => b.level_no - a.level_no);
-            const lastTriggered = triggeredLevels[0];
-            if (!lastTriggered) continue;
-            if (balance > (lastTriggered.remaining_lanas || 0) * 1.02) {
-              count++;
+                for (const account of plan.accounts) {
+                  const balance = balances[account.wallet];
+                  if (balance === undefined) continue;
+                  const triggeredLevels = account.levels
+                    .filter((l: any) => currentPrice >= l.trigger_price)
+                    .sort((a: any, b: any) => b.level_no - a.level_no);
+                  const lastTriggered = triggeredLevels[0];
+                  if (!lastTriggered) continue;
+                  if (balance > (lastTriggered.remaining_lanas || 0) * 1.02) {
+                    cashOutCount++;
+                  }
+                }
+              }
             }
           }
-          return count;
         } catch (err) {
-          console.error('[HeaderWarnings] Cash-out check error:', err);
-          return 0;
+          console.error('[HeaderWarnings] Cash-out processing error:', err);
         }
-      })();
 
-      // Run all checks in parallel
-      const [ownActive, sellCount, cashOutCount] = await Promise.all([
-        ownPromise,
-        sellPromise,
-        cashOutPromise,
-      ]);
-
-      if (!cancelled) {
-        console.log('[HeaderWarnings] Results:', { ownActive, sellCount, cashOutCount });
-        setWarnings({ ownActive, sellCount, cashOutCount });
-        setLoading(false);
+        if (!cancelled) {
+          console.log('[HeaderWarnings] Results:', { ownActive, sellCount, cashOutCount });
+          setWarnings({ ownActive, sellCount, cashOutCount });
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('[HeaderWarnings] Server check error:', err);
+        if (!cancelled) setLoading(false);
       }
     };
 
