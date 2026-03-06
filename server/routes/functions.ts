@@ -2942,4 +2942,48 @@ router.post('/unregistered-lana', async (req: Request, res: Response) => {
   }
 });
 
+// =============================================
+// CHECK ACTIVE OWN PROCESSES (KIND 37044)
+// =============================================
+router.post('/check-own-active', async (req: Request, res: Response) => {
+  try {
+    const { userPubkey } = req.body;
+    if (!userPubkey) {
+      return res.json({ success: false, error: 'Missing userPubkey' });
+    }
+
+    const relays = getRelaysFromDb();
+    if (relays.length === 0) {
+      return res.json({ success: true, hasActive: false, count: 0 });
+    }
+
+    // Fetch ALL KIND 37044 events (no #p filter — relays don't support it for this kind range)
+    const events = await queryEventsFromRelays(relays, { kinds: [37044], limit: 100 }, 12000);
+
+    // Filter: status=open AND user has a role in p-tags
+    const roles = ['initiator', 'facilitator', 'participant', 'guest'];
+    const activeProcesses = events.filter(event => {
+      const status = event.tags?.find((t: string[]) => t[0] === 'status')?.[1];
+      if (status !== 'open') return false;
+
+      return event.tags?.some((t: string[]) =>
+        t[0] === 'p' &&
+        t[1] === userPubkey &&
+        (roles.includes(t[2]) || roles.includes(t[3]))
+      );
+    });
+
+    console.log(`[check-own-active] Found ${events.length} KIND 37044 events, ${activeProcesses.length} active for user ${userPubkey.slice(0, 16)}...`);
+
+    res.json({
+      success: true,
+      hasActive: activeProcesses.length > 0,
+      count: activeProcesses.length,
+    });
+  } catch (error) {
+    console.error('Error checking active OWN processes:', error);
+    res.json({ success: false, error: 'Internal error' });
+  }
+});
+
 export default router;
