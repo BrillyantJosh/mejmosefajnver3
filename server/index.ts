@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb, closeDb } from './db/connection';
-import { fetchKind38888, refreshStaleProfiles } from './lib/nostr';
+import { fetchKind38888, refreshStaleProfiles, discoverNewProfiles } from './lib/nostr';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -116,6 +116,12 @@ async function syncKind38888ToDb(): Promise<boolean> {
   if (!ok) {
     console.warn('⚠️ Using seed data as fallback');
   }
+  // Discover new profiles on startup so the DB is always current
+  try {
+    await discoverNewProfiles(db);
+  } catch (err) {
+    console.error('❌ Startup profile discovery failed:', err);
+  }
 })();
 
 // =============================================
@@ -162,6 +168,15 @@ const heartbeatTimer = setInterval(async () => {
     }
   }
 
+  // Discover new profiles from relays every 5 heartbeats (= every 5 minutes)
+  if (heartbeatCount % 5 === 0) {
+    try {
+      await discoverNewProfiles(db);
+    } catch (err) {
+      console.error('❌ Error discovering new profiles:', err);
+    }
+  }
+
   // Sync unregistered LANA (KIND 87003/87009) every 10 heartbeats (= every 10 minutes)
   if (heartbeatCount % 10 === 0) {
     try {
@@ -172,7 +187,7 @@ const heartbeatTimer = setInterval(async () => {
   }
 }, HEARTBEAT_INTERVAL);
 
-console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute, relay retry every 5min, unreg LANA every 10min, profile refresh every 30min)`);
+console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute, relay retry every 5min, profile refresh+discovery every 5min, unreg LANA every 10min)`);
 
 // =============================================
 // API Routes
