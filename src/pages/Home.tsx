@@ -3,9 +3,12 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle, Video, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, Video, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format, startOfWeek, endOfWeek } from "date-fns";
 import { useNostrEvents, LanaEvent } from "@/hooks/useNostrEvents";
+import { useNostrDMs } from "@/hooks/useNostrDMs";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 interface WhatsUpItem {
@@ -47,6 +50,16 @@ export default function Home() {
   // Fetch events for sidebar
   const { events: onlineEvents, loading: loadingOnline } = useNostrEvents('online');
   const { events: liveEvents, loading: loadingLive } = useNostrEvents('live');
+
+  // Fetch DMs for sidebar
+  const { session } = useAuth();
+  const { conversations, profiles: dmProfiles, loading: dmsLoading } = useNostrDMs();
+
+  // Filter DM conversations: last 14 days, max 3
+  const fourteenDaysAgo = Math.floor(Date.now() / 1000) - 14 * 24 * 60 * 60;
+  const recentConversations = conversations
+    .filter(c => c.lastMessage && c.lastMessage.created_at >= fourteenDaysAgo)
+    .slice(0, 3);
 
   // Filter online events: this week only, upcoming/active
   const now = new Date();
@@ -322,6 +335,74 @@ export default function Home() {
                     className="flex items-center justify-center px-3 py-2 rounded-lg text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
                   >
                     View all events →
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Recent Messages Card */}
+            {session && !dmsLoading && recentConversations.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <MessageSquare className="h-5 w-5 text-green-500" />
+                    Messages
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-1">
+                    {recentConversations.map((conv) => {
+                      const profile = dmProfiles.get(conv.pubkey);
+                      const displayName = profile?.display_name || profile?.name || conv.pubkey.slice(0, 12) + '...';
+                      const lastMsg = conv.lastMessage;
+                      let preview = '';
+                      if (lastMsg?.decryptedContent) {
+                        const isOwn = lastMsg.isOwn;
+                        const raw = lastMsg.decryptedContent;
+                        // Detect audio/image messages
+                        if (raw.startsWith('audio:') || raw.includes('dm-audio')) {
+                          preview = isOwn ? 'You: 🎵 Audio' : '🎵 Audio';
+                        } else if (raw.startsWith('image:') || raw.includes('dm-images')) {
+                          preview = isOwn ? 'You: 📷 Image' : '📷 Image';
+                        } else {
+                          const text = raw.length > 50 ? raw.slice(0, 47) + '...' : raw;
+                          preview = isOwn ? `You: ${text}` : text;
+                        }
+                      }
+                      const timeAgo = lastMsg ? formatDistanceToNow(new Date(lastMsg.created_at * 1000), { addSuffix: true }) : '';
+
+                      return (
+                        <Link
+                          key={conv.pubkey}
+                          to="/chat"
+                          className="flex items-center gap-3 px-2 py-2.5 rounded-lg hover:bg-secondary/50 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium truncate">{displayName}</span>
+                              {conv.unreadCount > 0 && (
+                                <Badge variant="destructive" className="h-5 min-w-5 flex items-center justify-center px-1.5 text-[10px] font-bold flex-shrink-0">
+                                  {conv.unreadCount}
+                                </Badge>
+                              )}
+                            </div>
+                            {preview && (
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">{preview}</p>
+                            )}
+                            {timeAgo && (
+                              <p className="text-[10px] text-muted-foreground/70 mt-0.5">{timeAgo}</p>
+                            )}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+
+                  <Link
+                    to="/chat"
+                    className="flex items-center justify-center px-3 py-2 mt-2 rounded-lg text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
+                  >
+                    View all chats →
                   </Link>
                 </CardContent>
               </Card>
