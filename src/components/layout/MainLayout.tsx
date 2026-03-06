@@ -34,7 +34,7 @@ import { useLana8WonderCashOut } from "@/hooks/useLana8WonderCashOut";
 import { useAiAdvisorUnconditionalPayments } from "@/hooks/useAiAdvisorUnconditionalPayments";
 import { useNostrSellOffers } from "@/hooks/useNostrSellOffers";
 import { useWarningBeforeSplit } from "@/hooks/useWarningBeforeSplit";
-import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
+import { useOwnActiveProcess } from "@/hooks/useOwnActiveProcess";
 import InstallPromptBanner from "./InstallPromptBanner";
 import InstallAppDialog from "./InstallAppDialog";
 
@@ -57,7 +57,7 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const { getEnabledModules } = useModules();
   const { isAdmin, appSettings } = useAdmin();
-  const { logout: authLogout, refreshSession, session } = useAuth();
+  const { logout: authLogout, refreshSession } = useAuth();
   const { profile } = useNostrProfile();
   const { unpaidCount } = useNostrUnpaidLashes();
   const { parameters } = useSystemParameters();
@@ -66,7 +66,7 @@ export default function MainLayout() {
   const { unconditionalPayments } = useAiAdvisorUnconditionalPayments();
   const { offers: sellOffers } = useNostrSellOffers();
   const splitWarning = useWarningBeforeSplit();
-  const { processes: ownProcesses } = useNostrOpenProcesses(session?.nostrHexId || null);
+  const { hasActiveProcess: ownActive } = useOwnActiveProcess();
   const lastRefreshRef = useRef<number>(Date.now());
 
   const dynamicModules = getEnabledModules();
@@ -225,7 +225,7 @@ export default function MainLayout() {
 
           {/* Split Badge + Unregistered LANA Warning — centered */}
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
-            {ownProcesses.length > 0 && (
+            {ownActive && (
               <Link
                 to="/own"
                 className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-colors animate-pulse"
