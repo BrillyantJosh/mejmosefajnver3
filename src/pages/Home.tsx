@@ -394,42 +394,7 @@ export default function Home() {
 
           {/* Sidebar — right */}
           <div className="w-full lg:w-72 flex-shrink-0 space-y-4">
-            {/* FAQ Card */}
-            {faqItems.length > 0 && (
-              <Card className="sticky top-20">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <HelpCircle className="h-5 w-5 text-violet-500" />
-                    FAQ
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-1">
-                    {faqItems.map((faq) => (
-                      <Link
-                        key={faq.id}
-                        to={`/faq/${faq.id}`}
-                        className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-secondary/50 transition-colors group"
-                      >
-                        <PlayCircle className="h-4 w-4 text-red-500 flex-shrink-0 group-hover:scale-110 transition-transform" />
-                        <span className="line-clamp-2">{faq.title}</span>
-                      </Link>
-                    ))}
-                  </div>
-
-                  {/* Video Instructions link */}
-                  <Link
-                    to="/video-instructions"
-                    className="flex items-center gap-2 px-3 py-2.5 mt-3 rounded-lg text-sm font-medium border border-dashed border-violet-500/30 hover:bg-violet-500/5 transition-colors group"
-                  >
-                    <Video className="h-4 w-4 text-violet-500 flex-shrink-0 group-hover:scale-110 transition-transform" />
-                    <span>Video Instructions</span>
-                  </Link>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Events Card */}
+            {/* Events Card — first, most time-sensitive */}
             {!loadingOnline && !loadingLive && (onlineThisWeek.length > 0 || liveUpcoming.length > 0) && (
               <Card>
                 <CardHeader className="pb-3">
@@ -557,6 +522,41 @@ export default function Home() {
                     className="flex items-center justify-center px-3 py-2 mt-2 rounded-lg text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
                   >
                     View all chats →
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* FAQ Card — last, static content */}
+            {faqItems.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <HelpCircle className="h-5 w-5 text-violet-500" />
+                    FAQ
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-1">
+                    {faqItems.map((faq) => (
+                      <Link
+                        key={faq.id}
+                        to={`/faq/${faq.id}`}
+                        className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-secondary/50 transition-colors group"
+                      >
+                        <PlayCircle className="h-4 w-4 text-red-500 flex-shrink-0 group-hover:scale-110 transition-transform" />
+                        <span className="line-clamp-2">{faq.title}</span>
+                      </Link>
+                    ))}
+                  </div>
+
+                  {/* Video Instructions link */}
+                  <Link
+                    to="/video-instructions"
+                    className="flex items-center gap-2 px-3 py-2.5 mt-3 rounded-lg text-sm font-medium border border-dashed border-violet-500/30 hover:bg-violet-500/5 transition-colors group"
+                  >
+                    <Video className="h-4 w-4 text-violet-500 flex-shrink-0 group-hover:scale-110 transition-transform" />
+                    <span>Video Instructions</span>
                   </Link>
                 </CardContent>
               </Card>
