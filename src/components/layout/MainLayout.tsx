@@ -30,11 +30,9 @@ import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "sonner";
 import { useUnregisteredLana } from "@/hooks/useUnregisteredLana";
-import { useLana8WonderCashOut } from "@/hooks/useLana8WonderCashOut";
 import { useAiAdvisorUnconditionalPayments } from "@/hooks/useAiAdvisorUnconditionalPayments";
-import { useNostrSellOffers } from "@/hooks/useNostrSellOffers";
 import { useWarningBeforeSplit } from "@/hooks/useWarningBeforeSplit";
-import { useOwnActiveProcess } from "@/hooks/useOwnActiveProcess";
+import { useHeaderRelayWarnings } from "@/hooks/useHeaderRelayWarnings";
 import InstallPromptBanner from "./InstallPromptBanner";
 import InstallAppDialog from "./InstallAppDialog";
 
@@ -62,11 +60,9 @@ export default function MainLayout() {
   const { unpaidCount } = useNostrUnpaidLashes();
   const { parameters } = useSystemParameters();
   const { count: unregLanaCount } = useUnregisteredLana();
-  const { pendingCount: cashOutCount } = useLana8WonderCashOut();
   const { unconditionalPayments } = useAiAdvisorUnconditionalPayments();
-  const { offers: sellOffers } = useNostrSellOffers();
   const splitWarning = useWarningBeforeSplit();
-  const { hasActiveProcess: ownActive } = useOwnActiveProcess();
+  const { warnings: relayWarnings } = useHeaderRelayWarnings();
   const lastRefreshRef = useRef<number>(Date.now());
 
   const dynamicModules = getEnabledModules();
@@ -225,7 +221,7 @@ export default function MainLayout() {
 
           {/* Split Badge + Unregistered LANA Warning — centered */}
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
-            {ownActive && (
+            {relayWarnings.ownActive && (
               <Link
                 to="/own"
                 className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-colors animate-pulse"
@@ -261,7 +257,7 @@ export default function MainLayout() {
               </Link>
             )}
 
-            {cashOutCount > 0 && (
+            {relayWarnings.cashOutCount > 0 && (
               <Link
                 to="/lana8wonder"
                 className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-colors animate-pulse"
@@ -281,7 +277,7 @@ export default function MainLayout() {
               </Link>
             )}
 
-            {sellOffers.length > 0 && (
+            {relayWarnings.sellCount > 0 && (
               <a
                 href="https://www.selllana.com"
                 target="_blank"
