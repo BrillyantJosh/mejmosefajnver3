@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle, Video, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight } from "lucide-react";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, Video, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format, startOfWeek, endOfWeek } from "date-fns";
 import { useNostrEvents, LanaEvent } from "@/hooks/useNostrEvents";
@@ -90,8 +90,31 @@ export default function Home() {
       .catch(err => console.error('Failed to fetch active voting:', err));
   }, []);
 
-  // Fetch DMs for sidebar
+  // Voting eligibility check
   const { session } = useAuth();
+  const [votingEligibility, setVotingEligibility] = useState<'loading' | 'eligible' | 'resist' | 'not-eligible' | null>(null);
+  useEffect(() => {
+    if (activeVoting.length === 0) return;
+    if (!session?.nostrHexId) {
+      setVotingEligibility('not-eligible');
+      return;
+    }
+    setVotingEligibility('loading');
+    fetch(`${API_URL}/api/functions/check-voting-eligibility`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userPubkey: session.nostrHexId }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data?.canResist) setVotingEligibility('resist');
+        else if (data?.eligible) setVotingEligibility('eligible');
+        else setVotingEligibility('not-eligible');
+      })
+      .catch(() => setVotingEligibility('not-eligible'));
+  }, [activeVoting, session?.nostrHexId]);
+
+  // Fetch DMs for sidebar
   const { conversations, profiles: dmProfiles, loading: dmsLoading } = useNostrDMs();
 
   // Filter DM conversations: last 14 days, max 3
@@ -177,54 +200,93 @@ export default function Home() {
     <div className="max-w-6xl mx-auto">
       {/* Active Voting Banner */}
       {activeVoting.length > 0 && (
-        <div className="mb-6">
-          {activeVoting.map((proposal) => (
-            <Link
-              key={proposal.id}
-              to="/lana-aligns-world/align"
-              className="block group"
-            >
-              <Card className="overflow-hidden border-2 border-violet-500/30 bg-gradient-to-r from-violet-500/5 via-indigo-500/5 to-blue-500/5 hover:border-violet-500/50 hover:shadow-lg transition-all">
-                <CardContent className="p-4 sm:p-5">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
-                      <Vote className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+        <div className="mb-6 space-y-3">
+          {activeVoting.map((proposal) => {
+            const coverImg = proposal.img || (proposal.youtube ? `https://img.youtube.com/vi/${extractYouTubeId(proposal.youtube)}/hqdefault.jpg` : null);
+            return (
+              <Link
+                key={proposal.id}
+                to="/lana-aligns-world/align"
+                className="block group"
+              >
+                <Card className="overflow-hidden border-2 border-violet-500/30 bg-gradient-to-r from-violet-500/5 via-indigo-500/5 to-blue-500/5 hover:border-violet-500/50 hover:shadow-lg transition-all">
+                  {coverImg && (
+                    <div className="relative w-full h-36 sm:h-44 overflow-hidden">
+                      <img
+                        src={coverImg}
+                        alt={proposal.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                      <Badge variant="default" className="absolute top-3 left-3 bg-violet-500 text-[10px] px-1.5 animate-pulse">
+                        Active Voting
+                      </Badge>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant="default" className="bg-violet-500 text-[10px] px-1.5 animate-pulse">
-                          Active Voting
-                        </Badge>
-                        <Badge variant="outline" className="text-[10px] px-1.5">
-                          {proposal.level === 'global' ? (
-                            <><Globe className="h-2.5 w-2.5 mr-0.5" /> Global</>
-                          ) : (
-                            <><MapPin className="h-2.5 w-2.5 mr-0.5" /> Local</>
+                  )}
+                  <CardContent className="p-4 sm:p-5">
+                    <div className="flex items-start gap-4">
+                      <div className="flex-shrink-0 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center">
+                        <Vote className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          {!coverImg && (
+                            <Badge variant="default" className="bg-violet-500 text-[10px] px-1.5 animate-pulse">
+                              Active Voting
+                            </Badge>
                           )}
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                          <Calendar className="h-2.5 w-2.5" />
-                          {getVotingTimeRemaining(proposal.end)}
+                          <Badge variant="outline" className="text-[10px] px-1.5">
+                            {proposal.level === 'global' ? (
+                              <><Globe className="h-2.5 w-2.5 mr-0.5" /> Global</>
+                            ) : (
+                              <><MapPin className="h-2.5 w-2.5 mr-0.5" /> Local</>
+                            )}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                            <Calendar className="h-2.5 w-2.5" />
+                            {getVotingTimeRemaining(proposal.end)}
+                          </span>
+                        </div>
+                        <h3 className="text-base sm:text-lg font-bold leading-tight group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+                          {proposal.title}
+                        </h3>
+                        {proposal.shortPerspective && (
+                          <p className="text-xs sm:text-sm text-muted-foreground mt-1 line-clamp-2">
+                            {proposal.shortPerspective}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-1 mt-2 text-xs font-medium text-violet-600 dark:text-violet-400">
+                          Cast your vote
+                          <ArrowRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
+                        </div>
+                      </div>
+                      {/* Voting eligibility indicator */}
+                      <div className="flex-shrink-0 flex flex-col items-center gap-1 min-w-[48px]">
+                        {votingEligibility === 'loading' && (
+                          <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+                        )}
+                        {votingEligibility === 'eligible' && (
+                          <CheckCircle className="h-6 w-6 text-green-500" />
+                        )}
+                        {votingEligibility === 'resist' && (
+                          <Shield className="h-6 w-6 text-green-500" />
+                        )}
+                        {votingEligibility === 'not-eligible' && (
+                          <LogIn className="h-6 w-6 text-muted-foreground" />
+                        )}
+                        <span className="text-[9px] text-muted-foreground text-center leading-tight whitespace-nowrap">
+                          {votingEligibility === 'loading' ? 'Checking...' :
+                           votingEligibility === 'resist' ? 'Vote & Resist' :
+                           votingEligibility === 'eligible' ? 'Can Vote' :
+                           'Log in'}
                         </span>
                       </div>
-                      <h3 className="text-base sm:text-lg font-bold leading-tight group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
-                        {proposal.title}
-                      </h3>
-                      {proposal.shortPerspective && (
-                        <p className="text-xs sm:text-sm text-muted-foreground mt-1 line-clamp-2">
-                          {proposal.shortPerspective}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-1 mt-2 text-xs font-medium text-violet-600 dark:text-violet-400">
-                        Cast your vote
-                        <ArrowRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
-                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
 

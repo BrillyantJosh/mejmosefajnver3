@@ -2987,6 +2987,50 @@ router.post('/check-own-active', async (req: Request, res: Response) => {
 });
 
 // =============================================
+// CHECK VOTING ELIGIBILITY (QUORUM + RESIST)
+// =============================================
+router.post('/check-voting-eligibility', async (req: Request, res: Response) => {
+  try {
+    const { userPubkey } = req.body;
+    if (!userPubkey) {
+      return res.json({ success: true, eligible: false, inQuorum: false, canResist: false });
+    }
+
+    const relays = getRelaysFromDb();
+    if (relays.length === 0) {
+      // No relays = can't check resist, but quorum defaults to true
+      return res.json({ success: true, eligible: true, inQuorum: true, canResist: false });
+    }
+
+    // Quorum check (currently all defaults are OK — Profile, Registry, Self Responsibility)
+    const inQuorum = true;
+
+    // Resist check: Lana8Wonder (KIND 88888) + 3 real-life credentials (KIND 87033)
+    const [lana8Events, credentialEvents] = await Promise.all([
+      queryEventsFromRelays(relays, { kinds: [88888], '#p': [userPubkey], limit: 1 }, 8000),
+      queryEventsFromRelays(relays, { kinds: [87033], '#p': [userPubkey], limit: 100 }, 8000),
+    ]);
+
+    const hasLana8Wonder = lana8Events.length > 0;
+
+    // Filter for real_life familiarity
+    const realLifeCount = credentialEvents.filter((event: any) => {
+      const familiarityTag = event.tags?.find((t: string[]) => t[0] === 'familiarity');
+      return familiarityTag?.[1] === 'real_life';
+    }).length;
+
+    const canResist = hasLana8Wonder && realLifeCount >= 3;
+
+    console.log(`[check-voting-eligibility] User ${userPubkey.slice(0, 16)}... inQuorum=${inQuorum}, canResist=${canResist} (lana8wonder=${hasLana8Wonder}, realLifeRefs=${realLifeCount})`);
+
+    res.json({ success: true, eligible: inQuorum, inQuorum, canResist });
+  } catch (error) {
+    console.error('Error checking voting eligibility:', error);
+    res.json({ success: false, error: 'Internal error' });
+  }
+});
+
+// =============================================
 // CHECK ACTIVE VOTING PROPOSALS (KIND 38883)
 // =============================================
 router.get('/active-voting', async (_req: Request, res: Response) => {
