@@ -417,6 +417,7 @@ router.post('/discover-profiles', async (req: Request, res: Response) => {
 
         const rawMetadata = {
           ...content,
+          created_at: event.created_at,
           ...(langTag ? { lang: langTag } : {}),
           ...(interests.length > 0 ? { interests } : {}),
           ...(intimateInterests.length > 0 ? { intimateInterests } : {}),
@@ -1483,6 +1484,7 @@ router.post('/refresh-nostr-profiles', async (req: Request, res: Response) => {
         // Merge tags into raw_metadata so Profile page can read them
         const rawMetadata = {
           ...content,
+          created_at: event.created_at,
           ...(langTag ? { lang: langTag } : {}),
           ...(interests.length > 0 ? { interests } : {}),
           ...(intimateInterests.length > 0 ? { intimateInterests } : {}),

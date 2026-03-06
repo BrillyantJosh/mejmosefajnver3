@@ -229,9 +229,17 @@ export async function queryEventsFromRelays(
   const fetchEventsFromRelay = (relayUrl: string): Promise<NostrEvent[]> => {
     return new Promise((resolve) => {
       const events: NostrEvent[] = [];
+      let resolved = false;
+      const safeResolve = (result: NostrEvent[]) => {
+        if (!resolved) {
+          resolved = true;
+          resolve(result);
+        }
+      };
+
       const timeoutId = setTimeout(() => {
-        ws.close();
-        resolve(events);
+        try { ws.close(); } catch {}
+        safeResolve(events);
       }, timeout);
 
       let ws: WebSocket;
@@ -239,7 +247,7 @@ export async function queryEventsFromRelays(
         ws = new WebSocket(relayUrl);
       } catch (error) {
         clearTimeout(timeoutId);
-        resolve([]);
+        safeResolve([]);
         return;
       }
 
@@ -259,8 +267,8 @@ export async function queryEventsFromRelays(
           } else if (message[0] === 'EOSE') {
             // All stored events received, close connection
             clearTimeout(timeoutId);
-            ws.close();
-            resolve(events);
+            try { ws.close(); } catch {}
+            safeResolve(events);
           }
         } catch (error) {
           // Ignore parse errors
@@ -269,11 +277,14 @@ export async function queryEventsFromRelays(
 
       ws.on('error', () => {
         clearTimeout(timeoutId);
-        resolve(events);
+        safeResolve(events);
       });
 
       ws.on('close', () => {
         clearTimeout(timeoutId);
+        // CRITICAL: resolve on close too — if relay drops connection without
+        // error event, the promise would hang forever without this
+        safeResolve(events);
       });
     });
   };
@@ -481,9 +492,9 @@ export async function refreshStaleProfiles(db: any): Promise<void> {
     return;
   }
 
-  // 2. Find stale profiles (last_fetched_at older than 10 minutes), limit 50
+  // 2. Find stale profiles (last_fetched_at older than 1 hour), limit 100
   const staleProfiles = db.prepare(
-    `SELECT nostr_hex_id FROM nostr_profiles WHERE last_fetched_at < datetime('now', '-10 minutes') LIMIT 50`
+    `SELECT nostr_hex_id FROM nostr_profiles WHERE last_fetched_at < datetime('now', '-60 minutes') LIMIT 100`
   ).all() as { nostr_hex_id: string }[];
 
   if (staleProfiles.length === 0) {
@@ -547,6 +558,7 @@ export async function refreshStaleProfiles(db: any): Promise<void> {
 
       const rawMetadata = {
         ...content,
+        created_at: event.created_at,
         ...(langTag ? { lang: langTag } : {}),
         ...(interests.length > 0 ? { interests } : {}),
         ...(intimateInterests.length > 0 ? { intimateInterests } : {}),
