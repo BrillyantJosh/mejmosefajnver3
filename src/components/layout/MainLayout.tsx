@@ -1,7 +1,7 @@
 // VERSION: 2.2 - PWA Cache Fix + Version Display - 2026-01-22
 import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot, ExternalLink, PlayCircle, Bug, Home as HomeIcon, AlertTriangle } from "lucide-react";
+import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot, ExternalLink, PlayCircle, Bug, Home as HomeIcon, AlertTriangle, HandCoins } from "lucide-react";
 import logoImage from "@/assets/lana-logo.png";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,8 @@ import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "sonner";
 import { useUnregisteredLana } from "@/hooks/useUnregisteredLana";
+import { useLana8WonderCashOut } from "@/hooks/useLana8WonderCashOut";
+import { useAiAdvisorUnconditionalPayments } from "@/hooks/useAiAdvisorUnconditionalPayments";
 import InstallPromptBanner from "./InstallPromptBanner";
 import InstallAppDialog from "./InstallAppDialog";
 
@@ -57,6 +59,8 @@ export default function MainLayout() {
   const { unpaidCount } = useNostrUnpaidLashes();
   const { parameters } = useSystemParameters();
   const { count: unregLanaCount } = useUnregisteredLana();
+  const { pendingCount: cashOutCount } = useLana8WonderCashOut();
+  const { unconditionalPayments } = useAiAdvisorUnconditionalPayments();
   const lastRefreshRef = useRef<number>(Date.now());
 
   const dynamicModules = getEnabledModules();
@@ -238,6 +242,26 @@ export default function MainLayout() {
                 title="You have unregistered LANA — click to see details"
               >
                 <AlertTriangle className="h-4 w-4 text-red-500" />
+              </Link>
+            )}
+
+            {cashOutCount > 0 && (
+              <Link
+                to="/lana8wonder"
+                className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-colors animate-pulse"
+                title="You have pending Lana8Wonder cash-outs"
+              >
+                <span className="text-sm font-black text-red-500">8</span>
+              </Link>
+            )}
+
+            {unconditionalPayments.pendingCount > 0 && (
+              <Link
+                to="/unconditional-payment"
+                className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-colors animate-pulse"
+                title="You have unpaid unconditional payments"
+              >
+                <HandCoins className="h-4 w-4 text-red-500" />
               </Link>
             )}
           </div>
