@@ -308,7 +308,7 @@ router.post('/list-profiles', async (req: Request, res: Response) => {
     const db = getDb();
 
     let sql = `
-      SELECT nostr_hex_id, full_name, display_name, picture, about, lana_wallet_id, raw_metadata
+      SELECT nostr_hex_id, full_name, display_name, picture, about, lana_wallet_id, raw_metadata, updated_at
       FROM nostr_profiles
     `;
     const conditions: string[] = [];
@@ -330,7 +330,8 @@ router.post('/list-profiles', async (req: Request, res: Response) => {
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ');
     }
-    sql += ' ORDER BY full_name ASC';
+    // Order by most recently updated first (latest Nostr events on top)
+    sql += ' ORDER BY updated_at DESC';
 
     const rows = db.prepare(sql).all(...params) as any[];
 
@@ -349,6 +350,7 @@ router.post('/list-profiles', async (req: Request, res: Response) => {
         lanaWalletID: r.lana_wallet_id,
         language: rawMeta.language || rawMeta.lang,
         created_at: rawMeta.created_at,
+        updated_at: r.updated_at,
       };
     });
 

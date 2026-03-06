@@ -153,8 +153,8 @@ const heartbeatTimer = setInterval(async () => {
     }
   }
 
-  // Refresh stale profiles every 30 heartbeats (= every 30 minutes)
-  if (heartbeatCount % 30 === 0) {
+  // Refresh stale profiles every 5 heartbeats (= every 5 minutes)
+  if (heartbeatCount % 5 === 0) {
     try {
       await refreshStaleProfiles(db);
     } catch (err) {
