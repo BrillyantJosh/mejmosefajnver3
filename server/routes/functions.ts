@@ -2987,6 +2987,70 @@ router.post('/check-own-active', async (req: Request, res: Response) => {
 });
 
 // =============================================
+// UNIFIED HEADER WARNINGS (ALL relay checks server-side)
+// Replaces browser SimplePool for OWN, SELL, Lana8Wonder
+// =============================================
+router.post('/check-header-warnings', async (req: Request, res: Response) => {
+  try {
+    const { userPubkey } = req.body;
+    if (!userPubkey) {
+      return res.json({ success: true, ownActive: false, sellCount: 0, lana8WonderEvents: [] });
+    }
+
+    const relays = getRelaysFromDb();
+    if (relays.length === 0) {
+      return res.json({ success: true, ownActive: false, sellCount: 0, lana8WonderEvents: [] });
+    }
+
+    // Run ALL relay queries in parallel — single server-side batch
+    const [ownEvents, sellEvents, confirmEvents, lana8Events] = await Promise.all([
+      queryEventsFromRelays(relays, { kinds: [37044], limit: 100 }, 12000),
+      queryEventsFromRelays(relays, { kinds: [91991], authors: [userPubkey] }, 12000),
+      queryEventsFromRelays(relays, { kinds: [91993], authors: [userPubkey] }, 12000),
+      queryEventsFromRelays(relays, { kinds: [88888], '#p': [userPubkey], limit: 50 }, 12000),
+    ]);
+
+    // --- OWN: check for active processes (KIND 37044) ---
+    const roles = ['initiator', 'facilitator', 'participant', 'guest'];
+    const ownActive = ownEvents.some((event: any) => {
+      const status = event.tags?.find((t: string[]) => t[0] === 'status')?.[1];
+      if (status !== 'open') return false;
+      return event.tags?.some((t: string[]) =>
+        t[0] === 'p' && t[1] === userPubkey &&
+        (roles.includes(t[2]) || roles.includes(t[3]))
+      );
+    });
+
+    // --- SELL: count unconfirmed sell offers (KIND 91991 - 91993) ---
+    const confirmedSellIds = new Set<string>();
+    confirmEvents.forEach((event: any) => {
+      const sellTag = event.tags?.find((t: string[]) => t[0] === 'sell')?.[1];
+      if (sellTag) confirmedSellIds.add(sellTag);
+      event.tags?.forEach((tag: string[]) => {
+        if (tag[0] === 'e' && tag[3] === 'sell') confirmedSellIds.add(tag[1]);
+      });
+    });
+    const sellCount = sellEvents.filter((e: any) => !confirmedSellIds.has(e.id)).length;
+
+    // --- Lana8Wonder: return events for client-side cash-out processing ---
+    // (client needs exchange rates + wallet balances which it already has)
+    const lana8WonderEvents = lana8Events.map((e: any) => ({
+      id: e.id,
+      content: e.content,
+      tags: e.tags,
+      created_at: e.created_at,
+    }));
+
+    console.log(`[check-header-warnings] User ${userPubkey.slice(0, 16)}... own=${ownActive}, sell=${sellCount}, lana8wonder=${lana8WonderEvents.length}`);
+
+    res.json({ success: true, ownActive, sellCount, lana8WonderEvents });
+  } catch (error) {
+    console.error('Error checking header warnings:', error);
+    res.json({ success: false, error: 'Internal error', ownActive: false, sellCount: 0, lana8WonderEvents: [] });
+  }
+});
+
+// =============================================
 // CHECK VOTING ELIGIBILITY (QUORUM + RESIST)
 // =============================================
 router.post('/check-voting-eligibility', async (req: Request, res: Response) => {
