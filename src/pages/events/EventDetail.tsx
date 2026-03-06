@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Calendar, Clock, MapPin, Globe, Users, ArrowLeft,
-  ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2, X, Share2, AlertTriangle, Timer
+  ExternalLink, Youtube, FileText, Wallet, UserPlus, Check, Loader2, X, Share2, AlertTriangle, Timer, User
 } from "lucide-react";
 import { format } from "date-fns";
 import { SimplePool, finalizeEvent } from "nostr-tools";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { LanaEvent, ScheduleEntry, getEventStatus } from "@/hooks/useNostrEvents";
+import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { useNostrEventRegistrations } from "@/hooks/useNostrEventRegistrations";
 import { toast } from "@/hooks/use-toast";
 import { formatTimeInTimezone, getTimezoneAbbreviation, getUserTimezone } from "@/lib/timezones";
@@ -41,6 +42,9 @@ export default function EventDetail() {
 
   // Countdown hook - must be called unconditionally (before any early returns)
   const countdown = useEventCountdown(event?.start || new Date());
+
+  // Fetch organizer profile from cache/Nostr
+  const { profile: organizerProfile, isLoading: organizerLoading } = useNostrProfileCache(event?.pubkey || null);
 
   const relays = systemParameters?.relays || [];
 
@@ -206,17 +210,24 @@ export default function EventDetail() {
       setLoading(true);
 
       try {
-        const pool = new SimplePool();
-        
-        // Fetch by d tag for replaceable events
-        const rawEvents = await pool.querySync(relays, {
-          kinds: [36677],
-          "#d": [decodedDTag]
+        // Use server-side relay query (more reliable than browser SimplePool)
+        const API_URL = import.meta.env.VITE_API_URL ?? '';
+        const response = await fetch(`${API_URL}/api/functions/query-nostr-events`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filter: { kinds: [36677], '#d': [decodedDTag] },
+            timeout: 15000,
+          }),
         });
+
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        const data = await response.json();
+        const rawEvents = data.events || [];
 
         if (rawEvents.length > 0) {
           // Get the most recent event (by created_at) since it's a replaceable event
-          const latestEvent = rawEvents.reduce((latest, current) => 
+          const latestEvent = rawEvents.reduce((latest: any, current: any) =>
             current.created_at > latest.created_at ? current : latest
           );
           const parsed = parseEvent(latestEvent);
@@ -230,7 +241,7 @@ export default function EventDetail() {
     };
 
     fetchEvent();
-  }, [decodedDTag, session, relays, parseEvent]);
+  }, [decodedDTag, session, parseEvent]);
 
   if (loading) {
     return (
@@ -304,16 +315,37 @@ export default function EventDetail() {
           </div>
           
           {!event.cover && status !== 'upcoming' && (
-            <Badge 
+            <Badge
               className={`w-fit ${
-                status === 'happening-now' 
-                  ? 'bg-green-500 text-white animate-pulse' 
+                status === 'happening-now'
+                  ? 'bg-green-500 text-white animate-pulse'
                   : 'bg-amber-500 text-white'
               }`}
             >
               {status === 'happening-now' ? t('status.happeningNow') : t('status.today')}
             </Badge>
           )}
+
+          {/* Organizer */}
+          <div className="flex items-center gap-3 pt-1">
+            {organizerProfile?.picture ? (
+              <img
+                src={organizerProfile.picture}
+                alt={organizerProfile.display_name || organizerProfile.full_name || ''}
+                className="h-8 w-8 rounded-full object-cover border"
+              />
+            ) : (
+              <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                <User className="h-4 w-4 text-muted-foreground" />
+              </div>
+            )}
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground">{t('detail.organizer')}</span>
+              <span className="text-sm font-medium">
+                {organizerLoading ? '...' : (organizerProfile?.display_name || organizerProfile?.full_name || event.pubkey.slice(0, 12) + '...')}
+              </span>
+            </div>
+          </div>
         </CardHeader>
         
         <CardContent className="space-y-6">

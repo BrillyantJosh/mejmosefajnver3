@@ -67,6 +67,7 @@ const events = {
   'detail.attachment': 'Attachment {index}',
   'detail.recording': 'Recording',
   'detail.watchRecording': 'Watch Recording',
+  'detail.organizer': 'Organizer',
 
   // ── PublicEvent ──
   'public.title': 'Lana Event',
@@ -301,6 +302,7 @@ const translations: TranslationDict<EventsKey> = {
     'detail.attachment': 'Priloga {index}',
     'detail.recording': 'Posnetek',
     'detail.watchRecording': 'Oglej si posnetek',
+    'detail.organizer': 'Organizator',
 
     // ── PublicEvent ──
     'public.title': 'Lana dogodek',
@@ -530,6 +532,7 @@ const translations: TranslationDict<EventsKey> = {
     'detail.attachment': 'Anhang {index}',
     'detail.recording': 'Aufnahme',
     'detail.watchRecording': 'Aufnahme ansehen',
+    'detail.organizer': 'Organisator',
 
     // ── PublicEvent ──
     'public.title': 'Lana Event',
@@ -759,6 +762,7 @@ const translations: TranslationDict<EventsKey> = {
     'detail.attachment': 'Melléklet {index}',
     'detail.recording': 'Felvétel',
     'detail.watchRecording': 'Felvétel megtekintése',
+    'detail.organizer': 'Szervező',
 
     // ── PublicEvent ──
     'public.title': 'Lana esemény',
@@ -988,6 +992,7 @@ const translations: TranslationDict<EventsKey> = {
     'detail.attachment': 'Allegato {index}',
     'detail.recording': 'Registrazione',
     'detail.watchRecording': 'Guarda la registrazione',
+    'detail.organizer': 'Organizzatore',
 
     // ── PublicEvent ──
     'public.title': 'Evento Lana',
