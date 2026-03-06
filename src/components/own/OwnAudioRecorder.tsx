@@ -232,13 +232,16 @@ export default function OwnAudioRecorder({
         console.error("Upload error:", uploadError);
         setUploadFailed(true);
         setRetryCount(prev => prev + 1);
-        toast.error("Upload failed — tap retry to try again");
+        const errMsg = uploadError?.message || uploadError?.error || "Upload failed";
+        toast.error(`${errMsg} — tap retry`);
         return;
       }
 
       // Send the audio path to the chat (Nostr content uses "audio:" prefix)
       // Include duration metadata so it shows immediately in chat
-      const durSuffix = recordingTime > 0 ? `|dur:${recordingTime}` : '';
+      // Use ref value as primary (more reliable than state after auto-stop)
+      const durValue = recordingTimeRef.current > 0 ? recordingTimeRef.current : recordingTime;
+      const durSuffix = durValue > 0 ? `|dur:${durValue}` : '';
       const sent = await onSendAudio(`audio:${filePath}${durSuffix}`);
 
       if (!sent) {
