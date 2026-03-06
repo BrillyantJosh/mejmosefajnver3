@@ -464,7 +464,7 @@ export async function publishEventToRelays(
 /**
  * Refresh stale profiles from Nostr relays and update the database.
  * Called periodically by the server heartbeat.
- * Fetches profiles where last_fetched_at is older than 1 hour, up to 50 at a time.
+ * Fetches profiles where last_fetched_at is older than 10 minutes, up to 50 at a time.
  */
 export async function refreshStaleProfiles(db: any): Promise<void> {
   // 1. Get relays from kind_38888
@@ -481,9 +481,9 @@ export async function refreshStaleProfiles(db: any): Promise<void> {
     return;
   }
 
-  // 2. Find stale profiles (last_fetched_at older than 1 hour), limit 50
+  // 2. Find stale profiles (last_fetched_at older than 10 minutes), limit 50
   const staleProfiles = db.prepare(
-    `SELECT nostr_hex_id FROM nostr_profiles WHERE last_fetched_at < datetime('now', '-1 hour') LIMIT 50`
+    `SELECT nostr_hex_id FROM nostr_profiles WHERE last_fetched_at < datetime('now', '-10 minutes') LIMIT 50`
   ).all() as { nostr_hex_id: string }[];
 
   if (staleProfiles.length === 0) {
