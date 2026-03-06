@@ -3027,11 +3027,10 @@ router.post('/check-header-warnings', async (req: Request, res: Response) => {
       return res.json({ success: true, ownActive: false, sellCount: 0, lana8WonderEvents: [] });
     }
 
-    // Run ALL relay queries in parallel — single server-side batch
-    const [ownEvents, sellEvents, confirmEvents, lana8Events] = await Promise.all([
+    // Step 1: Run parallel queries that don't depend on each other
+    const [ownEvents, sellEventsRaw, lana8Events] = await Promise.all([
       queryEventsFromRelays(relays, { kinds: [37044], limit: 100 }, 12000),
       queryEventsFromRelays(relays, { kinds: [91991], authors: [userPubkey] }, 12000),
-      queryEventsFromRelays(relays, { kinds: [91993], authors: [userPubkey] }, 12000),
       queryEventsFromRelays(relays, { kinds: [88888], '#p': [userPubkey], limit: 50 }, 12000),
     ]);
 
@@ -3046,16 +3045,28 @@ router.post('/check-header-warnings', async (req: Request, res: Response) => {
       );
     });
 
-    // --- SELL: count unconfirmed sell offers (KIND 91991 - 91993) ---
-    const confirmedSellIds = new Set<string>();
-    confirmEvents.forEach((event: any) => {
-      const sellTag = event.tags?.find((t: string[]) => t[0] === 'sell')?.[1];
-      if (sellTag) confirmedSellIds.add(sellTag);
-      event.tags?.forEach((tag: string[]) => {
-        if (tag[0] === 'e' && tag[3] === 'sell') confirmedSellIds.add(tag[1]);
+    // --- SELL: only count SELLER's own unconfirmed offers ---
+    // Post-filter: relay may ignore authors filter — keep only events authored by this user
+    const userSellEvents = sellEventsRaw.filter((e: any) => e.pubkey === userPubkey);
+
+    // Step 2: Fetch confirmations (91993) targeted to user's sell offers via #e tag
+    let sellCount = 0;
+    if (userSellEvents.length > 0) {
+      const sellEventIds = userSellEvents.map((e: any) => e.id);
+      const confirmEvents = await queryEventsFromRelays(relays, {
+        kinds: [91993], '#e': sellEventIds,
+      }, 12000);
+
+      const confirmedSellIds = new Set<string>();
+      confirmEvents.forEach((event: any) => {
+        const sellTag = event.tags?.find((t: string[]) => t[0] === 'sell')?.[1];
+        if (sellTag) confirmedSellIds.add(sellTag);
+        event.tags?.forEach((tag: string[]) => {
+          if (tag[0] === 'e' && tag[3] === 'sell') confirmedSellIds.add(tag[1]);
+        });
       });
-    });
-    const sellCount = sellEvents.filter((e: any) => !confirmedSellIds.has(e.id)).length;
+      sellCount = userSellEvents.filter((e: any) => !confirmedSellIds.has(e.id)).length;
+    }
 
     // --- Lana8Wonder: return events for client-side cash-out processing ---
     // (client needs exchange rates + wallet balances which it already has)
