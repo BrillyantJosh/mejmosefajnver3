@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { SimplePool } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSystemParameters } from '@/contexts/SystemParametersContext';
+
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 export interface ScheduleEntry {
   start: Date;
@@ -58,13 +58,10 @@ export interface UseNostrEventsOptions {
 export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOptions) {
   const { enabled = true } = options || {};
   const { session } = useAuth();
-  const { parameters: systemParameters } = useSystemParameters();
   const [events, setEvents] = useState<LanaEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fetchStartedRef = useRef(false);
-
-  const relays = systemParameters?.relays || [];
 
   const parseEvent = (event: any): LanaEvent | null => {
     try {
@@ -169,21 +166,31 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
     setError(null);
 
     try {
-      const pool = new SimplePool();
-      
-      const rawEvents = await pool.querySync(relays, {
-        kinds: [36677],
-        limit: 100
+      // Use server-side relay query (much more reliable than browser SimplePool)
+      const response = await fetch(`${API_URL}/api/functions/query-nostr-events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filter: { kinds: [36677], limit: 100 },
+          timeout: 15000,
+        }),
       });
 
-      console.log('Fetched raw events:', rawEvents.length);
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const rawEvents = data.events || [];
+
+      console.log('Fetched raw events (server-side):', rawEvents.length);
 
       // Parse and filter events
       const parsedEvents: LanaEvent[] = [];
       const seenDTags = new Set<string>();
 
       // Sort by created_at descending to get most recent first
-      const sortedEvents = [...rawEvents].sort((a, b) => b.created_at - a.created_at);
+      const sortedEvents = [...rawEvents].sort((a: any, b: any) => b.created_at - a.created_at);
 
       for (const rawEvent of sortedEvents) {
         const parsed = parseEvent(rawEvent);
@@ -232,7 +239,7 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
     } finally {
       setLoading(false);
     }
-  }, [enabled, session, relays, filter]);
+  }, [enabled, session, filter]);
 
   useEffect(() => {
     if (!enabled) {
@@ -241,8 +248,8 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
       return;
     }
 
-    // Skip if no session or relays yet
-    if (!session || relays.length === 0) {
+    // Skip if no session yet
+    if (!session) {
       return;
     }
 
@@ -251,7 +258,7 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
       fetchStartedRef.current = true;
       fetchEvents();
     }
-  }, [enabled, fetchEvents, session, relays]);
+  }, [enabled, fetchEvents, session]);
 
   return { events, loading: enabled ? loading : false, error, refetch: fetchEvents };
 }
