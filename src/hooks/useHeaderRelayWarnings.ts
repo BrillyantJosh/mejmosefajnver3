@@ -49,10 +49,13 @@ export function useHeaderRelayWarnings() {
         console.log('[HeaderWarnings] Checking all relay warnings with single pool...');
 
         // --- Run ALL relay queries through the SAME pool in parallel ---
+        // NOTE: #p filter does NOT work on some relays for parametrized
+        // replaceable events (KIND 30000-39999). KIND 37044 falls in this
+        // range so we must fetch ALL events and filter client-side.
         const results = await Promise.allSettled([
-          // 1. OWN: KIND 37044 tagged with user
+          // 1. OWN: KIND 37044 — fetch ALL, filter client-side (relays don't support #p for this kind)
           Promise.race([
-            pool.querySync(relays, { kinds: [37044], '#p': [pubkey], limit: 50 }),
+            pool.querySync(relays, { kinds: [37044], limit: 100 }),
             timeout<Event>(12000),
           ]),
           // 2. SELL: KIND 91991 authored by user
@@ -65,9 +68,9 @@ export function useHeaderRelayWarnings() {
             pool.querySync(relays, { kinds: [91993], authors: [pubkey] }),
             timeout<Event>(12000),
           ]),
-          // 4. Lana8Wonder: KIND 88888 tagged with user
+          // 4. Lana8Wonder: KIND 88888 — fetch ALL, filter client-side
           Promise.race([
-            pool.querySync(relays, { kinds: [88888], '#p': [pubkey] }),
+            pool.querySync(relays, { kinds: [88888], limit: 50 }),
             timeout<Event>(12000),
           ]),
         ]);
@@ -85,14 +88,16 @@ export function useHeaderRelayWarnings() {
           sell: sellEvents.length,
           confirms: confirmEvents.length,
           cashOut: cashOutEvents.length,
+          pubkey: pubkey.slice(0, 16) + '...',
         });
 
         // --- Process OWN: check for open processes where user has a role ---
+        // Filter client-side since relays don't support #p for KIND 37044
         const ownActive = ownEvents.some((event: Event) => {
           const status = event.tags.find(t => t[0] === 'status')?.[1];
           if (status !== 'open') return false;
-          // User is already in #p filter, but double-check they have a role
-          return event.tags.some(
+          // Check if user is in any p-tag with a role
+          const hasRole = event.tags.some(
             t =>
               t[0] === 'p' &&
               t[1] === pubkey &&
@@ -101,6 +106,14 @@ export function useHeaderRelayWarnings() {
                t[2] === 'participant' || t[3] === 'participant' ||
                t[2] === 'guest' || t[3] === 'guest')
           );
+          if (hasRole) {
+            console.log('[HeaderWarnings] OWN match found:', {
+              eventId: event.id.slice(0, 16),
+              status,
+              title: event.tags.find(t => t[0] === 'title')?.[1],
+            });
+          }
+          return hasRole;
         });
 
         // --- Process SELL: active offers minus confirmed ---
@@ -117,12 +130,16 @@ export function useHeaderRelayWarnings() {
         ).length;
 
         // --- Process Lana8Wonder cash-out ---
+        // Filter client-side for events tagged with our pubkey
         let cashOutCount = 0;
-        if (cashOutEvents.length > 0) {
+        const userCashOutEvents = cashOutEvents.filter((event: Event) =>
+          event.tags.some(t => t[0] === 'p' && t[1] === pubkey)
+        );
+        if (userCashOutEvents.length > 0) {
           const currentPrice = parameters.exchangeRates?.EUR || 0;
           if (currentPrice > 0) {
             try {
-              const latestEvent = cashOutEvents.sort(
+              const latestEvent = userCashOutEvents.sort(
                 (a: Event, b: Event) => b.created_at - a.created_at
               )[0];
               const plan = JSON.parse(latestEvent.content);
