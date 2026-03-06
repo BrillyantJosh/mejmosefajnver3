@@ -30,12 +30,28 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     if (!audio) return;
 
     const handleLoadedMetadata = () => {
-      setDuration(audio.duration);
+      // WebM files from MediaRecorder often report Infinity duration.
+      // Only update if we got a valid finite duration from the audio element.
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
       setIsLoading(false);
+    };
+
+    const handleDurationChange = () => {
+      // Browser may resolve the real duration later (e.g. after seeking).
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
     };
 
     const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
+      // While playing, track highest currentTime as fallback duration
+      // (some WebM files never report finite duration)
+      if (audio.currentTime > 0 && (!isFinite(audio.duration) || audio.duration <= 0)) {
+        setDuration(prev => Math.max(prev, audio.currentTime + 0.5));
+      }
     };
 
     const handleEnded = () => {
@@ -50,12 +66,14 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('durationchange', handleDurationChange);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
 
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('durationchange', handleDurationChange);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
