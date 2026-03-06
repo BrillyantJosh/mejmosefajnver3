@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { useUnregisteredLana } from "@/hooks/useUnregisteredLana";
 import { useLana8WonderCashOut } from "@/hooks/useLana8WonderCashOut";
 import { useAiAdvisorUnconditionalPayments } from "@/hooks/useAiAdvisorUnconditionalPayments";
+import { useNostrSellOffers } from "@/hooks/useNostrSellOffers";
 import InstallPromptBanner from "./InstallPromptBanner";
 import InstallAppDialog from "./InstallAppDialog";
 
@@ -61,6 +62,7 @@ export default function MainLayout() {
   const { count: unregLanaCount } = useUnregisteredLana();
   const { pendingCount: cashOutCount } = useLana8WonderCashOut();
   const { unconditionalPayments } = useAiAdvisorUnconditionalPayments();
+  const { offers: sellOffers } = useNostrSellOffers();
   const lastRefreshRef = useRef<number>(Date.now());
 
   const dynamicModules = getEnabledModules();
@@ -263,6 +265,18 @@ export default function MainLayout() {
               >
                 <HandCoins className="h-4 w-4 text-red-500" />
               </Link>
+            )}
+
+            {sellOffers.length > 0 && (
+              <a
+                href="https://www.selllana.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-colors animate-pulse"
+                title="You got paid send Lanas"
+              >
+                <span className="text-xs font-black text-red-500">SELL</span>
+              </a>
             )}
           </div>
 
