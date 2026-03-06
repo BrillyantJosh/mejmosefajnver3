@@ -1997,11 +1997,36 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
       proposalFilter['#p'] = [userPubkey];
     }
 
-    // Fetch both proposals and confirmations in parallel
-    const [proposalEvents, confirmationEvents] = await Promise.all([
-      queryEventsFromRelays(relays, proposalFilter, 15000),
-      queryEventsFromRelays(relays, { kinds: [90901], limit: 200 }, 15000)
-    ]);
+    // Step 1: Fetch proposals
+    const proposalEvents = await queryEventsFromRelays(relays, proposalFilter, 15000);
+
+    // Step 2: Fetch confirmations TARGETED to these specific proposals
+    // OLD: { kinds: [90901], limit: 200 } — fetched random 200 from ALL users, missed user's confirmations
+    // NEW: #e filter gets confirmations for THESE proposals + authors filter as fallback
+    let confirmationEvents: any[] = [];
+    if (proposalEvents.length > 0) {
+      const proposalEventIds = proposalEvents.map((e: any) => e.id);
+
+      const confirmQueries: Promise<any[]>[] = [
+        queryEventsFromRelays(relays, { kinds: [90901], '#e': proposalEventIds }, 15000),
+      ];
+      if (userPubkey) {
+        confirmQueries.push(
+          queryEventsFromRelays(relays, { kinds: [90901], authors: [userPubkey], limit: 200 }, 15000)
+        );
+      }
+
+      const results = await Promise.all(confirmQueries);
+      const seenIds = new Set<string>();
+      for (const events of results) {
+        for (const event of events) {
+          if (!seenIds.has(event.id)) {
+            seenIds.add(event.id);
+            confirmationEvents.push(event);
+          }
+        }
+      }
+    }
     console.log(`✅ Found ${proposalEvents.length} KIND 90900 proposals, ${confirmationEvents.length} KIND 90901 confirmations`);
 
     // Parse confirmations into a lookup map
@@ -2104,23 +2129,6 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
     const pendingCount = filteredProposals.filter((p: any) => !p.isPaid).length;
     const paidCount = filteredProposals.filter((p: any) => p.isPaid).length;
     console.log(`📊 Proposals for user: ${filteredProposals.length} total (${pendingCount} pending, ${paidCount} paid)`);
-
-    // DEBUG: Log matching details for pending proposals
-    if (pendingCount > 0 && userPubkey) {
-      const pendingOnes = filteredProposals.filter((p: any) => !p.isPaid);
-      for (const p of pendingOnes.slice(0, 3)) {
-        console.log(`🔍 PENDING proposal d=${p.d}, eventId=${p.eventId?.slice(0,16)}..., service=${p.service}`);
-        console.log(`   matchByDTag=${paidByDTag.has(p.d)}, matchByEventId=${paidByEventId.has(p.eventId)}`);
-      }
-      // Log sample confirmation tags
-      const sampleConfirmations = confirmationEvents.slice(0, 3);
-      for (const c of sampleConfirmations) {
-        const proposalTag = c.tags.find((t: string[]) => t[0] === 'proposal')?.[1] || 'NONE';
-        const eTag = c.tags.find((t: string[]) => t[0] === 'e')?.[1] || 'NONE';
-        const eTagMarker = c.tags.find((t: string[]) => t[0] === 'e')?.[3] || 'NONE';
-        console.log(`   CONFIRM sample: proposal_tag=${proposalTag}, e_tag=${eTag?.slice(0,16)}..., e_marker=${eTagMarker}`);
-      }
-    }
 
     return res.json({ success: true, proposals: filteredProposals });
   } catch (error: any) {
