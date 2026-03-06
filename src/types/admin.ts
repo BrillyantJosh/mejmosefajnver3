@@ -3,6 +3,7 @@ export interface AppSettings {
   theme_colors: ThemeColors;
   default_rooms: string[];
   new_projects_100millionideas: boolean;
+  warning_before_split?: number; // Max LANA balance across Wallet + Main Wallet + Lana.Discount before SPLIT warning
 }
 
 export interface ThemeColors {

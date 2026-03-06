@@ -14,6 +14,7 @@ interface AdminContextType {
   updateThemeColors: (colors: ThemeColors) => Promise<void>;
   updateDefaultRooms: (rooms: string[]) => Promise<void>;
   updateNewProjects100M: (enabled: boolean) => Promise<void>;
+  updateWarningBeforeSplit: (amount: number | null) => Promise<void>;
   loadAppSettings: () => Promise<void>;
 }
 
@@ -51,6 +52,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         try { return JSON.parse(row.value); } catch { return row.value; }
       };
 
+      const rawSplitWarning = getValue('warning_before_split');
+      const warningBeforeSplit = typeof rawSplitWarning === 'number' && rawSplitWarning > 0
+        ? rawSplitWarning
+        : undefined;
+
       setAppSettings({
         app_name: (getValue('app_name') as string) || "Nostr App",
         theme_colors: (getValue('theme_colors') as ThemeColors) || {
@@ -65,6 +71,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         },
         default_rooms: (getValue('default_rooms') as string[]) || ["general"],
         new_projects_100millionideas: getValue('100millionideas_new_projects_enabled') !== false,
+        warning_before_split: warningBeforeSplit,
       });
     } catch (error) {
       console.error('Error loading app settings:', error);
@@ -181,6 +188,39 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateWarningBeforeSplit = async (amount: number | null) => {
+    if (!session?.nostrHexId) {
+      toast({
+        title: "Error",
+        description: "Not authenticated",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Store 0 to effectively disable, or the actual number
+      await invokeSettingsUpdate('warning_before_split', amount ?? 0);
+      setAppSettings(prev => prev ? {
+        ...prev,
+        warning_before_split: (amount && amount > 0) ? amount : undefined
+      } : null);
+      toast({
+        title: "Success",
+        description: amount && amount > 0
+          ? `Warning before SPLIT set to ${amount} LANA`
+          : "Warning before SPLIT cleared"
+      });
+    } catch (error) {
+      console.error('Error updating warning before split:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update setting",
+        variant: "destructive"
+      });
+    }
+  };
+
   useEffect(() => {
     // Don't run admin check until auth has finished loading
     if (authLoading) return;
@@ -215,6 +255,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         updateThemeColors,
         updateDefaultRooms,
         updateNewProjects100M,
+        updateWarningBeforeSplit,
         loadAppSettings,
       }}
     >
