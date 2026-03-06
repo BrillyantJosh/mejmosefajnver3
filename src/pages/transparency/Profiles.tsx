@@ -5,13 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { Search, Calendar, Wallet } from "lucide-react";
+import { Search, Calendar, Wallet, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { sl } from "date-fns/locale";
 
 export default function Profiles() {
   const navigate = useNavigate();
-  const { profiles, isLoading } = useNostrKind0Profiles();
+  const { profiles, isLoading, isRefreshing, lastRefreshed, triggerFullRefresh } = useNostrKind0Profiles();
   const [searchQuery, setSearchQuery] = useState("");
   const [walletOnly, setWalletOnly] = useState(true);
 
@@ -37,8 +37,27 @@ export default function Profiles() {
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
-      <h1 className="text-3xl font-bold mb-6">Profiles</h1>
-      
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold">Profiles</h1>
+        <div className="flex items-center gap-2">
+          {lastRefreshed && (
+            <span className="text-xs text-muted-foreground">
+              {format(lastRefreshed, "HH:mm:ss")}
+            </span>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={triggerFullRefresh}
+            disabled={isRefreshing}
+            className="gap-1"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Syncing...' : 'Sync Relays'}
+          </Button>
+        </div>
+      </div>
+
       <div className="mb-6 relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -90,7 +109,7 @@ export default function Profiles() {
                     name={profile.display_name || profile.name || 'Anonymous'}
                     className="h-16 w-16 flex-shrink-0"
                   />
-                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold text-lg truncate">
@@ -100,19 +119,19 @@ export default function Profiles() {
                         <span className="text-sm text-muted-foreground">@{profile.name}</span>
                       )}
                     </div>
-                    
+
                     {profile.location && (
                       <p className="text-sm text-muted-foreground mb-2">
                         📍 {profile.location}
                       </p>
                     )}
-                    
+
                     {profile.about && (
                       <p className="text-sm line-clamp-2 mb-2">
                         {profile.about}
                       </p>
                     )}
-                    
+
                     <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
                       {profile.country && <span>Country: {profile.country}</span>}
                       {profile.currency && <span>Currency: {profile.currency}</span>}
@@ -124,7 +143,7 @@ export default function Profiles() {
                         </span>
                       )}
                     </div>
-                    
+
                     {profile.pubkey && (
                       <p className="text-xs text-muted-foreground mt-2 font-mono break-all">
                         Nostr ID: {profile.pubkey}

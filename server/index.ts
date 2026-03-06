@@ -134,18 +134,32 @@ async function syncKind38888ToDb(): Promise<boolean> {
 setSSEHandlers(emitAiTaskUpdate, isUserConnectedToAiTasks);
 
 let heartbeatCount = 0;
+
+/** Wraps an async operation with a timeout to prevent it from blocking the heartbeat forever */
+function withTimeout<T>(fn: () => Promise<T>, label: string, ms: number): Promise<T | undefined> {
+  return Promise.race([
+    fn(),
+    new Promise<undefined>((resolve) =>
+      setTimeout(() => {
+        console.warn(`⏰ ${label} timed out after ${ms / 1000}s — skipping this cycle`);
+        resolve(undefined);
+      }, ms)
+    ),
+  ]);
+}
+
 const heartbeatTimer = setInterval(async () => {
   heartbeatCount++;
 
   // KIND 38888 sync every 60 heartbeats (= every hour)
   if (heartbeatCount % 60 === 0) {
     console.log(`💓 Heartbeat #${heartbeatCount} — syncing KIND 38888...`);
-    await syncKind38888ToDb();
+    await withTimeout(() => syncKind38888ToDb(), 'KIND 38888 sync', 45000);
   }
 
   // Process pending AI tasks every heartbeat (every minute)
   try {
-    await processPendingTasks(db);
+    await withTimeout(() => processPendingTasks(db), 'AI tasks', 30000);
   } catch (err) {
     console.error('❌ Error processing pending AI tasks:', err);
   }
@@ -153,7 +167,7 @@ const heartbeatTimer = setInterval(async () => {
   // Retry pending Nostr events every 5 heartbeats (= every 5 minutes)
   if (heartbeatCount % 5 === 0) {
     try {
-      await retryPendingNostrEvents(db);
+      await withTimeout(() => retryPendingNostrEvents(db), 'retryPendingNostrEvents', 30000);
     } catch (err) {
       console.error('❌ Error retrying pending Nostr events:', err);
     }
@@ -162,7 +176,7 @@ const heartbeatTimer = setInterval(async () => {
   // Refresh stale profiles every 5 heartbeats (= every 5 minutes)
   if (heartbeatCount % 5 === 0) {
     try {
-      await refreshStaleProfiles(db);
+      await withTimeout(() => refreshStaleProfiles(db), 'refreshStaleProfiles', 45000);
     } catch (err) {
       console.error('❌ Error refreshing stale profiles:', err);
     }
@@ -171,7 +185,7 @@ const heartbeatTimer = setInterval(async () => {
   // Discover new profiles from relays every 5 heartbeats (= every 5 minutes)
   if (heartbeatCount % 5 === 0) {
     try {
-      await discoverNewProfiles(db);
+      await withTimeout(() => discoverNewProfiles(db), 'discoverNewProfiles', 45000);
     } catch (err) {
       console.error('❌ Error discovering new profiles:', err);
     }
@@ -180,7 +194,7 @@ const heartbeatTimer = setInterval(async () => {
   // Sync unregistered LANA (KIND 87003/87009) every 10 heartbeats (= every 10 minutes)
   if (heartbeatCount % 10 === 0) {
     try {
-      await syncUnregisteredLana(db);
+      await withTimeout(() => syncUnregisteredLana(db), 'syncUnregisteredLana', 30000);
     } catch (err) {
       console.error('❌ Error syncing unregistered LANA:', err);
     }
