@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,8 +40,12 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
   const projectRelays = systemParameters?.relays || [];
   const relays = [...projectRelays, ...EXTERNAL_RELAYS.filter(r => !projectRelays.includes(r))];
 
-  // Default room from app_settings
-  const defaultRoom = appSettings?.default_rooms?.[0] || '';
+  // Detect room from current URL (e.g., /social/feed/general → "general")
+  const location = useLocation();
+  const urlRoomSlug = location.pathname.match(/\/social\/feed\/(.+)/)?.[1] || '';
+
+  // Use URL room slug first, then fall back to app_settings default
+  const defaultRoom = urlRoomSlug || appSettings?.default_rooms?.[0] || '';
 
   // Handle paste to allow only specific HTML tags (bold, etc.)
   const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -316,9 +321,9 @@ export function CreatePost({ onPostCreated }: CreatePostProps) {
 
       const tags: string[][] = [];
 
-      // Add default room tag
+      // Add room hashtag tag (so room feeds can find this post via #t filter)
       if (defaultRoom) {
-        tags.push(["a", defaultRoom]);
+        tags.push(["t", defaultRoom]);
       }
 
       // Add LANA hashtag tag (NIP-12)
