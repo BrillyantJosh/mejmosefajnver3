@@ -288,7 +288,7 @@ export function initializeSchema(db: Database.Database): void {
       tx_id TEXT NOT NULL,
       amount_lana REAL NOT NULL,
       amount_eur REAL NOT NULL DEFAULT 0,
-      wallet_type TEXT NOT NULL DEFAULT 'registered' CHECK (wallet_type IN ('registered','unregistered')),
+      wallet_type TEXT NOT NULL DEFAULT 'registered' CHECK (wallet_type IN ('registered','unregistered','card','bank_transfer')),
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -383,6 +383,44 @@ export function initializeSchema(db: Database.Database): void {
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch (_) { /* column already exists */ }
+  }
+
+  // Migration: expand event_tickets wallet_type CHECK constraint to allow 'card' and 'bank_transfer'
+  // SQLite cannot ALTER CHECK constraints, so we must recreate the table
+  try {
+    // Check if the migration is needed by trying a dummy insert with 'card' type
+    const testStmt = db.prepare(`INSERT INTO event_tickets (event_dtag, nostr_hex_id, wallet_address, tx_id, amount_lana, amount_eur, wallet_type)
+      VALUES ('__test__', '__test__', '', '__test__', 0, 0, 'card')`);
+    try {
+      testStmt.run();
+      // If it succeeds, the constraint already allows 'card' — clean up test row
+      db.prepare(`DELETE FROM event_tickets WHERE event_dtag = '__test__'`).run();
+    } catch (_checkErr) {
+      // CHECK constraint violation — need to recreate the table
+      console.log('🔄 Migrating event_tickets: expanding wallet_type CHECK constraint...');
+      db.exec(`
+        CREATE TABLE event_tickets_new (
+          id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+          event_dtag TEXT NOT NULL,
+          nostr_hex_id TEXT NOT NULL,
+          wallet_address TEXT NOT NULL,
+          tx_id TEXT NOT NULL,
+          amount_lana REAL NOT NULL,
+          amount_eur REAL NOT NULL DEFAULT 0,
+          wallet_type TEXT NOT NULL DEFAULT 'registered' CHECK (wallet_type IN ('registered','unregistered','card','bank_transfer')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO event_tickets_new SELECT * FROM event_tickets;
+        DROP TABLE event_tickets;
+        ALTER TABLE event_tickets_new RENAME TO event_tickets;
+        CREATE INDEX IF NOT EXISTS idx_event_tickets_event ON event_tickets(event_dtag);
+        CREATE INDEX IF NOT EXISTS idx_event_tickets_nostr ON event_tickets(nostr_hex_id);
+        CREATE INDEX IF NOT EXISTS idx_event_tickets_txid ON event_tickets(tx_id);
+      `);
+      console.log('✅ event_tickets migration complete');
+    }
+  } catch (migErr) {
+    console.error('⚠️ event_tickets migration error:', migErr);
   }
 
   console.log('SQLite schema initialized (26 tables + indexes)');
