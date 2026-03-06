@@ -581,6 +581,133 @@ export async function refreshStaleProfiles(db: any): Promise<void> {
 }
 
 /**
+ * Discover NEW profiles from Nostr relays that aren't yet in the database.
+ * Fetches KIND 0 events created since the last sync and upserts them.
+ * Called periodically by the server heartbeat.
+ */
+export async function discoverNewProfiles(db: any): Promise<void> {
+  // 1. Get relays from kind_38888
+  const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+  let relays: string[] = [];
+  if (row?.relays) {
+    try {
+      const parsed = JSON.parse(row.relays);
+      if (Array.isArray(parsed) && parsed.length > 0) relays = parsed;
+    } catch {}
+  }
+  if (relays.length === 0) {
+    console.log('⚠️ discoverNewProfiles: No relays available, skipping');
+    return;
+  }
+
+  // 2. Get the latest Nostr event created_at from raw_metadata to use as "since"
+  //    This way we only fetch events newer than what we already have
+  const latestRow = db.prepare(
+    `SELECT json_extract(raw_metadata, '$.created_at') as max_created_at
+     FROM nostr_profiles
+     WHERE raw_metadata IS NOT NULL
+     ORDER BY json_extract(raw_metadata, '$.created_at') DESC
+     LIMIT 1`
+  ).get() as any;
+
+  // Default: fetch profiles from the last 24 hours if no data exists
+  let sinceTimestamp = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+  if (latestRow?.max_created_at && typeof latestRow.max_created_at === 'number') {
+    // Fetch from 1 hour before the latest event to catch any we missed
+    sinceTimestamp = latestRow.max_created_at - 3600;
+  }
+
+  console.log(`🔍 discoverNewProfiles: Fetching KIND 0 from ${relays.length} relays since ${new Date(sinceTimestamp * 1000).toISOString()}...`);
+
+  // 3. Fetch KIND 0 events from relays with "since" filter
+  let events: NostrEvent[];
+  try {
+    events = await queryEventsFromRelays(relays, {
+      kinds: [0],
+      since: sinceTimestamp,
+    }, 20000);
+  } catch (error) {
+    console.error('❌ discoverNewProfiles: Relay fetch failed:', error);
+    return;
+  }
+
+  if (events.length === 0) {
+    console.log('✅ discoverNewProfiles: No new profiles found');
+    return;
+  }
+
+  console.log(`📥 discoverNewProfiles: Fetched ${events.length} KIND 0 events`);
+
+  // 4. Deduplicate - keep newest per pubkey
+  const latestEvents = new Map<string, NostrEvent>();
+  for (const event of events) {
+    const existing = latestEvents.get(event.pubkey);
+    if (!existing || event.created_at > existing.created_at) {
+      latestEvents.set(event.pubkey, event);
+    }
+  }
+
+  // 5. Upsert to database
+  const upsertStmt = db.prepare(`
+    INSERT INTO nostr_profiles (nostr_hex_id, full_name, display_name, picture, about, lana_wallet_id, raw_metadata, last_fetched_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    ON CONFLICT(nostr_hex_id) DO UPDATE SET
+      full_name = excluded.full_name,
+      display_name = excluded.display_name,
+      picture = excluded.picture,
+      about = excluded.about,
+      lana_wallet_id = excluded.lana_wallet_id,
+      raw_metadata = excluded.raw_metadata,
+      last_fetched_at = datetime('now'),
+      updated_at = datetime('now')
+  `);
+
+  let newCount = 0;
+  let updateCount = 0;
+  let errorCount = 0;
+  for (const [pubkey, event] of latestEvents) {
+    try {
+      const content = JSON.parse(event.content);
+
+      // Check if this profile already exists
+      const existing = db.prepare('SELECT nostr_hex_id FROM nostr_profiles WHERE nostr_hex_id = ?').get(pubkey);
+
+      const langTag = event.tags?.find((t: string[]) => t[0] === 'lang')?.[1];
+      const interests = event.tags?.filter((t: string[]) => t[0] === 't').map((t: string[]) => t[1]) || [];
+      const intimateInterests = event.tags?.filter((t: string[]) => t[0] === 'o').map((t: string[]) => t[1]) || [];
+
+      const rawMetadata = {
+        ...content,
+        created_at: event.created_at,
+        ...(langTag ? { lang: langTag } : {}),
+        ...(interests.length > 0 ? { interests } : {}),
+        ...(intimateInterests.length > 0 ? { intimateInterests } : {}),
+      };
+
+      upsertStmt.run(
+        pubkey,
+        content.name || null,
+        content.display_name || null,
+        content.picture || null,
+        content.about || null,
+        content.lanaWalletID || null,
+        JSON.stringify(rawMetadata)
+      );
+
+      if (existing) {
+        updateCount++;
+      } else {
+        newCount++;
+      }
+    } catch (error) {
+      errorCount++;
+    }
+  }
+
+  console.log(`✅ discoverNewProfiles: ${newCount} new, ${updateCount} updated, ${errorCount} errors (from ${latestEvents.size} unique profiles)`);
+}
+
+/**
  * Get the authorized pubkey for KIND 38888
  */
 export function getAuthorizedPubkey(): string {
