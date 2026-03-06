@@ -14,6 +14,9 @@ import lana8wonderBg from "@/assets/lana8wonder-bg.png";
 import knightsBg from "@/assets/knights-bg.png";
 import { UnregisteredLanaAlert } from "@/components/wallet/UnregisteredLanaAlert";
 import { useUnregisteredLana } from "@/hooks/useUnregisteredLana";
+import { useWarningBeforeSplit } from "@/hooks/useWarningBeforeSplit";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 interface WalletWithBalance {
   walletId: string;
@@ -33,6 +36,7 @@ export default function Wallet() {
   const { parameters, refetch: refetchParameters } = useSystemParameters();
   const { profile } = useNostrProfile();
   const { records: unregRecords, count: unregCount } = useUnregisteredLana();
+  const splitWarning = useWarningBeforeSplit();
   const [walletsWithBalances, setWalletsWithBalances] = useState<WalletWithBalance[]>([]);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [selectedWalletForQr, setSelectedWalletForQr] = useState<string>("");
@@ -129,6 +133,22 @@ export default function Wallet() {
       {/* Unregistered LANA Warning */}
       {unregCount > 0 && (
         <UnregisteredLanaAlert records={unregRecords} count={unregCount} />
+      )}
+
+      {/* Warning Before SPLIT */}
+      {splitWarning.exceeded && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Maximum Wallet Balance Exceeded</AlertTitle>
+          <AlertDescription>
+            Your combined balance across Wallet, Main Wallet, and Lana.Discount wallets is{' '}
+            <strong>{splitWarning.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LANA</strong>,
+            which exceeds the maximum allowed balance of{' '}
+            <strong>{splitWarning.limit.toLocaleString()} LANA</strong>.
+            You must reduce your balance before the next SPLIT to avoid your account being frozen.
+            Transfer or spend your LANA to bring your balance below the limit.
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Total Balance Summary */}

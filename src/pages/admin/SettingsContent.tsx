@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { ThemeColors } from "@/types/admin";
-import { Settings, Users, Loader2, Lightbulb } from "lucide-react";
+import { Settings, Users, Loader2, Lightbulb, AlertTriangle } from "lucide-react";
 import { useNostrRooms } from "@/hooks/useNostrRooms";
 
 export default function SettingsContent() {
-  const { appSettings, updateAppName, updateThemeColors, updateDefaultRooms, updateNewProjects100M } = useAdmin();
+  const { appSettings, updateAppName, updateThemeColors, updateDefaultRooms, updateNewProjects100M, updateWarningBeforeSplit } = useAdmin();
   const { rooms, loading: roomsLoading } = useNostrRooms();
   
   const [localName, setLocalName] = useState(appSettings?.app_name || "");
@@ -30,12 +30,16 @@ export default function SettingsContent() {
   const [localDefaultRooms, setLocalDefaultRooms] = useState<string[]>(
     appSettings?.default_rooms || ["general"]
   );
+  const [localWarningBeforeSplit, setLocalWarningBeforeSplit] = useState<string>(
+    appSettings?.warning_before_split?.toString() || ""
+  );
 
   useEffect(() => {
     if (appSettings) {
       setLocalName(appSettings.app_name);
       setLocalColors(appSettings.theme_colors);
       setLocalDefaultRooms(appSettings.default_rooms);
+      setLocalWarningBeforeSplit(appSettings.warning_before_split?.toString() || "");
     }
   }, [appSettings]);
 
@@ -49,6 +53,16 @@ export default function SettingsContent() {
 
   const handleSaveDefaultRooms = async () => {
     await updateDefaultRooms(localDefaultRooms);
+  };
+
+  const handleSaveWarningBeforeSplit = async () => {
+    const val = parseFloat(localWarningBeforeSplit);
+    await updateWarningBeforeSplit(isNaN(val) || val <= 0 ? null : val);
+  };
+
+  const handleClearWarningBeforeSplit = async () => {
+    setLocalWarningBeforeSplit("");
+    await updateWarningBeforeSplit(null);
   };
 
   const handleColorChange = (key: keyof ThemeColors, value: string) => {
@@ -179,6 +193,42 @@ export default function SettingsContent() {
               onCheckedChange={(checked) => updateNewProjects100M(checked)}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Warning Before SPLIT */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            Warning Before SPLIT
+          </CardTitle>
+          <CardDescription>
+            If set, users whose combined balance on Wallet + Main Wallet + Lana.Discount exceeds this amount will see a warning to reduce before SPLIT
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="warning-split">Max allowed LANA balance</Label>
+            <Input
+              id="warning-split"
+              type="number"
+              value={localWarningBeforeSplit}
+              onChange={(e) => setLocalWarningBeforeSplit(e.target.value)}
+              placeholder="e.g. 50000 (leave empty to disable)"
+              min="0"
+              step="1"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleSaveWarningBeforeSplit}>Save</Button>
+            <Button onClick={handleClearWarningBeforeSplit} variant="outline">Clear</Button>
+          </div>
+          {appSettings?.warning_before_split && (
+            <p className="text-sm text-muted-foreground">
+              Currently set to: <strong>{appSettings.warning_before_split.toLocaleString()} LANA</strong>
+            </p>
+          )}
         </CardContent>
       </Card>
 

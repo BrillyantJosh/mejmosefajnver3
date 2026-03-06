@@ -33,6 +33,7 @@ import { useUnregisteredLana } from "@/hooks/useUnregisteredLana";
 import { useLana8WonderCashOut } from "@/hooks/useLana8WonderCashOut";
 import { useAiAdvisorUnconditionalPayments } from "@/hooks/useAiAdvisorUnconditionalPayments";
 import { useNostrSellOffers } from "@/hooks/useNostrSellOffers";
+import { useWarningBeforeSplit } from "@/hooks/useWarningBeforeSplit";
 import InstallPromptBanner from "./InstallPromptBanner";
 import InstallAppDialog from "./InstallAppDialog";
 
@@ -63,6 +64,7 @@ export default function MainLayout() {
   const { pendingCount: cashOutCount } = useLana8WonderCashOut();
   const { unconditionalPayments } = useAiAdvisorUnconditionalPayments();
   const { offers: sellOffers } = useNostrSellOffers();
+  const splitWarning = useWarningBeforeSplit();
   const lastRefreshRef = useRef<number>(Date.now());
 
   const dynamicModules = getEnabledModules();
@@ -277,6 +279,16 @@ export default function MainLayout() {
               >
                 <span className="text-xs font-black text-red-500">SELL</span>
               </a>
+            )}
+
+            {splitWarning.exceeded && (
+              <Link
+                to="/wallet"
+                className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-colors animate-pulse"
+                title={`Your total wallet balance (${splitWarning.totalBalance.toFixed(0)} LANA) exceeds the maximum allowed (${splitWarning.limit.toLocaleString()} LANA) — reduce before SPLIT to avoid account freeze`}
+              >
+                <span className="text-xs font-black text-red-500">CLEAR</span>
+              </Link>
             )}
           </div>
 
