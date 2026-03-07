@@ -382,6 +382,112 @@ router.post('/discover-profiles', async (req: Request, res: Response) => {
   }
 });
 
+// last-lana-profiles — fetch last N Lana profiles (with wallet) DIRECTLY from relays
+router.post('/last-lana-profiles', async (req: Request, res: Response) => {
+  try {
+    const { limit = 30 } = req.body;
+    const relays = getRelaysFromDb();
+
+    if (relays.length === 0) {
+      return res.status(400).json({ error: 'No relays configured' });
+    }
+
+    // Skip damus.io — only Lana relays for wallet profiles
+    const lanaRelays = relays.filter((r: string) => !r.includes('damus.io'));
+
+    console.log(`🔍 Last ${limit} Lana profiles: querying ${lanaRelays.length} relays...`);
+
+    // Fetch KIND 0 events from all Lana relays (recent first, generous limit)
+    const events = await queryEventsFromRelays(lanaRelays, {
+      kinds: [0],
+      limit: 500,
+    }, 15000);
+
+    console.log(`📥 Last Lana profiles: received ${events.length} KIND 0 events`);
+
+    // Deduplicate — keep newest per pubkey
+    const latestByPubkey = new Map<string, typeof events[0]>();
+    for (const event of events) {
+      const existing = latestByPubkey.get(event.pubkey);
+      if (!existing || event.created_at > existing.created_at) {
+        latestByPubkey.set(event.pubkey, event);
+      }
+    }
+
+    // Filter to profiles with lanaWalletID, parse and sort by created_at DESC
+    const walletProfiles: any[] = [];
+    for (const [pubkey, event] of latestByPubkey) {
+      try {
+        const content = JSON.parse(event.content);
+        if (content.lanaWalletID) {
+          walletProfiles.push({
+            pubkey,
+            name: content.name || null,
+            display_name: content.display_name || null,
+            about: content.about || null,
+            picture: content.picture || null,
+            location: content.location || null,
+            country: content.country || null,
+            currency: content.currency || null,
+            lanaWalletID: content.lanaWalletID,
+            created_at: event.created_at,
+          });
+        }
+      } catch {}
+    }
+
+    // Sort by created_at descending (newest first)
+    walletProfiles.sort((a, b) => b.created_at - a.created_at);
+
+    // Also upsert these into DB so they're always fresh
+    const db = getDb();
+    const upsertStmt = db.prepare(`
+      INSERT INTO nostr_profiles (nostr_hex_id, full_name, display_name, picture, about, lana_wallet_id, raw_metadata, last_fetched_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ON CONFLICT(nostr_hex_id) DO UPDATE SET
+        full_name = excluded.full_name,
+        display_name = excluded.display_name,
+        picture = excluded.picture,
+        about = excluded.about,
+        lana_wallet_id = excluded.lana_wallet_id,
+        raw_metadata = excluded.raw_metadata,
+        last_fetched_at = datetime('now'),
+        updated_at = datetime('now')
+    `);
+
+    for (const [pubkey, event] of latestByPubkey) {
+      try {
+        const content = JSON.parse(event.content);
+        if (content.lanaWalletID) {
+          const langTag = event.tags?.find((t: string[]) => t[0] === 'lang')?.[1];
+          const interests = event.tags?.filter((t: string[]) => t[0] === 't').map((t: string[]) => t[1]) || [];
+          const intimateInterests = event.tags?.filter((t: string[]) => t[0] === 'o').map((t: string[]) => t[1]) || [];
+          const rawMetadata = {
+            ...content,
+            created_at: event.created_at,
+            ...(langTag ? { lang: langTag } : {}),
+            ...(interests.length > 0 ? { interests } : {}),
+            ...(intimateInterests.length > 0 ? { intimateInterests } : {}),
+          };
+          upsertStmt.run(pubkey, content.name || null, content.display_name || null, content.picture || null, content.about || null, content.lanaWalletID, JSON.stringify(rawMetadata));
+        }
+      } catch {}
+    }
+
+    const result = walletProfiles.slice(0, limit);
+    console.log(`✅ Last Lana profiles: returning ${result.length} (from ${walletProfiles.length} with wallet)`);
+
+    return res.json({
+      success: true,
+      profiles: result,
+      totalWithWallet: walletProfiles.length,
+    });
+  } catch (error: any) {
+    console.error('❌ Error in last-lana-profiles:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // check-send-eligibility — checks if sender can send in current block
 router.post('/check-send-eligibility', async (req: Request, res: Response) => {
   try {

@@ -50,6 +50,7 @@ import TransparencyProfiles from "./pages/transparency/Profiles";
 import TransparencyProfileDetail from "./pages/transparency/ProfileDetail";
 import TransparencyWallets from "./pages/transparency/Wallets";
 import TransparencyUnregisteredWallets from "./pages/transparency/UnregisteredWallets";
+import TransparencyLast30 from "./pages/transparency/Last30";
 import UnconditionalPaymentLayout from "./pages/unconditional-payment/UnconditionalPaymentLayout";
 import UnconditionalPaymentPending from "./pages/unconditional-payment/Pending";
 import UnconditionalPaymentCompleted from "./pages/unconditional-payment/Completed";
@@ -218,7 +219,8 @@ const App = () => (
                   </Route>
                   <Route path="/lanapays/unit/:unitId" element={<BusinessUnitDetail />} />
                   <Route path="/transparency" element={<LanaTransparencyLayout />}>
-                    <Route index element={<TransparencyProfiles />} />
+                    <Route index element={<TransparencyLast30 />} />
+                    <Route path="last-30" element={<TransparencyLast30 />} />
                     <Route path="profiles" element={<TransparencyProfiles />} />
                     <Route path="profiles/:pubkey" element={<TransparencyProfileDetail />} />
                     <Route path="wallets" element={<TransparencyWallets />} />
