@@ -343,6 +343,19 @@ export interface WalletData {
   createdAt?: number;
   registrarPubkey?: string;
   status?: string;
+  freezeStatus?: string;  // per-wallet freeze: '' | 'frozen_l8w' | 'frozen_max_cap' | 'frozen_too_wild'
+}
+
+/**
+ * Get human-readable freeze reason from freeze_status code
+ */
+export function getFreezeReason(freezeStatus: string): string {
+  switch (freezeStatus) {
+    case 'frozen_l8w': return 'Late wallet registration';
+    case 'frozen_max_cap': return 'Maximum balance cap exceeded';
+    case 'frozen_too_wild': return 'Irregular or suspicious activity';
+    default: return 'Account frozen';
+  }
 }
 
 export async function fetchUserWallets(
@@ -353,36 +366,65 @@ export async function fetchUserWallets(
   console.log(`🔄 Fetching wallets (KIND 30889) for pubkey: ${pubkey}`);
   console.log(`📡 Using ${relays.length} relays, ${trustedSigners.length} trusted signers`);
 
-  const events = await queryEventsFromRelays(relays, {
-    kinds: [30889],
-    '#d': [pubkey],
-  });
+  // Query by both #d (pubkey or wallet-list-pubkey) and #p tag for robust matching
+  // Different registrars use different d-tag formats
+  const [eventsByD, eventsByWalletD, eventsByP] = await Promise.all([
+    queryEventsFromRelays(relays, { kinds: [30889], '#d': [pubkey] }),
+    queryEventsFromRelays(relays, { kinds: [30889], '#d': [`wallet-list-${pubkey}`] }),
+    queryEventsFromRelays(relays, { kinds: [30889], '#p': [pubkey] }),
+  ]);
 
-  console.log(`📥 Received ${events.length} KIND 30889 events`);
+  // Merge and deduplicate by event id
+  const eventMap = new Map<string, any>();
+  [...eventsByD, ...eventsByWalletD, ...eventsByP].forEach(e => eventMap.set(e.id, e));
+  const events = Array.from(eventMap.values());
+
+  console.log(`📥 Received ${events.length} KIND 30889 events (d:${eventsByD.length}, wallet-d:${eventsByWalletD.length}, p:${eventsByP.length})`);
 
   // Filter by trusted signers if configured
   const filteredEvents = trustedSigners.length === 0
     ? events
     : events.filter(event => trustedSigners.includes(event.pubkey));
 
-  console.log(`✅ ${filteredEvents.length} events after trusted signer filter`);
+  // Only keep events that have w tags (wallet-list events, not individual wallet registrations)
+  const walletListEvents = filteredEvents.filter(event =>
+    event.tags.some((t: string[]) => t[0] === 'w')
+  );
+
+  console.log(`✅ ${walletListEvents.length} wallet-list events after filter (${filteredEvents.length} total trusted)`);
 
   const allWallets: WalletData[] = [];
 
-  for (const event of filteredEvents) {
-    const statusTag = event.tags.find(t => t[0] === 'status');
+  for (const event of walletListEvents) {
+    const statusTag = event.tags.find((t: string[]) => t[0] === 'status');
     const status = statusTag?.[1] || 'active';
+    const isAccountFrozen = status === 'frozen';
 
-    const walletTags = event.tags.filter(t => t[0] === 'w');
+    const walletTags = event.tags.filter((t: string[]) => t[0] === 'w');
 
     for (const tag of walletTags) {
       if (tag.length >= 6) {
+        // 7th field (index 6) is optional freeze_status
+        const perWalletFreeze = tag.length >= 7 ? (tag[6] || '') : '';
+
+        // Determine effective freeze status:
+        // If account-level status=frozen → all wallets frozen
+        // If per-wallet freeze code is set → that wallet is frozen
+        // Any unrecognized non-empty freeze code → treat as frozen (fail-safe)
+        let freezeStatus = '';
+        if (isAccountFrozen) {
+          freezeStatus = perWalletFreeze || 'frozen';
+        } else if (perWalletFreeze) {
+          freezeStatus = perWalletFreeze;
+        }
+
         allWallets.push({
           walletId: tag[1],
           walletType: tag[2],
           note: tag[4] || '',
           amountUnregistered: tag[5],
           status,
+          freezeStatus,
           registrarPubkey: event.pubkey,
           eventId: event.id,
           createdAt: event.created_at,

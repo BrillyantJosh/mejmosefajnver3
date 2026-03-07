@@ -4,10 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, ArrowRight, Wallet, Trash2, AlertTriangle, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Wallet, Trash2, AlertTriangle, Loader2, Snowflake, ShieldAlert } from "lucide-react";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
+import { useNostrWallets } from "@/hooks/useNostrWallets";
 import {
   Select,
   SelectContent,
@@ -16,14 +17,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/** Get human-readable freeze reason */
+function getFreezeReasonLabel(freezeStatus: string): string {
+  switch (freezeStatus) {
+    case 'frozen_l8w': return 'Late wallet registration';
+    case 'frozen_max_cap': return 'Maximum balance cap exceeded';
+    case 'frozen_too_wild': return 'Irregular or suspicious activity';
+    case 'frozen': return 'All accounts frozen by registrar';
+    default: return 'Account frozen';
+  }
+}
+
 export default function SendLana() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { parameters } = useSystemParameters();
+  const { wallets: userWallets } = useNostrWallets();
 
   const walletId = searchParams.get("walletId") || "";
   const walletBalance = parseFloat(searchParams.get("balance") || "0");
   const manualOnly = searchParams.get("manualOnly") === "true";
+
+  // Check if this wallet is frozen
+  const walletData = userWallets.find(w => w.walletId === walletId);
+  const isFrozen = !!(walletData?.freezeStatus);
 
   // Send Amount state
   const [selectedCurrency, setSelectedCurrency] = useState<"EUR" | "USD" | "GBP" | "LANA" | "">("");
@@ -120,10 +137,10 @@ export default function SendLana() {
       </Button>
 
       {/* Wallet Info */}
-      <Card className="mb-6">
+      <Card className={`mb-6 ${isFrozen ? 'border-blue-500/50 bg-blue-500/5' : ''}`}>
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
-            <Wallet className="h-4 w-4 text-muted-foreground" />
+            {isFrozen ? <Snowflake className="h-4 w-4 text-blue-500" /> : <Wallet className="h-4 w-4 text-muted-foreground" />}
             <p className="text-sm text-muted-foreground">Sending from</p>
           </div>
           <p className="font-mono text-sm break-all">{walletId}</p>
@@ -138,6 +155,22 @@ export default function SendLana() {
           )}
         </CardContent>
       </Card>
+
+      {/* Frozen Wallet Block */}
+      {isFrozen && (
+        <Alert variant="destructive" className="mb-6 border-blue-500/50 bg-blue-500/10">
+          <ShieldAlert className="h-4 w-4 text-blue-500" />
+          <AlertTitle className="text-blue-700 dark:text-blue-400">Wallet Frozen — Sending Disabled</AlertTitle>
+          <AlertDescription className="text-blue-700/80 dark:text-blue-300/80">
+            This wallet has been frozen by the registrar.
+            <strong className="block mt-1">Reason: {getFreezeReasonLabel(walletData?.freezeStatus || 'frozen')}</strong>
+            <span className="block mt-1">
+              All outgoing transactions are disabled. You can still receive funds to this wallet.
+              Contact your registrar to resolve this issue.
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* UTXO Consolidation Warning */}
       {!utxoLoading && tooManyUtxos && !utxoWarningDismissed && (
@@ -176,7 +209,21 @@ export default function SendLana() {
         </Alert>
       )}
 
-      {utxoLoading ? (
+      {isFrozen ? (
+        <Card className="opacity-50">
+          <CardContent className="p-8 text-center">
+            <Snowflake className="h-12 w-12 mx-auto mb-4 text-blue-500" />
+            <p className="text-lg font-semibold text-blue-700 dark:text-blue-400">Sending is not available</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              This wallet is frozen. All outgoing transactions are disabled.
+            </p>
+            <Button variant="outline" className="mt-4" onClick={() => navigate("/wallet")}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Wallets
+            </Button>
+          </CardContent>
+        </Card>
+      ) : utxoLoading ? (
         <Card>
           <CardContent className="p-8 flex items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

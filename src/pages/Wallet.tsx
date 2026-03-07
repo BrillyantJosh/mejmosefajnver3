@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wallet as WalletIcon, CreditCard, FileText, ExternalLink, TrendingUp, Copy, QrCode } from "lucide-react";
+import { Wallet as WalletIcon, CreditCard, FileText, ExternalLink, TrendingUp, Copy, QrCode, Snowflake, ShieldAlert } from "lucide-react";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,17 @@ import { useWarningBeforeSplit } from "@/hooks/useWarningBeforeSplit";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
 
+/** Get human-readable freeze reason */
+function getFreezeReasonLabel(freezeStatus: string): string {
+  switch (freezeStatus) {
+    case 'frozen_l8w': return 'Late wallet registration';
+    case 'frozen_max_cap': return 'Maximum balance cap exceeded';
+    case 'frozen_too_wild': return 'Irregular or suspicious activity';
+    case 'frozen': return 'All accounts frozen by registrar';
+    default: return 'Account frozen';
+  }
+}
+
 interface WalletWithBalance {
   walletId: string;
   walletType: string;
@@ -27,6 +38,7 @@ interface WalletWithBalance {
   createdAt?: number;
   registrarPubkey?: string;
   status?: string;
+  freezeStatus?: string;
   balance?: number;
   balanceLoading?: boolean;
 }
@@ -135,6 +147,45 @@ export default function Wallet() {
         <UnregisteredLanaAlert records={unregRecords} count={unregCount} />
       )}
 
+      {/* Frozen Account Warning */}
+      {(() => {
+        const frozenWallets = wallets.filter(w => w.freezeStatus);
+        const allFrozen = wallets.length > 0 && frozenWallets.length === wallets.length;
+        const someFrozen = frozenWallets.length > 0 && !allFrozen;
+
+        if (allFrozen) {
+          const reason = frozenWallets[0]?.freezeStatus || 'frozen';
+          return (
+            <Alert variant="destructive" className="mb-6 border-blue-500/50 bg-blue-500/10">
+              <Snowflake className="h-4 w-4 text-blue-500" />
+              <AlertTitle className="text-blue-700 dark:text-blue-400">All Accounts Frozen</AlertTitle>
+              <AlertDescription className="text-blue-700/80 dark:text-blue-300/80">
+                All your wallets have been frozen by the registrar.
+                <strong className="block mt-1">Reason: {getFreezeReasonLabel(reason)}</strong>
+                <span className="block mt-1">
+                  You can still receive funds, but all outgoing transactions are disabled.
+                  Contact your registrar to resolve this issue.
+                </span>
+              </AlertDescription>
+            </Alert>
+          );
+        }
+        if (someFrozen) {
+          return (
+            <Alert variant="destructive" className="mb-6 border-blue-500/50 bg-blue-500/10">
+              <Snowflake className="h-4 w-4 text-blue-500" />
+              <AlertTitle className="text-blue-700 dark:text-blue-400">Some Wallets Frozen</AlertTitle>
+              <AlertDescription className="text-blue-700/80 dark:text-blue-300/80">
+                {frozenWallets.length} of your {wallets.length} wallets {frozenWallets.length === 1 ? 'has' : 'have'} been frozen.
+                Frozen wallets can still receive funds, but outgoing transactions are disabled.
+                See each wallet card below for details.
+              </AlertDescription>
+            </Alert>
+          );
+        }
+        return null;
+      })()}
+
       {/* Warning Before SPLIT */}
       {splitWarning.exceeded && (
         <Alert variant="destructive" className="mb-6">
@@ -217,29 +268,45 @@ export default function Wallet() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {sortedWallets.map((wallet) => (
-            <Card 
-              key={wallet.eventId || wallet.walletId} 
+            <Card
+              key={wallet.eventId || wallet.walletId}
               className={`hover:shadow-lg transition-shadow relative overflow-hidden ${
-                wallet.walletType === "Main Wallet" ? "bg-green-500/10 border-green-500/30" : ""
+                wallet.freezeStatus
+                  ? "border-blue-500/50 bg-blue-500/5"
+                  : wallet.walletType === "Main Wallet" ? "bg-green-500/10 border-green-500/30" : ""
               }`}
-              style={wallet.walletType === "Lana8Wonder" ? {
+              style={!wallet.freezeStatus && wallet.walletType === "Lana8Wonder" ? {
                 backgroundImage: `url(${lana8wonderBg})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
-              } : wallet.walletType === "Knights" ? {
+              } : !wallet.freezeStatus && wallet.walletType === "Knights" ? {
                 backgroundImage: `url(${knightsBg})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
               } : undefined}
             >
-              {(wallet.walletType === "Lana8Wonder" || wallet.walletType === "Knights") && (
+              {!wallet.freezeStatus && (wallet.walletType === "Lana8Wonder" || wallet.walletType === "Knights") && (
                 <div className="absolute inset-0 bg-background/85" />
               )}
+
+              {/* Frozen overlay badge */}
+              {wallet.freezeStatus && (
+                <div className="absolute top-0 right-0 z-20 bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1">
+                  <Snowflake className="h-3 w-3" />
+                  FROZEN
+                </div>
+              )}
+
               <CardHeader className="relative z-10">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <WalletIcon className="h-5 w-5 text-primary" />
+                    <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      wallet.freezeStatus ? "bg-blue-500/20" : "bg-primary/10"
+                    }`}>
+                      {wallet.freezeStatus
+                        ? <Snowflake className="h-5 w-5 text-blue-500" />
+                        : <WalletIcon className="h-5 w-5 text-primary" />
+                      }
                     </div>
                     <div className="flex-1 min-w-0">
                       <CardTitle className="text-base font-semibold truncate" title={wallet.walletId}>
@@ -274,6 +341,21 @@ export default function Wallet() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3 relative z-10">
+                {/* Freeze reason banner on card */}
+                {wallet.freezeStatus && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 text-sm">
+                    <ShieldAlert className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-blue-700 dark:text-blue-400">
+                        {getFreezeReasonLabel(wallet.freezeStatus)}
+                      </p>
+                      <p className="text-blue-600/70 dark:text-blue-300/70 text-xs mt-0.5">
+                        Outgoing transactions disabled. Receiving is still allowed.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-2 p-3 rounded-lg bg-muted/50">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -285,7 +367,7 @@ export default function Wallet() {
                     ) : (
                       <div className="flex flex-col items-end">
                         {wallet.balance && wallet.balance > 0 && (
-                          <span className="text-2xl font-bold text-green-600">
+                          <span className={`text-2xl font-bold ${wallet.freezeStatus ? 'text-blue-600' : 'text-green-600'}`}>
                             {formatNumber(getFiatValue(wallet.balance).value)} {getFiatValue(wallet.balance).currency}
                           </span>
                         )}
@@ -302,7 +384,7 @@ export default function Wallet() {
                   <span className="text-muted-foreground">Type:</span>
                   <span className="font-medium">{wallet.walletType}</span>
                 </div>
-                
+
                 {wallet.note && (
                   <div className="flex items-start gap-2 text-sm">
                     <FileText className="h-4 w-4 text-muted-foreground mt-0.5" />
@@ -330,13 +412,25 @@ export default function Wallet() {
                   </a>
                 </Button>
 
-                {wallet.walletType !== "Lana8Wonder" && wallet.walletType !== "Knights" && (
+                {wallet.walletType !== "Lana8Wonder" && wallet.walletType !== "Knights" && !wallet.freezeStatus && (
                   <Button
                     size="sm"
                     className="w-full"
                     onClick={() => window.location.href = `/send-lana?walletId=${wallet.walletId}&balance=${wallet.balance || 0}`}
                   >
                     Send
+                  </Button>
+                )}
+
+                {wallet.freezeStatus && wallet.walletType !== "Lana8Wonder" && wallet.walletType !== "Knights" && (
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    variant="outline"
+                    disabled
+                  >
+                    <Snowflake className="h-4 w-4 mr-2" />
+                    Sending Disabled — Wallet Frozen
                   </Button>
                 )}
               </CardContent>
