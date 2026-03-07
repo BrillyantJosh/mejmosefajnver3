@@ -12,7 +12,7 @@ import { getDb } from '../db/connection';
 import { electrumCall, fetchBatchBalances } from '../lib/electrum';
 import { detectMissingFields, createPendingTask } from '../lib/aiTasks';
 import { sendLanaTransaction, sendBatchLanaTransaction } from '../lib/crypto';
-import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays } from '../lib/nostr';
+import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays, discoverNewProfiles } from '../lib/nostr';
 import { sendPushToUser } from '../lib/pushNotification';
 import multer from 'multer';
 
@@ -360,92 +360,21 @@ router.post('/list-profiles', async (req: Request, res: Response) => {
   }
 });
 
-// discover-profiles — fetch ALL KIND 0 profiles from relays (no time limit) and save to DB
+// discover-profiles — full paginated sweep of ALL KIND 0 profiles from relays
 router.post('/discover-profiles', async (req: Request, res: Response) => {
   try {
     const db = getDb();
-    const relays = getRelaysFromDb();
+    console.log(`🔍 Manual discover-profiles triggered (full paginated sweep)`);
+    await discoverNewProfiles(db);
 
-    if (relays.length === 0) {
-      return res.status(400).json({ error: 'No relays configured' });
-    }
-
-    console.log(`🔍 Discover profiles: fetching ALL KIND 0 from ${relays.length} relays (no time filter)`);
-
-    // Fetch ALL KIND 0 events — no since/until/limit filters
-    const events = await queryEventsFromRelays(relays, {
-      kinds: [0],
-    }, 30000);
-
-    console.log(`📥 Discover: received ${events.length} KIND 0 events from relays`);
-
-    // Deduplicate — keep newest per pubkey
-    const latestEvents = new Map<string, typeof events[0]>();
-    for (const event of events) {
-      const existing = latestEvents.get(event.pubkey);
-      if (!existing || event.created_at > existing.created_at) {
-        latestEvents.set(event.pubkey, event);
-      }
-    }
-
-    console.log(`🔄 Discover: ${latestEvents.size} unique profiles after dedup`);
-
-    // Upsert all into DB
-    let upserted = 0;
-    let errors = 0;
-
-    const upsertStmt = db.prepare(`
-      INSERT INTO nostr_profiles (nostr_hex_id, full_name, display_name, picture, about, lana_wallet_id, raw_metadata, last_fetched_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-      ON CONFLICT(nostr_hex_id) DO UPDATE SET
-        full_name = excluded.full_name,
-        display_name = excluded.display_name,
-        picture = excluded.picture,
-        about = excluded.about,
-        lana_wallet_id = excluded.lana_wallet_id,
-        raw_metadata = excluded.raw_metadata,
-        last_fetched_at = datetime('now'),
-        updated_at = datetime('now')
-    `);
-
-    for (const [pubkey, event] of latestEvents) {
-      try {
-        const content = JSON.parse(event.content);
-        const langTag = event.tags?.find((t: string[]) => t[0] === 'lang')?.[1];
-        const interests = event.tags?.filter((t: string[]) => t[0] === 't').map((t: string[]) => t[1]) || [];
-        const intimateInterests = event.tags?.filter((t: string[]) => t[0] === 'o').map((t: string[]) => t[1]) || [];
-
-        const rawMetadata = {
-          ...content,
-          created_at: event.created_at,
-          ...(langTag ? { lang: langTag } : {}),
-          ...(interests.length > 0 ? { interests } : {}),
-          ...(intimateInterests.length > 0 ? { intimateInterests } : {}),
-        };
-
-        upsertStmt.run(
-          pubkey,
-          content.name || null,
-          content.display_name || null,
-          content.picture || null,
-          content.about || null,
-          content.lanaWalletID || null,
-          JSON.stringify(rawMetadata)
-        );
-        upserted++;
-      } catch {
-        errors++;
-      }
-    }
-
-    console.log(`✅ Discover done: ${upserted} upserted, ${errors} errors`);
+    // Return current DB stats
+    const total = (db.prepare('SELECT COUNT(*) as cnt FROM nostr_profiles').get() as any).cnt;
+    const withWallet = (db.prepare("SELECT COUNT(*) as cnt FROM nostr_profiles WHERE lana_wallet_id IS NOT NULL AND lana_wallet_id != ''").get() as any).cnt;
 
     return res.json({
       success: true,
-      fetched: events.length,
-      unique: latestEvents.size,
-      upserted,
-      errors,
+      totalProfiles: total,
+      withWallet,
     });
   } catch (error: any) {
     console.error('❌ Error in discover-profiles:', error);

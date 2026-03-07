@@ -173,8 +173,8 @@ const heartbeatTimer = setInterval(async () => {
     }
   }
 
-  // Refresh stale profiles every 5 heartbeats (= every 5 minutes)
-  if (heartbeatCount % 5 === 0) {
+  // Refresh stale profiles every 10 heartbeats (= every 10 minutes)
+  if (heartbeatCount % 10 === 0) {
     try {
       await withTimeout(() => refreshStaleProfiles(db), 'refreshStaleProfiles', 45000);
     } catch (err) {
@@ -182,10 +182,11 @@ const heartbeatTimer = setInterval(async () => {
     }
   }
 
-  // Discover new profiles from relays every 5 heartbeats (= every 5 minutes)
-  if (heartbeatCount % 5 === 0) {
+  // Full paginated profile discovery every 30 heartbeats (= every 30 minutes)
+  // This walks ALL pages across all Lana relays — catches profiles missed by single-page queries
+  if (heartbeatCount % 30 === 0) {
     try {
-      await withTimeout(() => discoverNewProfiles(db), 'discoverNewProfiles', 45000);
+      await withTimeout(() => discoverNewProfiles(db), 'discoverNewProfiles', 120000);
     } catch (err) {
       console.error('❌ Error discovering new profiles:', err);
     }
@@ -201,7 +202,7 @@ const heartbeatTimer = setInterval(async () => {
   }
 }, HEARTBEAT_INTERVAL);
 
-console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute, relay retry every 5min, profile refresh+discovery every 5min, unreg LANA every 10min)`);
+console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute, relay retry every 5min, stale profile refresh every 10min, full profile discovery every 30min, unreg LANA every 10min)`);
 
 // =============================================
 // API Routes
