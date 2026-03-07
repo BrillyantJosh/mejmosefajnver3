@@ -3082,27 +3082,44 @@ router.post('/check-header-warnings', async (req: Request, res: Response) => {
       );
     });
 
-    // --- SELL: only count SELLER's own unconfirmed offers ---
-    // Post-filter: relay may ignore authors filter — keep only events authored by this user
+    // --- SELL: count BUY requests on user's SELLs that have NO CONFIRM yet ---
+    // Per P2P Exchange spec (KIND 91991→91992→91993):
+    //   SELL = open offer (no action needed from seller until someone buys)
+    //   BUY = someone wants to buy (references SELL via 'e' tag)
+    //   CONFIRM = seller confirms a BUY (references both SELL and BUY)
+    // Badge should ONLY show when: BUY exists for user's SELL but no CONFIRM exists for that BUY
     const userSellEvents = sellEventsRaw.filter((e: any) => e.pubkey === userPubkey);
 
-    // Step 2: Fetch confirmations (91993) targeted to user's sell offers via #e tag
     let sellCount = 0;
     if (userSellEvents.length > 0) {
       const sellEventIds = userSellEvents.map((e: any) => e.id);
-      const confirmEvents = await queryEventsFromRelays(relays, {
-        kinds: [91993], '#e': sellEventIds,
-      }, 12000);
 
-      const confirmedSellIds = new Set<string>();
+      // Fetch BUY events (91992) referencing user's SELL offers
+      // Fetch CONFIRM events (91993) referencing user's SELL offers
+      const [buyEvents, confirmEvents] = await Promise.all([
+        queryEventsFromRelays(relays, { kinds: [91992], '#e': sellEventIds }, 12000),
+        queryEventsFromRelays(relays, { kinds: [91993], '#e': sellEventIds }, 12000),
+      ]);
+
+      // Build set of confirmed BUY IDs from CONFIRM events
+      const confirmedBuyIds = new Set<string>();
       confirmEvents.forEach((event: any) => {
-        const sellTag = event.tags?.find((t: string[]) => t[0] === 'sell')?.[1];
-        if (sellTag) confirmedSellIds.add(sellTag);
+        // Check ["buy", "<buy_event_id>"] tag
+        const buyTag = event.tags?.find((t: string[]) => t[0] === 'buy')?.[1];
+        if (buyTag) confirmedBuyIds.add(buyTag);
+        // Also check ["e", id, "", "buy"] tag format
         event.tags?.forEach((tag: string[]) => {
-          if (tag[0] === 'e' && tag[3] === 'sell') confirmedSellIds.add(tag[1]);
+          if (tag[0] === 'e' && tag[3] === 'buy') confirmedBuyIds.add(tag[1]);
         });
       });
-      sellCount = userSellEvents.filter((e: any) => !confirmedSellIds.has(e.id)).length;
+
+      // Count BUY events that have NO corresponding CONFIRM
+      const unconfirmedBuys = buyEvents.filter((buyEvent: any) => !confirmedBuyIds.has(buyEvent.id));
+      sellCount = unconfirmedBuys.length;
+
+      if (sellCount > 0) {
+        console.log(`[SELL badge] User ${userPubkey.slice(0, 16)}... has ${unconfirmedBuys.length} unconfirmed BUY requests (${buyEvents.length} total BUYs, ${confirmedBuyIds.size} confirmed)`);
+      }
     }
 
     // --- Lana8Wonder: return events for client-side cash-out processing ---
