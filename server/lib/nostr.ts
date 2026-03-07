@@ -393,56 +393,58 @@ export async function fetchUserWallets(
 
   console.log(`✅ ${walletListEvents.length} wallet-list events after filter (${filteredEvents.length} total trusted)`);
 
-  const allWallets: WalletData[] = [];
+  if (walletListEvents.length === 0) {
+    console.log('⚠️ No wallet-list events found');
+    return [];
+  }
 
-  for (const event of walletListEvents) {
-    const statusTag = event.tags.find((t: string[]) => t[0] === 'status');
-    const status = statusTag?.[1] || 'active';
-    const isAccountFrozen = status === 'frozen';
+  // CRITICAL: Use ONLY the newest wallet-list event.
+  // The latest event from a trusted registrar is the authoritative wallet list.
+  // Merging wallets from multiple events causes stale/old wallets to appear.
+  walletListEvents.sort((a, b) => b.created_at - a.created_at);
+  const latestEvent = walletListEvents[0];
 
-    const walletTags = event.tags.filter((t: string[]) => t[0] === 'w');
+  console.log(`📋 Using latest event: ${latestEvent.id} (created_at: ${latestEvent.created_at}, registrar: ${latestEvent.pubkey.slice(0, 8)}...)`);
 
-    for (const tag of walletTags) {
-      if (tag.length >= 6) {
-        // 7th field (index 6) is optional freeze_status
-        const perWalletFreeze = tag.length >= 7 ? (tag[6] || '') : '';
+  const statusTag = latestEvent.tags.find((t: string[]) => t[0] === 'status');
+  const status = statusTag?.[1] || 'active';
+  const isAccountFrozen = status === 'frozen';
 
-        // Determine effective freeze status:
-        // If account-level status=frozen → all wallets frozen
-        // If per-wallet freeze code is set → that wallet is frozen
-        // Any unrecognized non-empty freeze code → treat as frozen (fail-safe)
-        let freezeStatus = '';
-        if (isAccountFrozen) {
-          freezeStatus = perWalletFreeze || 'frozen';
-        } else if (perWalletFreeze) {
-          freezeStatus = perWalletFreeze;
-        }
+  const walletTags = latestEvent.tags.filter((t: string[]) => t[0] === 'w');
+  const wallets: WalletData[] = [];
 
-        allWallets.push({
-          walletId: tag[1],
-          walletType: tag[2],
-          note: tag[4] || '',
-          amountUnregistered: tag[5],
-          status,
-          freezeStatus,
-          registrarPubkey: event.pubkey,
-          eventId: event.id,
-          createdAt: event.created_at,
-        });
+  for (const tag of walletTags) {
+    if (tag.length >= 6) {
+      // 7th field (index 6) is optional freeze_status
+      const perWalletFreeze = tag.length >= 7 ? (tag[6] || '') : '';
+
+      // Determine effective freeze status:
+      // If account-level status=frozen → all wallets frozen
+      // If per-wallet freeze code is set → that wallet is frozen
+      // Any unrecognized non-empty freeze code → treat as frozen (fail-safe)
+      let freezeStatus = '';
+      if (isAccountFrozen) {
+        freezeStatus = perWalletFreeze || 'frozen';
+      } else if (perWalletFreeze) {
+        freezeStatus = perWalletFreeze;
       }
+
+      wallets.push({
+        walletId: tag[1],
+        walletType: tag[2],
+        note: tag[4] || '',
+        amountUnregistered: tag[5],
+        status,
+        freezeStatus,
+        registrarPubkey: latestEvent.pubkey,
+        eventId: latestEvent.id,
+        createdAt: latestEvent.created_at,
+      });
     }
   }
 
-  // Sort by createdAt (newest first)
-  allWallets.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-  // Deduplicate by walletId (keep newest)
-  const uniqueWallets = Array.from(
-    new Map(allWallets.map(w => [w.walletId, w])).values()
-  );
-
-  console.log(`✅ Found ${uniqueWallets.length} unique wallets`);
-  return uniqueWallets;
+  console.log(`✅ Found ${wallets.length} wallets from latest event (status: ${status}, frozen: ${isAccountFrozen})`);
+  return wallets;
 }
 
 /**
