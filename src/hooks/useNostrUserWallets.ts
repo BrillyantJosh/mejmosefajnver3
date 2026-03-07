@@ -56,56 +56,64 @@ export const useNostrUserWallets = (pubkey: string | null) => {
           console.log('Found wallet list events:', events.length);
           
           const lanaRegistrarSigners = parameters?.trustedSigners?.LanaRegistrar || [];
-          
-          const filteredEvents = lanaRegistrarSigners.length === 0 
-            ? events 
+
+          const filteredEvents = lanaRegistrarSigners.length === 0
+            ? events
             : events.filter(event => lanaRegistrarSigners.includes(event.pubkey));
-          
-          const allWallets: NostrUserWallet[] = [];
-          
-          filteredEvents.forEach(event => {
-            // Only process events that have w tags (wallet-list events)
-            const walletTags = event.tags.filter(t => t[0] === 'w');
-            if (walletTags.length === 0) return;
 
-            const statusTag = event.tags.find(t => t[0] === 'status');
-            const status = statusTag?.[1] || 'active';
-            const isAccountFrozen = status === 'frozen';
+          // Only keep events that have w tags (wallet-list events)
+          const walletListEvents = filteredEvents.filter(event =>
+            event.tags.some(t => t[0] === 'w')
+          );
 
-            walletTags.forEach(tag => {
-              if (tag.length >= 6) {
-                // 7th field (index 6) is optional freeze_status
-                const perWalletFreeze = tag.length >= 7 ? (tag[6] || '') : '';
-                let freezeStatus = '';
-                if (isAccountFrozen) {
-                  freezeStatus = perWalletFreeze || 'frozen';
-                } else if (perWalletFreeze) {
-                  freezeStatus = perWalletFreeze;
-                }
+          if (walletListEvents.length === 0) {
+            setWallets([]);
+            console.log('No wallet-list events found');
+            return;
+          }
 
-                allWallets.push({
-                  walletId: tag[1],
-                  walletType: tag[2],
-                  note: tag[4] || '',
-                  amountUnregistered: tag[5],
-                  status: status,
-                  freezeStatus,
-                  registrarPubkey: event.pubkey,
-                  eventId: event.id,
-                  createdAt: event.created_at
-                });
+          // CRITICAL: Use ONLY the newest wallet-list event.
+          // The latest event from a trusted registrar is the authoritative wallet list.
+          // Merging wallets from multiple events causes stale/old wallets to appear.
+          walletListEvents.sort((a, b) => b.created_at - a.created_at);
+          const latestEvent = walletListEvents[0];
+
+          console.log(`Using latest event: ${latestEvent.id} (created_at: ${latestEvent.created_at})`);
+
+          const statusTag = latestEvent.tags.find(t => t[0] === 'status');
+          const status = statusTag?.[1] || 'active';
+          const isAccountFrozen = status === 'frozen';
+
+          const walletTags = latestEvent.tags.filter(t => t[0] === 'w');
+          const parsedWallets: NostrUserWallet[] = [];
+
+          walletTags.forEach(tag => {
+            if (tag.length >= 6) {
+              // 7th field (index 6) is optional freeze_status
+              const perWalletFreeze = tag.length >= 7 ? (tag[6] || '') : '';
+              let freezeStatus = '';
+              if (isAccountFrozen) {
+                freezeStatus = perWalletFreeze || 'frozen';
+              } else if (perWalletFreeze) {
+                freezeStatus = perWalletFreeze;
               }
-            });
+
+              parsedWallets.push({
+                walletId: tag[1],
+                walletType: tag[2],
+                note: tag[4] || '',
+                amountUnregistered: tag[5],
+                status: status,
+                freezeStatus,
+                registrarPubkey: latestEvent.pubkey,
+                eventId: latestEvent.id,
+                createdAt: latestEvent.created_at
+              });
+            }
           });
 
-          allWallets.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-          
-          const uniqueWallets = Array.from(
-            new Map(allWallets.map(wallet => [wallet.walletId, wallet])).values()
-          );
-          
-          setWallets(uniqueWallets);
-          console.log('Wallets loaded for user:', uniqueWallets);
+          setWallets(parsedWallets);
+          console.log('Wallets loaded from latest event:', parsedWallets.length, 'wallets, status:', status);
         } else {
           setWallets([]);
           console.log('No wallet records found for this user');
