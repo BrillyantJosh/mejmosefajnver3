@@ -11,6 +11,7 @@ export interface NostrWallet {
   createdAt?: number;
   registrarPubkey?: string;
   status?: string;
+  freezeStatus?: string;  // per-wallet freeze: '' | 'frozen_l8w' | 'frozen_max_cap' | 'frozen_too_wild'
 }
 
 export const useNostrWallets = () => {

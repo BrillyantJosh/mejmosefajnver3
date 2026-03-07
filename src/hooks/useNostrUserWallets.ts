@@ -11,6 +11,7 @@ export interface NostrUserWallet {
   createdAt?: number;
   registrarPubkey?: string;
   status?: string;
+  freezeStatus?: string;  // per-wallet freeze: '' | 'frozen_l8w' | 'frozen_max_cap' | 'frozen_too_wild'
 }
 
 export const useNostrUserWallets = (pubkey: string | null) => {
@@ -34,15 +35,22 @@ export const useNostrUserWallets = (pubkey: string | null) => {
       try {
         console.log('Fetching wallet records (KIND 30889) for pubkey:', pubkey);
         
-        const events = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [30889],
-            '#d': [pubkey],
-          }),
-          new Promise<Event[]>((_, reject) => 
+        // Query by both #d and #p for robust matching (registrars use different d-tag formats)
+        const [eventsByD, eventsByWalletD, eventsByP] = await Promise.race([
+          Promise.all([
+            pool.querySync(relays, { kinds: [30889], '#d': [pubkey] }),
+            pool.querySync(relays, { kinds: [30889], '#d': [`wallet-list-${pubkey}`] }),
+            pool.querySync(relays, { kinds: [30889], '#p': [pubkey] }),
+          ]),
+          new Promise<[Event[], Event[], Event[]]>((_, reject) =>
             setTimeout(() => reject(new Error('Wallet fetch timeout')), 10000)
           )
-        ]) as Event[];
+        ]) as [Event[], Event[], Event[]];
+
+        // Merge and deduplicate by event id
+        const eventMap = new Map<string, Event>();
+        [...eventsByD, ...eventsByWalletD, ...eventsByP].forEach(e => eventMap.set(e.id, e));
+        const events = Array.from(eventMap.values());
 
         if (events && events.length > 0) {
           console.log('Found wallet list events:', events.length);
@@ -56,19 +64,32 @@ export const useNostrUserWallets = (pubkey: string | null) => {
           const allWallets: NostrUserWallet[] = [];
           
           filteredEvents.forEach(event => {
+            // Only process events that have w tags (wallet-list events)
+            const walletTags = event.tags.filter(t => t[0] === 'w');
+            if (walletTags.length === 0) return;
+
             const statusTag = event.tags.find(t => t[0] === 'status');
             const status = statusTag?.[1] || 'active';
-            
-            const walletTags = event.tags.filter(t => t[0] === 'w');
-            
+            const isAccountFrozen = status === 'frozen';
+
             walletTags.forEach(tag => {
               if (tag.length >= 6) {
+                // 7th field (index 6) is optional freeze_status
+                const perWalletFreeze = tag.length >= 7 ? (tag[6] || '') : '';
+                let freezeStatus = '';
+                if (isAccountFrozen) {
+                  freezeStatus = perWalletFreeze || 'frozen';
+                } else if (perWalletFreeze) {
+                  freezeStatus = perWalletFreeze;
+                }
+
                 allWallets.push({
                   walletId: tag[1],
                   walletType: tag[2],
                   note: tag[4] || '',
                   amountUnregistered: tag[5],
                   status: status,
+                  freezeStatus,
                   registrarPubkey: event.pubkey,
                   eventId: event.id,
                   createdAt: event.created_at
