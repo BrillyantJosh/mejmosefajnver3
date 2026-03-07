@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { User, Save, Loader2, Navigation, Map, Plus, Upload, X, Eye, EyeOff, Copy, Globe, Link, Building2 } from "lucide-react";
+import { User, Save, Loader2, Navigation, Map, Plus, Upload, X, Eye, EyeOff, Copy, Globe, Link, Building2, Mail, Phone } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -52,6 +52,18 @@ const profileSchema = z.object({
   bankAddress: z.string().optional(),
   bankSWIFT: z.string().optional(),
   bankAccount: z.string().optional(),
+
+  // Contact (optional)
+  email: z.string().email("Invalid email format").optional().or(z.literal("")),
+  phone: z.string().regex(/^\d+$/, "Phone must contain digits only").optional().or(z.literal("")),
+  phone_country_code: z.string().regex(/^\+\d{1,3}$/, "Must be + followed by 1-3 digits").optional().or(z.literal("")),
+}).refine((data) => {
+  if (data.phone && !data.phone_country_code) return false;
+  if (data.phone_country_code && !data.phone) return false;
+  return true;
+}, {
+  message: "Phone number and country code must both be provided together",
+  path: ["phone"],
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
@@ -124,6 +136,9 @@ export default function Profile() {
       bankAddress: "",
       bankSWIFT: "",
       bankAccount: "",
+      email: "",
+      phone: "",
+      phone_country_code: "",
     },
   });
 
@@ -158,6 +173,9 @@ export default function Profile() {
         bankAddress: profile.bankAddress || '',
         bankSWIFT: profile.bankSWIFT || '',
         bankAccount: profile.bankAccount || '',
+        email: profile.email || '',
+        phone: profile.phone || '',
+        phone_country_code: profile.phone_country_code || '',
       });
 
       const paymentMethodsData = profile.payment_methods;
@@ -700,6 +718,32 @@ export default function Profile() {
                 </>
               )}
 
+              {(profile.email || profile.phone) && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-5 w-5 text-muted-foreground" />
+                      <h3 className="text-lg font-semibold">Contact Information</h3>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {profile.email && (
+                        <div>
+                          <Label className="text-muted-foreground">Email</Label>
+                          <p>{profile.email}</p>
+                        </div>
+                      )}
+                      {profile.phone && (
+                        <div>
+                          <Label className="text-muted-foreground">Phone</Label>
+                          <p>{profile.phone_country_code} {profile.phone}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
               <Button onClick={() => setIsEditing(true)} className="w-full md:w-auto">
                 Edit Profile
               </Button>
@@ -987,6 +1031,63 @@ export default function Profile() {
                         📍 {form.watch('latitude')?.toFixed(6)}, {form.watch('longitude')?.toFixed(6)}
                       </p>
                     )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold">Contact Information (Optional)</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">None of these fields are required. Share only what you want.</p>
+
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input placeholder="user@example.com" type="email" {...field} />
+                        </FormControl>
+                        <FormDescription>Optional. Used for off-platform communication or notifications.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="phone_country_code"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Country Code</FormLabel>
+                          <FormControl>
+                            <Input placeholder="+386" {...field} />
+                          </FormControl>
+                          <FormDescription>E.g., +386 (Slovenia), +1 (US), +44 (UK)</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone Number</FormLabel>
+                          <FormControl>
+                            <Input placeholder="41123456" {...field} />
+                          </FormControl>
+                          <FormDescription>Digits only, without country code prefix.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
                 </div>
 

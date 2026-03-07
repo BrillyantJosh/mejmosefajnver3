@@ -46,6 +46,11 @@ export interface NostrProfile {
   preferred_payout?: string;
   preferred_collect?: string;
   
+  // Contact (optional)
+  email?: string;
+  phone?: string;
+  phone_country_code?: string;
+
   // Legacy Banking (deprecated)
   bankName?: string;
   bankAddress?: string;
@@ -217,6 +222,11 @@ export const useNostrProfile = () => {
     try {
       // Prepare content (exclude tags fields)
       const { interests, intimateInterests, lang, ...content } = profileData;
+
+      // Clean contact fields: omit empty strings to keep KIND 0 JSON clean
+      if (!content.email) delete content.email;
+      if (!content.phone) delete content.phone;
+      if (!content.phone_country_code) delete content.phone_country_code;
 
       // Prepare tags
       const tags: string[][] = [

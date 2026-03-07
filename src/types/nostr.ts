@@ -14,4 +14,9 @@ export interface NostrProfile {
   whoAreYou?: string;
   orgasmic_profile?: string;
   statement_of_responsibility?: string;
+
+  // Contact (optional)
+  email?: string;
+  phone?: string;
+  phone_country_code?: string;
 }
