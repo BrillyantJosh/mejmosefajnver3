@@ -3082,43 +3082,52 @@ router.post('/check-header-warnings', async (req: Request, res: Response) => {
       );
     });
 
-    // --- SELL: count BUY requests on user's SELLs that have NO CONFIRM yet ---
+    // --- SELL: count SELLs that have BUY requests but NO CONFIRM ---
     // Per P2P Exchange spec (KIND 91991→91992→91993):
-    //   SELL = open offer (no action needed from seller until someone buys)
+    //   SELL = open offer (no action needed until someone buys)
     //   BUY = someone wants to buy (references SELL via 'e' tag)
-    //   CONFIRM = seller confirms a BUY (references both SELL and BUY)
-    // Badge should ONLY show when: BUY exists for user's SELL but no CONFIRM exists for that BUY
+    //   CONFIRM = seller confirms a BUY (references SELL via 'sell' tag)
+    // Badge shows ONLY when: a SELL has at least one BUY but zero CONFIRMs
+    // Once ANY BUY is confirmed for a SELL, the SELL is complete (other BUYs are irrelevant)
+    // An open SELL with zero BUYs is normal and should NOT trigger the badge
     const userSellEvents = sellEventsRaw.filter((e: any) => e.pubkey === userPubkey);
 
     let sellCount = 0;
     if (userSellEvents.length > 0) {
       const sellEventIds = userSellEvents.map((e: any) => e.id);
 
-      // Fetch BUY events (91992) referencing user's SELL offers
-      // Fetch CONFIRM events (91993) referencing user's SELL offers
+      // Fetch BUY events (91992) and CONFIRM events (91993) referencing user's SELLs
       const [buyEvents, confirmEvents] = await Promise.all([
         queryEventsFromRelays(relays, { kinds: [91992], '#e': sellEventIds }, 12000),
         queryEventsFromRelays(relays, { kinds: [91993], '#e': sellEventIds }, 12000),
       ]);
 
-      // Build set of confirmed BUY IDs from CONFIRM events
-      const confirmedBuyIds = new Set<string>();
+      // Build set of SELL IDs that have at least one BUY
+      const sellsWithBuys = new Set<string>();
+      buyEvents.forEach((buyEvent: any) => {
+        const sellRef = buyEvent.tags?.find((t: string[]) => t[0] === 'e')?.[1];
+        if (sellRef) sellsWithBuys.add(sellRef);
+      });
+
+      // Build set of SELL IDs that have at least one CONFIRM
+      const confirmedSellIds = new Set<string>();
       confirmEvents.forEach((event: any) => {
-        // Check ["buy", "<buy_event_id>"] tag
-        const buyTag = event.tags?.find((t: string[]) => t[0] === 'buy')?.[1];
-        if (buyTag) confirmedBuyIds.add(buyTag);
-        // Also check ["e", id, "", "buy"] tag format
+        // Check ["sell", "<sell_event_id>"] tag
+        const sellTag = event.tags?.find((t: string[]) => t[0] === 'sell')?.[1];
+        if (sellTag) confirmedSellIds.add(sellTag);
+        // Also check ["e", id, "", "sell"] tag format
         event.tags?.forEach((tag: string[]) => {
-          if (tag[0] === 'e' && tag[3] === 'buy') confirmedBuyIds.add(tag[1]);
+          if (tag[0] === 'e' && tag[3] === 'sell') confirmedSellIds.add(tag[1]);
         });
       });
 
-      // Count BUY events that have NO corresponding CONFIRM
-      const unconfirmedBuys = buyEvents.filter((buyEvent: any) => !confirmedBuyIds.has(buyEvent.id));
-      sellCount = unconfirmedBuys.length;
+      // Count SELLs that have BUYs but NO CONFIRMs
+      sellCount = userSellEvents.filter((e: any) =>
+        sellsWithBuys.has(e.id) && !confirmedSellIds.has(e.id)
+      ).length;
 
       if (sellCount > 0) {
-        console.log(`[SELL badge] User ${userPubkey.slice(0, 16)}... has ${unconfirmedBuys.length} unconfirmed BUY requests (${buyEvents.length} total BUYs, ${confirmedBuyIds.size} confirmed)`);
+        console.log(`[SELL badge] User ${userPubkey.slice(0, 16)}... has ${sellCount} unconfirmed SELLs with pending BUY requests`);
       }
     }
 
