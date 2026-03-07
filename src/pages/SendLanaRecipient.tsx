@@ -30,7 +30,7 @@ export default function SendLanaRecipient() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { session } = useAuth();
-  const { wallets: userWallets } = useNostrWallets();
+  const { wallets: myWallets } = useNostrWallets();
 
   const walletId = searchParams.get("walletId") || "";
   const amount = searchParams.get("amount") || "";
@@ -40,7 +40,7 @@ export default function SendLanaRecipient() {
   const manualOnly = searchParams.get("manualOnly") === "true";
 
   // Check if sender wallet is frozen
-  const senderWallet = userWallets.find(w => w.walletId === walletId);
+  const senderWallet = myWallets.find(w => w.walletId === walletId);
   const isFrozen = !!(senderWallet?.freezeStatus);
 
   const [recipientWalletId, setRecipientWalletId] = useState("");
