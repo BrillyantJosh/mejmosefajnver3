@@ -593,9 +593,78 @@ export async function refreshStaleProfiles(db: any): Promise<void> {
 }
 
 /**
- * Discover NEW profiles from Nostr relays that aren't yet in the database.
- * Fetches KIND 0 events created since the last sync and upserts them.
- * Called periodically by the server heartbeat.
+ * Paginated fetch of events from a single relay.
+ * Uses `until` cursor to walk backwards through time, getting all events.
+ * Returns deduplicated events (newest per pubkey for KIND 0).
+ */
+async function fetchAllFromRelay(
+  relayUrl: string,
+  baseFilter: Record<string, any>,
+  pageSize = 500,
+  maxPages = 20,
+  pageTimeout = 15000
+): Promise<NostrEvent[]> {
+  const allByPubkey = new Map<string, NostrEvent>();
+  let until: number | undefined = undefined;
+
+  for (let page = 0; page < maxPages; page++) {
+    const filter = { ...baseFilter, limit: pageSize };
+    if (until !== undefined) filter.until = until;
+
+    const events = await queryEventsFromRelays([relayUrl], filter, pageTimeout);
+    if (events.length === 0) break;
+
+    let oldestCreatedAt = Infinity;
+    for (const e of events) {
+      const existing = allByPubkey.get(e.pubkey);
+      if (!existing || e.created_at > existing.created_at) {
+        allByPubkey.set(e.pubkey, e);
+      }
+      if (e.created_at < oldestCreatedAt) oldestCreatedAt = e.created_at;
+    }
+
+    // Last page (fewer results than limit) or no progress
+    if (events.length < pageSize) break;
+    if (until !== undefined && oldestCreatedAt >= until) break;
+    until = oldestCreatedAt;
+  }
+
+  return Array.from(allByPubkey.values());
+}
+
+/** Helper to parse a KIND 0 event and upsert into nostr_profiles */
+function upsertProfileEvent(db: any, upsertStmt: any, pubkey: string, event: NostrEvent): boolean {
+  const content = JSON.parse(event.content);
+
+  const langTag = event.tags?.find((t: string[]) => t[0] === 'lang')?.[1];
+  const interests = event.tags?.filter((t: string[]) => t[0] === 't').map((t: string[]) => t[1]) || [];
+  const intimateInterests = event.tags?.filter((t: string[]) => t[0] === 'o').map((t: string[]) => t[1]) || [];
+
+  const rawMetadata = {
+    ...content,
+    created_at: event.created_at,
+    ...(langTag ? { lang: langTag } : {}),
+    ...(interests.length > 0 ? { interests } : {}),
+    ...(intimateInterests.length > 0 ? { intimateInterests } : {}),
+  };
+
+  upsertStmt.run(
+    pubkey,
+    content.name || null,
+    content.display_name || null,
+    content.picture || null,
+    content.about || null,
+    content.lanaWalletID || null,
+    JSON.stringify(rawMetadata)
+  );
+  return true;
+}
+
+/**
+ * Full paginated profile sweep across all relays.
+ * Walks backwards through time to catch ALL KIND 0 events,
+ * including older profiles that single-page queries miss.
+ * Called on startup and periodically (every 30 min).
  */
 export async function discoverNewProfiles(db: any): Promise<void> {
   // 1. Get relays from kind_38888
@@ -612,54 +681,39 @@ export async function discoverNewProfiles(db: any): Promise<void> {
     return;
   }
 
-  // 2. Get the latest Nostr event created_at from raw_metadata to use as "since"
-  //    This way we only fetch events newer than what we already have
-  const latestRow = db.prepare(
-    `SELECT json_extract(raw_metadata, '$.created_at') as max_created_at
-     FROM nostr_profiles
-     WHERE raw_metadata IS NOT NULL
-     ORDER BY json_extract(raw_metadata, '$.created_at') DESC
-     LIMIT 1`
-  ).get() as any;
+  // Skip damus.io for KIND 0 sweep (too many non-Lana profiles)
+  const lanaRelays = relays.filter(r => !r.includes('damus.io'));
 
-  // Default: fetch profiles from the last 24 hours if no data exists
-  let sinceTimestamp = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
-  if (latestRow?.max_created_at && typeof latestRow.max_created_at === 'number') {
-    // Fetch from 1 hour before the latest event to catch any we missed
-    sinceTimestamp = latestRow.max_created_at - 3600;
-  }
+  console.log(`🔍 discoverNewProfiles: Full paginated sweep across ${lanaRelays.length} Lana relays...`);
 
-  console.log(`🔍 discoverNewProfiles: Fetching KIND 0 from ${relays.length} relays since ${new Date(sinceTimestamp * 1000).toISOString()}...`);
+  // 2. Paginated fetch from each relay, merge all results
+  const allProfiles = new Map<string, NostrEvent>();
 
-  // 3. Fetch KIND 0 events from relays with "since" filter
-  let events: NostrEvent[];
-  try {
-    events = await queryEventsFromRelays(relays, {
-      kinds: [0],
-      since: sinceTimestamp,
-    }, 20000);
-  } catch (error) {
-    console.error('❌ discoverNewProfiles: Relay fetch failed:', error);
-    return;
-  }
-
-  if (events.length === 0) {
-    console.log('✅ discoverNewProfiles: No new profiles found');
-    return;
-  }
-
-  console.log(`📥 discoverNewProfiles: Fetched ${events.length} KIND 0 events`);
-
-  // 4. Deduplicate - keep newest per pubkey
-  const latestEvents = new Map<string, NostrEvent>();
-  for (const event of events) {
-    const existing = latestEvents.get(event.pubkey);
-    if (!existing || event.created_at > existing.created_at) {
-      latestEvents.set(event.pubkey, event);
+  for (const relay of lanaRelays) {
+    try {
+      const events = await fetchAllFromRelay(relay, { kinds: [0] }, 500, 20, 15000);
+      let added = 0;
+      for (const event of events) {
+        const existing = allProfiles.get(event.pubkey);
+        if (!existing || event.created_at > existing.created_at) {
+          allProfiles.set(event.pubkey, event);
+          added++;
+        }
+      }
+      console.log(`  📡 ${relay}: ${events.length} profiles fetched, ${added} kept (newest)`);
+    } catch (error) {
+      console.error(`  ❌ ${relay}: fetch failed:`, error);
     }
   }
 
-  // 5. Upsert to database
+  if (allProfiles.size === 0) {
+    console.log('✅ discoverNewProfiles: No profiles found on relays');
+    return;
+  }
+
+  console.log(`📥 discoverNewProfiles: ${allProfiles.size} unique profiles across all relays`);
+
+  // 3. Upsert all into database
   const upsertStmt = db.prepare(`
     INSERT INTO nostr_profiles (nostr_hex_id, full_name, display_name, picture, about, lana_wallet_id, raw_metadata, last_fetched_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -676,47 +730,28 @@ export async function discoverNewProfiles(db: any): Promise<void> {
 
   let newCount = 0;
   let updateCount = 0;
+  let walletCount = 0;
   let errorCount = 0;
-  for (const [pubkey, event] of latestEvents) {
+
+  for (const [pubkey, event] of allProfiles) {
     try {
-      const content = JSON.parse(event.content);
-
-      // Check if this profile already exists
       const existing = db.prepare('SELECT nostr_hex_id FROM nostr_profiles WHERE nostr_hex_id = ?').get(pubkey);
+      upsertProfileEvent(db, upsertStmt, pubkey, event);
 
-      const langTag = event.tags?.find((t: string[]) => t[0] === 'lang')?.[1];
-      const interests = event.tags?.filter((t: string[]) => t[0] === 't').map((t: string[]) => t[1]) || [];
-      const intimateInterests = event.tags?.filter((t: string[]) => t[0] === 'o').map((t: string[]) => t[1]) || [];
+      // Count stats
+      try {
+        const c = JSON.parse(event.content);
+        if (c.lanaWalletID) walletCount++;
+      } catch {}
 
-      const rawMetadata = {
-        ...content,
-        created_at: event.created_at,
-        ...(langTag ? { lang: langTag } : {}),
-        ...(interests.length > 0 ? { interests } : {}),
-        ...(intimateInterests.length > 0 ? { intimateInterests } : {}),
-      };
-
-      upsertStmt.run(
-        pubkey,
-        content.name || null,
-        content.display_name || null,
-        content.picture || null,
-        content.about || null,
-        content.lanaWalletID || null,
-        JSON.stringify(rawMetadata)
-      );
-
-      if (existing) {
-        updateCount++;
-      } else {
-        newCount++;
-      }
+      if (existing) updateCount++;
+      else newCount++;
     } catch (error) {
       errorCount++;
     }
   }
 
-  console.log(`✅ discoverNewProfiles: ${newCount} new, ${updateCount} updated, ${errorCount} errors (from ${latestEvents.size} unique profiles)`);
+  console.log(`✅ discoverNewProfiles: ${newCount} new, ${updateCount} updated, ${walletCount} with wallet, ${errorCount} errors (${allProfiles.size} total)`);
 }
 
 /**
