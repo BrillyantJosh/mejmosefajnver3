@@ -4,19 +4,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, ArrowRight, Scan, Key, Copy } from "lucide-react";
+import { ArrowLeft, ArrowRight, Scan, Key, Copy, ShieldAlert } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Html5Qrcode } from "html5-qrcode";
 import { convertWifToIds } from "@/lib/crypto";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { useNostrWallets } from "@/hooks/useNostrWallets";
 
 export default function SendLanaPrivateKey() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { parameters } = useSystemParameters();
+  const { wallets: userWallets } = useNostrWallets();
 
   const walletId = searchParams.get("walletId") || "";
   const recipientWalletId = searchParams.get("recipientWalletId") || "";
@@ -24,6 +26,10 @@ export default function SendLanaPrivateKey() {
   const currency = searchParams.get("currency") || "";
   const inputAmount = searchParams.get("inputAmount") || "";
   const emptyWallet = searchParams.get("emptyWallet") === "true";
+
+  // Check if sender wallet is frozen
+  const senderWallet = userWallets.find(w => w.walletId === walletId);
+  const isFrozen = !!(senderWallet?.freezeStatus);
 
   const [privateKey, setPrivateKey] = useState("");
   const [isScanning, setIsScanning] = useState(false);
@@ -208,6 +214,26 @@ export default function SendLanaPrivateKey() {
       setIsValidating(false);
     }
   };
+
+  // Block frozen wallets
+  if (isFrozen) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Button variant="ghost" onClick={() => navigate("/wallet")} className="mb-4">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Wallets
+        </Button>
+        <Alert variant="destructive" className="border-blue-500/50 bg-blue-500/10">
+          <ShieldAlert className="h-4 w-4 text-blue-500" />
+          <AlertTitle className="text-blue-700 dark:text-blue-400">Wallet Frozen — Sending Disabled</AlertTitle>
+          <AlertDescription className="text-blue-700/80 dark:text-blue-300/80">
+            This wallet has been frozen. All outgoing transactions are disabled.
+            Contact your registrar to resolve this issue.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto">
