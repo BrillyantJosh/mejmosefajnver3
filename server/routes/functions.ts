@@ -2536,6 +2536,26 @@ router.post('/send-lana-transaction', async (req: Request, res: Response) => {
     servers: req.body.electrumServers?.length || 0
   });
   try {
+    // Server-side freeze check: block transactions from frozen wallets
+    if (req.body.senderAddress && req.body.userPubkey) {
+      const relays = getRelaysFromDb();
+      const db = getDb();
+      const params = db.prepare('SELECT trusted_signers FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+      let trustedSigners: string[] = [];
+      if (params?.trusted_signers) {
+        try {
+          const parsed = JSON.parse(params.trusted_signers);
+          if (parsed?.LanaRegistrar) trustedSigners = parsed.LanaRegistrar;
+        } catch {}
+      }
+      const wallets = await fetchUserWallets(req.body.userPubkey, relays, trustedSigners);
+      const senderWallet = wallets.find(w => w.walletId === req.body.senderAddress);
+      if (senderWallet?.freezeStatus) {
+        console.log(`🚫 BLOCKED: Transaction from frozen wallet ${req.body.senderAddress} (freeze: ${senderWallet.freezeStatus})`);
+        return res.json({ success: false, error: 'This wallet is frozen. Outgoing transactions are disabled.' });
+      }
+    }
+
     const result = await sendLanaTransaction(req.body);
     console.log('📋 send-lana-transaction result:', { success: result.success, error: result.error, txHash: result.txHash });
     return res.json(result);
@@ -2548,6 +2568,26 @@ router.post('/send-lana-transaction', async (req: Request, res: Response) => {
 // send-batch-lana-transaction (multiple recipients in one TX)
 router.post('/send-batch-lana-transaction', async (req: Request, res: Response) => {
   try {
+    // Server-side freeze check for batch transactions
+    if (req.body.senderAddress && req.body.userPubkey) {
+      const relays = getRelaysFromDb();
+      const db = getDb();
+      const params = db.prepare('SELECT trusted_signers FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+      let trustedSigners: string[] = [];
+      if (params?.trusted_signers) {
+        try {
+          const parsed = JSON.parse(params.trusted_signers);
+          if (parsed?.LanaRegistrar) trustedSigners = parsed.LanaRegistrar;
+        } catch {}
+      }
+      const wallets = await fetchUserWallets(req.body.userPubkey, relays, trustedSigners);
+      const senderWallet = wallets.find(w => w.walletId === req.body.senderAddress);
+      if (senderWallet?.freezeStatus) {
+        console.log(`🚫 BLOCKED: Batch transaction from frozen wallet ${req.body.senderAddress}`);
+        return res.json({ success: false, error: 'This wallet is frozen. Outgoing transactions are disabled.' });
+      }
+    }
+
     const result = await sendBatchLanaTransaction(req.body);
     return res.json(result);
   } catch (error: any) {

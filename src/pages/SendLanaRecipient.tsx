@@ -4,14 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, ArrowRight, Scan, Search, User, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowRight, Scan, Search, User, Wallet, Snowflake, ShieldAlert } from "lucide-react";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Html5Qrcode } from "html5-qrcode";
 import { validateLanaWalletIdWithMessage } from "@/lib/lanaWalletValidation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
+import { useNostrWallets } from "@/hooks/useNostrWallets";
 
 interface SearchResult {
   pubkey: string;
@@ -29,6 +30,7 @@ export default function SendLanaRecipient() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { session } = useAuth();
+  const { wallets: userWallets } = useNostrWallets();
 
   const walletId = searchParams.get("walletId") || "";
   const amount = searchParams.get("amount") || "";
@@ -36,6 +38,10 @@ export default function SendLanaRecipient() {
   const inputAmount = searchParams.get("inputAmount") || "";
   const emptyWallet = searchParams.get("emptyWallet") === "true";
   const manualOnly = searchParams.get("manualOnly") === "true";
+
+  // Check if sender wallet is frozen
+  const senderWallet = userWallets.find(w => w.walletId === walletId);
+  const isFrozen = !!(senderWallet?.freezeStatus);
 
   const [recipientWalletId, setRecipientWalletId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -204,6 +210,26 @@ export default function SendLanaRecipient() {
     if (emptyWallet) params.set('emptyWallet', 'true');
     navigate(`/send-lana/private-key?${params.toString()}`);
   };
+
+  // Block frozen wallets from proceeding
+  if (isFrozen) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Button variant="ghost" onClick={() => navigate("/wallet")} className="mb-4">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Wallets
+        </Button>
+        <Alert variant="destructive" className="border-blue-500/50 bg-blue-500/10">
+          <ShieldAlert className="h-4 w-4 text-blue-500" />
+          <AlertTitle className="text-blue-700 dark:text-blue-400">Wallet Frozen — Sending Disabled</AlertTitle>
+          <AlertDescription className="text-blue-700/80 dark:text-blue-300/80">
+            This wallet has been frozen. All outgoing transactions are disabled.
+            Contact your registrar to resolve this issue.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto">
