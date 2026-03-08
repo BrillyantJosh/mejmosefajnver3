@@ -297,6 +297,14 @@ export default function Wallet() {
                 </div>
               )}
 
+              {/* CLEAR overlay badge — wallet needs to be reduced before SPLIT */}
+              {splitWarning.exceeded && !wallet.freezeStatus && ['Wallet', 'Main Wallet', 'Lana.Discount'].includes(wallet.walletType) && (wallet.balance || 0) > 0 && (
+                <div className="absolute top-0 right-0 z-20 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1 animate-pulse">
+                  <AlertTriangle className="h-3 w-3" />
+                  CLEAR
+                </div>
+              )}
+
               <CardHeader className="relative z-10">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
