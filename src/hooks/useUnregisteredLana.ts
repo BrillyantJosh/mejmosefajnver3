@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNostrWallets } from '@/hooks/useNostrWallets';
 
 export interface UnregisteredLanaRecord {
   id: string;
@@ -16,19 +17,33 @@ export interface UnregisteredLanaRecord {
 /**
  * Hook to fetch unregistered LANA records (KIND 87003) for the current user.
  * Polls the server every 60 seconds.
+ * Filters out records whose wallet_id is no longer in the user's KIND 30889 wallet list.
  */
 export function useUnregisteredLana() {
   const { session } = useAuth();
-  const [records, setRecords] = useState<UnregisteredLanaRecord[]>([]);
-  const [count, setCount] = useState(0);
+  const { wallets } = useNostrWallets();
+  const [rawRecords, setRawRecords] = useState<UnregisteredLanaRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
   const API_URL = import.meta.env.VITE_API_URL ?? '';
 
+  // Set of current wallet addresses from KIND 30889
+  const activeWalletIds = useMemo(
+    () => new Set(wallets.map(w => w.walletId)),
+    [wallets]
+  );
+
+  // Only keep records whose wallet still exists in the user's wallet list
+  const records = useMemo(() => {
+    if (activeWalletIds.size === 0) return rawRecords;
+    return rawRecords.filter(r => activeWalletIds.has(r.wallet_id));
+  }, [rawRecords, activeWalletIds]);
+
+  const count = records.length;
+
   const fetchRecords = useCallback(async () => {
     if (!session?.nostrHexId) {
-      setRecords([]);
-      setCount(0);
+      setRawRecords([]);
       return;
     }
 
@@ -42,24 +57,20 @@ export function useUnregisteredLana() {
       });
 
       if (!res.ok) {
-        setRecords([]);
-        setCount(0);
+        setRawRecords([]);
         return;
       }
 
       const data = await res.json();
 
       if (data?.success) {
-        setRecords(data.records || []);
-        setCount(data.count || 0);
+        setRawRecords(data.records || []);
       } else {
-        setRecords([]);
-        setCount(0);
+        setRawRecords([]);
       }
     } catch (error) {
       console.error('Error fetching unregistered LANA:', error);
-      setRecords([]);
-      setCount(0);
+      setRawRecords([]);
     } finally {
       setLoading(false);
     }
@@ -67,8 +78,7 @@ export function useUnregisteredLana() {
 
   useEffect(() => {
     if (!session?.nostrHexId) {
-      setRecords([]);
-      setCount(0);
+      setRawRecords([]);
       return;
     }
 
