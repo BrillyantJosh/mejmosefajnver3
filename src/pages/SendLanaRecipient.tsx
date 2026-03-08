@@ -193,7 +193,9 @@ export default function SendLanaRecipient() {
       return;
     }
 
-    // Check if recipient wallet is registered
+    // Check recipient wallet registration status
+    // Registered sends → recipient must BE registered
+    // Unregistered sends (manualOnly) → recipient must NOT be registered
     setIsCheckingRegistration(true);
     setError("");
     try {
@@ -206,15 +208,20 @@ export default function SendLanaRecipient() {
 
       const data = await res.json();
 
-      if (!data.success && !data.registered) {
+      if (!data.success && data.registered === undefined) {
         // API call failed — let user know but don't block
         console.warn('Wallet registration check failed:', data.error);
-      } else if (data.registered === false) {
+      } else if (manualOnly && data.registered === true) {
+        // Unregistered send → block if recipient IS registered
+        setError("This wallet is registered. Unregistered LANA can only be sent to unregistered wallets.");
+        setIsCheckingRegistration(false);
+        return;
+      } else if (!manualOnly && data.registered === false) {
+        // Registered send → block if recipient is NOT registered
         setError("This wallet is not registered. You can only send LANA to registered wallets.");
         setIsCheckingRegistration(false);
         return;
       }
-      // data.registered === true → wallet is registered, proceed
     } catch (err) {
       console.warn('Wallet registration check error (proceeding anyway):', err);
     } finally {

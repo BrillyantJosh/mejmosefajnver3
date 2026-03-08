@@ -345,6 +345,8 @@ const EventDonate = () => {
   const destinationWallet = walletType === 'unregistered' ? event?.donationWalletUnreg : event?.donationWallet;
   const canProceed = selectedWalletId && lanaAmount && parsedLanaAmount > 0 && hasSufficientBalance && !loadingBalances && destinationWallet;
 
+  const [isCheckingRegistration, setIsCheckingRegistration] = useState(false);
+
   const handleContinue = async () => {
     if (!selectedWalletId || !lanaAmount || !event) {
       toast({
@@ -353,6 +355,46 @@ const EventDonate = () => {
         variant: "destructive"
       });
       return;
+    }
+
+    // Verify destination wallet registration status matches wallet type
+    if (destinationWallet) {
+      setIsCheckingRegistration(true);
+      try {
+        const API_URL = import.meta.env.VITE_API_URL ?? '';
+        const res = await fetch(`${API_URL}/api/functions/check-wallet-registration`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wallet_id: destinationWallet }),
+        });
+
+        const data = await res.json();
+
+        if (data.success !== false && data.registered !== undefined) {
+          if (walletType === 'unregistered' && data.registered === true) {
+            toast({
+              title: "Invalid destination",
+              description: "Cannot send unregistered LANA to a registered wallet. The event's unregistered donation wallet is actually registered.",
+              variant: "destructive"
+            });
+            setIsCheckingRegistration(false);
+            return;
+          }
+          if (walletType === 'registered' && data.registered === false) {
+            toast({
+              title: "Invalid destination",
+              description: "Cannot send registered LANA to an unregistered wallet. The event's donation wallet is not registered.",
+              variant: "destructive"
+            });
+            setIsCheckingRegistration(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Wallet registration check error (proceeding anyway):', err);
+      } finally {
+        setIsCheckingRegistration(false);
+      }
     }
 
     // Navigate to private key entry page
@@ -978,12 +1020,14 @@ const EventDonate = () => {
           {/* Continue Button */}
           <Button
             onClick={handleContinue}
-            disabled={!canProceed}
+            disabled={!canProceed || isCheckingRegistration}
             className="w-full h-12"
           >
-            {parsedLanaAmount > 0
-              ? `${isPay ? 'Pay' : 'Donate'} ${parsedLanaAmount.toFixed(2)} LANA (€${fiatAmount.toFixed(2)})`
-              : isPay ? 'Pay' : 'Donate'
+            {isCheckingRegistration
+              ? 'Checking wallet...'
+              : parsedLanaAmount > 0
+                ? `${isPay ? 'Pay' : 'Donate'} ${parsedLanaAmount.toFixed(2)} LANA (€${fiatAmount.toFixed(2)})`
+                : isPay ? 'Pay' : 'Donate'
             }
           </Button>
 
