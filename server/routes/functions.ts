@@ -2828,6 +2828,40 @@ router.post('/register-virgin-wallet', async (req: Request, res: Response) => {
 });
 
 // =============================================
+// CHECK WALLET REGISTRATION (read-only, via lanawatch.us)
+// =============================================
+router.post('/check-wallet-registration', async (req: Request, res: Response) => {
+  try {
+    const { wallet_id } = req.body;
+    if (!wallet_id) {
+      return res.status(400).json({ success: false, error: 'wallet_id required' });
+    }
+
+    const apiKey = process.env.LANAWATCH_API_KEY;
+    if (!apiKey) {
+      console.error('LANAWATCH_API_KEY not configured in environment');
+      return res.status(500).json({ success: false, error: 'LANAWATCH_API_KEY not configured' });
+    }
+
+    const response = await fetch('https://laluxmwarlejdwyboudz.supabase.co/functions/v1/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        method: 'simple_check_wallet_registration',
+        api_key: apiKey,
+        data: { wallet_id },
+      }),
+    });
+
+    const result = await response.json();
+    return res.status(response.status).json(result);
+  } catch (error: any) {
+    console.error('Check wallet registration error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
 // QUEUE RELAY EVENT — Persist signed Nostr events for retry
 // Used as fallback when client-side relay publishing fails
 // =============================================

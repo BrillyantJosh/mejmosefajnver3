@@ -178,25 +178,55 @@ export default function SendLanaRecipient() {
     }
   };
 
+  const [isCheckingRegistration, setIsCheckingRegistration] = useState(false);
+
   const handleContinue = async () => {
     if (!recipientWalletId.trim()) {
       setError("Please enter or select a recipient wallet ID");
       return;
     }
 
-    // Validate wallet ID
+    // Validate wallet ID format
     const validation = await validateLanaWalletIdWithMessage(recipientWalletId);
     if (!validation.valid) {
       setError(validation.message || "Invalid wallet ID");
       return;
     }
 
-    console.log('🚀 SendLanaRecipient navigate:', { 
-      walletId, 
-      recipientWalletId, 
-      amount, 
-      currency, 
-      inputAmount 
+    // Check if recipient wallet is registered
+    setIsCheckingRegistration(true);
+    setError("");
+    try {
+      const API_URL = import.meta.env.VITE_API_URL ?? '';
+      const res = await fetch(`${API_URL}/api/functions/check-wallet-registration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet_id: recipientWalletId.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (!data.success && !data.registered) {
+        // API call failed — let user know but don't block
+        console.warn('Wallet registration check failed:', data.error);
+      } else if (data.registered === false) {
+        setError("This wallet is not registered. You can only send LANA to registered wallets.");
+        setIsCheckingRegistration(false);
+        return;
+      }
+      // data.registered === true → wallet is registered, proceed
+    } catch (err) {
+      console.warn('Wallet registration check error (proceeding anyway):', err);
+    } finally {
+      setIsCheckingRegistration(false);
+    }
+
+    console.log('🚀 SendLanaRecipient navigate:', {
+      walletId,
+      recipientWalletId,
+      amount,
+      currency,
+      inputAmount
     });
 
     // Navigate to private key entry page
@@ -403,10 +433,10 @@ export default function SendLanaRecipient() {
             className="w-full"
             size="lg"
             onClick={async () => await handleContinue()}
-            disabled={!recipientWalletId.trim()}
+            disabled={!recipientWalletId.trim() || isCheckingRegistration}
           >
-            Continue
-            <ArrowRight className="h-4 w-4 ml-2" />
+            {isCheckingRegistration ? "Checking wallet..." : "Continue"}
+            {!isCheckingRegistration && <ArrowRight className="h-4 w-4 ml-2" />}
           </Button>
         </CardContent>
       </Card>
