@@ -149,7 +149,14 @@ export default function Wallets() {
   const sortedWallets = [...walletsWithBalances].sort((a, b) => {
     const orderA = walletTypeOrder[a.walletType] || 99;
     const orderB = walletTypeOrder[b.walletType] || 99;
-    return orderA - orderB;
+    if (orderA !== orderB) return orderA - orderB;
+    // Sub-sort Lana8Wonder by numeric note (1, 2, 3...)
+    if (a.walletType === 'Lana8Wonder' && b.walletType === 'Lana8Wonder') {
+      const numA = parseInt(a.note || '') || Infinity;
+      const numB = parseInt(b.note || '') || Infinity;
+      return numA - numB;
+    }
+    return 0;
   });
 
   return (
