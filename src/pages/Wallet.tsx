@@ -24,6 +24,7 @@ function getFreezeReasonLabel(freezeStatus: string): string {
     case 'frozen_l8w': return 'Late wallet registration';
     case 'frozen_max_cap': return 'Maximum balance cap exceeded';
     case 'frozen_too_wild': return 'Irregular or suspicious activity';
+    case 'frozen_unreg_Lanas': return 'Received unregistered LANA exceeding threshold';
     case 'frozen': return 'All accounts frozen by registrar';
     default: return 'Account frozen';
   }

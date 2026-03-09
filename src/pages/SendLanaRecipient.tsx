@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, ArrowRight, Scan, Search, User, Wallet, Snowflake, ShieldAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, Scan, Search, User, Wallet, Snowflake, ShieldAlert, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -13,6 +13,7 @@ import { validateLanaWalletIdWithMessage } from "@/lib/lanaWalletValidation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
+import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 
 interface SearchResult {
   pubkey: string;
@@ -50,9 +51,72 @@ export default function SendLanaRecipient() {
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState("");
   const [selectedTab, setSelectedTab] = useState("manual");
-  
+
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
+  // Real-time wallet registration check
+  const [walletCheckStatus, setWalletCheckStatus] = useState<'idle' | 'checking' | 'registered' | 'unregistered' | 'error'>('idle');
+  const [walletCheckData, setWalletCheckData] = useState<{ wallet_type?: string; frozen?: boolean; nostr_hex_id?: string } | null>(null);
+  const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fetch owner profile when we have a nostr_hex_id
+  const { profile: ownerProfile, isLoading: ownerProfileLoading } = useNostrProfileCache(
+    walletCheckData?.nostr_hex_id || null
+  );
+
+  // Debounced wallet registration check
+  const checkWalletRegistration = useCallback(async (walletAddress: string) => {
+    setWalletCheckStatus('checking');
+    setWalletCheckData(null);
+    setError("");
+    try {
+      const API_URL = import.meta.env.VITE_API_URL ?? '';
+      const res = await fetch(`${API_URL}/api/functions/check-wallet-registration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet_id: walletAddress }),
+      });
+      const data = await res.json();
+
+      if (data.registered === true) {
+        setWalletCheckStatus('registered');
+        setWalletCheckData({
+          wallet_type: data.wallet?.wallet_type,
+          frozen: data.wallet?.frozen,
+          nostr_hex_id: data.wallet?.nostr_hex_id,
+        });
+      } else if (data.registered === false) {
+        setWalletCheckStatus('unregistered');
+        setWalletCheckData(null);
+      } else {
+        setWalletCheckStatus('error');
+        setWalletCheckData(null);
+      }
+    } catch {
+      setWalletCheckStatus('error');
+      setWalletCheckData(null);
+    }
+  }, []);
+
+  // Auto-check when recipientWalletId changes (debounced 600ms)
+  useEffect(() => {
+    if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+
+    const trimmed = recipientWalletId.trim();
+    if (!trimmed || trimmed.length < 26 || !trimmed.startsWith('L')) {
+      setWalletCheckStatus('idle');
+      setWalletCheckData(null);
+      return;
+    }
+
+    checkTimerRef.current = setTimeout(() => {
+      checkWalletRegistration(trimmed);
+    }, 600);
+
+    return () => {
+      if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+    };
+  }, [recipientWalletId, checkWalletRegistration]);
 
   // Fetch user's own wallets
   const { wallets: userWallets, isLoading: isLoadingWallets } = useNostrUserWallets(session?.nostrHexId || null);
@@ -178,8 +242,6 @@ export default function SendLanaRecipient() {
     }
   };
 
-  const [isCheckingRegistration, setIsCheckingRegistration] = useState(false);
-
   const handleContinue = async () => {
     if (!recipientWalletId.trim()) {
       setError("Please enter or select a recipient wallet ID");
@@ -193,48 +255,15 @@ export default function SendLanaRecipient() {
       return;
     }
 
-    // Check recipient wallet registration status
-    // Registered sends → recipient must BE registered
-    // Unregistered sends (manualOnly) → recipient must NOT be registered
-    setIsCheckingRegistration(true);
-    setError("");
-    try {
-      const API_URL = import.meta.env.VITE_API_URL ?? '';
-      const res = await fetch(`${API_URL}/api/functions/check-wallet-registration`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_id: recipientWalletId.trim() }),
-      });
-
-      const data = await res.json();
-
-      if (!data.success && data.registered === undefined) {
-        // API call failed — let user know but don't block
-        console.warn('Wallet registration check failed:', data.error);
-      } else if (manualOnly && data.registered === true) {
-        // Unregistered send → block if recipient IS registered
-        setError("This wallet is registered. Unregistered LANA can only be sent to unregistered wallets.");
-        setIsCheckingRegistration(false);
-        return;
-      } else if (!manualOnly && data.registered === false) {
-        // Registered send → block if recipient is NOT registered
-        setError("This wallet is not registered. You can only send LANA to registered wallets.");
-        setIsCheckingRegistration(false);
-        return;
-      }
-    } catch (err) {
-      console.warn('Wallet registration check error (proceeding anyway):', err);
-    } finally {
-      setIsCheckingRegistration(false);
+    // Block based on real-time wallet check result
+    if (manualOnly && walletCheckStatus === 'registered') {
+      setError("This wallet is registered. Unregistered LANA can only be sent to unregistered wallets.");
+      return;
     }
-
-    console.log('🚀 SendLanaRecipient navigate:', {
-      walletId,
-      recipientWalletId,
-      amount,
-      currency,
-      inputAmount
-    });
+    if (!manualOnly && walletCheckStatus === 'unregistered') {
+      setError("This wallet is not registered. You can only send LANA to registered wallets.");
+      return;
+    }
 
     // Navigate to private key entry page
     const params = new URLSearchParams({
@@ -317,6 +346,100 @@ export default function SendLanaRecipient() {
                   onChange={(e) => setRecipientWalletId(e.target.value)}
                 />
               </div>
+
+              {/* Real-time wallet check result */}
+              {walletCheckStatus === 'checking' && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Checking wallet...
+                </div>
+              )}
+
+              {walletCheckStatus === 'registered' && (
+                <div className={`p-3 rounded-lg border text-sm ${
+                  manualOnly
+                    ? 'bg-red-500/10 border-red-500/30'
+                    : 'bg-green-500/10 border-green-500/30'
+                }`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    {manualOnly ? (
+                      <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    )}
+                    <span className={`font-medium ${manualOnly ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+                      Registered Wallet
+                    </span>
+                    {walletCheckData?.wallet_type && (
+                      <span className="text-xs text-muted-foreground">({walletCheckData.wallet_type})</span>
+                    )}
+                    {walletCheckData?.frozen && (
+                      <span className="text-xs text-blue-500 flex items-center gap-1">
+                        <Snowflake className="h-3 w-3" /> Frozen
+                      </span>
+                    )}
+                  </div>
+                  {/* Owner profile */}
+                  {walletCheckData?.nostr_hex_id && (
+                    <div className="flex items-center gap-2 mt-2 pl-6">
+                      {ownerProfileLoading ? (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Loading owner...
+                        </div>
+                      ) : ownerProfile ? (
+                        <>
+                          <UserAvatar
+                            pubkey={walletCheckData.nostr_hex_id}
+                            picture={ownerProfile.picture}
+                            name={ownerProfile.display_name || ownerProfile.full_name || ''}
+                            className="h-8 w-8"
+                          />
+                          <div>
+                            <p className="font-medium text-sm">
+                              {ownerProfile.display_name || ownerProfile.full_name || 'Unknown'}
+                            </p>
+                            {ownerProfile.full_name && ownerProfile.display_name && ownerProfile.full_name !== ownerProfile.display_name && (
+                              <p className="text-xs text-muted-foreground">@{ownerProfile.full_name}</p>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Owner profile not found</p>
+                      )}
+                    </div>
+                  )}
+                  {manualOnly && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-2 pl-6">
+                      Unregistered LANA can only be sent to unregistered wallets.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {walletCheckStatus === 'unregistered' && (
+                <div className={`p-3 rounded-lg border text-sm ${
+                  manualOnly
+                    ? 'bg-green-500/10 border-green-500/30'
+                    : 'bg-red-500/10 border-red-500/30'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {manualOnly ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-500" />
+                    )}
+                    <span className={`font-medium ${manualOnly ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                      Unregistered Wallet
+                    </span>
+                  </div>
+                  {!manualOnly && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1 pl-6">
+                      You can only send registered LANA to registered wallets.
+                    </p>
+                  )}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="mywallets" className="space-y-4">
@@ -440,10 +563,24 @@ export default function SendLanaRecipient() {
             className="w-full"
             size="lg"
             onClick={async () => await handleContinue()}
-            disabled={!recipientWalletId.trim() || isCheckingRegistration}
+            disabled={
+              !recipientWalletId.trim() ||
+              walletCheckStatus === 'checking' ||
+              (manualOnly && walletCheckStatus === 'registered') ||
+              (!manualOnly && walletCheckStatus === 'unregistered')
+            }
           >
-            {isCheckingRegistration ? "Checking wallet..." : "Continue"}
-            {!isCheckingRegistration && <ArrowRight className="h-4 w-4 ml-2" />}
+            {walletCheckStatus === 'checking' ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Checking wallet...
+              </>
+            ) : (
+              <>
+                Continue
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </>
+            )}
           </Button>
         </CardContent>
       </Card>

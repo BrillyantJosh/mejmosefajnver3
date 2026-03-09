@@ -343,7 +343,7 @@ export interface WalletData {
   createdAt?: number;
   registrarPubkey?: string;
   status?: string;
-  freezeStatus?: string;  // per-wallet freeze: '' | 'frozen_l8w' | 'frozen_max_cap' | 'frozen_too_wild'
+  freezeStatus?: string;  // per-wallet freeze: '' | 'frozen_l8w' | 'frozen_max_cap' | 'frozen_too_wild' | 'frozen_unreg_Lanas'
 }
 
 /**
@@ -354,6 +354,7 @@ export function getFreezeReason(freezeStatus: string): string {
     case 'frozen_l8w': return 'Late wallet registration';
     case 'frozen_max_cap': return 'Maximum balance cap exceeded';
     case 'frozen_too_wild': return 'Irregular or suspicious activity';
+    case 'frozen_unreg_Lanas': return 'Received unregistered LANA exceeding threshold';
     default: return 'Account frozen';
   }
 }
