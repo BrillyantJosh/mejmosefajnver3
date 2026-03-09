@@ -127,16 +127,21 @@ export default function SellLana() {
                     const lanaAmount = lanoshisToLana(offer.amount);
                     const fiatTotal = calculateFiatValue(offer.amount);
                     const fiatPrice = exchangeRate;
+                    const isPendingToPay = offer.status !== 'active';
 
                     return (
-                      <TableRow key={offer.id}>
+                      <TableRow
+                        key={offer.id}
+                        className={isPendingToPay ? 'cursor-pointer hover:bg-yellow-500/10 transition-colors' : ''}
+                        onClick={isPendingToPay ? () => window.open('https://www.selllana.com', '_blank') : undefined}
+                      >
                         <TableCell className="font-mono text-xs md:text-sm">
                           {truncateWallet(offer.wallet)}
                         </TableCell>
                         <TableCell className="font-medium text-xs md:text-sm whitespace-nowrap">
-                          {lanaAmount.toLocaleString('en-US', { 
+                          {lanaAmount.toLocaleString('en-US', {
                             minimumFractionDigits: 0,
-                            maximumFractionDigits: 0 
+                            maximumFractionDigits: 0
                           })} LANA
                         </TableCell>
                         <TableCell className="text-xs md:text-sm whitespace-nowrap">
@@ -156,19 +161,13 @@ export default function SellLana() {
                               active
                             </Badge>
                           ) : (
-                            <a 
-                              href="https://www.selllana.com" 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="inline-block"
+                            <Badge
+                              variant="default"
+                              className="bg-yellow-500 hover:bg-yellow-600 text-black cursor-pointer transition-colors flex items-center gap-1"
                             >
-                              <Badge 
-                                variant="default" 
-                                className="bg-yellow-500 hover:bg-yellow-600 text-black cursor-pointer transition-colors"
-                              >
-                                pending to pay
-                              </Badge>
-                            </a>
+                              pending to pay
+                              <ExternalLink className="h-3 w-3" />
+                            </Badge>
                           )}
                         </TableCell>
                       </TableRow>
