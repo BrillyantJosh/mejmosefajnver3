@@ -122,6 +122,7 @@ import SendLanaRecipient from "./pages/SendLanaRecipient";
 import SendLanaPrivateKey from "./pages/SendLanaPrivateKey";
 import SendLanaResult from "./pages/SendLanaResult";
 import SellLana from "./pages/SellLana";
+import TestTransaction from "./pages/TestTransaction";
 import BuyLana from "./pages/BuyLana";
 import Lana8Wonder from "./pages/Lana8Wonder";
 import Lana8WonderTransfer from "./pages/Lana8WonderTransfer";
@@ -304,6 +305,7 @@ const App = () => (
             <Route path="/send-lana/private-key" element={<SendLanaPrivateKey />} />
             <Route path="/send-lana/result" element={<SendLanaResult />} />
                   <Route path="/sell-lana" element={<SellLana />} />
+                  <Route path="/test-transaction" element={<TestTransaction />} />
                   <Route path="/buy-lana" element={<BuyLana />} />
                   <Route path="/lana8wonder" element={<Lana8WonderLayout />}>
                     <Route index element={<Lana8Wonder />} />

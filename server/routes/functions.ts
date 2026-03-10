@@ -11,7 +11,7 @@ import webpush from 'web-push';
 import { getDb } from '../db/connection';
 import { electrumCall, fetchBatchBalances } from '../lib/electrum';
 import { detectMissingFields, createPendingTask } from '../lib/aiTasks';
-import { sendLanaTransaction, sendBatchLanaTransaction } from '../lib/crypto';
+import { sendLanaTransaction, sendBatchLanaTransaction, base58CheckDecode, uint8ArrayToHex, privateKeyToPublicKey, privateKeyToUncompressedPublicKey, publicKeyToAddress, normalizeWif } from '../lib/crypto';
 import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays, discoverNewProfiles } from '../lib/nostr';
 import { sendPushToUser } from '../lib/pushNotification';
 import multer from 'multer';
@@ -2857,6 +2857,48 @@ router.post('/check-wallet-registration', async (req: Request, res: Response) =>
     return res.status(response.status).json(result);
   } catch (error: any) {
     console.error('Check wallet registration error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
+// DEBUG: WIF Key Derivation (test page only)
+// =============================================
+router.post('/debug-derive-wif', async (req: Request, res: Response) => {
+  try {
+    const { wif } = req.body;
+    if (!wif) {
+      return res.status(400).json({ success: false, error: 'wif required' });
+    }
+
+    const normalizedKey = normalizeWif(wif);
+    const payload = base58CheckDecode(normalizedKey);
+
+    const versionByte = '0x' + payload[0].toString(16).padStart(2, '0');
+    const hasCompressionFlag = payload.length === 34 && payload[33] === 0x01;
+    const privateKeyHex = uint8ArrayToHex(payload.slice(1, 33));
+
+    const uncompressedPub = privateKeyToUncompressedPublicKey(privateKeyHex);
+    const compressedPub = privateKeyToPublicKey(privateKeyHex);
+
+    const uncompressedAddress = publicKeyToAddress(uncompressedPub);
+    const compressedAddress = publicKeyToAddress(compressedPub);
+
+    return res.json({
+      success: true,
+      derivation: {
+        payloadLength: payload.length,
+        versionByte,
+        hasCompressionFlag,
+        privateKeyHex,
+        uncompressedPubkey: uint8ArrayToHex(uncompressedPub),
+        compressedPubkey: uint8ArrayToHex(compressedPub),
+        uncompressedAddress,
+        compressedAddress,
+      },
+    });
+  } catch (error: any) {
+    console.error('Debug derive WIF error:', error);
     return res.status(500).json({ success: false, error: error.message });
   }
 });
