@@ -42,12 +42,8 @@ interface TxResult {
 export default function TestTransaction() {
   const { parameters } = useSystemParameters();
 
-  const [senderAddress, setSenderAddress] = useState(
-    "LaREAsZV35SdsxDTuFALgRmtoqC1qWcKnk"
-  );
-  const [privateKey, setPrivateKey] = useState(
-    "T8ZZb5KGS1YAZaQE5MTLXgCFmrqFgmNmNKFT1CH5ww1x3Cr79XBc"
-  );
+  const [senderAddress, setSenderAddress] = useState("");
+  const [privateKey, setPrivateKey] = useState("");
   const [recipientAddress, setRecipientAddress] = useState("");
   const [amount, setAmount] = useState("");
 
@@ -77,6 +73,14 @@ export default function TestTransaction() {
       const data = await res.json();
       if (data.success) {
         setDerivation(data.derivation);
+        // Auto-fill sender address based on key type
+        if (data.derivation.hasCompressionFlag) {
+          setSenderAddress(data.derivation.compressedAddress);
+          toast.success("Compressed key detected — sender address auto-filled");
+        } else {
+          setSenderAddress(data.derivation.uncompressedAddress);
+          toast.success("Uncompressed key detected — sender address auto-filled");
+        }
       } else {
         setDerivationError(data.error || "Derivation failed");
       }
@@ -232,15 +236,21 @@ export default function TestTransaction() {
 
                   <div className="border-t pt-2">
                     <div className="flex items-center justify-between mb-1">
-                      <p className="text-muted-foreground">Address (from uncompressed):</p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2"
-                        onClick={() => copyText(derivation.uncompressedAddress, "Address")}
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
+                      <p className="text-muted-foreground">
+                        Address (from uncompressed)
+                        {!derivation.hasCompressionFlag && <span className="text-orange-500 ml-1">← auto-selected</span>}
+                        :
+                      </p>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2"
+                          onClick={() => copyText(derivation.uncompressedAddress, "Address")}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                     <p className={`font-mono text-sm p-2 rounded ${
                       derivation.uncompressedAddress === senderAddress.trim()
@@ -248,21 +258,27 @@ export default function TestTransaction() {
                         : "bg-background"
                     }`}>
                       {derivation.uncompressedAddress}
-                      {derivation.uncompressedAddress === senderAddress.trim() && " ✅ MATCH"}
+                      {derivation.uncompressedAddress === senderAddress.trim() && " ✅ SENDER"}
                     </p>
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <p className="text-muted-foreground">Address (from compressed):</p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2"
-                        onClick={() => copyText(derivation.compressedAddress, "Address")}
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
+                      <p className="text-muted-foreground">
+                        Address (from compressed)
+                        {derivation.hasCompressionFlag && <span className="text-orange-500 ml-1">← auto-selected</span>}
+                        :
+                      </p>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2"
+                          onClick={() => copyText(derivation.compressedAddress, "Address")}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                     <p className={`font-mono text-sm p-2 rounded ${
                       derivation.compressedAddress === senderAddress.trim()
@@ -270,21 +286,9 @@ export default function TestTransaction() {
                         : "bg-background"
                     }`}>
                       {derivation.compressedAddress}
-                      {derivation.compressedAddress === senderAddress.trim() && " ✅ MATCH"}
+                      {derivation.compressedAddress === senderAddress.trim() && " ✅ SENDER"}
                     </p>
                   </div>
-
-                  {derivation.uncompressedAddress !== senderAddress.trim() &&
-                   derivation.compressedAddress !== senderAddress.trim() && (
-                    <Alert variant="destructive" className="mt-2">
-                      <XCircle className="h-4 w-4" />
-                      <AlertTitle>No Address Match!</AlertTitle>
-                      <AlertDescription>
-                        Neither derived address matches the sender address. The private key
-                        does not correspond to this wallet.
-                      </AlertDescription>
-                    </Alert>
-                  )}
                 </div>
               </div>
             )}
