@@ -178,6 +178,16 @@ export default function MainLayout() {
     };
   }, [refreshSession]);
 
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileMenuOpen]);
+
   // Auto-send lashes in background when NOT on /lash/pay page
   const isOnPayLashesPage = location.pathname === "/lash/pay";
   useAutoLashSender({ enabled: !isOnPayLashesPage });
@@ -482,9 +492,9 @@ export default function MainLayout() {
           </div>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Mobile Menu — fixed overlay below header */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t bg-background max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain">
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background overflow-y-auto overscroll-contain md:hidden" style={{ top: 'calc(4rem + env(safe-area-inset-top, 0px))' }}>
             <nav className="container px-4 py-4 space-y-2">
               {/* Fixed Menu Items */}
               {fixedMenuItems.map((item) => (
