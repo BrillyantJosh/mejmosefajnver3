@@ -492,10 +492,13 @@ export default function MainLayout() {
           </div>
         </div>
 
-        {/* Mobile Menu — fixed overlay below header */}
-        {mobileMenuOpen && (
-          <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background overflow-y-auto overscroll-contain md:hidden" style={{ top: 'calc(4rem + env(safe-area-inset-top, 0px))' }}>
-            <nav className="container px-4 py-4 space-y-2">
+        {/* Mobile menu moved outside header — see below */}
+      </header>
+
+      {/* Mobile Menu — fixed overlay below header, OUTSIDE <header> to avoid sticky stacking context issues in PWA */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background overflow-y-auto overscroll-contain md:hidden" style={{ top: 'calc(4rem + env(safe-area-inset-top, 0px))' }}>
+          <nav className="container px-4 py-4 space-y-2">
               {/* Fixed Menu Items */}
               {fixedMenuItems.map((item) => (
                 <Link
@@ -630,10 +633,9 @@ export default function MainLayout() {
                 )
               ))}
 
-            </nav>
-          </div>
-        )}
-      </header>
+          </nav>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="container px-4 py-6">
