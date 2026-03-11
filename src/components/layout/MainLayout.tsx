@@ -484,7 +484,7 @@ export default function MainLayout() {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t bg-background">
+          <div className="md:hidden border-t bg-background max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain">
             <nav className="container px-4 py-4 space-y-2">
               {/* Fixed Menu Items */}
               {fixedMenuItems.map((item) => (
