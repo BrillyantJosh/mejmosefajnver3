@@ -113,8 +113,8 @@ async function wifToPrivateKey(wif: string): Promise<string> {
       }
     }
     
-    // Verify prefix (0xb0 for LanaCoin)
-    if (payload[0] !== 0xb0) {
+    // Verify prefix: 0xb0 (old uncompressed WIF, starts with '6') or 0x41 (new compressed WIF per chainparams SECRET_KEY=65, starts with 'T')
+    if (payload[0] !== 0xb0 && payload[0] !== 0x41) {
       throw new Error('Invalid WIF prefix');
     }
     
