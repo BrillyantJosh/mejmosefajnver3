@@ -67,6 +67,8 @@ export default function MainLayout() {
   const { wallets: myWallets } = useNostrWallets();
   const hasFrozenWallet = myWallets.some(w => w.freezeStatus);
   const lastRefreshRef = useRef<number>(Date.now());
+  const headerRef = useRef<HTMLElement>(null);
+  const [menuTop, setMenuTop] = useState(64);
 
   const dynamicModules = getEnabledModules();
   const appVersion = import.meta.env.VITE_APP_VERSION || 'dev';
@@ -178,10 +180,13 @@ export default function MainLayout() {
     };
   }, [refreshSession]);
 
-  // Lock body scroll when mobile menu is open
+  // Lock body scroll when mobile menu is open + measure header position
   useEffect(() => {
     if (mobileMenuOpen) {
       document.body.style.overflow = 'hidden';
+      if (headerRef.current) {
+        setMenuTop(headerRef.current.getBoundingClientRect().bottom);
+      }
     } else {
       document.body.style.overflow = '';
     }
@@ -219,7 +224,7 @@ export default function MainLayout() {
       />
 
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-[env(safe-area-inset-top)]">
+      <header ref={headerRef} className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-[env(safe-area-inset-top)]">
         <div className="container relative flex h-16 items-center justify-between px-4">
           <Link to="/" className="flex items-center space-x-2 min-w-0 flex-1 mr-4">
             <img
@@ -497,7 +502,7 @@ export default function MainLayout() {
 
       {/* Mobile Menu — fixed overlay below header, OUTSIDE <header> to avoid sticky stacking context issues in PWA */}
       {mobileMenuOpen && (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background overflow-y-auto overscroll-contain md:hidden" style={{ top: 'calc(4rem + env(safe-area-inset-top, 0px))' }}>
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background overflow-y-auto overscroll-contain md:hidden" style={{ top: menuTop }}>
           <nav className="container px-4 py-4 space-y-2">
               {/* Fixed Menu Items */}
               {fixedMenuItems.map((item) => (
