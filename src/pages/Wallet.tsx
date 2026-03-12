@@ -41,6 +41,7 @@ interface WalletWithBalance {
   status?: string;
   freezeStatus?: string;
   balance?: number;
+  unconfirmedBalance?: number;
   balanceLoading?: boolean;
 }
 
@@ -92,7 +93,8 @@ export default function Wallet() {
         const balanceData = data.wallets?.find((b: any) => b.wallet_id === wallet.walletId);
         return {
           ...wallet,
-          balance: balanceData?.balance || 0,
+          balance: balanceData?.confirmed_balance ?? balanceData?.balance ?? 0,
+          unconfirmedBalance: balanceData?.unconfirmed_balance ?? 0,
           balanceLoading: false,
         };
       });
@@ -238,6 +240,13 @@ export default function Wallet() {
                     )}{' '}
                     LANA
                   </p>
+                  {walletsWithBalances.reduce((sum, w) => sum + (w.unconfirmedBalance || 0), 0) !== 0 && (
+                    <p className="text-sm text-orange-500 font-medium">
+                      + {formatNumber(
+                        walletsWithBalances.reduce((sum, w) => sum + (w.unconfirmedBalance || 0), 0)
+                      )} LANA pending
+                    </p>
+                  )}
                 </>
               )}
             </div>
@@ -390,6 +399,11 @@ export default function Wallet() {
                         <span className="text-sm text-muted-foreground">
                           ≈ {formatNumber(wallet.balance || 0)} LANA
                         </span>
+                        {(wallet.unconfirmedBalance ?? 0) !== 0 && (
+                          <span className="text-xs text-orange-500 font-medium mt-1">
+                            + {formatNumber(wallet.unconfirmedBalance!)} LANA pending
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>

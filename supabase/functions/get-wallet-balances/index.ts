@@ -11,6 +11,8 @@ interface ElectrumServer {
 interface WalletBalance {
   wallet_id: string;
   balance: number;
+  confirmed_balance: number;
+  unconfirmed_balance: number;
   status: string;
   error?: string;
 }
@@ -145,13 +147,17 @@ class ElectrumBalanceAggregator {
           const response = responses.get(responseId);
 
           if (response && response.result) {
-            const confirmedBalance = response.result.confirmed || 0;
-            const unconfirmedBalance = response.result.unconfirmed || 0;
-            const totalBalance = (confirmedBalance + unconfirmedBalance) / 100000000; // Convert from lanoshis
+            const confirmedLanoshis = response.result.confirmed || 0;
+            const unconfirmedLanoshis = response.result.unconfirmed || 0;
+            const confirmedLana = Math.round((confirmedLanoshis / 100000000) * 100) / 100;
+            const unconfirmedLana = Math.round((unconfirmedLanoshis / 100000000) * 100) / 100;
+            const totalBalance = Math.round((confirmedLana + unconfirmedLana) * 100) / 100;
 
             balances.push({
               wallet_id: address,
-              balance: Math.round(totalBalance * 100) / 100,
+              balance: totalBalance,
+              confirmed_balance: confirmedLana,
+              unconfirmed_balance: unconfirmedLana,
               status: totalBalance > 0 ? 'active' : 'inactive',
             });
           } else {
@@ -160,6 +166,8 @@ class ElectrumBalanceAggregator {
             balances.push({
               wallet_id: address,
               balance: 0,
+              confirmed_balance: 0,
+              unconfirmed_balance: 0,
               status: 'inactive',
               error: errorMsg,
             });
