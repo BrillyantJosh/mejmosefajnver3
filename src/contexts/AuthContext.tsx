@@ -11,7 +11,10 @@ declare global {
 
 interface UserSession {
   lanaPrivateKey: string;
-  walletId: string;
+  walletId: string; // Primary address matching WIF type
+  walletIdCompressed?: string; // Always the compressed address
+  walletIdUncompressed?: string; // Always the uncompressed address
+  isCompressed?: boolean; // true = Staking (T-prefix), false = Dominate (6-prefix)
   nostrHexId: string;
   nostrNpubId: string;
   nostrPrivateKey: string;
@@ -266,6 +269,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userSession: UserSession = {
         lanaPrivateKey: derivedIds.lanaPrivateKey,
         walletId: derivedIds.walletId,
+        walletIdCompressed: derivedIds.walletIdCompressed,
+        walletIdUncompressed: derivedIds.walletIdUncompressed,
+        isCompressed: derivedIds.isCompressed,
         nostrHexId: derivedIds.nostrHexId,
         nostrNpubId: derivedIds.nostrNpubId,
         nostrPrivateKey: derivedIds.nostrPrivateKey,

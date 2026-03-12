@@ -63,7 +63,7 @@ export function PaymentForm({
 
         // Check both compressed and uncompressed addresses
         // (older wallet registrations via KIND 30889 may use uncompressed addresses)
-        const matchesCompressed = derivedIds.walletId === senderWalletId;
+        const matchesCompressed = derivedIds.walletIdCompressed === senderWalletId;
         const matchesUncompressed = derivedIds.walletIdUncompressed === senderWalletId;
 
         if (!matchesCompressed && !matchesUncompressed) {

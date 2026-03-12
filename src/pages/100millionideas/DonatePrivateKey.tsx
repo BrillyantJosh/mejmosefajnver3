@@ -65,7 +65,7 @@ const DonatePrivateKey = () => {
 
         // Check both compressed and uncompressed addresses
         // Older wallet registrations (KIND 30889) may use uncompressed addresses
-        const matchesCompressed = result.walletId === selectedWalletId;
+        const matchesCompressed = result.walletIdCompressed === selectedWalletId;
         const matchesUncompressed = result.walletIdUncompressed === selectedWalletId;
 
         if (!matchesCompressed && !matchesUncompressed) {
@@ -75,8 +75,8 @@ const DonatePrivateKey = () => {
         } else {
           setValidationError("");
           setIsValid(true);
-          // Always store the compressed address for server-side transactions
-          setCompressedWalletId(result.walletId);
+          // Store the matching address for server-side transactions
+          setCompressedWalletId(matchesCompressed ? result.walletIdCompressed : result.walletIdUncompressed);
         }
       } catch (error) {
         setValidationError("Invalid private key format");

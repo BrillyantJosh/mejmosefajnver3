@@ -35,3 +35,4 @@ server/uploads/
 .env
 .env.*
 !.env.example
+data/

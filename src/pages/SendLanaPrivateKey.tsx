@@ -117,7 +117,7 @@ export default function SendLanaPrivateKey() {
         const derivedIds = await convertWifToIds(privateKey.trim());
         
         // Check both compressed and uncompressed addresses
-        const matchesCompressed = derivedIds.walletId === walletId;
+        const matchesCompressed = derivedIds.walletIdCompressed === walletId;
         const matchesUncompressed = derivedIds.walletIdUncompressed === walletId;
 
         if (!matchesCompressed && !matchesUncompressed) {

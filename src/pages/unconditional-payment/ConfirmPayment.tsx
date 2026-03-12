@@ -84,7 +84,7 @@ export default function ConfirmPayment() {
         const derivedIds = await convertWifToIds(privateKey);
         
         // Check both compressed and uncompressed addresses
-        const matchesCompressed = derivedIds.walletId === paymentData.senderWallet;
+        const matchesCompressed = derivedIds.walletIdCompressed === paymentData.senderWallet;
         const matchesUncompressed = derivedIds.walletIdUncompressed === paymentData.senderWallet;
 
         if (matchesCompressed || matchesUncompressed) {

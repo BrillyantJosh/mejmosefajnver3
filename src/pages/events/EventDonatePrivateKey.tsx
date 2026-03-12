@@ -61,7 +61,7 @@ const EventDonatePrivateKey = () => {
         const result = await convertWifToIds(privateKey);
         
         // Check both compressed and uncompressed addresses
-        const matchesCompressed = result.walletId === state.selectedWalletId;
+        const matchesCompressed = result.walletIdCompressed === state.selectedWalletId;
         const matchesUncompressed = result.walletIdUncompressed === state.selectedWalletId;
 
         if (matchesCompressed || matchesUncompressed) {

@@ -90,38 +90,41 @@ function normalizeWif(wif: string): string {
   return wif.replace(/[\s\u200B-\u200D\uFEFF\r\n\t]/g, '').trim();
 }
 
-// Convert WIF to raw private key hex
-async function wifToPrivateKey(wif: string): Promise<string> {
+// Convert WIF to raw private key hex + detect compression flag
+async function wifToPrivateKey(wif: string): Promise<{ privateKeyHex: string; isCompressed: boolean }> {
   try {
     // Normalize WIF - remove invisible characters
     const normalizedWif = normalizeWif(wif);
-    
+
     // Decode Base58
     const decoded = base58Decode(normalizedWif);
-    
+
     // Extract components
     const payload = decoded.slice(0, -4);
     const checksum = decoded.slice(-4);
-    
+
     // Verify checksum
     const hash = await sha256d(payload);
     const expectedChecksum = hash.slice(0, 4);
-    
+
     for (let i = 0; i < 4; i++) {
       if (checksum[i] !== expectedChecksum[i]) {
         throw new Error('Invalid WIF checksum');
       }
     }
-    
-    // Verify prefix: 0xb0 (old uncompressed WIF, starts with '6') or 0x41 (new compressed WIF per chainparams SECRET_KEY=65, starts with 'T')
+
+    // Verify prefix: 0xb0 (Dominate/uncompressed, starts with '6') or 0x41 (Staking/compressed, starts with 'T')
     if (payload[0] !== 0xb0 && payload[0] !== 0x41) {
       throw new Error('Invalid WIF prefix');
     }
-    
+
+    // Detect compression: 34 bytes = version(1) + key(32) + flag(1) -> compressed
+    const isCompressed = payload.length === 34 && payload[33] === 0x01;
+
     // Extract private key (32 bytes after prefix)
     const privateKey = payload.slice(1, 33);
-    return bytesToHex(privateKey);
-    
+    return { privateKeyHex: bytesToHex(privateKey), isCompressed };
+
   } catch (error) {
     throw new Error(`Invalid WIF format: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -208,28 +211,33 @@ export function hexToNpub(hexPubKey: string): string {
 }
 
 // Main function to convert WIF to all derived identifiers
+// Detects WIF format (Dominate/uncompressed vs Staking/compressed) and sets primary walletId accordingly
 export async function convertWifToIds(wif: string) {
   try {
-    // Step 1: Extract private key from WIF
-    const privateKeyHex = await wifToPrivateKey(wif);
+    // Step 1: Extract private key + detect WIF format
+    const { privateKeyHex, isCompressed } = await wifToPrivateKey(wif);
 
     // Step 2: Generate public keys (both formats needed)
     const uncompressedPublicKeyHex = generatePublicKey(privateKeyHex);
     const compressedPublicKeyHex = generateCompressedPublicKey(privateKeyHex);
     const nostrHexId = deriveNostrPublicKey(privateKeyHex);
 
-    // Step 3: Generate addresses/identifiers
-    // Generate BOTH address formats:
-    // - Compressed address matches server-side derivation (for transactions)
-    // - Uncompressed address matches older wallet registrations in KIND 30889 events
-    const walletId = await generateLanaAddress(compressedPublicKeyHex);
+    // Step 3: Generate BOTH address formats
+    const walletIdCompressed = await generateLanaAddress(compressedPublicKeyHex);
     const walletIdUncompressed = await generateLanaAddress(uncompressedPublicKeyHex);
     const nostrNpubId = hexToNpub(nostrHexId);
+
+    // Primary walletId matches the WIF key type:
+    // - Staking WIF (T-prefix, 0x41): primary = compressed address
+    // - Dominate WIF (6-prefix, 0xB0): primary = uncompressed address
+    const walletId = isCompressed ? walletIdCompressed : walletIdUncompressed;
 
     return {
       lanaPrivateKey: wif,
       walletId,
+      walletIdCompressed,
       walletIdUncompressed,
+      isCompressed,
       nostrHexId,
       nostrNpubId,
       nostrPrivateKey: privateKeyHex

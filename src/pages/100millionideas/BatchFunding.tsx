@@ -227,7 +227,7 @@ const BatchFunding = () => {
       setValidationError("");
       try {
         const result = await convertWifToIds(privateKey.trim());
-        const matchesCompressed = result.walletId === selectedWalletId;
+        const matchesCompressed = result.walletIdCompressed === selectedWalletId;
         const matchesUncompressed = result.walletIdUncompressed === selectedWalletId;
         if (!matchesCompressed && !matchesUncompressed) {
           setValidationError("Private key does not match the selected wallet");
