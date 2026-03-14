@@ -15,6 +15,12 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 
+const PROJECT_TYPES = [
+  { value: "Inspiration", label: "Inspiration" },
+  { value: "OnlineEvent", label: "Online Event" },
+  { value: "Event", label: "Event" },
+];
+
 const WHAT_TYPES = [
   { value: "IamAllowingMyself", label: "I am Allowing Myself" },
   { value: "EmbraceEnough", label: "Embracing Enough" },
@@ -72,7 +78,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
   const [fiatGoal, setFiatGoal] = useState(initialData?.fiatGoal || "");
   const [currency, setCurrency] = useState(initialData?.currency || "EUR");
   const [wallet, setWallet] = useState(initialData?.wallet || "");
-  const [projectType] = useState("Inspiration"); // Always "Inspiration" — locked
+  const [projectType, setProjectType] = useState(initialData?.projectType || "Inspiration");
   const [whatType, setWhatType] = useState(initialData?.whatType || "");
   const [status, setStatus] = useState<"draft" | "active">(initialData?.status || "draft");
   const [responsibilityStatement, setResponsibilityStatement] = useState(
@@ -528,7 +534,18 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
 
           <div className="space-y-2">
             <Label htmlFor="projectType">Project Type *</Label>
-            <Input value="Inspiration" disabled className="bg-muted" />
+            <Select value={projectType} onValueChange={setProjectType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PROJECT_TYPES.map((pt) => (
+                  <SelectItem key={pt.value} value={pt.value}>
+                    {pt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
