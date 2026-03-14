@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Plus, X, ImagePlus, Wallet, Video, FileText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdmin } from "@/contexts/AdminContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { finalizeEvent } from "nostr-tools";
 import { toast } from "@/hooks/use-toast";
@@ -63,6 +64,7 @@ const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 export default function ProjectForm({ mode, initialData, onSubmitSuccess }: ProjectFormProps) {
   const { session } = useAuth();
+  const { appSettings } = useAdmin();
   const { parameters: systemParameters } = useSystemParameters();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
 
@@ -106,24 +108,22 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
   const [publishing, setPublishing] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // Max allowed funding amount from app_settings
-  const [maxAllowedAmount, setMaxAllowedAmount] = useState(200);
+  // Per-type settings from admin
+  const pts = appSettings?.project_type_settings;
+  const currentTypeConfig = pts?.[projectType as keyof typeof pts];
+  const maxAllowedAmount = currentTypeConfig?.maxAmount ?? 200;
 
+  // Filter PROJECT_TYPES to only show admin-enabled types
+  const enabledProjectTypes = PROJECT_TYPES.filter(
+    (pt) => pts?.[pt.value as keyof typeof pts]?.enabled !== false
+  );
+
+  // If current projectType was disabled by admin, reset to first enabled
   useEffect(() => {
-    const fetchMaxAmount = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/db/app_settings?key=eq.inspiration_max_allowed_amount&select=key,value`);
-        const rows = await res.json();
-        if (rows?.[0]?.value) {
-          const val = typeof rows[0].value === 'number' ? rows[0].value : parseInt(rows[0].value, 10);
-          if (val > 0) setMaxAllowedAmount(val);
-        }
-      } catch (e) {
-        console.error('Failed to load max amount setting:', e);
-      }
-    };
-    fetchMaxAmount();
-  }, []);
+    if (enabledProjectTypes.length > 0 && !enabledProjectTypes.find(pt => pt.value === projectType)) {
+      setProjectType(enabledProjectTypes[0].value);
+    }
+  }, [pts]);
 
   // Lock status to active if project has donations
   const hasDonations = initialData?.hasDonations || false;
@@ -426,7 +426,32 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Funding — first so user selects wallet immediately */}
+      {/* Project Type — first because funding limits depend on it */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Project Type</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label htmlFor="projectType">Type *</Label>
+          <Select value={projectType} onValueChange={setProjectType}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {enabledProjectTypes.map((pt) => (
+                <SelectItem key={pt.value} value={pt.value}>
+                  {pt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Maximum funding for {projectType === "OnlineEvent" ? "Online Event" : projectType}: {maxAllowedAmount} {currency}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Funding */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Funding</CardTitle>
@@ -530,22 +555,6 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
               placeholder="Describe your project in detail: vision, goals, how funds will be used..."
               rows={10}
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="projectType">Project Type *</Label>
-            <Select value={projectType} onValueChange={setProjectType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PROJECT_TYPES.map((pt) => (
-                  <SelectItem key={pt.value} value={pt.value}>
-                    {pt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="space-y-2">

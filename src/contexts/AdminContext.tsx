@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { AppSettings, ThemeColors } from "@/types/admin";
+import { AppSettings, ThemeColors, ProjectTypeSettings } from "@/types/admin";
 import { toast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,7 @@ interface AdminContextType {
   updateDefaultRooms: (rooms: string[]) => Promise<void>;
   updateNewProjects100M: (enabled: boolean) => Promise<void>;
   updateWarningBeforeSplit: (amount: number | null) => Promise<void>;
+  updateProjectTypeSettings: (settings: ProjectTypeSettings) => Promise<void>;
   loadAppSettings: () => Promise<void>;
 }
 
@@ -57,6 +58,12 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         ? rawSplitWarning
         : undefined;
 
+      const defaultProjectTypeSettings: ProjectTypeSettings = {
+        Inspiration: { enabled: true, maxAmount: 200 },
+        OnlineEvent: { enabled: true, maxAmount: 200 },
+        Event: { enabled: true, maxAmount: 200 },
+      };
+
       setAppSettings({
         app_name: (getValue('app_name') as string) || "Nostr App",
         theme_colors: (getValue('theme_colors') as ThemeColors) || {
@@ -72,6 +79,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         default_rooms: (getValue('default_rooms') as string[]) || ["general"],
         new_projects_100millionideas: getValue('100millionideas_new_projects_enabled') !== false,
         warning_before_split: warningBeforeSplit,
+        project_type_settings: (getValue('project_type_settings') as ProjectTypeSettings) || defaultProjectTypeSettings,
       });
     } catch (error) {
       console.error('Error loading app settings:', error);
@@ -221,6 +229,30 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateProjectTypeSettings = async (settings: ProjectTypeSettings) => {
+    if (!session?.nostrHexId) {
+      toast({
+        title: "Error",
+        description: "Not authenticated",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await invokeSettingsUpdate('project_type_settings', settings);
+      setAppSettings(prev => prev ? { ...prev, project_type_settings: settings } : null);
+      toast({ title: "Success", description: "Project type settings updated" });
+    } catch (error) {
+      console.error('Error updating project type settings:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update project type settings",
+        variant: "destructive"
+      });
+    }
+  };
+
   useEffect(() => {
     // Don't run admin check until auth has finished loading
     if (authLoading) return;
@@ -256,6 +288,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         updateDefaultRooms,
         updateNewProjects100M,
         updateWarningBeforeSplit,
+        updateProjectTypeSettings,
         loadAppSettings,
       }}
     >

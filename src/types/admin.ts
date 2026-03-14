@@ -1,9 +1,21 @@
+export interface ProjectTypeConfig {
+  enabled: boolean;
+  maxAmount: number;
+}
+
+export interface ProjectTypeSettings {
+  Inspiration: ProjectTypeConfig;
+  OnlineEvent: ProjectTypeConfig;
+  Event: ProjectTypeConfig;
+}
+
 export interface AppSettings {
   app_name: string;
   theme_colors: ThemeColors;
   default_rooms: string[];
   new_projects_100millionideas: boolean;
   warning_before_split?: number; // Max LANA balance across Wallet + Main Wallet + Lana.Discount before SPLIT warning
+  project_type_settings?: ProjectTypeSettings;
 }
 
 export interface ThemeColors {
