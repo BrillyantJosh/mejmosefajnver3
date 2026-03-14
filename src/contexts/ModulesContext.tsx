@@ -360,6 +360,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-red-500 to-orange-500',
     enabled: true,
     order: 27
+  },
+  {
+    id: 'shop',
+    title: 'Shop',
+    description: 'Point of sale and invoice payments with LanaCoins',
+    icon: Store,
+    path: '/shop/sell',
+    gradient: 'from-emerald-500 to-green-500',
+    enabled: true,
+    order: 28
   }
 ];
 
@@ -421,7 +431,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'lanaexchange': 'OTC LanaCoin',
     'being': 'Sožitje',
     'splitwatcher': 'SPLIT Watcher',
-    'reportloss': 'Report Loss'
+    'reportloss': 'Report Loss',
+    'shop': 'Shop'
   };
   return mapping[id] || id;
 };
@@ -459,7 +470,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'OTC LanaCoin': 'lanaexchange',
     'Sožitje': 'being',
     'SPLIT Watcher': 'splitwatcher',
-    'Report Loss': 'reportloss'
+    'Report Loss': 'reportloss',
+    'Shop': 'shop'
   };
   return mapping[id] || null;
 };

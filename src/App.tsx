@@ -112,6 +112,9 @@ import SplitWatcherGeneral from "./pages/split-watcher/SplitWatcherGeneral";
 import ReportLossLayout from "./pages/report-loss/ReportLossLayout";
 import ReportForm from "./pages/report-loss/ReportForm";
 import LossBoard from "./pages/report-loss/LossBoard";
+import ShopLayout from "./pages/shop/ShopLayout";
+import ShopSell from "./pages/shop/ShopSell";
+import ShopPay from "./pages/shop/ShopPay";
 
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
@@ -331,6 +334,11 @@ const App = () => (
                   <Route path="/report-loss" element={<ReportLossLayout />}>
                     <Route index element={<ReportForm />} />
                     <Route path="board" element={<LossBoard />} />
+                  </Route>
+                  <Route path="/shop" element={<ShopLayout />}>
+                    <Route index element={<Navigate to="/shop/sell" replace />} />
+                    <Route path="sell" element={<ShopSell />} />
+                    <Route path="pay" element={<ShopPay />} />
                   </Route>
                   <Route
                     path="/admin"
