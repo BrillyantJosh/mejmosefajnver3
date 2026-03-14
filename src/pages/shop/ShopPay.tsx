@@ -205,6 +205,11 @@ export default function ShopPay() {
   const [isValidating, setIsValidating] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
+  // Balance check
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+
   // Processing / result
   const [isProcessing, setIsProcessing] = useState(false);
   const [txResult, setTxResult] = useState<{
@@ -232,6 +237,66 @@ export default function ShopPay() {
       setSelectedWalletId(availableWallets[0].walletId);
     }
   }, [availableWallets, selectedWalletId]);
+
+  // ==========================================
+  // Fetch wallet balance when wallet is selected in pay step
+  // ==========================================
+
+  useEffect(() => {
+    if (!selectedWalletId || !selectedInvoice || step !== "pay") {
+      setWalletBalance(null);
+      setBalanceError(null);
+      return;
+    }
+
+    const fetchBalance = async () => {
+      setIsLoadingBalance(true);
+      setBalanceError(null);
+      try {
+        const electrumServers = (parameters?.electrumServers || []).map(
+          (s) => ({
+            host: s.host,
+            port: parseInt(s.port, 10) || 5097,
+          })
+        );
+
+        const { data, error } = await supabase.functions.invoke(
+          "get-wallet-balances",
+          {
+            body: {
+              wallet_addresses: [selectedWalletId],
+              electrum_servers:
+                electrumServers.length > 0 ? electrumServers : undefined,
+            },
+          }
+        );
+
+        if (error) {
+          setBalanceError("Could not check balance");
+          return;
+        }
+
+        const walletData = data?.wallets?.[0];
+        if (walletData && !walletData.error) {
+          setWalletBalance(walletData.balance);
+        } else {
+          setBalanceError("Could not check balance");
+        }
+      } catch {
+        setBalanceError("Could not check balance");
+      } finally {
+        setIsLoadingBalance(false);
+      }
+    };
+
+    fetchBalance();
+  }, [selectedWalletId, selectedInvoice, step, parameters?.electrumServers]);
+
+  // Derived: is balance sufficient?
+  const hasSufficientBalance =
+    walletBalance !== null &&
+    selectedInvoice !== null &&
+    walletBalance >= selectedInvoice.amountLana;
 
   // ==========================================
   // Fetch invoices
@@ -487,6 +552,8 @@ export default function ShopPay() {
     setIsPrivateKeyValid(false);
     setValidationError(null);
     setTxResult(null);
+    setWalletBalance(null);
+    setBalanceError(null);
     fetchInvoices();
   };
 
@@ -591,6 +658,8 @@ export default function ShopPay() {
                     setPrivateKey("");
                     setIsPrivateKeyValid(false);
                     setValidationError(null);
+                    setWalletBalance(null);
+                    setBalanceError(null);
                   }}
                 >
                   <SelectTrigger>
@@ -618,6 +687,57 @@ export default function ShopPay() {
                     ))}
                   </SelectContent>
                 </Select>
+              )}
+
+              {/* Wallet Balance */}
+              {selectedWalletId && (
+                <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                  isLoadingBalance
+                    ? "bg-muted"
+                    : balanceError
+                    ? "bg-muted"
+                    : hasSufficientBalance
+                    ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800"
+                    : "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800"
+                }`}>
+                  {isLoadingBalance ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
+                      <span className="text-sm text-muted-foreground">Checking balance...</span>
+                    </>
+                  ) : balanceError ? (
+                    <>
+                      <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm text-muted-foreground">{balanceError}</span>
+                    </>
+                  ) : walletBalance !== null ? (
+                    <>
+                      {hasSufficientBalance ? (
+                        <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                          <span className="text-sm font-medium">
+                            Balance: {formatLana(walletBalance)}
+                          </span>
+                          {!hasSufficientBalance && (
+                            <span className="text-xs text-red-500">
+                              (need {formatLana(selectedInvoice!.amountLana)})
+                            </span>
+                          )}
+                        </div>
+                        {hasSufficientBalance && (
+                          <span className="text-xs text-green-600">Sufficient funds</span>
+                        )}
+                        {!hasSufficientBalance && walletBalance !== null && (
+                          <span className="text-xs text-red-500">Insufficient funds</span>
+                        )}
+                      </div>
+                    </>
+                  ) : null}
+                </div>
               )}
 
               {/* Private Key Input */}
@@ -686,7 +806,7 @@ export default function ShopPay() {
             </Button>
             <Button
               onClick={handlePay}
-              disabled={!isPrivateKeyValid || isProcessing}
+              disabled={!isPrivateKeyValid || isProcessing || (walletBalance !== null && !hasSufficientBalance)}
               className="flex-1 bg-green-600 hover:bg-green-700 text-white"
             >
               Pay {formatLana(selectedInvoice.amountLana)}
