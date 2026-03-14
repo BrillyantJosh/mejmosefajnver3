@@ -505,13 +505,13 @@ export default function ShopSell() {
   // ==========================================
 
   return (
-    <div className="px-4 space-y-6">
+    <div className="px-4 space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <CreditCard className="h-6 w-6" />
+        <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+          <CreditCard className="h-5 w-5 sm:h-6 sm:w-6" />
           Sell
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
           Charge a customer or send an invoice
         </p>
       </div>
@@ -625,11 +625,11 @@ export default function ShopSell() {
           </Card>
 
           {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Button
               onClick={handleChargeCustomer}
               disabled={!inputAmount || calculatedLana <= 0 || !selectedWalletId}
-              className="h-14 bg-green-600 hover:bg-green-700 text-white"
+              className="h-12 sm:h-14 bg-green-600 hover:bg-green-700 text-white text-sm sm:text-base"
             >
               <Camera className="h-5 w-5 mr-2" />
               Charge Customer
@@ -638,7 +638,7 @@ export default function ShopSell() {
               onClick={handleSendInvoice}
               disabled={!inputAmount || calculatedLana <= 0 || !selectedWalletId}
               variant="outline"
-              className="h-14"
+              className="h-12 sm:h-14 text-sm sm:text-base"
             >
               <FileText className="h-5 w-5 mr-2" />
               Send Invoice
@@ -969,7 +969,7 @@ export default function ShopSell() {
 
       {/* Custom QR Scanner Dialog with amount display */}
       <Dialog open={isScannerOpen} onOpenChange={handleCloseScanner}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-[95vw] sm:max-w-md mx-auto">
           {/* Amount Header — big and clear */}
           <div className="text-center space-y-2 pt-2">
             <div className="flex items-center justify-center gap-2 text-muted-foreground">

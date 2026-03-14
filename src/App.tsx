@@ -114,6 +114,7 @@ import ReportForm from "./pages/report-loss/ReportForm";
 import LossBoard from "./pages/report-loss/LossBoard";
 import ShopLayout from "./pages/shop/ShopLayout";
 import ShopSell from "./pages/shop/ShopSell";
+import ShopPaid from "./pages/shop/ShopPaid";
 import ShopPay from "./pages/shop/ShopPay";
 
 import Chat from "./pages/Chat";
@@ -338,6 +339,7 @@ const App = () => (
                   <Route path="/shop" element={<ShopLayout />}>
                     <Route index element={<Navigate to="/shop/sell" replace />} />
                     <Route path="sell" element={<ShopSell />} />
+                    <Route path="paid" element={<ShopPaid />} />
                     <Route path="pay" element={<ShopPay />} />
                   </Route>
                   <Route

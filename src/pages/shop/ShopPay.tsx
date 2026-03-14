@@ -125,14 +125,14 @@ function InvoiceCard({
       className="cursor-pointer hover:shadow-md transition-shadow"
       onClick={onClick}
     >
-      <CardContent className="p-4 space-y-3">
+      <CardContent className="p-3 sm:p-4 space-y-3">
         {/* Seller info */}
         <div className="flex items-center gap-3">
           <UserAvatar
             pubkey={invoice.pubkey}
             picture={profile?.picture}
             name={profile?.display_name || profile?.full_name}
-            className="h-10 w-10"
+            className="h-8 w-8 sm:h-10 sm:w-10"
           />
           <div className="flex-1 min-w-0">
             <p className="font-medium truncate">
@@ -156,10 +156,10 @@ function InvoiceCard({
         {/* Amount */}
         <div className="flex items-baseline justify-between">
           <div>
-            <span className="text-2xl font-bold">
+            <span className="text-xl sm:text-2xl font-bold">
               {invoice.amountLana.toFixed(2)}
             </span>
-            <span className="text-sm text-muted-foreground ml-1">LANA</span>
+            <span className="text-xs sm:text-sm text-muted-foreground ml-1">LANA</span>
           </div>
           {invoice.amountFiat > 0 && invoice.currency !== "LANA" && (
             <span className="text-sm text-muted-foreground">
@@ -176,7 +176,7 @@ function InvoiceCard({
         )}
 
         {/* Wallet */}
-        <div className="text-xs text-muted-foreground font-mono">
+        <div className="text-[0.65rem] sm:text-xs text-muted-foreground font-mono truncate">
           Pay to: {invoice.walletId.slice(0, 12)}...{invoice.walletId.slice(-4)}
         </div>
       </CardContent>
@@ -495,14 +495,14 @@ export default function ShopPay() {
   // ==========================================
 
   return (
-    <div className="px-4 space-y-6">
+    <div className="px-4 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ShoppingCart className="h-6 w-6" />
+          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+            <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6" />
             Pay
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             Browse and pay open invoices
           </p>
         </div>
