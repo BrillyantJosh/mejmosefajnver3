@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Heart, Users } from "lucide-react";
+import { Heart, Users, EyeOff, Eye, Trophy } from "lucide-react";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { useNostrProjectDonations } from "@/hooks/useNostrProjectDonations";
 import { ProjectData } from "@/hooks/useNostrProjects";
@@ -11,6 +11,11 @@ import { useNavigate } from "react-router-dom";
 
 interface ProjectCardProps {
   project: ProjectData;
+  isModuleAdmin?: boolean;
+  isHidden?: boolean;
+  isCompleted?: boolean;
+  onToggleHidden?: (dTag: string) => void;
+  onToggleCompleted?: (dTag: string) => void;
 }
 
 // Map what_type enum values to readable labels
@@ -21,7 +26,7 @@ const WHAT_TYPE_LABELS: Record<string, string> = {
   'ProductOrService': 'Product Or Service',
 };
 
-const ProjectCard = ({ project }: ProjectCardProps) => {
+const ProjectCard = ({ project, isModuleAdmin, isHidden, isCompleted, onToggleHidden, onToggleCompleted }: ProjectCardProps) => {
   const { profile } = useNostrProfileCache(project.ownerPubkey);
   const { donations, totalRaised, isLoading } = useNostrProjectDonations(project.id);
   const navigate = useNavigate();
@@ -38,30 +43,52 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
   };
 
   return (
-    <Card 
-      className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+    <Card
+      className={`overflow-hidden hover:shadow-lg transition-shadow cursor-pointer ${isHidden ? 'opacity-50 border-dashed' : ''}`}
       onClick={handleSupportProject}
     >
       {/* Cover Image */}
       {project.coverImage && (
-        <div className="aspect-video w-full overflow-hidden">
-          <img 
-            src={project.coverImage} 
+        <div className="aspect-video w-full overflow-hidden relative">
+          <img
+            src={project.coverImage}
             alt={project.title}
             className="w-full h-full object-cover"
           />
+          {isCompleted && (
+            <div className="absolute inset-0 bg-green-600/20 flex items-center justify-center">
+              <Badge className="bg-green-600 text-white text-lg px-4 py-1.5 gap-2">
+                <Trophy className="h-5 w-5" />
+                Completed
+              </Badge>
+            </div>
+          )}
         </div>
       )}
 
       <CardContent className="p-6 space-y-4">
-        {/* Title */}
+        {/* Title + Badges */}
         <div className="flex items-start justify-between gap-2">
           <h3 className="text-2xl font-bold text-green-600 flex-1">
             {project.title}
           </h3>
-          {isFullyFunded && (
-            <Badge className="bg-green-500 text-white">Funded ✓</Badge>
-          )}
+          <div className="flex gap-1 flex-shrink-0">
+            {isCompleted && !project.coverImage && (
+              <Badge className="bg-green-600 text-white gap-1">
+                <Trophy className="h-3 w-3" />
+                Completed
+              </Badge>
+            )}
+            {isHidden && (
+              <Badge variant="outline" className="border-orange-300 text-orange-600 gap-1">
+                <EyeOff className="h-3 w-3" />
+                Hidden
+              </Badge>
+            )}
+            {isFullyFunded && (
+              <Badge className="bg-green-500 text-white">Funded ✓</Badge>
+            )}
+          </div>
         </div>
 
         {/* What Type Badge */}
@@ -111,7 +138,7 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
         </div>
 
         {/* Support Button */}
-        <Button 
+        <Button
           className="w-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleSupportProject}
           disabled={isFullyFunded}
@@ -119,6 +146,36 @@ const ProjectCard = ({ project }: ProjectCardProps) => {
           <Heart className="h-4 w-4 mr-2" />
           {isFullyFunded ? 'Fully Funded' : 'Support Project'}
         </Button>
+
+        {/* Admin Controls */}
+        {isModuleAdmin && (
+          <div className="flex gap-2 pt-2 border-t" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant={isHidden ? "default" : "outline"}
+              size="sm"
+              className="flex-1 gap-1"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleHidden?.(project.id);
+              }}
+            >
+              {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+              {isHidden ? "Show" : "Hide"}
+            </Button>
+            <Button
+              variant={isCompleted ? "default" : "outline"}
+              size="sm"
+              className={`flex-1 gap-1 ${isCompleted ? 'bg-green-600 hover:bg-green-700' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleCompleted?.(project.id);
+              }}
+            >
+              <Trophy className="h-3.5 w-3.5" />
+              {isCompleted ? "Completed ✓" : "Complete"}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

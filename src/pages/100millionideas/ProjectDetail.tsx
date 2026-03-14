@@ -2,11 +2,12 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useNostrProjects } from "@/hooks/useNostrProjects";
 import { useNostrProjectDonations } from "@/hooks/useNostrProjectDonations";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
+import { useAdmin } from "@/contexts/AdminContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Users, Target, Wallet, ExternalLink } from "lucide-react";
+import { ArrowLeft, Users, Target, Wallet, ExternalLink, Trophy } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -37,7 +38,10 @@ const ProjectDetail = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { projects, isLoading: projectsLoading } = useNostrProjects();
+  const { appSettings } = useAdmin();
   const project = projects.find(p => p.id === projectId);
+  const projectOverrides = appSettings?.project_overrides || {};
+  const isCompleted = !!(projectId && projectOverrides[projectId]?.completed);
   const { donations, totalRaised } = useNostrProjectDonations(projectId || '');
   const { profile: ownerProfile } = useNostrProfileCache(project?.ownerPubkey || null);
 
@@ -93,6 +97,12 @@ const ProjectDetail = () => {
         <Badge className="absolute top-4 right-4 bg-background text-foreground">
           {project.currency}
         </Badge>
+        {isCompleted && (
+          <Badge className="absolute top-4 left-4 bg-green-600 text-white text-sm px-3 py-1 gap-1.5">
+            <Trophy className="h-4 w-4" />
+            Completed
+          </Badge>
+        )}
       </div>
 
       {/* Content */}

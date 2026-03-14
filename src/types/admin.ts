@@ -9,6 +9,15 @@ export interface ProjectTypeSettings {
   Event: ProjectTypeConfig;
 }
 
+export interface ProjectOverride {
+  hidden?: boolean;
+  completed?: boolean;
+}
+
+export interface ProjectOverrides {
+  [dTag: string]: ProjectOverride;
+}
+
 export interface AppSettings {
   app_name: string;
   theme_colors: ThemeColors;
@@ -16,6 +25,8 @@ export interface AppSettings {
   new_projects_100millionideas: boolean;
   warning_before_split?: number; // Max LANA balance across Wallet + Main Wallet + Lana.Discount before SPLIT warning
   project_type_settings?: ProjectTypeSettings;
+  millionideas_admins?: string[];
+  project_overrides?: ProjectOverrides;
 }
 
 export interface ThemeColors {

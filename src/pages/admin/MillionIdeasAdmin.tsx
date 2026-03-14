@@ -6,11 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ProjectTypeSettings } from "@/types/admin";
-import { Lightbulb } from "lucide-react";
+import { Lightbulb, UserPlus, X } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 export default function MillionIdeasAdmin() {
-  const { appSettings, updateNewProjects100M, updateProjectTypeSettings } = useAdmin();
+  const { appSettings, updateNewProjects100M, updateProjectTypeSettings, update100MAdmins } = useAdmin();
 
+  // --- Project Type Settings ---
   const defaultPTS: ProjectTypeSettings = {
     Inspiration: { enabled: true, maxAmount: 200 },
     OnlineEvent: { enabled: true, maxAmount: 200 },
@@ -20,9 +22,14 @@ export default function MillionIdeasAdmin() {
     appSettings?.project_type_settings || defaultPTS
   );
 
+  // --- Module Admins ---
+  const [admins, setAdmins] = useState<string[]>(appSettings?.millionideas_admins || []);
+  const [newAdminHex, setNewAdminHex] = useState("");
+
   useEffect(() => {
     if (appSettings) {
       setLocalPTS(appSettings.project_type_settings || defaultPTS);
+      setAdmins(appSettings.millionideas_admins || []);
     }
   }, [appSettings]);
 
@@ -43,6 +50,27 @@ export default function MillionIdeasAdmin() {
 
   const handleSavePTS = async () => {
     await updateProjectTypeSettings(localPTS);
+  };
+
+  const handleAddAdmin = async () => {
+    const hex = newAdminHex.trim().toLowerCase();
+    if (!hex) return;
+    if (!/^[0-9a-f]{64}$/.test(hex)) {
+      toast({ title: "Error", description: "Invalid Nostr HEX ID — must be 64 hex characters", variant: "destructive" });
+      return;
+    }
+    if (admins.includes(hex)) {
+      toast({ title: "Error", description: "This admin is already added", variant: "destructive" });
+      return;
+    }
+    const updated = [...admins, hex];
+    await update100MAdmins(updated);
+    setNewAdminHex("");
+  };
+
+  const handleRemoveAdmin = async (hex: string) => {
+    const updated = admins.filter(a => a !== hex);
+    await update100MAdmins(updated);
   };
 
   return (
@@ -119,6 +147,50 @@ export default function MillionIdeasAdmin() {
             );
           })}
           <Button onClick={handleSavePTS}>Save Project Types</Button>
+        </CardContent>
+      </Card>
+
+      {/* Module Administrators */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserPlus className="h-5 w-5" />
+            Module Administrators
+          </CardTitle>
+          <CardDescription>
+            Users with these Nostr HEX IDs can hide projects and mark them as completed on the projects page
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              value={newAdminHex}
+              onChange={(e) => setNewAdminHex(e.target.value)}
+              placeholder="Nostr HEX ID (64 characters)"
+              className="font-mono text-sm"
+            />
+            <Button onClick={handleAddAdmin}>Add</Button>
+          </div>
+
+          {admins.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No module administrators added yet. Global admins always have access.</p>
+          ) : (
+            <div className="space-y-2">
+              {admins.map((hex) => (
+                <div key={hex} className="flex items-center justify-between p-3 border rounded-lg">
+                  <span className="font-mono text-sm break-all">{hex}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
+                    onClick={() => handleRemoveAdmin(hex)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

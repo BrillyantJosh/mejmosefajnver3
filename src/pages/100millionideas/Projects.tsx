@@ -4,10 +4,38 @@ import ProjectsSummaryBar from "@/components/100millionideas/ProjectsSummaryBar"
 import { Loader2, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useAdmin } from "@/contexts/AdminContext";
+import { ProjectOverrides } from "@/types/admin";
 
 const Projects = () => {
   const { projects, isLoading } = useNostrProjects();
   const navigate = useNavigate();
+  const { is100MAdmin, appSettings, updateProjectOverrides } = useAdmin();
+
+  const overrides: ProjectOverrides = appSettings?.project_overrides || {};
+
+  // For non-admins, filter out hidden projects
+  const visibleProjects = is100MAdmin
+    ? projects
+    : projects.filter(p => !overrides[p.id]?.hidden);
+
+  const handleToggleHidden = async (dTag: string) => {
+    const current = overrides[dTag] || {};
+    const updated: ProjectOverrides = {
+      ...overrides,
+      [dTag]: { ...current, hidden: !current.hidden },
+    };
+    await updateProjectOverrides(updated);
+  };
+
+  const handleToggleCompleted = async (dTag: string) => {
+    const current = overrides[dTag] || {};
+    const updated: ProjectOverrides = {
+      ...overrides,
+      [dTag]: { ...current, completed: !current.completed },
+    };
+    await updateProjectOverrides(updated);
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -34,7 +62,7 @@ const Projects = () => {
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           <span className="ml-2 text-muted-foreground">Loading projects...</span>
         </div>
-      ) : projects.length === 0 ? (
+      ) : visibleProjects.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground">No projects found yet.</p>
           <p className="text-sm text-muted-foreground mt-2">
@@ -43,8 +71,16 @@ const Projects = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects.map((project) => (
-            <ProjectCard key={project.eventId} project={project} />
+          {visibleProjects.map((project) => (
+            <ProjectCard
+              key={project.eventId}
+              project={project}
+              isModuleAdmin={is100MAdmin}
+              isHidden={!!overrides[project.id]?.hidden}
+              isCompleted={!!overrides[project.id]?.completed}
+              onToggleHidden={handleToggleHidden}
+              onToggleCompleted={handleToggleCompleted}
+            />
           ))}
         </div>
       )}

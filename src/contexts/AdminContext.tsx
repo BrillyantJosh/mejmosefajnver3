@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { AppSettings, ThemeColors, ProjectTypeSettings } from "@/types/admin";
+import { AppSettings, ThemeColors, ProjectTypeSettings, ProjectOverrides } from "@/types/admin";
 import { toast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,6 +8,7 @@ const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 interface AdminContextType {
   isAdmin: boolean;
+  is100MAdmin: boolean;
   loading: boolean;
   appSettings: AppSettings | null;
   updateAppName: (name: string) => Promise<void>;
@@ -16,6 +17,8 @@ interface AdminContextType {
   updateNewProjects100M: (enabled: boolean) => Promise<void>;
   updateWarningBeforeSplit: (amount: number | null) => Promise<void>;
   updateProjectTypeSettings: (settings: ProjectTypeSettings) => Promise<void>;
+  update100MAdmins: (admins: string[]) => Promise<void>;
+  updateProjectOverrides: (overrides: ProjectOverrides) => Promise<void>;
   loadAppSettings: () => Promise<void>;
 }
 
@@ -80,6 +83,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         new_projects_100millionideas: getValue('100millionideas_new_projects_enabled') !== false,
         warning_before_split: warningBeforeSplit,
         project_type_settings: (getValue('project_type_settings') as ProjectTypeSettings) || defaultProjectTypeSettings,
+        millionideas_admins: (getValue('100millionideas_admins') as string[]) || [],
+        project_overrides: (getValue('100millionideas_project_overrides') as ProjectOverrides) || {},
       });
     } catch (error) {
       console.error('Error loading app settings:', error);
@@ -253,6 +258,43 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const update100MAdmins = async (admins: string[]) => {
+    if (!session?.nostrHexId) {
+      toast({ title: "Error", description: "Not authenticated", variant: "destructive" });
+      return;
+    }
+    try {
+      await invokeSettingsUpdate('100millionideas_admins', admins);
+      setAppSettings(prev => prev ? { ...prev, millionideas_admins: admins } : null);
+      toast({ title: "Success", description: "100M Ideas admins updated" });
+    } catch (error) {
+      console.error('Error updating 100M admins:', error);
+      toast({ title: "Error", description: "Failed to update admins", variant: "destructive" });
+    }
+  };
+
+  const updateProjectOverrides = async (overrides: ProjectOverrides) => {
+    if (!session?.nostrHexId) {
+      toast({ title: "Error", description: "Not authenticated", variant: "destructive" });
+      return;
+    }
+    try {
+      await invokeSettingsUpdate('100millionideas_project_overrides', overrides);
+      setAppSettings(prev => prev ? { ...prev, project_overrides: overrides } : null);
+    } catch (error) {
+      console.error('Error updating project overrides:', error);
+      toast({ title: "Error", description: "Failed to update project", variant: "destructive" });
+    }
+  };
+
+  // Compute 100M Ideas admin status
+  const is100MAdmin = Boolean(
+    session?.nostrHexId && (
+      isAdmin || // Global admin is always 100M admin too
+      (appSettings?.millionideas_admins || []).includes(session.nostrHexId)
+    )
+  );
+
   useEffect(() => {
     // Don't run admin check until auth has finished loading
     if (authLoading) return;
@@ -281,6 +323,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     <AdminContext.Provider
       value={{
         isAdmin,
+        is100MAdmin,
         loading,
         appSettings,
         updateAppName,
@@ -289,6 +332,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         updateNewProjects100M,
         updateWarningBeforeSplit,
         updateProjectTypeSettings,
+        update100MAdmins,
+        updateProjectOverrides,
         loadAppSettings,
       }}
     >
