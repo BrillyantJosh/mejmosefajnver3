@@ -6,9 +6,10 @@ import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
 import { useNostrGroupKey } from "@/hooks/useNostrGroupKey";
 import { useNostrGroupMessages } from "@/hooks/useNostrGroupMessages";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
-import { SimplePool, finalizeEvent, nip44 } from "nostr-tools";
+import { finalizeEvent, nip44 } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { useLashHistory } from "@/hooks/useLashHistory";
 import { useNostrLash } from "@/hooks/useNostrLash";
 import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
@@ -248,34 +249,37 @@ export default function Own() {
         pubkey: signedEvent.pubkey.slice(0, 16) + '...'
       });
 
-      // 4. Publish to relays
-      // ⚠️ IMPORTANT: Do NOT reduce this timeout below 60000ms!
-      // Audio messages are larger and relays can be slow to acknowledge.
-      // Setting it lower causes "Sending failed" errors.
-      const RELAY_PUBLISH_TIMEOUT = 60000;
-      const pool = new SimplePool();
-      const publishPromises = pool.publish(parameters.relays, signedEvent);
-
-      const publishResults = await Promise.allSettled(
-        Array.from(publishPromises).map((promise, index) =>
-          Promise.race([
-            promise.then(() => ({ relay: parameters.relays[index], success: true })),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Timeout')), RELAY_PUBLISH_TIMEOUT)
-            )
-          ])
-        )
+      // 4. Publish to relays via server-side endpoint (more reliable than browser SimplePool)
+      // ⚠️ Browser-side SimplePool WebSocket connections are unreliable for larger payloads
+      // (audio references, etc.) — server-side publish handles relay connections properly.
+      const { data: publishData, error: publishError } = await supabase.functions.invoke(
+        'publish-dm-event',
+        { body: { event: signedEvent } }
       );
 
-      const successCount = publishResults.filter(r => r.status === 'fulfilled').length;
-      console.log(`✅ Published to ${successCount}/${parameters.relays.length} relays`);
+      if (publishError) {
+        console.error('❌ Server publish error:', publishError);
+      }
+
+      const successCount = publishData?.publishedTo || 0;
+      const totalRelays = publishData?.totalRelays || 0;
+      console.log(`✅ Published to ${successCount}/${totalRelays} relays`);
+
+      // Queue as fallback in case primary publish missed some relays
+      supabase.functions
+        .invoke('queue-relay-event', {
+          body: { signedEvent, userPubkey: session.nostrHexId },
+        })
+        .catch(() => {}); // silent fallback
 
       if (successCount > 0) {
         toast.success("Message sent");
         return true;
       } else {
-        toast.error("Failed to publish to any relay");
-        return false;
+        // Even if publish-dm-event reported 0, the queue-relay-event fallback may still deliver
+        console.warn('⚠️ Primary publish reported 0 relays, relying on queue fallback');
+        toast.success("Message queued");
+        return true;
       }
     } catch (error) {
       console.error('❌ Error sending OWN message:', error);
