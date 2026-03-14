@@ -137,23 +137,46 @@ export default function Home() {
   useEffect(() => {
     if (!session?.nostrHexId) return;
 
-    supabase.functions
-      .invoke("query-nostr-events", {
+    // Fetch both KIND 70100 (invoices) and KIND 70101 (confirmations) in parallel
+    Promise.all([
+      supabase.functions.invoke("query-nostr-events", {
         body: {
           filter: { kinds: [70100], limit: 100 },
           timeout: 10000,
         },
-      })
-      .then(({ data, error }) => {
-        if (error || !data?.events) return;
+      }),
+      supabase.functions.invoke("query-nostr-events", {
+        body: {
+          filter: { kinds: [70101], limit: 200 },
+          timeout: 10000,
+        },
+      }),
+    ])
+      .then(([invoiceRes, confirmRes]) => {
+        if (invoiceRes.error || !invoiceRes.data?.events) return;
+
+        // Build set of paid invoice IDs from KIND 70101 confirmations
+        const paidInvoiceIds = new Set<string>();
+        const confirmEvents = confirmRes.data?.events || [];
+        for (const evt of confirmEvents) {
+          const tags = evt.tags || [];
+          const invoiceRef = tags.find((t: string[]) => t[0] === "invoice_ref")?.[1];
+          const status = tags.find((t: string[]) => t[0] === "status")?.[1];
+          if (invoiceRef && status === "confirmed") {
+            paidInvoiceIds.add(invoiceRef);
+          }
+        }
+
         const nowUnix = Math.floor(Date.now() / 1000);
-        const parsed = data.events
+        const parsed = invoiceRes.data.events
           .map((evt: any) => {
             const tags = evt.tags || [];
             const getTag = (n: string) =>
               tags.find((t: string[]) => t[0] === n)?.[1];
             const status = getTag("status") || "open";
             if (status !== "open") return null;
+            // Exclude already paid invoices (confirmed via KIND 70101)
+            if (paidInvoiceIds.has(evt.id)) return null;
             // Not own invoices
             if (evt.pubkey === session?.nostrHexId) return null;
             // Not expired

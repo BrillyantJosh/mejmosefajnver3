@@ -305,23 +305,41 @@ export default function ShopPay() {
   const fetchInvoices = async () => {
     setIsLoadingInvoices(true);
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "query-nostr-events",
-        {
+      // Fetch KIND 70100 (invoices) and KIND 70101 (payment confirmations) in parallel
+      const [invoiceRes, confirmRes] = await Promise.all([
+        supabase.functions.invoke("query-nostr-events", {
           body: {
             filter: { kinds: [70100], limit: 100 },
             timeout: 15000,
           },
-        }
-      );
+        }),
+        supabase.functions.invoke("query-nostr-events", {
+          body: {
+            filter: { kinds: [70101], limit: 200 },
+            timeout: 15000,
+          },
+        }),
+      ]);
 
-      if (error) {
-        console.error("Failed to fetch invoices:", error);
+      if (invoiceRes.error) {
+        console.error("Failed to fetch invoices:", invoiceRes.error);
         toast.error("Failed to load invoices");
         return;
       }
 
-      const events = data?.events || [];
+      // Build set of paid invoice IDs from KIND 70101 confirmations
+      const paidInvoiceIds = new Set<string>();
+      const confirmEvents = confirmRes.data?.events || [];
+      for (const evt of confirmEvents) {
+        const tags = evt.tags || [];
+        const invoiceRef = tags.find((t: string[]) => t[0] === "invoice_ref")?.[1];
+        const status = tags.find((t: string[]) => t[0] === "status")?.[1];
+        if (invoiceRef && status === "confirmed") {
+          paidInvoiceIds.add(invoiceRef);
+        }
+      }
+
+      const events = invoiceRes.data?.events || [];
       const now = Math.floor(Date.now() / 1000);
 
       const parsed = events
@@ -330,6 +348,8 @@ export default function ShopPay() {
           if (!inv) return false;
           // Only show open invoices
           if (inv.status !== "open") return false;
+          // Exclude already paid invoices (confirmed via KIND 70101)
+          if (paidInvoiceIds.has(inv.id)) return false;
           // Exclude own invoices
           if (inv.pubkey === session?.nostrHexId) return false;
           // Exclude expired
