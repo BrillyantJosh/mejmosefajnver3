@@ -332,16 +332,6 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     order: 25
   },
   {
-    id: 'shop',
-    title: 'Shop',
-    description: 'Point-of-sale payments and invoice management with LanaCoins',
-    icon: Store,
-    path: '/shop',
-    gradient: 'from-emerald-500 to-green-500',
-    enabled: true,
-    order: 0.8
-  },
-  {
     id: 'being',
     title: 'Sožitje',
     description: 'Chat with the digital being Sožitje — every conversation helps it grow',
@@ -431,8 +421,7 @@ const mapToNostrId = (id: ModuleType): string => {
     'lanaexchange': 'OTC LanaCoin',
     'being': 'Sožitje',
     'splitwatcher': 'SPLIT Watcher',
-    'reportloss': 'Report Loss',
-    'shop': 'Shop'
+    'reportloss': 'Report Loss'
   };
   return mapping[id] || id;
 };
@@ -470,8 +459,7 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'OTC LanaCoin': 'lanaexchange',
     'Sožitje': 'being',
     'SPLIT Watcher': 'splitwatcher',
-    'Report Loss': 'reportloss',
-    'Shop': 'shop'
+    'Report Loss': 'reportloss'
   };
   return mapping[id] || null;
 };
