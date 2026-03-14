@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle, Video, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn } from "lucide-react";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, Video, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format, startOfWeek, endOfWeek } from "date-fns";
 import { useNostrEvents, LanaEvent } from "@/hooks/useNostrEvents";
@@ -122,6 +122,64 @@ export default function Home() {
   const recentConversations = conversations
     .filter(c => c.lastMessage && c.lastMessage.created_at >= fourteenDaysAgo)
     .slice(0, 3);
+
+  // Fetch pending invoices to pay (KIND 70100 targeted at user, or public)
+  const [pendingInvoices, setPendingInvoices] = useState<Array<{
+    id: string;
+    pubkey: string;
+    amountLana: number;
+    amountFiat: number;
+    currency: string;
+    description: string;
+    deadline: number | null;
+  }>>([]);
+
+  useEffect(() => {
+    if (!session?.nostrHexId) return;
+
+    supabase.functions
+      .invoke("query-nostr-events", {
+        body: {
+          filter: { kinds: [70100], limit: 100 },
+          timeout: 10000,
+        },
+      })
+      .then(({ data, error }) => {
+        if (error || !data?.events) return;
+        const nowUnix = Math.floor(Date.now() / 1000);
+        const parsed = data.events
+          .map((evt: any) => {
+            const tags = evt.tags || [];
+            const getTag = (n: string) =>
+              tags.find((t: string[]) => t[0] === n)?.[1];
+            const status = getTag("status") || "open";
+            if (status !== "open") return null;
+            // Not own invoices
+            if (evt.pubkey === session?.nostrHexId) return null;
+            // Not expired
+            const deadlineStr = getTag("deadline");
+            const deadline = deadlineStr ? parseInt(deadlineStr, 10) : null;
+            if (deadline && deadline < nowUnix) return null;
+            // If targeted, only show if it's for us
+            const targetBuyer = tags.find((t: string[]) => t[0] === "p")?.[1];
+            if (targetBuyer && targetBuyer !== session?.nostrHexId) return null;
+            const amountLana = parseFloat(getTag("amount_lana") || "0");
+            if (amountLana <= 0) return null;
+            return {
+              id: evt.id,
+              pubkey: evt.pubkey,
+              amountLana,
+              amountFiat: parseFloat(getTag("amount_fiat") || "0"),
+              currency: getTag("currency") || "EUR",
+              description: getTag("description") || evt.content || "",
+              deadline,
+            };
+          })
+          .filter(Boolean);
+        setPendingInvoices(parsed);
+      })
+      .catch(() => {});
+  }, [session?.nostrHexId]);
 
   // Filter online events: this week only, upcoming/active
   const now = new Date();
@@ -394,7 +452,49 @@ export default function Home() {
 
           {/* Sidebar — right */}
           <div className="w-full lg:w-72 flex-shrink-0 space-y-4">
-            {/* Events Card — first, most time-sensitive */}
+            {/* Pending Invoices Card */}
+            {session && pendingInvoices.length > 0 && (
+              <Link to="/shop/pay" className="block">
+                <Card className="border-orange-300 dark:border-orange-700 hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Receipt className="h-5 w-5 text-orange-500" />
+                      Invoices to Pay
+                      <Badge variant="destructive" className="ml-auto h-5 min-w-5 flex items-center justify-center px-1.5 text-[10px] font-bold">
+                        {pendingInvoices.length}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="space-y-1.5">
+                      {pendingInvoices.slice(0, 3).map((inv) => (
+                        <div
+                          key={inv.id}
+                          className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-muted/50"
+                        >
+                          <span className="text-sm truncate flex-1 min-w-0">
+                            {inv.description || "Invoice"}
+                          </span>
+                          <span className="text-sm font-bold text-orange-600 ml-2 whitespace-nowrap">
+                            {inv.amountLana.toFixed(2)} LANA
+                          </span>
+                        </div>
+                      ))}
+                      {pendingInvoices.length > 3 && (
+                        <p className="text-xs text-muted-foreground text-center">
+                          +{pendingInvoices.length - 3} more
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-center px-3 py-2 mt-2 rounded-lg text-xs font-medium text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-colors">
+                      Go to Pay →
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            )}
+
+            {/* Events Card — most time-sensitive */}
             {!loadingOnline && !loadingLive && (onlineThisWeek.length > 0 || liveUpcoming.length > 0) && (
               <Card>
                 <CardHeader className="pb-3">
