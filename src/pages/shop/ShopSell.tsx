@@ -147,9 +147,10 @@ export default function ShopSell() {
     setScannedKey(trimmed);
 
     try {
-      // Derive wallet from WIF key
+      // Derive wallet from WIF key — walletId is the PRIMARY address
+      // matching the WIF format (compressed for Staking/0x41, uncompressed for Dominate/0xB0)
       const ids = await convertWifToIds(trimmed);
-      const buyerAddr = ids.walletIdCompressed || ids.walletIdUncompressed;
+      const buyerAddr = ids.walletId;
 
       if (!buyerAddr) {
         setScanError("Could not derive wallet address from scanned key");
