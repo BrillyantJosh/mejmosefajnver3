@@ -451,11 +451,15 @@ export async function fetchUserWallets(
 /**
  * Publish a signed Nostr event to multiple relays
  * Returns an array of { relay, success, error? } results
+ *
+ * ⚠️ IMPORTANT: Do NOT reduce the default timeout below 30000ms!
+ * Lower values (e.g. 8000ms) cause "Sending failed" errors for audio
+ * messages and other larger payloads when relays are slow to respond.
  */
 export async function publishEventToRelays(
   relays: string[],
   event: any,
-  timeout = 8000
+  timeout = 30000
 ): Promise<Array<{ relay: string; success: boolean; error?: string }>> {
   const publishToRelay = (relayUrl: string): Promise<{ relay: string; success: boolean; error?: string }> => {
     return new Promise((resolve) => {

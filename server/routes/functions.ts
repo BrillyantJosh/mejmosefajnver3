@@ -2413,7 +2413,8 @@ router.post('/publish-dm-event', async (req: Request, res: Response) => {
 
     console.log(`📤 Publishing KIND ${event.kind} event to ${relays.length} relays...`);
 
-    const results = await publishEventToRelays(relays, event, 8000);
+    // ⚠️ Do NOT reduce below 30000ms — causes "Sending failed" for audio/larger payloads
+    const results = await publishEventToRelays(relays, event, 30000);
     const successCount = results.filter(r => r.success).length;
 
     console.log(`✅ Published to ${successCount}/${relays.length} relays`);
@@ -2451,7 +2452,8 @@ router.post('/publish-loss-report', async (req: Request, res: Response) => {
 
     console.log(`📤 Publishing KIND 56757 loss report to ${relays.length} relays...`);
 
-    const results = await publishEventToRelays(relays, event, 8000);
+    // ⚠️ Do NOT reduce below 30000ms — causes "Sending failed" for audio/larger payloads
+    const results = await publishEventToRelays(relays, event, 30000);
     const successCount = results.filter(r => r.success).length;
 
     console.log(`✅ Loss report published to ${successCount}/${relays.length} relays`);
