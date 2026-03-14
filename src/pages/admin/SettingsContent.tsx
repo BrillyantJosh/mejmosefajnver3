@@ -5,13 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
-import { ThemeColors, ProjectTypeSettings } from "@/types/admin";
-import { Settings, Users, Loader2, Lightbulb, AlertTriangle } from "lucide-react";
+import { ThemeColors } from "@/types/admin";
+import { Settings, Users, Loader2, AlertTriangle } from "lucide-react";
 import { useNostrRooms } from "@/hooks/useNostrRooms";
 
 export default function SettingsContent() {
-  const { appSettings, updateAppName, updateThemeColors, updateDefaultRooms, updateNewProjects100M, updateWarningBeforeSplit, updateProjectTypeSettings } = useAdmin();
+  const { appSettings, updateAppName, updateThemeColors, updateDefaultRooms, updateWarningBeforeSplit } = useAdmin();
   const { rooms, loading: roomsLoading } = useNostrRooms();
   
   const [localName, setLocalName] = useState(appSettings?.app_name || "");
@@ -34,22 +33,12 @@ export default function SettingsContent() {
     appSettings?.warning_before_split?.toString() || ""
   );
 
-  const defaultPTS: ProjectTypeSettings = {
-    Inspiration: { enabled: true, maxAmount: 200 },
-    OnlineEvent: { enabled: true, maxAmount: 200 },
-    Event: { enabled: true, maxAmount: 200 },
-  };
-  const [localPTS, setLocalPTS] = useState<ProjectTypeSettings>(
-    appSettings?.project_type_settings || defaultPTS
-  );
-
   useEffect(() => {
     if (appSettings) {
       setLocalName(appSettings.app_name);
       setLocalColors(appSettings.theme_colors);
       setLocalDefaultRooms(appSettings.default_rooms);
       setLocalWarningBeforeSplit(appSettings.warning_before_split?.toString() || "");
-      setLocalPTS(appSettings.project_type_settings || defaultPTS);
     }
   }, [appSettings]);
 
@@ -73,25 +62,6 @@ export default function SettingsContent() {
   const handleClearWarningBeforeSplit = async () => {
     setLocalWarningBeforeSplit("");
     await updateWarningBeforeSplit(null);
-  };
-
-  const handlePTSToggle = (type: keyof ProjectTypeSettings) => {
-    setLocalPTS(prev => ({
-      ...prev,
-      [type]: { ...prev[type], enabled: !prev[type].enabled }
-    }));
-  };
-
-  const handlePTSMaxAmount = (type: keyof ProjectTypeSettings, value: string) => {
-    const num = parseInt(value, 10);
-    setLocalPTS(prev => ({
-      ...prev,
-      [type]: { ...prev[type], maxAmount: isNaN(num) ? 0 : num }
-    }));
-  };
-
-  const handleSavePTS = async () => {
-    await updateProjectTypeSettings(localPTS);
   };
 
   const handleColorChange = (key: keyof ThemeColors, value: string) => {
@@ -196,79 +166,6 @@ export default function SettingsContent() {
           <Button onClick={handleSaveDefaultRooms} disabled={roomsLoading}>
             Save Default Rooms
           </Button>
-        </CardContent>
-      </Card>
-
-      {/* Feature Toggles */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Lightbulb className="h-5 w-5" />
-            Feature Toggles
-          </CardTitle>
-          <CardDescription>Enable or disable specific features across the application</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-3 border rounded-lg">
-            <div className="space-y-0.5">
-              <Label htmlFor="toggle-100m" className="font-medium">100 Million Ideas — New Projects</Label>
-              <p className="text-xs text-muted-foreground">
-                When disabled, users can browse and edit existing projects but cannot create new ones
-              </p>
-            </div>
-            <Switch
-              id="toggle-100m"
-              checked={appSettings?.new_projects_100millionideas ?? true}
-              onCheckedChange={(checked) => updateNewProjects100M(checked)}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Project Type Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Lightbulb className="h-5 w-5" />
-            Project Types — Configuration
-          </CardTitle>
-          <CardDescription>Enable or disable project types and set maximum funding amounts for each</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {(["Inspiration", "OnlineEvent", "Event"] as const).map((type) => {
-            const label = type === "OnlineEvent" ? "Online Event" : type;
-            return (
-              <div key={type} className="p-3 border rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor={`toggle-pt-${type}`} className="font-medium">{label}</Label>
-                    <p className="text-xs text-muted-foreground">
-                      {localPTS[type].enabled ? "Users can create this type of project" : "Disabled — not available for new projects"}
-                    </p>
-                  </div>
-                  <Switch
-                    id={`toggle-pt-${type}`}
-                    checked={localPTS[type].enabled}
-                    onCheckedChange={() => handlePTSToggle(type)}
-                  />
-                </div>
-                {localPTS[type].enabled && (
-                  <div className="space-y-1">
-                    <Label htmlFor={`max-${type}`} className="text-sm">Max funding amount</Label>
-                    <Input
-                      id={`max-${type}`}
-                      type="number"
-                      min="1"
-                      value={localPTS[type].maxAmount}
-                      onChange={(e) => handlePTSMaxAmount(type, e.target.value)}
-                      className="max-w-[200px]"
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          <Button onClick={handleSavePTS}>Save Project Types</Button>
         </CardContent>
       </Card>
 
