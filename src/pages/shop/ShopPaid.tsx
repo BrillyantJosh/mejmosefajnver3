@@ -132,7 +132,7 @@ function InvoiceRow({ invoice }: { invoice: SentInvoice }) {
               )}
             </div>
 
-            {/* Amount + description */}
+            {/* Amount + recipient + description */}
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 flex-wrap">
                 <span className="text-base sm:text-lg font-bold">
@@ -144,6 +144,23 @@ function InvoiceRow({ invoice }: { invoice: SentInvoice }) {
                   </span>
                 )}
               </div>
+              {/* Recipient name — always visible */}
+              {(invoice.paidByPubkey || invoice.targetBuyer) && (
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <UserAvatar
+                    pubkey={invoice.paidByPubkey || invoice.targetBuyer || ""}
+                    picture={buyerProfile?.picture}
+                    name={buyerProfile?.display_name || buyerProfile?.full_name}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-xs text-muted-foreground truncate">
+                    {isPaid ? "Paid by " : "To "}
+                    {buyerProfile?.display_name ||
+                      buyerProfile?.full_name ||
+                      (invoice.paidByPubkey || invoice.targetBuyer || "").slice(0, 12) + "..."}
+                  </span>
+                </div>
+              )}
               {invoice.description && (
                 <p className="text-xs sm:text-sm text-muted-foreground truncate">
                   {invoice.description}
