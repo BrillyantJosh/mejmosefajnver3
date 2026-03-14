@@ -12,6 +12,7 @@ export interface ProjectTypeSettings {
 export interface ProjectOverride {
   hidden?: boolean;
   completed?: boolean;
+  completionComment?: string;
 }
 
 export interface ProjectOverrides {

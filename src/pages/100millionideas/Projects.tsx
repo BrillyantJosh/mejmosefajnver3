@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNostrProjects } from "@/hooks/useNostrProjects";
 import ProjectCard from "@/components/100millionideas/ProjectCard";
 import ProjectsSummaryBar from "@/components/100millionideas/ProjectsSummaryBar";
@@ -5,12 +6,26 @@ import { Loader2, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAdmin } from "@/contexts/AdminContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { ProjectOverrides } from "@/types/admin";
+import { finalizeEvent } from "nostr-tools";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+
+const hexToBytes = (hex: string): Uint8Array => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+};
 
 const Projects = () => {
   const { projects, isLoading } = useNostrProjects();
   const navigate = useNavigate();
   const { is100MAdmin, appSettings, updateProjectOverrides } = useAdmin();
+  const { session } = useAuth();
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const overrides: ProjectOverrides = appSettings?.project_overrides || {};
 
@@ -19,22 +34,114 @@ const Projects = () => {
     ? projects
     : projects.filter(p => !overrides[p.id]?.hidden);
 
-  const handleToggleHidden = async (dTag: string) => {
-    const current = overrides[dTag] || {};
-    const updated: ProjectOverrides = {
-      ...overrides,
-      [dTag]: { ...current, hidden: !current.hidden },
-    };
-    await updateProjectOverrides(updated);
+  const publishNostrEvent = async (eventTemplate: { kind: number; tags: string[][]; content: string }) => {
+    if (!session?.nostrPrivateKey) return;
+
+    const signed = finalizeEvent(
+      { ...eventTemplate, created_at: Math.floor(Date.now() / 1000) },
+      hexToBytes(session.nostrPrivateKey)
+    );
+
+    const { data, error } = await supabase.functions.invoke("publish-dm-event", {
+      body: { event: signed },
+    });
+
+    if (error) {
+      console.error("Failed to publish Nostr event:", error);
+    } else {
+      console.log(`✅ Published KIND ${eventTemplate.kind} to ${data?.publishedTo || 0} relays`);
+    }
   };
 
-  const handleToggleCompleted = async (dTag: string) => {
-    const current = overrides[dTag] || {};
-    const updated: ProjectOverrides = {
-      ...overrides,
-      [dTag]: { ...current, completed: !current.completed },
-    };
-    await updateProjectOverrides(updated);
+  const handleToggleHidden = async (dTag: string) => {
+    if (!session?.nostrHexId) return;
+    setActionLoading(dTag);
+
+    try {
+      const current = overrides[dTag] || {};
+      const nowHidden = !current.hidden;
+
+      // Publish KIND 31235 visibility event to Nostr
+      if (nowHidden) {
+        await publishNostrEvent({
+          kind: 31235,
+          tags: [
+            ["d", dTag],
+            ["service", "lanacrowd"],
+            ["status", "blocked"],
+            ["p", session.nostrHexId, "reviewer"],
+          ],
+          content: "",
+        });
+      }
+
+      // Save to app_settings
+      const updated: ProjectOverrides = {
+        ...overrides,
+        [dTag]: { ...current, hidden: nowHidden },
+      };
+      await updateProjectOverrides(updated);
+
+      toast({
+        title: nowHidden ? "Project Hidden" : "Project Visible",
+        description: nowHidden
+          ? "Project hidden from public view and recorded on Nostr"
+          : "Project is now visible again",
+      });
+    } catch (error) {
+      console.error("Error toggling project visibility:", error);
+      toast({ title: "Error", description: "Failed to update project visibility", variant: "destructive" });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleToggleCompleted = async (dTag: string, comment?: string) => {
+    if (!session?.nostrHexId) return;
+    setActionLoading(dTag);
+
+    try {
+      const current = overrides[dTag] || {};
+      const nowCompleted = !current.completed;
+
+      // Publish KIND 60201 completion event to Nostr
+      if (nowCompleted && comment) {
+        await publishNostrEvent({
+          kind: 60201,
+          tags: [
+            ["service", "lanacrowd"],
+            ["project", dTag],
+            ["p", session.nostrHexId, "reviewer"],
+            ["status", "completed"],
+            ["timestamp_completed", String(Math.floor(Date.now() / 1000))],
+          ],
+          content: comment,
+        });
+      }
+
+      // Save to app_settings
+      const updated: ProjectOverrides = {
+        ...overrides,
+        [dTag]: {
+          ...current,
+          completed: nowCompleted,
+          completionComment: nowCompleted ? comment : undefined,
+        },
+      };
+      await updateProjectOverrides(updated);
+
+      toast({
+        title: nowCompleted ? "Project Completed" : "Completion Removed",
+        description: nowCompleted
+          ? "Project marked as completed and recorded on Nostr (KIND 60201)"
+          : "Completion status removed",
+      });
+    } catch (error) {
+      console.error("Error toggling project completion:", error);
+      toast({ title: "Error", description: "Failed to update project status", variant: "destructive" });
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   return (
@@ -78,8 +185,10 @@ const Projects = () => {
               isModuleAdmin={is100MAdmin}
               isHidden={!!overrides[project.id]?.hidden}
               isCompleted={!!overrides[project.id]?.completed}
+              completionComment={overrides[project.id]?.completionComment}
               onToggleHidden={handleToggleHidden}
               onToggleCompleted={handleToggleCompleted}
+              actionLoading={actionLoading}
             />
           ))}
         </div>

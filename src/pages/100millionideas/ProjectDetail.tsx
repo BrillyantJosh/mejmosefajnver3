@@ -38,10 +38,12 @@ const ProjectDetail = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { projects, isLoading: projectsLoading } = useNostrProjects();
-  const { appSettings } = useAdmin();
+  const { appSettings, is100MAdmin } = useAdmin();
   const project = projects.find(p => p.id === projectId);
   const projectOverrides = appSettings?.project_overrides || {};
   const isCompleted = !!(projectId && projectOverrides[projectId]?.completed);
+  const isHidden = !!(projectId && projectOverrides[projectId]?.hidden);
+  const completionComment = projectId ? projectOverrides[projectId]?.completionComment : undefined;
   const { donations, totalRaised } = useNostrProjectDonations(projectId || '');
   const { profile: ownerProfile } = useNostrProfileCache(project?.ownerPubkey || null);
 
@@ -49,6 +51,15 @@ const ProjectDetail = () => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Hidden projects: only 100M admins can view
+  if (isHidden && !is100MAdmin) {
+    return (
+      <div className="container mx-auto p-6">
+        <p className="text-center text-muted-foreground">Project not found</p>
       </div>
     );
   }
@@ -115,6 +126,25 @@ const ProjectDetail = () => {
             Updated {format(new Date(project.createdAt * 1000), 'dd/MM/yyyy')}
           </p>
         </div>
+
+        {/* Completion Banner */}
+        {isCompleted && (
+          <Card className="p-6 border-green-500/30 bg-green-500/5">
+            <div className="flex gap-3">
+              <Trophy className="h-6 w-6 text-green-600 shrink-0 mt-0.5" />
+              <div>
+                <h2 className="text-xl font-semibold text-green-600 mb-1">
+                  Project Completed
+                </h2>
+                {completionComment && (
+                  <p className="text-muted-foreground italic">
+                    "{completionComment}"
+                  </p>
+                )}
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Project Initiator */}
         <Card className="p-6">
