@@ -452,15 +452,28 @@ export async function fetchUserWallets(
  * Publish a signed Nostr event to multiple relays
  * Returns an array of { relay, success, error? } results
  *
- * ⚠️ IMPORTANT: Do NOT reduce the default timeout below 60000ms!
- * Lower values cause "Sending failed" errors for audio messages
- * and other larger payloads when relays are slow to respond.
+ * ⚠️⚠️⚠️ CRITICAL: NEVER reduce the default timeout below 60000ms! ⚠️⚠️⚠️
+ *
+ * History of failures caused by short timeouts:
+ * - 8s timeout → audio messages always failed ("Sending failed")
+ * - 30s timeout → still failed for 4+ minute audio recordings
+ * - 60s timeout → works reliably with server-side publish
+ *
+ * The OWN module (audio messages), Shop, and DM modules all depend on this.
+ * Reducing this timeout WILL break audio message delivery.
  */
+const MINIMUM_PUBLISH_TIMEOUT = 60000; // Absolute minimum — do NOT change
+
 export async function publishEventToRelays(
   relays: string[],
   event: any,
   timeout = 60000
 ): Promise<Array<{ relay: string; success: boolean; error?: string }>> {
+  // Enforce minimum timeout to prevent future regressions
+  if (timeout < MINIMUM_PUBLISH_TIMEOUT) {
+    console.warn(`⚠️ publishEventToRelays: timeout ${timeout}ms is below minimum ${MINIMUM_PUBLISH_TIMEOUT}ms, using minimum`);
+    timeout = MINIMUM_PUBLISH_TIMEOUT;
+  }
   const publishToRelay = (relayUrl: string): Promise<{ relay: string; success: boolean; error?: string }> => {
     return new Promise((resolve) => {
       let resolved = false;
