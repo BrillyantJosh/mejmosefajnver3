@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -25,8 +29,10 @@ import {
   FileText,
   Search,
   AlertCircle,
+  X,
+  QrCode,
 } from "lucide-react";
-import { QRScanner } from "@/components/QRScanner";
+import { Html5Qrcode } from "html5-qrcode";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
@@ -69,6 +75,9 @@ export default function ShopSell() {
   const [scannedKey, setScannedKey] = useState("");
   const [buyerWallet, setBuyerWallet] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const hasScannedRef = useRef(false);
 
   // Processing / result
   const [isProcessing, setIsProcessing] = useState(false);
@@ -139,6 +148,76 @@ export default function ShopSell() {
     setBuyerWallet("");
     // Open scanner immediately
     setTimeout(() => setIsScannerOpen(true), 100);
+  };
+
+  // Scanner lifecycle
+  const startScanner = async () => {
+    try {
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras || cameras.length === 0) {
+        setScanError("No camera found on this device.");
+        return;
+      }
+
+      let selectedCamera = cameras[0];
+      if (cameras.length > 1) {
+        const backCamera = cameras.find(
+          (c) =>
+            c.label.toLowerCase().includes("back") ||
+            c.label.toLowerCase().includes("rear")
+        );
+        if (backCamera) selectedCamera = backCamera;
+      }
+
+      const scanner = new Html5Qrcode("qr-reader-shop-sell");
+      scannerRef.current = scanner;
+
+      await scanner.start(
+        selectedCamera.id,
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+          if (hasScannedRef.current) return;
+          hasScannedRef.current = true;
+          handleQRScan(decodedText);
+          stopScanner();
+          setIsScannerOpen(false);
+        },
+        () => {} // ignore scanning errors
+      );
+      setIsCameraReady(true);
+    } catch (err) {
+      console.error("Failed to start scanner:", err);
+      setScanError("Failed to access camera. Please check permissions.");
+    }
+  };
+
+  const stopScanner = async () => {
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop();
+      } catch {
+        // ignore
+      }
+      scannerRef.current = null;
+      setIsCameraReady(false);
+    }
+  };
+
+  // Start/stop scanner when dialog opens/closes
+  useEffect(() => {
+    if (isScannerOpen) {
+      hasScannedRef.current = false;
+      setIsCameraReady(false);
+      const timer = setTimeout(() => startScanner(), 150);
+      return () => clearTimeout(timer);
+    } else {
+      stopScanner();
+    }
+  }, [isScannerOpen]);
+
+  const handleCloseScanner = async () => {
+    await stopScanner();
+    setIsScannerOpen(false);
   };
 
   const handleQRScan = async (data: string) => {
@@ -888,12 +967,62 @@ export default function ShopSell() {
         </>
       )}
 
-      {/* QR Scanner */}
-      <QRScanner
-        isOpen={isScannerOpen}
-        onClose={() => setIsScannerOpen(false)}
-        onScan={handleQRScan}
-      />
+      {/* Custom QR Scanner Dialog with amount display */}
+      <Dialog open={isScannerOpen} onOpenChange={handleCloseScanner}>
+        <DialogContent className="sm:max-w-md">
+          {/* Amount Header — big and clear */}
+          <div className="text-center space-y-2 pt-2">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
+              <QrCode className="h-5 w-5" />
+              <span className="text-sm font-medium">Charge Customer</span>
+            </div>
+            <div className="p-4 bg-green-50 dark:bg-green-950/30 rounded-xl border border-green-200 dark:border-green-800">
+              <p className="text-4xl font-bold text-green-600">
+                {formatLana(calculatedLana)}
+              </p>
+              {selectedCurrency !== "LANA" && (
+                <p className="text-lg text-green-600/70 mt-1">
+                  {formatCurrency(parseFloat(inputAmount || "0"), selectedCurrency)}
+                </p>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Scan customer's private key QR code to charge
+            </p>
+          </div>
+
+          {/* Camera viewport */}
+          <div className="space-y-3">
+            <div
+              id="qr-reader-shop-sell"
+              className="w-full rounded-lg overflow-hidden"
+            />
+
+            {!isCameraReady && !scanError && (
+              <div className="flex items-center justify-center py-4 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                Starting camera...
+              </div>
+            )}
+
+            {scanError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{scanError}</AlertDescription>
+              </Alert>
+            )}
+
+            <Button
+              onClick={handleCloseScanner}
+              variant="outline"
+              className="w-full"
+            >
+              <X className="w-4 h-4 mr-2" />
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
