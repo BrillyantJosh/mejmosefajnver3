@@ -249,10 +249,10 @@ export default function Own() {
       });
 
       // 4. Publish to relays
-      // ⚠️ IMPORTANT: Do NOT reduce this timeout below 30000ms!
+      // ⚠️ IMPORTANT: Do NOT reduce this timeout below 60000ms!
       // Audio messages are larger and relays can be slow to acknowledge.
-      // Setting it lower (e.g. 8000ms) causes "Sending failed" errors.
-      const RELAY_PUBLISH_TIMEOUT = 30000;
+      // Setting it lower causes "Sending failed" errors.
+      const RELAY_PUBLISH_TIMEOUT = 60000;
       const pool = new SimplePool();
       const publishPromises = pool.publish(parameters.relays, signedEvent);
 
