@@ -60,13 +60,25 @@ const HEARTBEAT_INTERVAL = 60 * 1000; // 1 minute (was 1 hour)
 
 /**
  * Sync KIND 38888 from Lana relays and save to database.
- * Called on startup and then every hour via heartbeat.
- * Returns true if sync was successful.
+ * Called on startup and then every heartbeat (1 minute).
+ * Compares created_at with DB — only updates if newer event found.
+ * Returns true if sync was successful (data was updated or already up-to-date).
  */
 async function syncKind38888ToDb(): Promise<boolean> {
   try {
     const data = await fetchKind38888();
     if (data) {
+      // Check if we already have this event (compare created_at)
+      const existing = db.prepare(
+        'SELECT created_at, event_id FROM kind_38888 ORDER BY created_at DESC LIMIT 1'
+      ).get() as { created_at: number; event_id: string } | undefined;
+
+      if (existing && existing.created_at >= data.created_at) {
+        // Already up-to-date, no need to update
+        return true;
+      }
+
+      // New or updated event — save to DB
       db.prepare('DELETE FROM kind_38888').run();
       db.prepare(`
         INSERT INTO kind_38888 (
@@ -87,7 +99,7 @@ async function syncKind38888ToDb(): Promise<boolean> {
         JSON.stringify(data.trusted_signers),
         data.raw_event
       );
-      console.log(`✅ KIND 38888 synced: version ${data.version}, ${data.relays.length} relays`);
+      console.log(`✅ KIND 38888 updated: version ${data.version}, ${data.relays.length} relays (was: ${existing?.event_id || 'none'})`);
       console.log(`📡 Relays: ${data.relays.join(', ')}`);
 
       // Notify connected SSE clients about the update
@@ -126,7 +138,7 @@ async function syncKind38888ToDb(): Promise<boolean> {
 
 // =============================================
 // Heartbeat — 1 minute interval
-// KIND 38888 sync every 60 heartbeats (= 1 hour)
+// KIND 38888 sync every heartbeat (smart: only updates DB if newer)
 // AI pending tasks processed every heartbeat
 // =============================================
 
@@ -151,11 +163,8 @@ function withTimeout<T>(fn: () => Promise<T>, label: string, ms: number): Promis
 const heartbeatTimer = setInterval(async () => {
   heartbeatCount++;
 
-  // KIND 38888 sync every 60 heartbeats (= every hour)
-  if (heartbeatCount % 60 === 0) {
-    console.log(`💓 Heartbeat #${heartbeatCount} — syncing KIND 38888...`);
-    await withTimeout(() => syncKind38888ToDb(), 'KIND 38888 sync', 45000);
-  }
+  // KIND 38888 sync every heartbeat (smart: only updates DB if event is newer)
+  await withTimeout(() => syncKind38888ToDb(), 'KIND 38888 sync', 45000);
 
   // Process pending AI tasks every heartbeat (every minute)
   try {
@@ -202,7 +211,7 @@ const heartbeatTimer = setInterval(async () => {
   }
 }, HEARTBEAT_INTERVAL);
 
-console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 hourly, AI tasks every minute, relay retry every 5min, stale profile refresh every 10min, full profile discovery every 30min, unreg LANA every 10min)`);
+console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 every beat, AI tasks every minute, relay retry every 5min, stale profile refresh every 10min, full profile discovery every 30min, unreg LANA every 10min)`);
 
 // =============================================
 // API Routes
