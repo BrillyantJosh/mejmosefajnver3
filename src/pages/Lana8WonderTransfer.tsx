@@ -106,12 +106,38 @@ export default function Lana8WonderTransfer() {
     setIsSubmitting(true);
 
     try {
+      // First check if cashOutAmount covers the full wallet balance
+      // If so, use emptyWallet mode (backend deducts fee from amount)
+      let useEmptyWallet = false;
+
+      try {
+        const { data: utxoData } = await supabase.functions.invoke('get-utxo-info', {
+          body: {
+            address: state.sourceWalletId,
+            electrumServers: parameters?.electrumServers || [],
+          },
+        });
+
+        if (utxoData?.success && utxoData.totalBalance) {
+          const cashOutSatoshis = Math.floor(state.cashOutAmount * 100_000_000);
+          const totalBalance = utxoData.totalBalance; // already in satoshis
+          // If sending >= 98% of balance or more than balance, use empty wallet mode
+          if (cashOutSatoshis >= totalBalance * 0.98) {
+            useEmptyWallet = true;
+            console.log(`🔄 Lana8Wonder: using emptyWallet mode (cashOut=${cashOutSatoshis} >= 98% of balance=${totalBalance})`);
+          }
+        }
+      } catch (utxoErr) {
+        console.warn('Could not check UTXO info, proceeding with normal transfer:', utxoErr);
+      }
+
       const { data, error } = await supabase.functions.invoke('send-lana-transaction', {
         body: {
           senderAddress: state.sourceWalletId,
           recipientAddress: selectedDestination,
           amount: state.cashOutAmount,
           privateKey: privateKey,
+          emptyWallet: useEmptyWallet,
           electrumServers: parameters?.electrumServers || [],
         },
       });
@@ -123,8 +149,10 @@ export default function Lana8WonderTransfer() {
         navigate('/lana8wonder', {
           state: {
             transferSuccess: true,
-            txHash: data.txHash,
-            amount: state.cashOutAmount,
+            txHash: data.txHash || data.txid,
+            amount: useEmptyWallet
+              ? (data.amount ? data.amount / 100_000_000 : state.cashOutAmount)
+              : state.cashOutAmount,
           },
         });
       } else {
