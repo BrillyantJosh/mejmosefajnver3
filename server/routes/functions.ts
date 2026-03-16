@@ -2026,9 +2026,13 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
     }
 
     // Build filter for proposals
+    // limit: 1000 to ensure we get ALL proposals (both payer + recipient roles)
+    // The #p relay filter matches any p-tag regardless of marker, so a popular
+    // recipient with 100+ subscribers could fill a small limit and crowd out
+    // proposals where this user is the payer.
     const proposalFilter: Record<string, any> = {
       kinds: [90900],
-      limit: 100
+      limit: 1000
     };
     if (userPubkey) {
       proposalFilter['#p'] = [userPubkey];
