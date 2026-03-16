@@ -43,7 +43,10 @@ export default function Pending() {
   const { balances, isLoading: balancesLoading } = useWalletBalances(walletAddresses);
 
   // Server already matches proposals with confirmations (KIND 90901) and sets isPaid
-  const pendingProposals = useMemo(() => proposals.filter(p => !p.isPaid), [proposals]);
+  const pendingProposals = useMemo(() =>
+    proposals.filter(p => !p.isPaid && p.payerPubkey === session?.nostrHexId),
+    [proposals, session?.nostrHexId]
+  );
 
   // Fetch profiles for all recipient pubkeys
   const recipientPubkeys = useMemo(() => 
