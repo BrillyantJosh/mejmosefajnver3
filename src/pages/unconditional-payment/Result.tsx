@@ -69,13 +69,13 @@ export default function Result() {
   }, {} as Record<string, { success: number; failed: number; proposals: string[] }>);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
+    <div className="max-w-4xl mx-auto space-y-6 pb-20 px-4 sm:px-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <CheckCircle2 className="h-8 w-8 text-green-500" />
+        <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+          <CheckCircle2 className="h-7 w-7 sm:h-8 sm:w-8 text-green-500 flex-shrink-0" />
           Payment Successful
         </h1>
-        <p className="text-muted-foreground">Transaction confirmed and published to Nostr relays</p>
+        <p className="text-sm sm:text-base text-muted-foreground">Transaction confirmed and published to Nostr relays</p>
       </div>
 
       {/* Transaction Summary */}
@@ -92,12 +92,13 @@ export default function Result() {
               <div className="flex-1">
                 <p className="text-sm text-muted-foreground mb-1">Transaction ID</p>
                 <div className="flex items-center gap-2">
-                  <code className="text-sm font-mono bg-muted px-2 py-1 rounded break-all">
+                  <code className="text-xs sm:text-sm font-mono bg-muted px-2 py-1 rounded break-all">
                     {resultData.txid}
                   </code>
                   <Button
                     variant="ghost"
                     size="sm"
+                    className="flex-shrink-0"
                     onClick={() => window.open(`https://chainz.cryptoid.info/lana/tx.dws?${resultData.txid}`, '_blank')}
                   >
                     <ExternalLink className="h-4 w-4" />
@@ -117,12 +118,12 @@ export default function Result() {
           <div className="space-y-2">
             <p className="text-sm font-medium">Recipients ({resultData.recipients.length})</p>
             {resultData.recipients.map((recipient, index) => (
-              <div key={index} className="p-3 bg-muted rounded-lg flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="font-mono text-sm break-all">{recipient.wallet.substring(0, 20)}...{recipient.wallet.substring(recipient.wallet.length - 8)}</p>
-                  <p className="text-xs text-muted-foreground">{recipient.services.join(', ')}</p>
+              <div key={index} className="p-3 bg-muted rounded-lg flex items-center justify-between gap-2 min-w-0">
+                <div className="flex-1 min-w-0">
+                  <p className="font-mono text-xs sm:text-sm truncate">{recipient.wallet}</p>
+                  <p className="text-xs text-muted-foreground truncate">{recipient.services.join(', ')}</p>
                 </div>
-                <p className="font-semibold">{formatLana(recipient.amount)}</p>
+                <p className="font-semibold whitespace-nowrap flex-shrink-0">{formatLana(recipient.amount)}</p>
               </div>
             ))}
           </div>
@@ -138,9 +139,9 @@ export default function Result() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-            <span className="font-medium">Overall Success Rate</span>
-            <Badge variant={successfulRelays === totalRelays ? "default" : successfulRelays > 0 ? "secondary" : "destructive"}>
+          <div className="flex items-center justify-between gap-2 p-3 bg-muted rounded-lg">
+            <span className="font-medium text-sm sm:text-base">Overall Success Rate</span>
+            <Badge variant={successfulRelays === totalRelays ? "default" : successfulRelays > 0 ? "secondary" : "destructive"} className="whitespace-nowrap">
               {successfulRelays} / {totalRelays} successful
             </Badge>
           </div>
@@ -188,8 +189,8 @@ export default function Result() {
       </Card>
 
       {/* Actions */}
-      <div className="flex gap-4">
-        <Button 
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+        <Button
           onClick={() => {
             sessionStorage.removeItem('unconditionalPaymentResult');
             navigate('/unconditional-payment/completed');
@@ -198,7 +199,7 @@ export default function Result() {
         >
           View Completed Payments
         </Button>
-        <Button 
+        <Button
           onClick={() => {
             sessionStorage.removeItem('unconditionalPaymentResult');
             navigate('/unconditional-payment');

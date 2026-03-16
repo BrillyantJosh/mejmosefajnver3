@@ -55,28 +55,28 @@ export default function Completed() {
 
         return (
           <Card key={payment.id}>
-            <CardContent className="p-6">
-              <div className="flex items-start gap-4">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-start gap-3 sm:gap-4 min-w-0">
                 <div className="flex-shrink-0">
-                  <CheckCircle className="h-6 w-6 text-green-500" />
+                  <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" />
                 </div>
-                
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">{payment.service}</h3>
-                    <span className="text-sm font-medium text-green-600">
+
+                <div className="flex-1 min-w-0 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-base sm:text-lg font-semibold truncate">{payment.service}</h3>
+                    <span className="text-sm font-medium text-green-600 whitespace-nowrap flex-shrink-0">
                       {formatLana(parseFloat(payment.amountLana))}
                     </span>
                   </div>
-                  
+
                   {proposal && (
                     <p className="text-sm text-muted-foreground">{proposal.content}</p>
                   )}
-                  
+
                   {/* Profile Information */}
                   {profile && (
-                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                      <UserAvatar pubkey={payment.recipientPubkey} picture={profile.picture} name={profile.display_name || profile.name} className="h-10 w-10" />
+                    <div className="flex items-center gap-3 p-2 sm:p-3 bg-muted/50 rounded-lg min-w-0">
+                      <UserAvatar pubkey={payment.recipientPubkey} picture={profile.picture} name={profile.display_name || profile.name} className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-sm truncate">
                           {profile.display_name || profile.name || 'Anonymous'}
@@ -87,8 +87,8 @@ export default function Completed() {
                       </div>
                     </div>
                   )}
-                  
-                  <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>
                       {formatCurrency(parseFloat(payment.fiatAmount), payment.fiatCurrency)}
                     </span>
@@ -97,16 +97,16 @@ export default function Completed() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground">TX:</span>
-                    <code className="bg-muted px-2 py-1 rounded text-xs">
-                      {payment.txId.substring(0, 16)}...{payment.txId.substring(payment.txId.length - 8)}
+                  <div className="flex items-center gap-2 text-xs min-w-0">
+                    <span className="text-muted-foreground flex-shrink-0">TX:</span>
+                    <code className="bg-muted px-2 py-1 rounded text-xs truncate">
+                      {payment.txId}
                     </code>
                     <a
                       href={`https://chainz.cryptoid.info/lana/tx.dws?${payment.txId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      className="inline-flex items-center gap-1 text-primary hover:underline flex-shrink-0"
                     >
                       <ExternalLink className="h-3 w-3" />
                     </a>

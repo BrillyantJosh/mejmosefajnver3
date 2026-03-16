@@ -49,10 +49,10 @@ export default function UnconditionalPaymentLayout() {
   const scoreNum = score ? parseFloat(score.score) : 0;
 
   return (
-    <div className="max-w-7xl mx-auto pb-20">
+    <div className="max-w-7xl mx-auto pb-20 px-4 sm:px-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">Unconditional Payment</h1>
-        <p className="text-muted-foreground">Send payments to projects and initiatives in the Lana ecosystem</p>
+        <h1 className="text-2xl sm:text-3xl font-bold">Unconditional Payment</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">Send payments to projects and initiatives in the Lana ecosystem</p>
       </div>
 
       {/* Payment Score */}
@@ -66,10 +66,10 @@ export default function UnconditionalPaymentLayout() {
 
       {!scoreLoading && score && (
         <Card className={`mb-6 border ${getScoreBg(scoreNum)}`}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <div className="flex items-center gap-2">
-                <TrendingUp className={`h-5 w-5 ${getScoreColor(scoreNum)}`} />
+                <TrendingUp className={`h-5 w-5 flex-shrink-0 ${getScoreColor(scoreNum)}`} />
                 <span className="text-sm font-medium text-muted-foreground">Payment Score</span>
               </div>
               <div className="flex items-baseline gap-1">
@@ -78,7 +78,7 @@ export default function UnconditionalPaymentLayout() {
                 </span>
                 <span className="text-sm text-muted-foreground">/10</span>
               </div>
-              <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <div className="sm:ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 {score.periodStart && score.periodEnd && (
                   <span>{formatPeriod(score.periodStart, score.periodEnd)}</span>
                 )}

@@ -219,51 +219,51 @@ export default function Pending() {
 
           return (
             <Card key={proposal.eventId} className={isSelected ? 'border-primary' : ''}>
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-start gap-3 sm:gap-4 min-w-0">
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={() => handleToggleProposal(proposal.eventId)}
-                    className="mt-1"
+                    className="mt-1 flex-shrink-0"
                   />
-                  
-                  <div className="flex-1 space-y-3">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-lg font-semibold">{proposal.service}</h3>
-                        <span className="text-sm text-muted-foreground">
+
+                  <div className="flex-1 min-w-0 space-y-3">
+                    <div className="min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h3 className="text-base sm:text-lg font-semibold truncate">{proposal.service}</h3>
+                        <span className="text-sm text-muted-foreground whitespace-nowrap flex-shrink-0">
                           {formatCurrency(lanaToFiat(originalLana, userCurrency), userCurrency)}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground mb-2">{proposal.content}</p>
-                      
+
                       {/* Recipient Information */}
-                      <div className="mb-2 p-2 bg-muted/50 rounded space-y-1">
+                      <div className="mb-2 p-2 bg-muted/50 rounded space-y-1 overflow-hidden">
                         {(() => {
                           const profile = recipientProfiles.get(proposal.recipientPubkey);
                           return (
                             <>
                               <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-muted-foreground">Recipient:</span>
-                                <span className="text-xs font-medium">
+                                <span className="text-xs font-medium text-muted-foreground flex-shrink-0">Recipient:</span>
+                                <span className="text-xs font-medium truncate">
                                   {profile?.display_name || profile?.full_name || 'Unknown'}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Wallet:</span>
-                                <span className="text-xs font-mono">{proposal.wallet}</span>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-xs text-muted-foreground flex-shrink-0">Wallet:</span>
+                                <span className="text-xs font-mono truncate">{proposal.wallet}</span>
                               </div>
                             </>
                           );
                         })()}
                       </div>
-                      
-                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         {proposal.ref && (
-                          <span>Ref: {proposal.ref}</span>
+                          <span className="truncate max-w-full">Ref: {proposal.ref}</span>
                         )}
                         <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
+                          <Calendar className="h-3 w-3 flex-shrink-0" />
                           {format(new Date(proposal.createdAt * 1000), 'MMM d, yyyy')}
                         </span>
                         {proposal.expires && proposal.expires > Date.now() / 1000 && (
@@ -315,56 +315,56 @@ export default function Pending() {
       {/* Payment Summary */}
       {selectedProposals.size > 0 && (
         <Card>
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="space-y-4">
               {selectedWallet && (
                 <div className="space-y-3 pb-4 border-b">
                   <div className="flex items-center gap-2 text-sm font-medium">
-                    <Wallet className="h-4 w-4" />
+                    <Wallet className="h-4 w-4 flex-shrink-0" />
                     <span>Payment Breakdown</span>
                   </div>
-                  
+
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between gap-2">
                       <span className="text-muted-foreground">Wallet Balance:</span>
-                      <span className="font-medium">{formatLana(selectedWalletBalance)}</span>
+                      <span className="font-medium whitespace-nowrap">{formatLana(selectedWalletBalance)}</span>
                     </div>
-                    
-                    <div className="space-y-1 pl-4">
+
+                    <div className="space-y-1 pl-2 sm:pl-4">
                       {Array.from(selectedProposals).map((proposalId, index) => {
                         const proposal = pendingProposals.find(p => p.eventId === proposalId);
                         if (!proposal) return null;
-                        
+
                         const customAmount = customAmounts[proposalId];
                         const amount = customAmount !== undefined
                           ? (parseFloat(customAmount) || 0)
                           : fiatToLana(parseFloat(proposal.fiatAmount), proposal.fiatCurrency);
-                        
+
                         return (
-                          <div key={proposalId} className="flex justify-between text-muted-foreground">
-                            <span>Payment {index + 1} ({proposal.service}):</span>
-                            <span>-{formatLana(amount)}</span>
+                          <div key={proposalId} className="flex justify-between gap-2 text-muted-foreground">
+                            <span className="truncate">{proposal.service}:</span>
+                            <span className="whitespace-nowrap flex-shrink-0">-{formatLana(amount)}</span>
                           </div>
                         );
                       })}
                     </div>
-                    
-                    <div className="flex justify-between pt-2 border-t">
+
+                    <div className="flex justify-between gap-2 pt-2 border-t">
                       <span className="font-medium">Total Payment:</span>
-                      <span className="font-medium text-primary">-{formatLana(totalLana)}</span>
+                      <span className="font-medium text-primary whitespace-nowrap">-{formatLana(totalLana)}</span>
                     </div>
-                    
-                    <div className="flex justify-between pt-2 border-t">
+
+                    <div className="flex justify-between gap-2 pt-2 border-t">
                       <span className="font-semibold">Remaining Balance:</span>
-                      <span className={`font-semibold ${remainingBalance < 0 ? 'text-destructive' : 'text-success'}`}>
+                      <span className={`font-semibold whitespace-nowrap ${remainingBalance < 0 ? 'text-destructive' : 'text-success'}`}>
                         {formatLana(remainingBalance)}
                       </span>
                     </div>
                   </div>
                 </div>
               )}
-              
-              <div className="flex items-center justify-between">
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Amount</p>
                   <p className="text-2xl font-bold">{formatLana(totalLana)}</p>
@@ -374,6 +374,7 @@ export default function Pending() {
                   onClick={handleProceedToPayment}
                   disabled={!selectedWallet || remainingBalance < 0}
                   size="lg"
+                  className="w-full sm:w-auto"
                 >
                   Proceed to Payment
                 </Button>
