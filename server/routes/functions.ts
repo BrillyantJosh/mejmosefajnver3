@@ -2163,16 +2163,29 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
     // Sort by newest first
     filteredProposals.sort((a: any, b: any) => b.createdAt - a.createdAt);
 
-    // Deduplicate by d-tag: keep only the newest event for each unique d-tag
-    // This prevents showing 100 identical subscription entries when the publisher
-    // created multiple events with the same d-tag
+    // Deduplicate proposals: the publisher may create many events for the same
+    // subscription (each with a unique timestamp-based d-tag like sub:lana:17736...).
+    // Strategy: for PENDING proposals, deduplicate by service+wallet combo (keep newest).
+    // For PAID proposals, keep all (each represents a completed payment).
+    // Also deduplicate by d-tag as a second pass.
     const deduped: any[] = [];
+    const seenServiceWallet = new Set<string>();
     const seenDTags = new Set<string>();
     for (const p of filteredProposals) {
+      // d-tag dedup (keep newest per d-tag)
       if (p.d) {
-        if (seenDTags.has(p.d)) continue; // skip older duplicate
+        if (seenDTags.has(p.d)) continue;
         seenDTags.add(p.d);
       }
+
+      // For pending (unpaid) proposals: deduplicate by service+wallet
+      // Same subscription to the same wallet only needs to appear once
+      if (!p.isPaid) {
+        const key = `${p.service}|${p.wallet}`;
+        if (seenServiceWallet.has(key)) continue; // skip older duplicate
+        seenServiceWallet.add(key);
+      }
+
       deduped.push(p);
     }
 
