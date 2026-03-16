@@ -269,6 +269,9 @@ export default function Pending() {
                           </span>
                         )}
                       </div>
+                      <div className="text-[10px] text-muted-foreground/60 font-mono truncate mt-1">
+                        Event: {proposal.eventId}
+                      </div>
                     </div>
 
                     {isSelected && (

@@ -111,6 +111,9 @@ export default function Completed() {
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
+                  <div className="text-[10px] text-muted-foreground/60 font-mono truncate">
+                    Event: {payment.id}
+                  </div>
                 </div>
               </div>
             </CardContent>

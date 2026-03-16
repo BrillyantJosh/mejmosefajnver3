@@ -2163,11 +2163,24 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
     // Sort by newest first
     filteredProposals.sort((a: any, b: any) => b.createdAt - a.createdAt);
 
-    const pendingCount = filteredProposals.filter((p: any) => !p.isPaid).length;
-    const paidCount = filteredProposals.filter((p: any) => p.isPaid).length;
-    console.log(`📊 Proposals for user: ${filteredProposals.length} total (${pendingCount} pending, ${paidCount} paid)`);
+    // Deduplicate by d-tag: keep only the newest event for each unique d-tag
+    // This prevents showing 100 identical subscription entries when the publisher
+    // created multiple events with the same d-tag
+    const deduped: any[] = [];
+    const seenDTags = new Set<string>();
+    for (const p of filteredProposals) {
+      if (p.d) {
+        if (seenDTags.has(p.d)) continue; // skip older duplicate
+        seenDTags.add(p.d);
+      }
+      deduped.push(p);
+    }
 
-    return res.json({ success: true, proposals: filteredProposals });
+    const pendingCount = deduped.filter((p: any) => !p.isPaid).length;
+    const paidCount = deduped.filter((p: any) => p.isPaid).length;
+    console.log(`📊 Proposals for user: ${deduped.length} total (${pendingCount} pending, ${paidCount} paid)${deduped.length < filteredProposals.length ? ` [deduped from ${filteredProposals.length}]` : ''}`);
+
+    return res.json({ success: true, proposals: deduped });
   } catch (error: any) {
     console.error('❌ Error fetching donation proposals:', error);
     return res.status(500).json({ success: false, error: error.message, proposals: [] });
