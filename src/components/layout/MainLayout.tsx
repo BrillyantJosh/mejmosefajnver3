@@ -2,8 +2,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot, ExternalLink, PlayCircle, Bug, Home as HomeIcon, AlertTriangle, HandCoins, Snowflake } from "lucide-react";
-import logoDayImage from "@/assets/lana-logo.png";
-import logoNightImage from "@/assets/lana-logo-v2.png";
+import logoDayImage from "@/assets/lana-logo-dark.png";
+import logoNightImage from "@/assets/lana-logo-white.png";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
