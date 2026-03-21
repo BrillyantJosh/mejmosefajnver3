@@ -14,8 +14,9 @@ import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { fiatToLana, lanaToFiat, getUserCurrency, formatCurrency, formatLana, lanaToLanoshi } from "@/lib/currencyConversion";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { Calendar, ExternalLink, Wallet } from "lucide-react";
+import { Calendar, ExternalLink, Wallet, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
+import { useNostrPaymentScore } from "@/hooks/useNostrPaymentScore";
 
 interface DonationSelection {
   proposalId: string;
@@ -27,6 +28,7 @@ export default function Pending() {
   const navigate = useNavigate();
   const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(session?.nostrHexId);
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
+  const { score, isLoading: scoreLoading } = useNostrPaymentScore(session?.nostrHexId);
 
   const [selectedProposals, setSelectedProposals] = useState<Set<string>>(new Set());
   const [customAmounts, setCustomAmounts] = useState<{ [key: string]: string }>({});
@@ -168,8 +170,48 @@ export default function Pending() {
     );
   }
 
+  const scoreNum = score ? parseFloat(score.score) : 0;
+  const getScoreColor = (s: number) => s >= 7 ? 'text-green-600 dark:text-green-400' : s >= 5 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400';
+  const getScoreBg = (s: number) => s >= 7 ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800' : s >= 5 ? 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800';
+  const formatLanoshi = (l: string) => { const v = parseInt(l, 10); return isNaN(v) ? l : (v / 100_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' LANA'; };
+  const formatPeriod = (start: string, end: string) => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const fmt = (ym: string) => { const [y, m] = ym.split('-'); return `${months[parseInt(m, 10) - 1] || m} ${y}`; };
+    return `${fmt(start)} – ${fmt(end)}`;
+  };
+
   return (
     <div className="space-y-6">
+      {/* Payment Score - only when there are pending proposals */}
+      {!scoreLoading && score && (
+        <Card className={`border ${getScoreBg(scoreNum)}`}>
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex items-center gap-2">
+                <TrendingUp className={`h-5 w-5 flex-shrink-0 ${getScoreColor(scoreNum)}`} />
+                <span className="text-sm font-medium text-muted-foreground">Payment Score</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className={`text-2xl font-bold ${getScoreColor(scoreNum)}`}>
+                  {score.score}
+                </span>
+                <span className="text-sm text-muted-foreground">/10</span>
+              </div>
+              <div className="sm:ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {score.periodStart && score.periodEnd && (
+                  <span>{formatPeriod(score.periodStart, score.periodEnd)}</span>
+                )}
+                {score.paidLanoshi && score.proposedLanoshi && (
+                  <span>
+                    Paid {formatLanoshi(score.paidLanoshi)} / {formatLanoshi(score.proposedLanoshi)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Wallet Selection */}
       <Card>
         <CardHeader>
