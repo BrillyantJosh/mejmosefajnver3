@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot, ExternalLink, PlayCircle, Bug, Home as HomeIcon, AlertTriangle, HandCoins, Snowflake } from "lucide-react";
-import logoImage from "@/assets/lana-logo.png";
+import logoDayImage from "@/assets/lana-logo.png";
+import logoNightImage from "@/assets/lana-logo-v2.png";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -228,9 +229,14 @@ export default function MainLayout() {
         <div className="container relative flex h-16 items-center justify-between px-4">
           <Link to="/" className="flex items-center space-x-2 min-w-0 flex-1 mr-4">
             <img
-              src={logoImage}
+              src={logoDayImage}
               alt="Logo"
-              className="h-8 w-8 object-contain flex-shrink-0 rounded-full dark:brightness-0 dark:invert"
+              className="h-8 w-8 object-contain flex-shrink-0 dark:hidden"
+            />
+            <img
+              src={logoNightImage}
+              alt="Logo"
+              className="h-8 w-8 object-contain flex-shrink-0 hidden dark:block rounded-full"
             />
             <span className="text-lg md:text-xl font-bold bg-gradient-to-r from-lana-blue-deep via-lana-mid to-lana-orange-vibrant bg-clip-text text-transparent truncate">
               {appSettings?.app_name || "Nostr App"}
