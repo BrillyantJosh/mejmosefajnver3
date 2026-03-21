@@ -230,7 +230,7 @@ export default function MainLayout() {
             <img
               src={logoImage}
               alt="Logo"
-              className="h-8 w-8 object-contain flex-shrink-0"
+              className="h-8 w-8 object-contain flex-shrink-0 rounded-full dark:brightness-0 dark:invert"
             />
             <span className="text-lg md:text-xl font-bold bg-gradient-to-r from-lana-blue-deep via-lana-mid to-lana-orange-vibrant bg-clip-text text-transparent truncate">
               {appSettings?.app_name || "Nostr App"}
