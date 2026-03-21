@@ -14,7 +14,8 @@ import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { fiatToLana, lanaToFiat, getUserCurrency, formatCurrency, formatLana, lanaToLanoshi } from "@/lib/currencyConversion";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { Calendar, ExternalLink, Wallet, TrendingUp } from "lucide-react";
+import { Calendar, ExternalLink, Wallet, TrendingUp, AlertTriangle, Clock } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { format } from "date-fns";
 import { useNostrPaymentScore } from "@/hooks/useNostrPaymentScore";
 
@@ -42,7 +43,7 @@ export default function Pending() {
 
   // Fetch wallet balances
   const walletAddresses = useMemo(() => wallets.map(w => w.walletId), [wallets]);
-  const { balances, isLoading: balancesLoading } = useWalletBalances(walletAddresses);
+  const { balances, balanceDetails, isLoading: balancesLoading } = useWalletBalances(walletAddresses);
 
   // Server already matches proposals with confirmations (KIND 90901) and sets isPaid
   const pendingProposals = useMemo(() =>
@@ -75,9 +76,13 @@ export default function Pending() {
 
   const totalInUserCurrency = formatCurrency(lanaToFiat(totalLana, userCurrency), userCurrency);
 
-  // Get selected wallet balance
+  // Get selected wallet balance (confirmed vs unconfirmed)
+  const selectedWalletDetail = selectedWallet ? balanceDetails.get(selectedWallet) : null;
   const selectedWalletBalance = selectedWallet ? (balances.get(selectedWallet) || 0) : 0;
-  const remainingBalance = selectedWalletBalance - totalLana;
+  const confirmedBalance = selectedWalletDetail?.confirmed ?? selectedWalletBalance;
+  const unconfirmedBalance = selectedWalletDetail?.unconfirmed ?? 0;
+  const hasUnconfirmed = unconfirmedBalance > 0;
+  const remainingBalance = confirmedBalance - totalLana;
 
   const handleToggleProposal = useCallback((proposalId: string) => {
     const newSet = new Set(selectedProposals);
@@ -226,12 +231,14 @@ export default function Pending() {
               {wallets
                 .filter(wallet => !wallet.walletType?.toLowerCase().includes('lana8wonder'))
                 .map(wallet => {
+                  const detail = balanceDetails.get(wallet.walletId);
                   const balance = balances.get(wallet.walletId);
                   const walletType = wallet.walletType || 'Wallet';
                   const addressPreview = wallet.walletId.substring(0, 8) + '...';
-                  const displayText = wallet.note 
+                  const displayText = wallet.note
                     ? `${wallet.note.substring(0, 20)}${wallet.note.length > 20 ? '...' : ''}`
                     : `${walletType} - ${addressPreview}`;
+                  const hasIncoming = detail && detail.unconfirmed > 0;
                   return (
                     <SelectItem key={wallet.walletId} value={wallet.walletId}>
                       <div className="flex items-center justify-between w-full gap-4">
@@ -239,7 +246,10 @@ export default function Pending() {
                           {displayText}
                         </span>
                         <span className="text-sm text-muted-foreground whitespace-nowrap">
-                          {balance !== undefined ? formatLana(balance) : '...'}
+                          {balance !== undefined ? formatLana(detail?.confirmed ?? balance) : '...'}
+                          {hasIncoming && (
+                            <span className="text-orange-500 ml-1">(+{formatLana(detail!.unconfirmed)} pending)</span>
+                          )}
                         </span>
                       </div>
                     </SelectItem>
@@ -368,12 +378,22 @@ export default function Pending() {
 
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">Wallet Balance:</span>
-                      <span className="font-medium whitespace-nowrap">{formatLana(selectedWalletBalance)}</span>
+                      <span className="text-muted-foreground">Confirmed Balance:</span>
+                      <span className="font-medium whitespace-nowrap">{formatLana(confirmedBalance)}</span>
                     </div>
 
+                    {hasUnconfirmed && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          Incoming (unconfirmed):
+                        </span>
+                        <span className="font-medium whitespace-nowrap text-orange-500">+{formatLana(unconfirmedBalance)}</span>
+                      </div>
+                    )}
+
                     <div className="space-y-1 pl-2 sm:pl-4">
-                      {Array.from(selectedProposals).map((proposalId, index) => {
+                      {Array.from(selectedProposals).map((proposalId) => {
                         const proposal = pendingProposals.find(p => p.eventId === proposalId);
                         if (!proposal) return null;
 
@@ -402,6 +422,29 @@ export default function Pending() {
                         {formatLana(remainingBalance)}
                       </span>
                     </div>
+
+                    {hasUnconfirmed && remainingBalance < 0 && (confirmedBalance + unconfirmedBalance - totalLana) >= 0 && (
+                      <Alert className="border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800">
+                        <AlertTriangle className="h-4 w-4 text-orange-500" />
+                        <AlertDescription className="text-sm">
+                          <p className="font-medium text-orange-700 dark:text-orange-400 mb-1">
+                            Funds are incoming but not yet confirmed
+                          </p>
+                          <p className="text-muted-foreground">
+                            You have {formatLana(unconfirmedBalance)} LANA waiting for the next block confirmation.
+                            Please wait until your funds are confirmed before proceeding with the payment.
+                          </p>
+                          <a
+                            href="https://lanawatch.us"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 mt-2 text-sm text-primary hover:underline font-medium"
+                          >
+                            Check block status on LanaWatch <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
                 </div>
               )}
@@ -429,9 +472,15 @@ export default function Pending() {
               )}
               
               {selectedWallet && remainingBalance < 0 && (
-                <p className="text-sm text-destructive">
-                  Insufficient funds. You need {formatLana(Math.abs(remainingBalance))} more LANA.
-                </p>
+                hasUnconfirmed && (confirmedBalance + unconfirmedBalance - totalLana) >= 0 ? (
+                  <p className="text-sm text-orange-600 dark:text-orange-400">
+                    Your confirmed balance is insufficient, but you have {formatLana(unconfirmedBalance)} LANA incoming. Wait for the next block to confirm your funds.
+                  </p>
+                ) : (
+                  <p className="text-sm text-destructive">
+                    Insufficient funds. You need {formatLana(Math.abs(remainingBalance))} more LANA.
+                  </p>
+                )
               )}
             </div>
           </CardContent>
