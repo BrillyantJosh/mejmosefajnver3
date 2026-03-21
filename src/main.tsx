@@ -15,6 +15,13 @@ const updateSW = registerSW({
   },
   onRegistered(registration) {
     console.log("[PWA] Service worker registered:", registration);
+    // Periodically check for SW updates (every 60 seconds)
+    // This ensures users get new deploys without manual hard refresh
+    if (registration) {
+      setInterval(() => {
+        registration.update();
+      }, 60 * 1000);
+    }
   },
   onRegisterError(error) {
     console.error("[PWA] Service worker registration error:", error);
