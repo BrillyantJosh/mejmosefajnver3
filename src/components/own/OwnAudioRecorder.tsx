@@ -39,7 +39,11 @@ export default function OwnAudioRecorder({
   const audioBlobRef = useRef<Blob | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingTimeRef = useRef(0);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const wentBackgroundRef = useRef(false);
+  const isRecordingRef = useRef(false);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (streamRef.current) {
@@ -51,8 +55,41 @@ export default function OwnAudioRecorder({
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
       }
+      releaseWakeLock();
     };
   }, [audioPreview]);
+
+  // Detect app going to background during recording (Android tab throttling)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isRecordingRef.current) {
+        wentBackgroundRef.current = true;
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  // Request WakeLock to prevent Android Doze mode during recording
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+        wakeLockRef.current.addEventListener('release', () => {
+          wakeLockRef.current = null;
+        });
+      }
+    } catch {
+      // WakeLock not supported or denied — continue without it
+    }
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
+  };
 
   const getSupportedMimeType = () => {
     const types = [
@@ -85,12 +122,15 @@ export default function OwnAudioRecorder({
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 44100,
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
+          sampleRate: { ideal: 44100 },
         },
       });
       streamRef.current = stream;
+
+      // Prevent Android Doze mode from pausing audio
+      await requestWakeLock();
 
       const mimeType = getSupportedMimeType();
 
@@ -122,11 +162,22 @@ export default function OwnAudioRecorder({
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
         }
+
+        releaseWakeLock();
+
+        // Warn if app went to background during recording
+        if (wentBackgroundRef.current) {
+          toast.warning("Recording may contain gaps — the app was in the background during recording. Keep the app open for best results.");
+        }
       };
 
-      // Record in 5-second chunks for better memory management on older devices
-      mediaRecorder.start(5000);
+      // Record continuously — no timeslice to avoid lost chunks on Android
+      // when JS is throttled by Doze mode or tab backgrounding.
+      // For 5-min max recordings (~2-5MB webm/opus) this is fine.
+      mediaRecorder.start();
       setIsRecording(true);
+      isRecordingRef.current = true;
+      wentBackgroundRef.current = false;
       setRecordingTime(0);
       recordingTimeRef.current = 0;
       setShowTimeWarning(false);
@@ -146,6 +197,7 @@ export default function OwnAudioRecorder({
               if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
                 mediaRecorderRef.current.stop();
                 setIsRecording(false);
+                isRecordingRef.current = false;
                 if (recordingTimerRef.current) {
                   clearInterval(recordingTimerRef.current);
                   recordingTimerRef.current = null;
@@ -160,6 +212,7 @@ export default function OwnAudioRecorder({
       toast.info("Recording... (max 5 min)");
     } catch (error: any) {
       console.error('Error accessing microphone:', error);
+      releaseWakeLock();
       if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
         toast.error("Microphone access denied. Please allow microphone in browser settings.");
       } else if (error?.name === 'NotFoundError' || error?.name === 'DevicesNotFoundError') {
@@ -176,6 +229,7 @@ export default function OwnAudioRecorder({
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      isRecordingRef.current = false;
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
         recordingTimerRef.current = null;
@@ -266,6 +320,7 @@ export default function OwnAudioRecorder({
 
   const handleCancel = () => {
     stopRecording();
+    releaseWakeLock();
     setRecordingTime(0);
     setShowTimeWarning(false);
     toast.info("Recording cancelled");
