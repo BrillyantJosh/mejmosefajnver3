@@ -4,6 +4,7 @@ import { useNostrProjects, ProjectData } from "@/hooks/useNostrProjects";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { useNostrProjectDonations } from "@/hooks/useNostrProjectDonations";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdmin } from "@/contexts/AdminContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -133,8 +134,10 @@ const BatchFunding = () => {
   const { session } = useAuth();
   const { toast } = useToast();
   const { parameters } = useSystemParameters();
+  const { appSettings } = useAdmin();
   const { projects, isLoading: projectsLoading } = useNostrProjects();
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
+  const projectOverrides = appSettings?.project_overrides || {};
 
   const [step, setStep] = useState<BatchStep>('select');
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
@@ -154,8 +157,10 @@ const BatchFunding = () => {
   const [processingStatus, setProcessingStatus] = useState<string>("");
   const [result, setResult] = useState<BatchResult | null>(null);
 
-  // Filter active projects that have a wallet address
-  const activeProjects = projects.filter(p => p.status === 'active' && p.wallet && !p.isBlocked);
+  // Filter active projects that have a wallet address (exclude hidden and blocked)
+  const activeProjects = projects.filter(p =>
+    p.status === 'active' && p.wallet && !p.isBlocked && !projectOverrides[p.id]?.hidden
+  );
 
   // Initialize entries when projects load
   useEffect(() => {
