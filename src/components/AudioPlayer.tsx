@@ -196,7 +196,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       <audio
         ref={audioRef}
         src={audioUrl}
-        preload="metadata"
+        preload="auto"
       />
     </div>
   );
