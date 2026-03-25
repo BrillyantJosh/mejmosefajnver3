@@ -62,7 +62,15 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     const handleError = () => {
       setIsLoading(false);
       setHasError(true);
-      console.error('Error loading audio:', audioUrl);
+      const err = audio.error;
+      console.error('Error loading audio:', audioUrl, {
+        code: err?.code,
+        message: err?.message,
+        // 1=MEDIA_ERR_ABORTED, 2=MEDIA_ERR_NETWORK, 3=MEDIA_ERR_DECODE, 4=MEDIA_ERR_SRC_NOT_SUPPORTED
+        codeName: err?.code === 1 ? 'ABORTED' : err?.code === 2 ? 'NETWORK' : err?.code === 3 ? 'DECODE' : err?.code === 4 ? 'SRC_NOT_SUPPORTED' : 'UNKNOWN',
+        networkState: audio.networkState,
+        readyState: audio.readyState,
+      });
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
