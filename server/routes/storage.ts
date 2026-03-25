@@ -132,9 +132,13 @@ function serveFile(bucket: string, relativePath: string, res: Response) {
     return res.status(404).json({ error: 'File not found' });
   }
   // For audio buckets, force audio/* Content-Type so <audio> elements don't reject
-  // the file on devices that refuse video/webm in audio context
+  // the file on devices that refuse video/webm in audio context.
+  // Also disable caching to prevent stale Content-Type from being served via 304.
   if (bucket === 'dm-audio' && safePath.endsWith('.webm')) {
-    return res.sendFile(filePath, { headers: { 'Content-Type': 'audio/webm' } });
+    res.setHeader('Content-Type', 'audio/webm');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('ETag', '');
+    return res.sendFile(filePath, { headers: { 'Content-Type': 'audio/webm' }, lastModified: false, etag: false });
   }
   return res.sendFile(filePath);
 }
