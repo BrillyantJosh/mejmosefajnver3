@@ -137,7 +137,6 @@ function serveFile(bucket: string, relativePath: string, res: Response) {
   if (bucket === 'dm-audio' && safePath.endsWith('.webm')) {
     const stat = fs.statSync(filePath);
     res.setHeader('Content-Type', 'audio/webm');
-    res.setHeader('Content-Length', stat.size);
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
@@ -147,11 +146,13 @@ function serveFile(bucket: string, relativePath: string, res: Response) {
       const parts = range.replace(/bytes=/, '').split('-');
       const start = parseInt(parts[0], 10);
       const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      const chunkSize = end - start + 1;
       res.status(206);
       res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
-      res.setHeader('Content-Length', end - start + 1);
+      res.setHeader('Content-Length', chunkSize);
       return fs.createReadStream(filePath, { start, end }).pipe(res);
     }
+    res.setHeader('Content-Length', stat.size);
     return fs.createReadStream(filePath).pipe(res);
   }
   return res.sendFile(filePath);
