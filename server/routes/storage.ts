@@ -119,7 +119,7 @@ router.get('/:bucket/public/:filename', (req: Request, res: Response) => {
 });
 
 // Helper to serve a file from a bucket given a relative file path
-function serveFile(bucket: string, relativePath: string, res: Response) {
+function serveFile(bucket: string, relativePath: string, req: Request, res: Response) {
   if (!ALLOWED_BUCKETS.includes(bucket)) {
     return res.status(400).json({ error: `Invalid bucket: ${bucket}` });
   }
@@ -163,7 +163,7 @@ router.get('/:bucket/{*filePath}', (req: Request, res: Response) => {
   const { bucket, filePath } = req.params;
   // Express 5 wildcard returns array of path segments — join them
   const resolvedPath = Array.isArray(filePath) ? filePath.join('/') : String(filePath);
-  return serveFile(bucket, resolvedPath, res);
+  return serveFile(bucket, resolvedPath, req, res);
 });
 
 // DELETE /api/storage/:bucket/:filename - Delete file
