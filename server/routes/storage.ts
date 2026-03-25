@@ -137,8 +137,8 @@ function serveFile(bucket: string, relativePath: string, res: Response) {
   if (bucket === 'dm-audio' && safePath.endsWith('.webm')) {
     res.setHeader('Content-Type', 'audio/webm');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('ETag', '');
-    return res.sendFile(filePath, { headers: { 'Content-Type': 'audio/webm' }, lastModified: false, etag: false });
+    res.removeHeader('ETag');
+    return res.sendFile(filePath, { headers: { 'Content-Type': 'audio/webm' }, lastModified: false, etag: false, cacheControl: false });
   }
   return res.sendFile(filePath);
 }
