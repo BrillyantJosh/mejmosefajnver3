@@ -135,10 +135,24 @@ function serveFile(bucket: string, relativePath: string, res: Response) {
   // the file on devices that refuse video/webm in audio context.
   // Also disable caching to prevent stale Content-Type from being served via 304.
   if (bucket === 'dm-audio' && safePath.endsWith('.webm')) {
+    const stat = fs.statSync(filePath);
     res.setHeader('Content-Type', 'audio/webm');
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.removeHeader('ETag');
-    return res.sendFile(filePath, { headers: { 'Content-Type': 'audio/webm' }, lastModified: false, etag: false, cacheControl: false });
+
+    // Support Range requests for audio seeking
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
+      res.setHeader('Content-Length', end - start + 1);
+      return fs.createReadStream(filePath, { start, end }).pipe(res);
+    }
+    return fs.createReadStream(filePath).pipe(res);
   }
   return res.sendFile(filePath);
 }
