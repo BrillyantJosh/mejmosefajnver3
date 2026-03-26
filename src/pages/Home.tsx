@@ -398,7 +398,75 @@ export default function Home() {
               </div>
             ) : (
               <>
-                <div className="space-y-6">
+                {/* Mobile: horizontal video scroller + compact cards below */}
+                <div className="block lg:hidden">
+                  {/* Horizontal video carousel */}
+                  {paginatedItems.some(item => item.youtube_url && extractYouTubeId(item.youtube_url)) && (
+                    <div className="mb-4">
+                      <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-3 -mx-4 px-4 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+                        {paginatedItems.map((item) => {
+                          const ytId = item.youtube_url ? extractYouTubeId(item.youtube_url) : null;
+                          if (!ytId) return null;
+                          return (
+                            <div key={`vid-${item.id}`} className="snap-center flex-shrink-0 w-[85vw] max-w-[500px]">
+                              <Card className="overflow-hidden">
+                                <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+                                  <iframe
+                                    className="absolute top-0 left-0 w-full h-full rounded-t-lg"
+                                    src={`https://www.youtube.com/embed/${ytId}`}
+                                    title={item.title}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  />
+                                </div>
+                                <CardContent className="p-3">
+                                  <h2 className="text-sm font-bold truncate">{item.title}</h2>
+                                  <p className="text-[10px] text-muted-foreground mt-1">{formatTime(item.created_at)}</p>
+                                </CardContent>
+                              </Card>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground text-center mt-1">
+                        ← Swipe for more videos →
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Mobile: compact text cards */}
+                  <div className="space-y-4">
+                    {paginatedItems.map((item) => (
+                      <Card key={item.id} className="overflow-hidden">
+                        <CardContent className="pt-4">
+                          <h2 className="text-lg font-bold">{item.title}</h2>
+                          {item.body && (
+                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap line-clamp-4">
+                              {item.body}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between mt-3">
+                            <p className="text-xs text-muted-foreground">
+                              {formatTime(item.created_at)}
+                            </p>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1.5 text-muted-foreground hover:text-foreground"
+                              onClick={() => handleShare(item)}
+                            >
+                              <Share2 className="h-4 w-4" />
+                              <span className="text-xs">Share</span>
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Desktop: original vertical layout */}
+                <div className="hidden lg:block space-y-6">
                   {paginatedItems.map((item) => {
                     const ytId = item.youtube_url ? extractYouTubeId(item.youtube_url) : null;
                     return (
