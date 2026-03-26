@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Component, ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrWallets } from '@/hooks/useNostrWallets';
@@ -13,6 +13,44 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/I18nContext';
+
+// Error boundary to catch render crashes and show error instead of white screen
+class Lana8WonderErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('🔴 Lana8Wonder crash:', error, info.componentStack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="container mx-auto p-4 pb-24 space-y-4">
+          <div className="p-6 border border-destructive rounded-lg bg-destructive/10">
+            <h2 className="text-lg font-bold text-destructive mb-2">Something went wrong</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              An error occurred loading Lana8Wonder. Please try refreshing the page.
+            </p>
+            <pre className="text-xs bg-muted p-3 rounded overflow-auto max-h-32 mb-4">
+              {this.state.error?.message || 'Unknown error'}
+            </pre>
+            <button
+              className="px-4 py-2 bg-primary text-primary-foreground rounded text-sm"
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import lana8wonderTranslations from '@/i18n/modules/lana8wonder';
 
 interface TransferSuccessState {
@@ -108,8 +146,19 @@ const Lana8Wonder = () => {
           // Get the latest event
           const latestEvent = events.sort((a, b) => b.created_at - a.created_at)[0];
           const plan = JSON.parse(latestEvent.content) as AnnuityPlan;
-          setAnnuityPlan(plan);
-          console.log('Annuity plan found:', plan);
+          // Defensive: ensure accounts is a valid array with levels
+          if (!plan || !Array.isArray(plan.accounts)) {
+            console.error('🔴 Invalid annuity plan structure:', plan);
+            setAnnuityPlan(null);
+          } else {
+            // Ensure all accounts have levels array
+            plan.accounts = plan.accounts.map(acc => ({
+              ...acc,
+              levels: Array.isArray(acc.levels) ? acc.levels : []
+            }));
+            setAnnuityPlan(plan);
+            console.log('Annuity plan found:', plan);
+          }
         } else {
           setAnnuityPlan(null);
           console.log('No annuity plan found');
@@ -556,4 +605,10 @@ const Lana8Wonder = () => {
   );
 };
 
-export default Lana8Wonder;
+export default function Lana8WonderWithErrorBoundary() {
+  return (
+    <Lana8WonderErrorBoundary>
+      <Lana8Wonder />
+    </Lana8WonderErrorBoundary>
+  );
+}
