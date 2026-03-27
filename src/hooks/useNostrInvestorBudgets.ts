@@ -39,14 +39,17 @@ export const useNostrInvestorBudgets = (hexId: string | null | undefined) => {
       const pool = new SimplePool();
 
       try {
-        const events = await Promise.race([
+        // Relay doesn't index custom tags — fetch all from author, filter client-side
+        const allEvents = await Promise.race([
           pool.querySync(relays, {
             kinds: [30938],
             authors: [DIRECT_FUND_PUBKEY],
-            '#investor_hex': [hexId],
           }),
           new Promise<never[]>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000)),
         ]);
+        const events = allEvents.filter(e =>
+          e.tags.some(t => t[0] === 'investor_hex' && t[1] === hexId)
+        );
 
         if (cancelled) return;
 
