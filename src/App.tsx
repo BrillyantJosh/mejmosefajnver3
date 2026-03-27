@@ -53,6 +53,9 @@ import TransparencyWallets from "./pages/transparency/Wallets";
 import TransparencyUnregisteredWallets from "./pages/transparency/UnregisteredWallets";
 import TransparencyLast30 from "./pages/transparency/Last30";
 import TransparencySearchByWallet from "./pages/transparency/SearchByWallet";
+import DirectFundLayout from "./pages/direct-fund/DirectFundLayout";
+import DirectFundPayments from "./pages/direct-fund/PaymentsPage";
+import DirectFundBudgets from "./pages/direct-fund/BudgetsPage";
 import UnconditionalPaymentLayout from "./pages/unconditional-payment/UnconditionalPaymentLayout";
 import UnconditionalPaymentPending from "./pages/unconditional-payment/Pending";
 import UnconditionalPaymentCompleted from "./pages/unconditional-payment/Completed";
@@ -307,6 +310,11 @@ const App = () => (
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/wallet/register" element={<RegisterWallet />} />
                   <Route path="/wallet/register/result" element={<RegisterWalletResult />} />
+                  <Route path="/direct-fund" element={<DirectFundLayout />}>
+                    <Route index element={<Navigate to="/direct-fund/payments" replace />} />
+                    <Route path="payments" element={<DirectFundPayments />} />
+                    <Route path="budgets" element={<DirectFundBudgets />} />
+                  </Route>
                   <Route path="/send-lana" element={<SendLana />} />
             <Route path="/send-lana/recipient" element={<SendLanaRecipient />} />
             <Route path="/send-lana/private-key" element={<SendLanaPrivateKey />} />

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -88,6 +88,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     image: walletImage,
     enabled: true,
     order: 4
+  },
+  {
+    id: 'direct-fund',
+    title: 'Direct Fund',
+    description: 'Investment budgets and pending payments',
+    icon: TrendingUp,
+    path: '/direct-fund',
+    gradient: 'from-emerald-500 to-teal-500',
+    enabled: true,
+    order: 5
   },
   {
     id: 'unconditionalpayment',
