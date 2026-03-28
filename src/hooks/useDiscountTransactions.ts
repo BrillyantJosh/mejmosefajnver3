@@ -135,11 +135,17 @@ export const useDiscountTransactions = () => {
 
       console.log(`[discount] Fetched ${buybackEvents.length} KIND 30936 events, ${payoutEvents.length} KIND 30937 events`);
 
-      // Parse buyback transactions — show all (admin view of Lana.Discount activity)
+      // Parse buyback transactions — show all, newest first by transaction ID
       const parsedTransactions = buybackEvents
         .map(parseBuybackEvent)
         .filter((t): t is BuybackTransaction => t !== null)
-        .sort((a, b) => b.createdAt - a.createdAt);
+        .sort((a, b) => {
+          // Sort by numeric ID descending (newest transaction = highest ID)
+          const idA = parseInt(a.id) || 0;
+          const idB = parseInt(b.id) || 0;
+          if (idA !== idB) return idB - idA;
+          return b.createdAt - a.createdAt;
+        });
 
       // Parse payouts
       const parsedPayouts = payoutEvents
