@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -380,6 +380,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-emerald-500 to-green-500',
     enabled: true,
     order: 28
+  },
+  {
+    id: 'lanadiscount',
+    title: 'Lana Discount',
+    description: 'Sell LANA coins and track buyback transactions',
+    icon: Tag,
+    path: '/discount/transactions',
+    gradient: 'from-teal-500 to-cyan-500',
+    enabled: true,
+    order: 29
   }
 ];
 
@@ -442,7 +452,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'being': 'Sožitje',
     'splitwatcher': 'SPLIT Watcher',
     'reportloss': 'Report Loss',
-    'shop': 'Shop'
+    'shop': 'Shop',
+    'lanadiscount': 'Lana Discount'
   };
   return mapping[id] || id;
 };
@@ -481,7 +492,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Sožitje': 'being',
     'SPLIT Watcher': 'splitwatcher',
     'Report Loss': 'reportloss',
-    'Shop': 'shop'
+    'Shop': 'shop',
+    'Lana Discount': 'lanadiscount'
   };
   return mapping[id] || null;
 };

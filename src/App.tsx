@@ -120,6 +120,9 @@ import ShopLayout from "./pages/shop/ShopLayout";
 import ShopSell from "./pages/shop/ShopSell";
 import ShopPaid from "./pages/shop/ShopPaid";
 import ShopPay from "./pages/shop/ShopPay";
+import LanaDiscountLayout from "./pages/discount/LanaDiscountLayout";
+import DiscountTransactions from "./pages/discount/DiscountTransactions";
+import DiscountSell from "./pages/discount/DiscountSell";
 
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
@@ -351,6 +354,11 @@ const App = () => (
                     <Route path="sell" element={<ShopSell />} />
                     <Route path="paid" element={<ShopPaid />} />
                     <Route path="pay" element={<ShopPay />} />
+                  </Route>
+                  <Route path="/discount" element={<LanaDiscountLayout />}>
+                    <Route index element={<Navigate to="/discount/transactions" replace />} />
+                    <Route path="transactions" element={<DiscountTransactions />} />
+                    <Route path="sell" element={<DiscountSell />} />
                   </Route>
                   <Route
                     path="/admin"
