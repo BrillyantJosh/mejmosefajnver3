@@ -29,6 +29,7 @@ import { toast } from "sonner";
 // Fallback defaults — overridden by admin settings
 const DEFAULT_BUYBACK_WALLET = "Lg7iw2aQp8qazNsZVZFhf4rP7bikSrLRxB";
 const DEFAULT_API_URL = "https://www.lana.discount";
+const DEFAULT_API_KEY = "ldk_brain_37fe9da0c986846693edcd176620526a8b8d9eca";
 const DEFAULT_COMMISSION_LANAPAYS = 30;
 const DEFAULT_COMMISSION_OTHER = 21;
 
@@ -66,7 +67,7 @@ export default function DiscountSell() {
   // Admin-configurable settings with defaults
   const BUYBACK_WALLET = appSettings?.discount_buyback_wallet || DEFAULT_BUYBACK_WALLET;
   const DISCOUNT_API_URL = appSettings?.discount_api_url || DEFAULT_API_URL;
-  const DISCOUNT_API_KEY = appSettings?.discount_api_key || '';
+  const DISCOUNT_API_KEY = appSettings?.discount_api_key || DEFAULT_API_KEY;
   const COMMISSION_LANAPAYS = appSettings?.discount_commission_lanapays ?? DEFAULT_COMMISSION_LANAPAYS;
   const COMMISSION_OTHER = appSettings?.discount_commission_other ?? DEFAULT_COMMISSION_OTHER;
   const MIN_SELL: Record<string, number> = {
