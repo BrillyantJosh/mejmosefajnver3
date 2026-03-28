@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,10 @@ import {
   Banknote,
   ArrowLeft,
   ShieldCheck,
+  QrCode,
+  X,
 } from "lucide-react";
+import { Html5Qrcode } from "html5-qrcode";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAdmin } from "@/contexts/AdminContext";
@@ -92,6 +95,13 @@ export default function DiscountSell() {
   const [privateKeyValid, setPrivateKeyValid] = useState<boolean | null>(null);
   const [validatingKey, setValidatingKey] = useState(false);
   const [executing, setExecuting] = useState(false);
+
+  // QR Scanner
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const hasScannedRef = useRef(false);
 
   // Step 5: Result
   const [txResult, setTxResult] = useState<{
@@ -250,6 +260,62 @@ export default function DiscountSell() {
   };
 
   // Execute sell
+  // QR Scanner
+  const startScanner = useCallback(async () => {
+    setScanError(null);
+    try {
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras || cameras.length === 0) {
+        setScanError("No camera found on this device.");
+        return;
+      }
+      let selectedCamera = cameras[0];
+      if (cameras.length > 1) {
+        const backCamera = cameras.find(c =>
+          c.label.toLowerCase().includes("back") || c.label.toLowerCase().includes("rear")
+        );
+        if (backCamera) selectedCamera = backCamera;
+      }
+      const scanner = new Html5Qrcode("qr-reader-discount");
+      scannerRef.current = scanner;
+      await scanner.start(
+        selectedCamera.id,
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+          if (hasScannedRef.current) return;
+          hasScannedRef.current = true;
+          setPrivateKey(decodedText.trim());
+          stopScanner();
+          setIsScannerOpen(false);
+          toast.success("QR code scanned successfully");
+        },
+        () => {}
+      );
+      setIsCameraReady(true);
+    } catch (err) {
+      console.error("Failed to start scanner:", err);
+      setScanError("Failed to access camera. Please check permissions.");
+    }
+  }, []);
+
+  const stopScanner = useCallback(async () => {
+    if (scannerRef.current) {
+      try { await scannerRef.current.stop(); } catch {}
+      scannerRef.current = null;
+      setIsCameraReady(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isScannerOpen) {
+      hasScannedRef.current = false;
+      const timer = setTimeout(startScanner, 300);
+      return () => clearTimeout(timer);
+    } else {
+      stopScanner();
+    }
+  }, [isScannerOpen, startScanner, stopScanner]);
+
   const executeSell = async () => {
     if (!session?.lanaPrivateKey || !session?.nostrHexId) {
       toast.error("Authentication required");
@@ -260,13 +326,27 @@ export default function DiscountSell() {
     setTxResult(null);
 
     try {
+      // Build electrum servers list from system parameters
+      let electrumServers = (parameters?.electrumServers || []).map((s: any) =>
+        typeof s === 'string' ? { host: s.split(':')[0], port: parseInt(s.split(':')[1]) || 5097 } : s
+      );
+      if (electrumServers.length === 0) {
+        electrumServers.push(
+          { host: "electrum1.lanacoin.com", port: 5097 },
+          { host: "electrum2.lanacoin.com", port: 5097 }
+        );
+      }
+
       // Step 1: Build and broadcast LANA transaction via Supabase
       const { data: txData, error: txError } =
         await supabase.functions.invoke("send-lana-transaction", {
           body: {
-            senderPrivateKeyWIF: privateKey,
+            senderAddress: selectedWallet,
             recipientAddress: BUYBACK_WALLET,
-            amountLanoshis: lanaAmountLanoshis,
+            amount: parsedLana,
+            privateKey: privateKey,
+            emptyWallet: isEmptyWallet,
+            electrumServers,
           },
         });
 
@@ -274,11 +354,11 @@ export default function DiscountSell() {
         throw new Error(txError.message || "Failed to send LANA transaction");
       }
 
-      if (!txData?.success && !txData?.txHash && !txData?.txid) {
+      if (!txData?.success) {
         throw new Error(txData?.error || "Transaction failed");
       }
 
-      const txHash = txData.txHash || txData.txid;
+      const txHash = txData.txid || txData.txHash;
 
       // Step 2: Register sale with Lana.Discount external API
       const saleRes = await fetch(`${DISCOUNT_API_URL}/api/external/sale`, {
@@ -881,19 +961,29 @@ export default function DiscountSell() {
                 {/* WIF Private Key Input */}
                 <div className="space-y-3">
                   <label className="text-sm font-medium text-foreground">WIF Private Key</label>
-                  <input
-                    type="password"
-                    value={privateKey}
-                    onChange={(e) => setPrivateKey(e.target.value.trim())}
-                    placeholder="Enter your WIF private key for the selected wallet"
-                    className={`w-full rounded-xl border-2 px-4 py-3 font-mono text-sm bg-background transition-colors focus:outline-none focus:ring-2 ${
-                      privateKeyValid === true
-                        ? 'border-green-500 focus:ring-green-500/30'
-                        : privateKeyValid === false
-                          ? 'border-red-500 focus:ring-red-500/30'
-                          : 'border-border focus:ring-primary/30'
-                    }`}
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={privateKey}
+                      onChange={(e) => setPrivateKey(e.target.value.trim())}
+                      placeholder="Enter or scan your WIF private key"
+                      className={`flex-1 rounded-xl border-2 px-4 py-3 font-mono text-sm bg-background transition-colors focus:outline-none focus:ring-2 ${
+                        privateKeyValid === true
+                          ? 'border-green-500 focus:ring-green-500/30'
+                          : privateKeyValid === false
+                            ? 'border-red-500 focus:ring-red-500/30'
+                            : 'border-border focus:ring-primary/30'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsScannerOpen(true)}
+                      className="shrink-0 rounded-xl border-2 border-border px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      title="Scan QR Code"
+                    >
+                      <QrCode className="h-5 w-5" />
+                    </button>
+                  </div>
                   {validatingKey && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <Loader2 className="h-3 w-3 animate-spin" /> Validating key...
@@ -1091,6 +1181,40 @@ export default function DiscountSell() {
             </div>
           )}
         </>
+      )}
+      {/* QR Scanner Modal */}
+      {isScannerOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-card border-2 border-border rounded-2xl p-6 max-w-md w-full mx-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-foreground">Scan WIF Private Key</h3>
+              <button
+                onClick={() => setIsScannerOpen(false)}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div
+              id="qr-reader-discount"
+              className="rounded-xl overflow-hidden bg-black min-h-[280px]"
+            />
+            {!isCameraReady && !scanError && (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Starting camera...
+              </div>
+            )}
+            {scanError && (
+              <div className="rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-3 text-sm text-red-600">
+                {scanError}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground text-center">
+              Point your camera at the QR code containing your WIF private key.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );
