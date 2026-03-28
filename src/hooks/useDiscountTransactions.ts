@@ -71,7 +71,7 @@ function parseBuybackEvent(event: any): BuybackTransaction | null {
       source: getTagValue(tags, 'source') || 'external',
       status: getTagValue(tags, 'status') || 'completed',
       paidFiat: parseFloat(getTagValue(tags, 'paid_fiat') || '0'),
-      rpcVerified: getTagValue(tags, 'rpc_verified') === 'true',
+      rpcVerified: getTagValue(tags, 'rpc_verified') === '1' || getTagValue(tags, 'rpc_verified') === 'true',
       rpcConfirmations: parseInt(getTagValue(tags, 'rpc_confirmations') || '0', 10),
       createdAt: event.created_at,
     };
@@ -126,26 +126,16 @@ export const useDiscountTransactions = () => {
     const pool = new SimplePool();
 
     try {
-      // Fetch KIND 30936 (buyback transactions) — no author filter, filter by user p-tag
-      const buybackFilter = {
-        kinds: [30936 as number],
-        '#p': [session.nostrHexId],
-        limit: 200,
-      };
-
-      // Fetch KIND 30937 (FIAT payouts) — no author filter, filter by user p-tag
-      const payoutFilter = {
-        kinds: [30937 as number],
-        '#p': [session.nostrHexId],
-        limit: 200,
-      };
-
+      // Fetch ALL KIND 30936 and 30937 events, then filter client-side by user_hex tag
+      // (Nostr relays don't index multi-char tag names like "user_hex")
       const [buybackEvents, payoutEvents] = await Promise.all([
-        pool.querySync(parameters.relays, buybackFilter),
-        pool.querySync(parameters.relays, payoutFilter),
+        pool.querySync(parameters.relays, { kinds: [30936 as number], limit: 500 }),
+        pool.querySync(parameters.relays, { kinds: [30937 as number], limit: 500 }),
       ]);
 
-      // Parse buyback transactions
+      console.log(`[discount] Fetched ${buybackEvents.length} KIND 30936 events, ${payoutEvents.length} KIND 30937 events`);
+
+      // Parse buyback transactions — show all (admin view of Lana.Discount activity)
       const parsedTransactions = buybackEvents
         .map(parseBuybackEvent)
         .filter((t): t is BuybackTransaction => t !== null)
