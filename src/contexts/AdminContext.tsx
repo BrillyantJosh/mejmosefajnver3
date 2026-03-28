@@ -19,6 +19,7 @@ interface AdminContextType {
   updateProjectTypeSettings: (settings: ProjectTypeSettings) => Promise<void>;
   update100MAdmins: (admins: string[]) => Promise<void>;
   updateProjectOverrides: (overrides: ProjectOverrides) => Promise<void>;
+  updateDiscountSettings: (settings: Partial<Pick<AppSettings, 'discount_commission_lanapays' | 'discount_commission_other' | 'discount_min_sell_eur' | 'discount_min_sell_usd' | 'discount_min_sell_gbp' | 'discount_buyback_wallet' | 'discount_api_url' | 'discount_api_key'>>) => Promise<void>;
   loadAppSettings: () => Promise<void>;
 }
 
@@ -85,6 +86,14 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         project_type_settings: (getValue('project_type_settings') as ProjectTypeSettings) || defaultProjectTypeSettings,
         millionideas_admins: (getValue('100millionideas_admins') as string[]) || [],
         project_overrides: (getValue('100millionideas_project_overrides') as ProjectOverrides) || {},
+        discount_commission_lanapays: (getValue('discount_commission_lanapays') as number) ?? 30,
+        discount_commission_other: (getValue('discount_commission_other') as number) ?? 21,
+        discount_min_sell_eur: (getValue('discount_min_sell_eur') as number) ?? 2,
+        discount_min_sell_usd: (getValue('discount_min_sell_usd') as number) ?? 2,
+        discount_min_sell_gbp: (getValue('discount_min_sell_gbp') as number) ?? 2,
+        discount_buyback_wallet: (getValue('discount_buyback_wallet') as string) || 'Lg7iw2aQp8qazNsZVZFhf4rP7bikSrLRxB',
+        discount_api_url: (getValue('discount_api_url') as string) || 'https://www.lana.discount',
+        discount_api_key: (getValue('discount_api_key') as string) || '',
       });
     } catch (error) {
       console.error('Error loading app settings:', error);
@@ -287,6 +296,23 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateDiscountSettings = async (settings: Partial<Pick<AppSettings, 'discount_commission_lanapays' | 'discount_commission_other' | 'discount_min_sell_eur' | 'discount_min_sell_usd' | 'discount_min_sell_gbp' | 'discount_buyback_wallet' | 'discount_api_url' | 'discount_api_key'>>) => {
+    if (!session?.nostrHexId) {
+      toast({ title: "Error", description: "Not authenticated", variant: "destructive" });
+      return;
+    }
+    try {
+      for (const [key, value] of Object.entries(settings)) {
+        await invokeSettingsUpdate(key, value);
+      }
+      setAppSettings(prev => prev ? { ...prev, ...settings } : null);
+      toast({ title: "Success", description: "Lana Discount settings saved" });
+    } catch (error) {
+      console.error('Error updating discount settings:', error);
+      toast({ title: "Error", description: "Failed to save discount settings", variant: "destructive" });
+    }
+  };
+
   // Compute 100M Ideas admin status
   const is100MAdmin = Boolean(
     session?.nostrHexId && (
@@ -334,6 +360,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         updateProjectTypeSettings,
         update100MAdmins,
         updateProjectOverrides,
+        updateDiscountSettings,
         loadAppSettings,
       }}
     >

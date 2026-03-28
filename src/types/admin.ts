@@ -28,6 +28,15 @@ export interface AppSettings {
   project_type_settings?: ProjectTypeSettings;
   millionideas_admins?: string[];
   project_overrides?: ProjectOverrides;
+  // Lana Discount settings
+  discount_commission_lanapays?: number;  // Commission % for LanaPays.Us wallets (default 30)
+  discount_commission_other?: number;     // Commission % for other wallets (default 21)
+  discount_min_sell_eur?: number;         // Min sell amount in EUR
+  discount_min_sell_usd?: number;         // Min sell amount in USD
+  discount_min_sell_gbp?: number;         // Min sell amount in GBP
+  discount_buyback_wallet?: string;       // Wallet address to send LANA to
+  discount_api_url?: string;              // Lana.Discount API URL
+  discount_api_key?: string;              // Lana.Discount API key
 }
 
 export interface ThemeColors {

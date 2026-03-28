@@ -151,6 +151,7 @@ import TrainAI from "./pages/admin/TrainAI";
 import WhatsUpAdmin from "./pages/admin/WhatsUpAdmin";
 import FaqAdmin from "./pages/admin/FaqAdmin";
 import MillionIdeasAdmin from "./pages/admin/MillionIdeasAdmin";
+import DiscountAdmin from "./pages/admin/DiscountAdmin";
 import ReportBug from "./pages/ReportBug";
 import PublicPost from "./pages/PublicPost";
 import PublicEvent from "./pages/PublicEvent";
@@ -375,6 +376,7 @@ const App = () => (
                     <Route path="whats-up" element={<WhatsUpAdmin />} />
                     <Route path="faq" element={<FaqAdmin />} />
                     <Route path="100-million-ideas" element={<MillionIdeasAdmin />} />
+                    <Route path="lana-discount" element={<DiscountAdmin />} />
                     <Route path="settings" element={<AdminSettings />} />
                   </Route>
                 </Route>

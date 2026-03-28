@@ -16,15 +16,17 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { useAdmin } from "@/contexts/AdminContext";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-const BUYBACK_WALLET = "Lg7iw2aQp8qazNsZVZFhf4rP7bikSrLRxB";
-const DISCOUNT_API_URL = "https://www.lana.discount";
-const DISCOUNT_API_KEY = "ldk_brain_37fe9da0c986846693edcd176620526a8b8d9eca";
-const COMMISSION_PERCENT = 21;
+// Fallback defaults — overridden by admin settings
+const DEFAULT_BUYBACK_WALLET = "Lg7iw2aQp8qazNsZVZFhf4rP7bikSrLRxB";
+const DEFAULT_API_URL = "https://www.lana.discount";
+const DEFAULT_COMMISSION_LANAPAYS = 30;
+const DEFAULT_COMMISSION_OTHER = 21;
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   EUR: "\u20ac",
@@ -53,8 +55,21 @@ function formatFiat(amount: number, currency: string): string {
 export default function DiscountSell() {
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
+  const { appSettings } = useAdmin();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
   const { profile } = useNostrProfile();
+
+  // Admin-configurable settings with defaults
+  const BUYBACK_WALLET = appSettings?.discount_buyback_wallet || DEFAULT_BUYBACK_WALLET;
+  const DISCOUNT_API_URL = appSettings?.discount_api_url || DEFAULT_API_URL;
+  const DISCOUNT_API_KEY = appSettings?.discount_api_key || '';
+  const COMMISSION_LANAPAYS = appSettings?.discount_commission_lanapays ?? DEFAULT_COMMISSION_LANAPAYS;
+  const COMMISSION_OTHER = appSettings?.discount_commission_other ?? DEFAULT_COMMISSION_OTHER;
+  const MIN_SELL: Record<string, number> = {
+    EUR: appSettings?.discount_min_sell_eur ?? 2,
+    USD: appSettings?.discount_min_sell_usd ?? 2,
+    GBP: appSettings?.discount_min_sell_gbp ?? 2,
+  };
 
   // 5-step flow
   const [step, setStep] = useState(1);
@@ -155,10 +170,19 @@ export default function DiscountSell() {
   // Wallet balance for selected wallet
   const walletBalance = selectedWallet ? balances[selectedWallet] || 0 : 0;
 
+  // Determine commission based on wallet type
+  const selectedWalletObj = wallets.find(w => w.walletId === selectedWallet);
+  const isLanaPayWallet = selectedWalletObj?.walletType === 'Lana.Discount' || selectedWalletObj?.walletType === 'LanaPays';
+  const COMMISSION_PERCENT = isLanaPayWallet ? COMMISSION_LANAPAYS : COMMISSION_OTHER;
+
+  // Minimum sell check
+  const minSellFiat = MIN_SELL[selectedCurrency] || 0;
+
   // FIAT calculations
   const grossFiat = parsedLana * exchangeRate;
   const commissionFiat = grossFiat * (COMMISSION_PERCENT / 100);
   const netFiat = grossFiat - commissionFiat;
+  const belowMinimum = minSellFiat > 0 && grossFiat > 0 && grossFiat < minSellFiat;
 
   // Lanoshis
   const lanaAmountLanoshis = Math.round(parsedLana * 100000000);
@@ -752,6 +776,16 @@ export default function DiscountSell() {
                 </div>
               </div>
 
+              {/* Minimum amount warning */}
+              {belowMinimum && (
+                <div className="rounded-xl border-2 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700 dark:text-red-400">
+                    Minimum sell value is <strong>{CURRENCY_SYMBOLS[selectedCurrency] || ''}{minSellFiat} {selectedCurrency}</strong>
+                  </p>
+                </div>
+              )}
+
               <div className="flex justify-between">
                 <button
                   onClick={() => setStep(2)}
@@ -761,9 +795,9 @@ export default function DiscountSell() {
                 </button>
                 <button
                   onClick={() => setStep(4)}
-                  disabled={parsedLana <= 0 || exchangeRate <= 0}
+                  disabled={parsedLana <= 0 || exchangeRate <= 0 || belowMinimum}
                   className={`rounded-xl px-6 py-3 font-semibold text-white transition-all ${
-                    parsedLana > 0 && exchangeRate > 0
+                    parsedLana > 0 && exchangeRate > 0 && !belowMinimum
                       ? "bg-primary hover:bg-primary/90 shadow-lg"
                       : "bg-muted-foreground/30 cursor-not-allowed"
                   }`}
