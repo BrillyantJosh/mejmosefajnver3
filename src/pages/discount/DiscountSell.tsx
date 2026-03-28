@@ -360,27 +360,24 @@ export default function DiscountSell() {
 
       const txHash = txData.txid || txData.txHash;
 
-      // Step 2: Register sale with Lana.Discount external API
-      const saleRes = await fetch(`${DISCOUNT_API_URL}/api/external/sale`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${DISCOUNT_API_KEY}`,
-        },
-        body: JSON.stringify({
-          tx_hash: txHash,
-          sender_wallet_id: selectedWallet,
-          buyback_wallet_id: BUYBACK_WALLET,
-          lana_amount: parsedLana,
-          currency: selectedCurrency,
-          exchange_rate: exchangeRate,
-          user_hex_id: session.nostrHexId,
-        }),
-      });
+      // Step 2: Register sale with Lana.Discount via server proxy (avoids CORS)
+      const { data: saleData, error: saleError } =
+        await supabase.functions.invoke("discount-external-sale", {
+          body: {
+            apiUrl: DISCOUNT_API_URL,
+            apiKey: DISCOUNT_API_KEY,
+            tx_hash: txHash,
+            sender_wallet_id: selectedWallet,
+            buyback_wallet_id: BUYBACK_WALLET,
+            lana_amount: parsedLana,
+            currency: selectedCurrency,
+            exchange_rate: exchangeRate,
+            user_hex_id: session.nostrHexId,
+          },
+        });
 
-      if (!saleRes.ok) {
-        const errBody = await saleRes.text();
-        console.error("Discount API error:", errBody);
+      if (saleError) {
+        console.error("Discount API error:", saleError);
         setTxResult({
           success: true,
           txHash,
@@ -394,11 +391,10 @@ export default function DiscountSell() {
           "LANA sent successfully, but sale registration had an issue."
         );
       } else {
-        const saleData = await saleRes.json();
         setTxResult({
           success: true,
           txHash,
-          transactionId: saleData.transaction_id || saleData.id,
+          transactionId: saleData?.transactionId || saleData?.transaction_id,
           lanaAmount: parsedLana,
           netFiat,
           currency: selectedCurrency,
