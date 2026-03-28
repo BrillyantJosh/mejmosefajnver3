@@ -81,7 +81,7 @@ function TransactionCard({
               )}
             </div>
 
-            {/* Amount + date */}
+            {/* Amount + date + progress */}
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 flex-wrap">
                 <span className="text-base sm:text-lg font-bold">
@@ -94,6 +94,20 @@ function TransactionCard({
               <p className="text-xs text-muted-foreground">
                 {formatDate(tx.createdAt)}
               </p>
+              {/* Payment progress bar */}
+              {tx.netFiat > 0 && (
+                <div className="mt-1.5 flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${tx.paidFiat >= tx.netFiat ? 'bg-green-500' : tx.paidFiat > 0 ? 'bg-yellow-500' : 'bg-muted-foreground/20'}`}
+                      style={{ width: `${Math.min(100, (tx.paidFiat / tx.netFiat) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                    {formatFiat(tx.paidFiat, tx.currency)} / {formatFiat(tx.netFiat, tx.currency)}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Badges + expand */}
@@ -288,10 +302,14 @@ export default function DiscountTransactions() {
     const pending = transactions.filter((t) => t.status !== "paid").length;
     // Use first transaction's currency or default to EUR
     const currency = transactions.length > 0 ? transactions[0].currency : "EUR";
+    const totalPaid = transactions.reduce((sum, t) => sum + t.paidFiat, 0);
+    const remaining = Math.round((totalNetFiat - totalPaid) * 100) / 100;
     return {
       count: transactions.length,
       totalLana,
       totalNetFiat,
+      totalPaid,
+      remaining,
       pending,
       currency,
     };
@@ -345,18 +363,18 @@ export default function DiscountTransactions() {
             </div>
             <div className="p-2 sm:p-3 bg-green-50 dark:bg-green-950/30 rounded-lg text-center">
               <p className="text-lg sm:text-xl font-bold text-green-600">
-                {formatFiat(stats.totalNetFiat, stats.currency)}
+                {formatFiat(stats.totalPaid, stats.currency)}
               </p>
               <p className="text-[0.65rem] sm:text-xs text-muted-foreground">
-                Net FIAT
+                Paid Out
               </p>
             </div>
             <div className="p-2 sm:p-3 bg-muted rounded-lg text-center">
-              <p className="text-lg sm:text-xl font-bold text-yellow-600">
-                {stats.pending}
+              <p className={`text-lg sm:text-xl font-bold ${stats.remaining > 0 ? 'text-orange-500' : 'text-green-600'}`}>
+                {formatFiat(stats.remaining, stats.currency)}
               </p>
               <p className="text-[0.65rem] sm:text-xs text-muted-foreground">
-                Pending
+                Remaining
               </p>
             </div>
           </div>
