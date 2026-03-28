@@ -20,6 +20,7 @@ import { useAdmin } from "@/contexts/AdminContext";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 import { supabase } from "@/integrations/supabase/client";
+import { convertWifToIds } from "@/lib/crypto";
 import { toast } from "sonner";
 
 // Fallback defaults — overridden by admin settings
@@ -86,7 +87,10 @@ export default function DiscountSell() {
   const [lanaAmount, setLanaAmount] = useState("");
   const [isEmptyWallet, setIsEmptyWallet] = useState(false);
 
-  // Step 4: Confirm
+  // Step 4: Confirm + Private Key
+  const [privateKey, setPrivateKey] = useState("");
+  const [privateKeyValid, setPrivateKeyValid] = useState<boolean | null>(null);
+  const [validatingKey, setValidatingKey] = useState(false);
   const [executing, setExecuting] = useState(false);
 
   // Step 5: Result
@@ -154,6 +158,28 @@ export default function DiscountSell() {
       setSelectedCurrency(activeCurrencies[0]);
     }
   }, [activeCurrencies, selectedCurrency]);
+
+  // Validate private key against selected wallet (debounced)
+  useEffect(() => {
+    if (!privateKey || !selectedWallet) {
+      setPrivateKeyValid(null);
+      return;
+    }
+    setValidatingKey(true);
+    const timer = setTimeout(async () => {
+      try {
+        const ids = await convertWifToIds(privateKey);
+        const matches = ids.walletId === selectedWallet ||
+          ids.walletIdCompressed === selectedWallet ||
+          ids.walletIdUncompressed === selectedWallet;
+        setPrivateKeyValid(matches);
+      } catch {
+        setPrivateKeyValid(false);
+      }
+      setValidatingKey(false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [privateKey, selectedWallet]);
 
   // Exchange rate
   const exchangeRate = useMemo(() => {
@@ -238,7 +264,7 @@ export default function DiscountSell() {
       const { data: txData, error: txError } =
         await supabase.functions.invoke("send-lana-transaction", {
           body: {
-            senderPrivateKeyWIF: session.lanaPrivateKey,
+            senderPrivateKeyWIF: privateKey,
             recipientAddress: BUYBACK_WALLET,
             amountLanoshis: lanaAmountLanoshis,
           },
@@ -319,6 +345,8 @@ export default function DiscountSell() {
     setSelectedCurrency(activeCurrencies[0] || "");
     setLanaAmount("");
     setIsEmptyWallet(false);
+    setPrivateKey("");
+    setPrivateKeyValid(null);
     setTxResult(null);
   };
 
@@ -850,18 +878,42 @@ export default function DiscountSell() {
                   </div>
                 </div>
 
-                {/* Session key notice (no private key input needed in MejmoseFajn) */}
-                <div className="rounded-xl border border-green-200 bg-green-50/50 dark:bg-green-950/30 dark:border-green-800 p-4 flex items-center gap-3">
-                  <ShieldCheck className="h-5 w-5 text-green-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      Your transaction will be signed with your session key
+                {/* WIF Private Key Input */}
+                <div className="space-y-3">
+                  <label className="text-sm font-medium text-foreground">WIF Private Key</label>
+                  <input
+                    type="password"
+                    value={privateKey}
+                    onChange={(e) => setPrivateKey(e.target.value.trim())}
+                    placeholder="Enter your WIF private key for the selected wallet"
+                    className={`w-full rounded-xl border-2 px-4 py-3 font-mono text-sm bg-background transition-colors focus:outline-none focus:ring-2 ${
+                      privateKeyValid === true
+                        ? 'border-green-500 focus:ring-green-500/30'
+                        : privateKeyValid === false
+                          ? 'border-red-500 focus:ring-red-500/30'
+                          : 'border-border focus:ring-primary/30'
+                    }`}
+                  />
+                  {validatingKey && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Validating key...
                     </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Your private key is already securely stored in your active
-                      session. No manual input needed.
+                  )}
+                  {privateKeyValid === true && (
+                    <p className="text-xs text-green-600 flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" /> Private key matches the selected wallet
                     </p>
-                  </div>
+                  )}
+                  {privateKeyValid === false && (
+                    <p className="text-xs text-red-500 flex items-center gap-1">
+                      <XCircle className="h-3 w-3" /> Private key does not match the selected wallet
+                    </p>
+                  )}
+                  {privateKeyValid === null && privateKey === '' && (
+                    <p className="text-xs text-muted-foreground">
+                      Your private key is used only to sign this transaction. It is never stored.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -874,11 +926,11 @@ export default function DiscountSell() {
                 </button>
                 <button
                   onClick={executeSell}
-                  disabled={executing}
+                  disabled={executing || !privateKey || privateKeyValid !== true}
                   className={`rounded-xl px-8 py-3 font-semibold text-white transition-all ${
-                    executing
-                      ? "bg-muted-foreground/30 cursor-not-allowed"
-                      : "bg-red-600 hover:bg-red-700 shadow-lg"
+                    !executing && privateKey && privateKeyValid === true
+                      ? "bg-red-600 hover:bg-red-700 shadow-lg"
+                      : "bg-muted-foreground/30 cursor-not-allowed"
                   }`}
                 >
                   {executing ? (
