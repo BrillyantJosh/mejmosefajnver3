@@ -22,9 +22,12 @@ import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAdmin } from "@/contexts/AdminContext";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
+import { useNostrPaymentScore } from "@/hooks/useNostrPaymentScore";
 import { supabase } from "@/integrations/supabase/client";
 import { convertWifToIds } from "@/lib/crypto";
 import { toast } from "sonner";
+
+const MIN_RATING = 9;
 
 // Fallback defaults — overridden by admin settings
 const DEFAULT_BUYBACK_WALLET = "Lg7iw2aQp8qazNsZVZFhf4rP7bikSrLRxB";
@@ -63,6 +66,11 @@ export default function DiscountSell() {
   const { appSettings } = useAdmin();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
   const { profile } = useNostrProfile();
+  const { score: paymentScore, isLoading: scoreLoading } = useNostrPaymentScore(session?.nostrHexId);
+
+  // Rating check
+  const userRating = paymentScore ? parseFloat(paymentScore.score) : null;
+  const ratingBlocked = userRating === null || userRating < MIN_RATING;
 
   // Admin-configurable settings with defaults
   const BUYBACK_WALLET = appSettings?.discount_buyback_wallet || DEFAULT_BUYBACK_WALLET;
@@ -483,9 +491,31 @@ export default function DiscountSell() {
         ))}
       </div>
 
-      {walletsLoading ? (
+      {walletsLoading || scoreLoading ? (
         <div className="flex items-center justify-center py-20">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        </div>
+      ) : ratingBlocked ? (
+        <div className="space-y-4">
+          <div className="rounded-2xl border-2 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-6 text-center space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center">
+              <XCircle className="h-8 w-8 text-red-500" />
+            </div>
+            <h2 className="text-xl font-bold text-red-700 dark:text-red-400">Selling Not Available</h2>
+            <p className="text-sm text-red-600 dark:text-red-400 max-w-md mx-auto leading-relaxed">
+              Selling registered LanaCoins is only available to users who have fully paid their subscriptions and achieved a rating of 9 or above. Please settle any outstanding payments to unlock this feature.
+            </p>
+            {userRating !== null && (
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-100 dark:bg-red-900/40">
+                <span className="text-sm font-medium text-red-700 dark:text-red-400">
+                  Your current rating: {userRating}/10
+                </span>
+              </div>
+            )}
+            {userRating === null && (
+              <p className="text-xs text-red-500/70">No payment rating found for your account.</p>
+            )}
+          </div>
         </div>
       ) : (
         <>
