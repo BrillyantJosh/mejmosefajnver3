@@ -64,14 +64,12 @@ export const useNostrDonationPayments = (
         // Only update state if data actually changed
         setPayments(prev => arraysEqual(parsedPayments, prev) ? prev : parsedPayments);
       } else {
-        // Only clear if this is the initial load
-        if (!hasLoadedOnceRef.current) {
-          setPayments([]);
-        }
+        // Server returned empty — always clear (condition resolved)
+        setPayments([]);
       }
     } catch (error) {
       console.error('❌ Error fetching donation payments:', error);
-      // DO NOT clear payments after first successful load - keep last known good state
+      // Network error — keep last known good state after first load
       if (!hasLoadedOnceRef.current) {
         setPayments([]);
       }

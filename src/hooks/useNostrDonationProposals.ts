@@ -67,14 +67,12 @@ export const useNostrDonationProposals = (
         // Only update state if data actually changed
         setProposals(prev => arraysEqual(parsedProposals, prev) ? prev : parsedProposals);
       } else {
-        // Only clear if this is the initial load
-        if (!hasLoadedOnceRef.current) {
-          setProposals([]);
-        }
+        // Server returned empty — always clear (condition resolved)
+        setProposals([]);
       }
     } catch (error) {
       console.error('❌ Error fetching donation proposals:', error);
-      // DO NOT clear proposals after first successful load - keep last known good state
+      // Network error — keep last known good state after first load
       if (!hasLoadedOnceRef.current) {
         setProposals([]);
       }

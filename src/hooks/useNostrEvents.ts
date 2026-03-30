@@ -263,6 +263,185 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
   return { events, loading: enabled ? loading : false, error, refetch: fetchEvents };
 }
 
+/**
+ * Fetches ALL events (KIND 36677) in a single request and returns both online and live events.
+ * Use this on the home page instead of calling useNostrEvents('online') + useNostrEvents('live').
+ */
+export function useNostrEventsAll(options?: UseNostrEventsOptions) {
+  const { enabled = true } = options || {};
+  const { session } = useAuth();
+  const [onlineEvents, setOnlineEvents] = useState<LanaEvent[]>([]);
+  const [liveEvents, setLiveEvents] = useState<LanaEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const fetchStartedRef = useRef(false);
+
+  const parseEvent = (event: any): LanaEvent | null => {
+    try {
+      const tags = event.tags || [];
+      const getTagValue = (name: string): string | undefined => {
+        const tag = tags.find((t: string[]) => t[0] === name);
+        return tag ? tag[1] : undefined;
+      };
+      const getAllTagValues = (name: string): string[] => {
+        return tags.filter((t: string[]) => t[0] === name).map((t: string[]) => t[1]);
+      };
+
+      const title = getTagValue('title');
+      const status = getTagValue('status') as 'active' | 'archived' | 'canceled';
+      const startStr = getTagValue('start');
+      const dTag = getTagValue('d');
+      const language = getTagValue('language');
+      const eventType = getTagValue('event_type');
+      const organizerPubkey = getTagValue('p');
+
+      if (!title || !status || !startStr || !dTag || !language || !eventType || !organizerPubkey) {
+        return null;
+      }
+
+      const start = new Date(startStr);
+      if (isNaN(start.getTime())) return null;
+
+      const endStr = getTagValue('end');
+      const end = endStr ? new Date(endStr) : undefined;
+
+      const onlineUrl = getTagValue('online');
+      const isOnline = !!onlineUrl;
+
+      const latStr = getTagValue('lat');
+      const lonStr = getTagValue('lon');
+      const lat = latStr ? parseFloat(latStr) : undefined;
+      const lon = lonStr ? parseFloat(lonStr) : undefined;
+
+      const capacityStr = getTagValue('capacity');
+      const fiatValueStr = getTagValue('fiat_value');
+      const maxGuestsStr = getTagValue('max_guests');
+
+      const scheduleTags = tags.filter((t: string[]) => t[0] === 'schedule');
+      const schedule: ScheduleEntry[] = scheduleTags
+        .map((t: string[]) => {
+          const s = new Date(t[1]);
+          if (isNaN(s.getTime())) return null;
+          const e = t[2] ? new Date(t[2]) : undefined;
+          return { start: s, end: e && !isNaN(e.getTime()) ? e : undefined };
+        })
+        .filter((entry): entry is ScheduleEntry => entry !== null)
+        .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+      return {
+        id: event.id,
+        pubkey: event.pubkey,
+        created_at: event.created_at,
+        title,
+        content: event.content || '',
+        status,
+        start,
+        end: end && !isNaN(end.getTime()) ? end : undefined,
+        language,
+        eventType,
+        organizerPubkey,
+        isOnline,
+        onlineUrl,
+        youtubeUrl: getTagValue('youtube'),
+        youtubeRecordingUrl: getTagValue('youtube_recording'),
+        location: getTagValue('location'),
+        lat,
+        lon,
+        capacity: capacityStr ? parseInt(capacityStr, 10) : undefined,
+        cover: getTagValue('cover'),
+        donationWallet: getTagValue('donation_wallet'),
+        donationWalletUnreg: getTagValue('donation_wallet_unreg'),
+        donationWalletType: (getTagValue('donation_wallet_type') as 'registered' | 'unregistered') || undefined,
+        fiatValue: fiatValueStr ? parseFloat(fiatValueStr) : undefined,
+        guests: getAllTagValues('guest'),
+        attachments: getAllTagValues('attachment'),
+        category: getTagValue('category'),
+        recording: getTagValue('recording'),
+        maxGuests: maxGuestsStr ? parseInt(maxGuestsStr, 10) : undefined,
+        dTag,
+        timezone: getTagValue('timezone'),
+        schedule,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchEvents = useCallback(async () => {
+    if (!enabled || !session) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/functions/query-nostr-events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filter: { kinds: [36677], limit: 100 },
+          timeout: 15000,
+        }),
+      });
+
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+      const data = await response.json();
+      const rawEvents = data.events || [];
+
+      // Parse, deduplicate by dTag (newest first), filter active
+      const parsedEvents: LanaEvent[] = [];
+      const seenDTags = new Set<string>();
+      const sortedEvents = [...rawEvents].sort((a: any, b: any) => b.created_at - a.created_at);
+
+      for (const rawEvent of sortedEvents) {
+        const parsed = parseEvent(rawEvent);
+        if (parsed && parsed.status === 'active') {
+          if (!seenDTags.has(parsed.dTag)) {
+            seenDTags.add(parsed.dTag);
+            parsedEvents.push(parsed);
+          }
+        }
+      }
+
+      // Filter upcoming
+      const now = new Date();
+      const isUpcoming = (event: LanaEvent) => {
+        if (event.schedule.length > 0) {
+          const lastEntry = event.schedule[event.schedule.length - 1];
+          const lastEnd = lastEntry.end || new Date(lastEntry.start.getTime() + 2 * 60 * 60 * 1000);
+          return lastEnd > now;
+        }
+        const eventEnd = event.end || new Date(event.start.getTime() + 2 * 60 * 60 * 1000);
+        return event.start > now || eventEnd > now;
+      };
+
+      const upcoming = parsedEvents.filter(isUpcoming);
+
+      // Split into online and live, sort by start
+      const online = upcoming.filter(e => e.isOnline).sort((a, b) => a.start.getTime() - b.start.getTime());
+      const live = upcoming.filter(e => !e.isOnline).sort((a, b) => a.start.getTime() - b.start.getTime());
+
+      setOnlineEvents(online);
+      setLiveEvents(live);
+    } catch (err) {
+      console.error('Error fetching events:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [enabled, session]);
+
+  useEffect(() => {
+    if (!enabled || !session) return;
+    if (!fetchStartedRef.current) {
+      fetchStartedRef.current = true;
+      fetchEvents();
+    }
+  }, [enabled, fetchEvents, session]);
+
+  return { onlineEvents, liveEvents, loading: enabled ? loading : false, refetch: fetchEvents };
+}
+
 export function getEventStatus(event: LanaEvent): 'happening-now' | 'today' | 'upcoming' {
   const now = new Date();
   const fifteenMinutesFromNow = new Date(now.getTime() + 15 * 60 * 1000);

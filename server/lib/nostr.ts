@@ -655,6 +655,89 @@ export async function refreshStaleProfiles(db: any): Promise<void> {
 }
 
 /**
+ * Daily cleanup: removes profiles from the DB that no longer exist on any relay.
+ * Queries all profiles in batches, checks each against relays, deletes orphans.
+ */
+export async function cleanupOrphanedProfiles(db: any): Promise<void> {
+  // 1. Get relays from kind_38888
+  const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+  let relays: string[] = [];
+  if (row?.relays) {
+    try {
+      const parsed = JSON.parse(row.relays);
+      if (Array.isArray(parsed) && parsed.length > 0) relays = parsed;
+    } catch {}
+  }
+  if (relays.length === 0) {
+    console.log('⚠️ cleanupOrphanedProfiles: No relays available, skipping');
+    return;
+  }
+
+  // 2. Get all profiles from DB
+  const allProfiles = db.prepare('SELECT nostr_hex_id FROM nostr_profiles').all() as { nostr_hex_id: string }[];
+  if (allProfiles.length === 0) {
+    console.log('✅ cleanupOrphanedProfiles: No profiles in DB');
+    return;
+  }
+
+  console.log(`🧹 cleanupOrphanedProfiles: Checking ${allProfiles.length} profiles against relays...`);
+
+  const orphanedPubkeys: string[] = [];
+  const BATCH_SIZE = 50;
+
+  // 3. Check in batches of 50
+  for (let i = 0; i < allProfiles.length; i += BATCH_SIZE) {
+    const batch = allProfiles.slice(i, i + BATCH_SIZE).map(p => p.nostr_hex_id);
+
+    let events: NostrEvent[] = [];
+    try {
+      events = await queryEventsFromRelays(relays, {
+        kinds: [0],
+        authors: batch,
+      }, 15000);
+    } catch (error) {
+      console.error(`❌ cleanupOrphanedProfiles: Relay fetch failed for batch ${i / BATCH_SIZE + 1}:`, error);
+      // Skip this batch — don't delete profiles we couldn't verify
+      continue;
+    }
+
+    // Found pubkeys from relay response
+    const foundPubkeys = new Set(events.map(e => e.pubkey));
+
+    // Mark missing ones as orphaned
+    for (const pk of batch) {
+      if (!foundPubkeys.has(pk)) {
+        orphanedPubkeys.push(pk);
+      }
+    }
+
+    // Small delay between batches to not hammer relays
+    if (i + BATCH_SIZE < allProfiles.length) {
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+
+  // 4. Delete orphaned profiles
+  if (orphanedPubkeys.length === 0) {
+    console.log(`✅ cleanupOrphanedProfiles: All ${allProfiles.length} profiles verified on relays`);
+    return;
+  }
+
+  const deleteStmt = db.prepare('DELETE FROM nostr_profiles WHERE nostr_hex_id = ?');
+  let deletedCount = 0;
+  for (const pk of orphanedPubkeys) {
+    try {
+      deleteStmt.run(pk);
+      deletedCount++;
+    } catch (error) {
+      console.error(`❌ cleanupOrphanedProfiles: Error deleting ${pk}:`, error);
+    }
+  }
+
+  console.log(`🧹 cleanupOrphanedProfiles: Deleted ${deletedCount} orphaned profiles (not found on any relay). ${allProfiles.length - deletedCount} remain.`);
+}
+
+/**
  * Paginated fetch of events from a single relay.
  * Uses `until` cursor to walk backwards through time, getting all events.
  * Returns deduplicated events (newest per pubkey for KIND 0).

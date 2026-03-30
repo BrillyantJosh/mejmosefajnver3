@@ -1,15 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Sparkles, HelpCircle, PlayCircle, Video, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { formatDistanceToNow, format, startOfWeek, endOfWeek } from "date-fns";
-import { useNostrEvents, LanaEvent } from "@/hooks/useNostrEvents";
-import { useNostrDMs } from "@/hooks/useNostrDMs";
+import LazyYouTube from "@/components/LazyYouTube";
+import { formatDistanceToNow, format, endOfWeek } from "date-fns";
+import { useNostrEventsAll, LanaEvent } from "@/hooks/useNostrEvents";
+import { useRecentConversations } from "@/hooks/useRecentConversations";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserAcknowledgement } from "@/hooks/useNostrUserAcknowledgement";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
@@ -169,63 +171,81 @@ function VotingCard({ proposal, votingEligibility, extractYouTubeId }: {
 }
 
 export default function Home() {
-  const [items, setItems] = useState<WhatsUpItem[]>([]);
-  const [faqItems, setFaqItems] = useState<FaqItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
-
-  // Fetch events for sidebar
-  const { events: onlineEvents, loading: loadingOnline } = useNostrEvents('online');
-  const { events: liveEvents, loading: loadingLive } = useNostrEvents('live');
-
-  // Fetch active voting proposals from server
-  const [activeVoting, setActiveVoting] = useState<ActiveVotingProposal[]>([]);
-  useEffect(() => {
-    fetch(`${API_URL}/api/functions/active-voting`)
-      .then(r => r.json())
-      .then(data => {
-        if (data?.success && data.proposals?.length > 0) {
-          setActiveVoting(data.proposals);
-        }
-      })
-      .catch(err => console.error('Failed to fetch active voting:', err));
-  }, []);
-
-  // Voting eligibility check
   const { session } = useAuth();
-  const [votingEligibility, setVotingEligibility] = useState<'loading' | 'eligible' | 'resist' | 'not-eligible' | null>(null);
-  useEffect(() => {
-    if (activeVoting.length === 0) return;
-    if (!session?.nostrHexId) {
-      setVotingEligibility('not-eligible');
-      return;
-    }
-    setVotingEligibility('loading');
-    fetch(`${API_URL}/api/functions/check-voting-eligibility`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userPubkey: session.nostrHexId }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data?.canResist) setVotingEligibility('resist');
-        else if (data?.eligible) setVotingEligibility('eligible');
-        else setVotingEligibility('not-eligible');
-      })
-      .catch(() => setVotingEligibility('not-eligible'));
-  }, [activeVoting, session?.nostrHexId]);
 
-  // Fetch DMs for sidebar
-  const { conversations, profiles: dmProfiles, loading: dmsLoading } = useNostrDMs();
+  // --- News & FAQ (React Query — cached, instant on re-visit) ---
+  const { data: items = [], isLoading: loading } = useQuery<WhatsUpItem[]>({
+    queryKey: ['whats-up'],
+    queryFn: async () => {
+      const res = await supabase
+        .from("whats_up")
+        .select("id,title,body,youtube_url,created_at")
+        .eq("published", 1)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (res.error) throw res.error;
+      return res.data || [];
+    },
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
 
-  // Filter DM conversations: last 14 days, max 3
-  const fourteenDaysAgo = Math.floor(Date.now() / 1000) - 14 * 24 * 60 * 60;
-  const recentConversations = conversations
-    .filter(c => c.lastMessage && c.lastMessage.created_at >= fourteenDaysAgo)
-    .slice(0, 3);
+  const { data: faqItems = [] } = useQuery<FaqItem[]>({
+    queryKey: ['faq'],
+    queryFn: async () => {
+      const res = await supabase
+        .from("faq")
+        .select("id,title,youtube_url")
+        .eq("published", 1)
+        .order("display_order", { ascending: true });
+      if (res.error) throw res.error;
+      return res.data || [];
+    },
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+  });
 
-  // Fetch pending invoices to pay (KIND 70100 targeted at user, or public)
-  const [pendingInvoices, setPendingInvoices] = useState<Array<{
+  // --- Active Voting (React Query — parallel with eligibility) ---
+  const { data: activeVoting = [] } = useQuery<ActiveVotingProposal[]>({
+    queryKey: ['active-voting'],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/api/functions/active-voting`);
+      const data = await res.json();
+      return data?.success && data.proposals?.length > 0 ? data.proposals : [];
+    },
+    staleTime: 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+
+  // --- Voting Eligibility (React Query — runs in parallel, no waterfall) ---
+  const { data: votingEligibility = null, isLoading: eligibilityLoading } = useQuery<'eligible' | 'resist' | 'not-eligible' | null>({
+    queryKey: ['voting-eligibility', session?.nostrHexId],
+    queryFn: async () => {
+      if (!session?.nostrHexId) return 'not-eligible';
+      const res = await fetch(`${API_URL}/api/functions/check-voting-eligibility`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userPubkey: session.nostrHexId }),
+      });
+      const data = await res.json();
+      if (data?.canResist) return 'resist';
+      if (data?.eligible) return 'eligible';
+      return 'not-eligible';
+    },
+    enabled: activeVoting.length > 0,
+    staleTime: 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+
+  // --- Events sidebar (single merged request for online + live) ---
+  const { onlineEvents, liveEvents, loading: loadingEvents } = useNostrEventsAll();
+
+  // --- DMs for sidebar (lightweight — no 10s polling, decrypts only 3 messages) ---
+  const { conversations: recentConversations, loading: dmsLoading } = useRecentConversations(3);
+
+  // --- Pending Invoices (React Query — cached) ---
+  const { data: pendingInvoices = [] } = useQuery<Array<{
     id: string;
     pubkey: string;
     amountLana: number;
@@ -233,77 +253,63 @@ export default function Home() {
     currency: string;
     description: string;
     deadline: number | null;
-  }>>([]);
+  }>>({
+    queryKey: ['pending-invoices', session?.nostrHexId],
+    queryFn: async () => {
+      const [invoiceRes, confirmRes] = await Promise.all([
+        supabase.functions.invoke("query-nostr-events", {
+          body: { filter: { kinds: [70100], limit: 100 }, timeout: 10000 },
+        }),
+        supabase.functions.invoke("query-nostr-events", {
+          body: { filter: { kinds: [70101], limit: 200 }, timeout: 10000 },
+        }),
+      ]);
 
-  useEffect(() => {
-    if (!session?.nostrHexId) return;
+      if (invoiceRes.error || !invoiceRes.data?.events) return [];
 
-    // Fetch both KIND 70100 (invoices) and KIND 70101 (confirmations) in parallel
-    Promise.all([
-      supabase.functions.invoke("query-nostr-events", {
-        body: {
-          filter: { kinds: [70100], limit: 100 },
-          timeout: 10000,
-        },
-      }),
-      supabase.functions.invoke("query-nostr-events", {
-        body: {
-          filter: { kinds: [70101], limit: 200 },
-          timeout: 10000,
-        },
-      }),
-    ])
-      .then(([invoiceRes, confirmRes]) => {
-        if (invoiceRes.error || !invoiceRes.data?.events) return;
-
-        // Build set of paid invoice IDs from KIND 70101 confirmations
-        const paidInvoiceIds = new Set<string>();
-        const confirmEvents = confirmRes.data?.events || [];
-        for (const evt of confirmEvents) {
-          const tags = evt.tags || [];
-          const invoiceRef = tags.find((t: string[]) => t[0] === "invoice_ref")?.[1];
-          const status = tags.find((t: string[]) => t[0] === "status")?.[1];
-          if (invoiceRef && status === "confirmed") {
-            paidInvoiceIds.add(invoiceRef);
-          }
+      const paidInvoiceIds = new Set<string>();
+      const confirmEvents = confirmRes.data?.events || [];
+      for (const evt of confirmEvents) {
+        const tags = evt.tags || [];
+        const invoiceRef = tags.find((t: string[]) => t[0] === "invoice_ref")?.[1];
+        const status = tags.find((t: string[]) => t[0] === "status")?.[1];
+        if (invoiceRef && status === "confirmed") {
+          paidInvoiceIds.add(invoiceRef);
         }
+      }
 
-        const nowUnix = Math.floor(Date.now() / 1000);
-        const parsed = invoiceRes.data.events
-          .map((evt: any) => {
-            const tags = evt.tags || [];
-            const getTag = (n: string) =>
-              tags.find((t: string[]) => t[0] === n)?.[1];
-            const status = getTag("status") || "open";
-            if (status !== "open") return null;
-            // Exclude already paid invoices (confirmed via KIND 70101)
-            if (paidInvoiceIds.has(evt.id)) return null;
-            // Not own invoices
-            if (evt.pubkey === session?.nostrHexId) return null;
-            // Not expired
-            const deadlineStr = getTag("deadline");
-            const deadline = deadlineStr ? parseInt(deadlineStr, 10) : null;
-            if (deadline && deadline < nowUnix) return null;
-            // If targeted, only show if it's for us
-            const targetBuyer = tags.find((t: string[]) => t[0] === "p")?.[1];
-            if (targetBuyer && targetBuyer !== session?.nostrHexId) return null;
-            const amountLana = parseFloat(getTag("amount_lana") || "0");
-            if (amountLana <= 0) return null;
-            return {
-              id: evt.id,
-              pubkey: evt.pubkey,
-              amountLana,
-              amountFiat: parseFloat(getTag("amount_fiat") || "0"),
-              currency: getTag("currency") || "EUR",
-              description: getTag("description") || evt.content || "",
-              deadline,
-            };
-          })
-          .filter(Boolean);
-        setPendingInvoices(parsed);
-      })
-      .catch(() => {});
-  }, [session?.nostrHexId]);
+      const nowUnix = Math.floor(Date.now() / 1000);
+      return invoiceRes.data.events
+        .map((evt: any) => {
+          const tags = evt.tags || [];
+          const getTag = (n: string) => tags.find((t: string[]) => t[0] === n)?.[1];
+          const status = getTag("status") || "open";
+          if (status !== "open") return null;
+          if (paidInvoiceIds.has(evt.id)) return null;
+          if (evt.pubkey === session?.nostrHexId) return null;
+          const deadlineStr = getTag("deadline");
+          const deadline = deadlineStr ? parseInt(deadlineStr, 10) : null;
+          if (deadline && deadline < nowUnix) return null;
+          const targetBuyer = tags.find((t: string[]) => t[0] === "p")?.[1];
+          if (targetBuyer && targetBuyer !== session?.nostrHexId) return null;
+          const amountLana = parseFloat(getTag("amount_lana") || "0");
+          if (amountLana <= 0) return null;
+          return {
+            id: evt.id,
+            pubkey: evt.pubkey,
+            amountLana,
+            amountFiat: parseFloat(getTag("amount_fiat") || "0"),
+            currency: getTag("currency") || "EUR",
+            description: getTag("description") || evt.content || "",
+            deadline,
+          };
+        })
+        .filter(Boolean);
+    },
+    enabled: !!session?.nostrHexId,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
 
   // Filter online events: this week only, upcoming/active
   const now = new Date();
@@ -316,36 +322,6 @@ export default function Home() {
   const liveUpcoming = liveEvents
     .filter(e => e.status === 'active' && (e.end ? e.end >= now : e.start >= new Date(now.getTime() - 2 * 60 * 60 * 1000)))
     .sort((a, b) => a.start.getTime() - b.start.getTime());
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const [newsRes, faqRes] = await Promise.all([
-          supabase
-            .from("whats_up")
-            .select("id,title,body,youtube_url,created_at")
-            .eq("published", 1)
-            .order("created_at", { ascending: false })
-            .limit(20),
-          supabase
-            .from("faq")
-            .select("id,title,youtube_url")
-            .eq("published", 1)
-            .order("display_order", { ascending: true }),
-        ]);
-
-        if (newsRes.error) throw newsRes.error;
-        if (faqRes.error) throw faqRes.error;
-        setItems(newsRes.data || []);
-        setFaqItems(faqRes.data || []);
-      } catch (err) {
-        console.error("Failed to load:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
 
   // Pagination
   const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
@@ -387,7 +363,7 @@ export default function Home() {
             <VotingCard
               key={proposal.id}
               proposal={proposal}
-              votingEligibility={votingEligibility}
+              votingEligibility={eligibilityLoading ? 'loading' : votingEligibility}
               extractYouTubeId={extractYouTubeId}
             />
           ))}
@@ -430,15 +406,7 @@ export default function Home() {
                         <div key={`m-${item.id}`} className="snap-center flex-shrink-0 w-[85vw] max-w-[500px]">
                           <Card className="overflow-hidden h-full">
                             {ytId && (
-                              <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-                                <iframe
-                                  className="absolute top-0 left-0 w-full h-full"
-                                  src={`https://www.youtube.com/embed/${ytId}`}
-                                  title={item.title}
-                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                  allowFullScreen
-                                />
-                              </div>
+                              <LazyYouTube videoId={ytId} title={item.title} />
                             )}
                             <CardContent className={`${ytId ? 'pt-3' : 'pt-4'} pb-3`}>
                               <h2 className="text-base font-bold line-clamp-2">{item.title}</h2>
@@ -481,15 +449,7 @@ export default function Home() {
                     return (
                       <Card key={item.id} className="overflow-hidden">
                         {ytId && (
-                          <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-                            <iframe
-                              className="absolute top-0 left-0 w-full h-full"
-                              src={`https://www.youtube.com/embed/${ytId}`}
-                              title={item.title}
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                            />
-                          </div>
+                          <LazyYouTube videoId={ytId} title={item.title} />
                         )}
                         <CardContent className={ytId ? "pt-4" : "pt-6"}>
                           <h2 className="text-xl font-bold">{item.title}</h2>
@@ -595,7 +555,7 @@ export default function Home() {
             )}
 
             {/* Events Card — most time-sensitive */}
-            {!loadingOnline && !loadingLive && (onlineThisWeek.length > 0 || liveUpcoming.length > 0) && (
+            {!loadingEvents && (onlineThisWeek.length > 0 || liveUpcoming.length > 0) && (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -671,24 +631,7 @@ export default function Home() {
                 <CardContent className="pt-0">
                   <div className="space-y-1">
                     {recentConversations.map((conv) => {
-                      const profile = dmProfiles.get(conv.pubkey);
-                      const displayName = profile?.display_name || profile?.name || conv.pubkey.slice(0, 12) + '...';
-                      const lastMsg = conv.lastMessage;
-                      let preview = '';
-                      if (lastMsg?.decryptedContent) {
-                        const isOwn = lastMsg.isOwn;
-                        const raw = lastMsg.decryptedContent;
-                        // Detect audio/image messages
-                        if (raw.startsWith('audio:') || raw.includes('dm-audio')) {
-                          preview = isOwn ? 'You: 🎵 Audio' : '🎵 Audio';
-                        } else if (raw.startsWith('image:') || raw.includes('dm-images')) {
-                          preview = isOwn ? 'You: 📷 Image' : '📷 Image';
-                        } else {
-                          const text = raw.length > 50 ? raw.slice(0, 47) + '...' : raw;
-                          preview = isOwn ? `You: ${text}` : text;
-                        }
-                      }
-                      const timeAgo = lastMsg ? formatDistanceToNow(new Date(lastMsg.created_at * 1000), { addSuffix: true }) : '';
+                      const timeAgo = formatDistanceToNow(new Date(conv.timestamp * 1000), { addSuffix: true });
 
                       return (
                         <Link
@@ -698,19 +641,17 @@ export default function Home() {
                         >
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-sm font-medium truncate">{displayName}</span>
+                              <span className="text-sm font-medium truncate">{conv.displayName}</span>
                               {conv.unreadCount > 0 && (
                                 <Badge variant="destructive" className="h-5 min-w-5 flex items-center justify-center px-1.5 text-[10px] font-bold flex-shrink-0">
                                   {conv.unreadCount}
                                 </Badge>
                               )}
                             </div>
-                            {preview && (
-                              <p className="text-xs text-muted-foreground truncate mt-0.5">{preview}</p>
+                            {conv.preview && (
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">{conv.preview}</p>
                             )}
-                            {timeAgo && (
-                              <p className="text-[10px] text-muted-foreground/70 mt-0.5">{timeAgo}</p>
-                            )}
+                            <p className="text-[10px] text-muted-foreground/70 mt-0.5">{timeAgo}</p>
                           </div>
                         </Link>
                       );

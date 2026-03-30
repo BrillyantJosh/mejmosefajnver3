@@ -385,21 +385,98 @@ export default function ProfileDetail() {
               <>
                 <Separator />
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Payment Methods</h3>
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold">Payment Methods</h3>
+                  </div>
                   <div className="space-y-3">
                     {profile.payment_methods.map((method: any) => (
                       <Card key={method.id} className="p-4">
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <div className="flex items-center justify-between">
                             <h4 className="font-semibold">{method.label}</h4>
-                            {method.primary && (
-                              <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
-                                Primary
-                              </span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {method.primary && (
+                                <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
+                                  Primary
+                                </span>
+                              )}
+                              <Badge variant="outline" className="text-[10px]">
+                                {method.scheme}
+                              </Badge>
+                            </div>
                           </div>
-                          <div className="text-sm text-muted-foreground">
-                            {method.scheme} • {method.country} • {method.currency} • {method.scope}
+                          <div className="text-xs text-muted-foreground">
+                            {method.country} • {method.currency} • {method.scope}
+                          </div>
+                          {/* Copyable banking fields */}
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {method.iban && (
+                              <div className="flex items-center gap-2 p-2 bg-muted/50 rounded min-w-0">
+                                <div className="flex-1 min-w-0">
+                                  <Label className="text-[10px] text-muted-foreground">IBAN</Label>
+                                  <p className="font-mono text-sm truncate">{method.iban}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => { navigator.clipboard.writeText(method.iban); toast({ title: "Copied", description: "IBAN copied to clipboard" }); }}>
+                                  <Copy className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            )}
+                            {method.bic && (
+                              <div className="flex items-center gap-2 p-2 bg-muted/50 rounded min-w-0">
+                                <div className="flex-1 min-w-0">
+                                  <Label className="text-[10px] text-muted-foreground">BIC/SWIFT</Label>
+                                  <p className="font-mono text-sm">{method.bic}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => { navigator.clipboard.writeText(method.bic); toast({ title: "Copied", description: "BIC copied to clipboard" }); }}>
+                                  <Copy className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            )}
+                            {method.account_holder && (
+                              <div className="flex items-center gap-2 p-2 bg-muted/50 rounded min-w-0">
+                                <div className="flex-1 min-w-0">
+                                  <Label className="text-[10px] text-muted-foreground">Account Holder</Label>
+                                  <p className="text-sm truncate">{method.account_holder}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => { navigator.clipboard.writeText(method.account_holder); toast({ title: "Copied", description: "Account holder copied" }); }}>
+                                  <Copy className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            )}
+                            {method.account_number && (
+                              <div className="flex items-center gap-2 p-2 bg-muted/50 rounded min-w-0">
+                                <div className="flex-1 min-w-0">
+                                  <Label className="text-[10px] text-muted-foreground">Account Number</Label>
+                                  <p className="font-mono text-sm truncate">{method.account_number}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => { navigator.clipboard.writeText(method.account_number); toast({ title: "Copied", description: "Account number copied" }); }}>
+                                  <Copy className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            )}
+                            {method.sort_code && (
+                              <div className="flex items-center gap-2 p-2 bg-muted/50 rounded min-w-0">
+                                <div className="flex-1 min-w-0">
+                                  <Label className="text-[10px] text-muted-foreground">Sort Code</Label>
+                                  <p className="font-mono text-sm">{method.sort_code}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => { navigator.clipboard.writeText(method.sort_code); toast({ title: "Copied", description: "Sort code copied" }); }}>
+                                  <Copy className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            )}
+                            {method.routing_number && (
+                              <div className="flex items-center gap-2 p-2 bg-muted/50 rounded min-w-0">
+                                <div className="flex-1 min-w-0">
+                                  <Label className="text-[10px] text-muted-foreground">Routing Number</Label>
+                                  <p className="font-mono text-sm">{method.routing_number}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => { navigator.clipboard.writeText(method.routing_number); toast({ title: "Copied", description: "Routing number copied" }); }}>
+                                  <Copy className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </Card>
@@ -416,31 +493,51 @@ export default function ProfileDetail() {
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <Building2 className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="text-lg font-semibold">Legacy Banking Information</h3>
+                    <h3 className="text-lg font-semibold">Banking Information</h3>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {profile.bankName && (
-                      <div>
-                        <Label className="text-muted-foreground">Bank Name</Label>
-                        <p>{profile.bankName}</p>
+                      <div className="flex items-center gap-2 p-2.5 bg-muted/50 rounded min-w-0">
+                        <div className="flex-1 min-w-0">
+                          <Label className="text-[10px] text-muted-foreground">Bank Name</Label>
+                          <p className="text-sm truncate">{profile.bankName}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => { navigator.clipboard.writeText(profile.bankName!); toast({ title: "Copied", description: "Bank name copied" }); }}>
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     )}
                     {profile.bankSWIFT && (
-                      <div>
-                        <Label className="text-muted-foreground">SWIFT/BIC Code</Label>
-                        <p className="font-mono">{profile.bankSWIFT}</p>
+                      <div className="flex items-center gap-2 p-2.5 bg-muted/50 rounded min-w-0">
+                        <div className="flex-1 min-w-0">
+                          <Label className="text-[10px] text-muted-foreground">SWIFT/BIC Code</Label>
+                          <p className="font-mono text-sm">{profile.bankSWIFT}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => { navigator.clipboard.writeText(profile.bankSWIFT!); toast({ title: "Copied", description: "SWIFT code copied" }); }}>
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     )}
                     {profile.bankAddress && (
-                      <div>
-                        <Label className="text-muted-foreground">Bank Address</Label>
-                        <p>{profile.bankAddress}</p>
+                      <div className="flex items-center gap-2 p-2.5 bg-muted/50 rounded sm:col-span-2 min-w-0">
+                        <div className="flex-1 min-w-0">
+                          <Label className="text-[10px] text-muted-foreground">Bank Address</Label>
+                          <p className="text-sm">{profile.bankAddress}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => { navigator.clipboard.writeText(profile.bankAddress!); toast({ title: "Copied", description: "Bank address copied" }); }}>
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     )}
                     {profile.bankAccount && (
-                      <div>
-                        <Label className="text-muted-foreground">Bank Account Number</Label>
-                        <p className="font-mono">{profile.bankAccount}</p>
+                      <div className="flex items-center gap-2 p-2.5 bg-muted/50 rounded sm:col-span-2 min-w-0">
+                        <div className="flex-1 min-w-0">
+                          <Label className="text-[10px] text-muted-foreground">Account Number / IBAN</Label>
+                          <p className="font-mono text-sm break-all">{profile.bankAccount}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => { navigator.clipboard.writeText(profile.bankAccount!); toast({ title: "Copied", description: "Account number copied" }); }}>
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     )}
                   </div>

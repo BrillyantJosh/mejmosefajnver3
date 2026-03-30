@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb, closeDb } from './db/connection';
-import { fetchKind38888, refreshStaleProfiles, discoverNewProfiles } from './lib/nostr';
+import { fetchKind38888, refreshStaleProfiles, discoverNewProfiles, cleanupOrphanedProfiles } from './lib/nostr';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -201,6 +201,15 @@ const heartbeatTimer = setInterval(async () => {
     }
   }
 
+  // Cleanup orphaned profiles once daily (every 1440 heartbeats = 24 hours)
+  if (heartbeatCount % 1440 === 0) {
+    try {
+      await withTimeout(() => cleanupOrphanedProfiles(db), 'cleanupOrphanedProfiles', 300000);
+    } catch (err) {
+      console.error('❌ Error cleaning up orphaned profiles:', err);
+    }
+  }
+
   // Sync unregistered LANA (KIND 87003/87009) every 10 heartbeats (= every 10 minutes)
   if (heartbeatCount % 10 === 0) {
     try {
@@ -211,7 +220,7 @@ const heartbeatTimer = setInterval(async () => {
   }
 }, HEARTBEAT_INTERVAL);
 
-console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 every beat, AI tasks every minute, relay retry every 5min, stale profile refresh every 10min, full profile discovery every 30min, unreg LANA every 10min)`);
+console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 every beat, AI tasks every minute, relay retry every 5min, stale profile refresh every 10min, full profile discovery every 30min, orphaned profile cleanup every 24h, unreg LANA every 10min)`);
 
 // =============================================
 // API Routes
