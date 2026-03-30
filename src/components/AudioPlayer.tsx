@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Play, Pause, Volume2 } from 'lucide-react';
+import { Play, Pause, Volume2, Loader2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,11 +19,11 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(initialDuration || 0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const retriedRef = useRef(false);
+  const loadedRef = useRef(false);
 
   const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2];
 
@@ -34,16 +34,19 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     };
   }, [blobUrl]);
 
+  // Audio event listeners — only active after blob is loaded
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !blobUrl) return;
 
     const handleLoadedMetadata = () => {
       if (isFinite(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration);
       }
       setIsLoading(false);
-      setHasError(false);
+      // Auto-play after loading
+      audio.play().catch(() => {});
+      setIsPlaying(true);
     };
 
     const handleDurationChange = () => {
@@ -65,34 +68,12 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       setCurrentTime(0);
     };
 
-    const handleError = async () => {
+    const handleError = () => {
       const err = audio.error;
-      console.error('Error loading audio:', blobUrl || audioUrl, {
+      console.error('Error playing audio blob:', {
         code: err?.code,
         message: err?.message,
-        codeName: err?.code === 1 ? 'ABORTED' : err?.code === 2 ? 'NETWORK' : err?.code === 3 ? 'DECODE' : err?.code === 4 ? 'SRC_NOT_SUPPORTED' : 'UNKNOWN',
-        retried: retriedRef.current,
       });
-
-      // Retry with blob URL — bypasses Chrome's network-layer demuxer which fails
-      // on WebM files with Duration=0 and no Cues (common from MediaRecorder).
-      // Blob URLs use a different code path that handles these files correctly.
-      if (!retriedRef.current && !blobUrl) {
-        retriedRef.current = true;
-        console.log('🔄 Retrying audio with blob URL...');
-        try {
-          const response = await fetch(audioUrl);
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const blob = await response.blob();
-          const url = URL.createObjectURL(blob);
-          setBlobUrl(url);
-          // The audio element will be updated via the src prop change
-          return; // Don't set error state yet — retry in progress
-        } catch (fetchErr) {
-          console.error('❌ Blob URL retry failed:', fetchErr);
-        }
-      }
-
       setIsLoading(false);
       setHasError(true);
     };
@@ -110,25 +91,61 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
+  }, [blobUrl]);
+
+  // Load audio as blob — called on first play click
+  const loadAndPlay = useCallback(async () => {
+    if (loadedRef.current || blobUrl) {
+      // Already loaded — just toggle play
+      const audio = audioRef.current;
+      if (audio) {
+        audio.play().catch(() => {});
+        setIsPlaying(true);
+      }
+      return;
+    }
+
+    setIsLoading(true);
+    setHasError(false);
+    loadedRef.current = true;
+
+    try {
+      const response = await fetch(audioUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setBlobUrl(url);
+      // Audio element will auto-play via handleLoadedMetadata
+    } catch (err) {
+      console.error('Error loading audio:', audioUrl, err);
+      setIsLoading(false);
+      setHasError(true);
+      loadedRef.current = false;
+    }
   }, [audioUrl, blobUrl]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
+    if (!blobUrl) {
+      // First play — load as blob
+      loadAndPlay();
+      return;
+    }
+
     if (isPlaying) {
       audio.pause();
+      setIsPlaying(false);
     } else {
-      audio.play().catch(err => {
-        console.error('Error playing audio:', err);
-      });
+      audio.play().catch(() => {});
+      setIsPlaying(true);
     }
-    setIsPlaying(!isPlaying);
   };
 
   const handleSeek = (values: number[]) => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !blobUrl) return;
 
     const newTime = values[0];
     audio.currentTime = newTime;
@@ -161,7 +178,9 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
         disabled={isLoading || hasError}
         className="flex-shrink-0 h-9 w-9 p-0"
       >
-        {isPlaying ? (
+        {isLoading ? (
+          <Loader2 className="h-5 w-5 animate-spin" />
+        ) : isPlaying ? (
           <Pause className="h-5 w-5" />
         ) : (
           <Play className="h-5 w-5" />
@@ -178,7 +197,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
           max={duration || 100}
           step={0.1}
           onValueChange={handleSeek}
-          disabled={isLoading}
+          disabled={!blobUrl}
           className="w-full [&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
         />
       </div>
@@ -216,11 +235,11 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
         )}
       </span>
 
-      {/* Hidden Audio Element */}
+      {/* Hidden Audio Element — only gets src after user clicks play */}
       <audio
         ref={audioRef}
-        src={blobUrl || audioUrl}
-        preload="auto"
+        src={blobUrl || undefined}
+        preload="none"
       />
     </div>
   );
