@@ -22,24 +22,31 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const retriedRef = useRef(false);
 
   const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2];
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [blobUrl]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const handleLoadedMetadata = () => {
-      // WebM files from MediaRecorder often report Infinity duration.
-      // Only update if we got a valid finite duration from the audio element.
       if (isFinite(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration);
       }
       setIsLoading(false);
+      setHasError(false);
     };
 
     const handleDurationChange = () => {
-      // Browser may resolve the real duration later (e.g. after seeking).
       if (isFinite(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration);
       }
@@ -47,8 +54,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
 
     const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
-      // While playing, track highest currentTime as fallback duration
-      // (some WebM files never report finite duration)
+      // Track highest currentTime as fallback duration for WebM without Duration
       if (audio.currentTime > 0 && (!isFinite(audio.duration) || audio.duration <= 0)) {
         setDuration(prev => Math.max(prev, audio.currentTime + 0.5));
       }
@@ -59,18 +65,36 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       setCurrentTime(0);
     };
 
-    const handleError = () => {
-      setIsLoading(false);
-      setHasError(true);
+    const handleError = async () => {
       const err = audio.error;
-      console.error('Error loading audio:', audioUrl, {
+      console.error('Error loading audio:', blobUrl || audioUrl, {
         code: err?.code,
         message: err?.message,
-        // 1=MEDIA_ERR_ABORTED, 2=MEDIA_ERR_NETWORK, 3=MEDIA_ERR_DECODE, 4=MEDIA_ERR_SRC_NOT_SUPPORTED
         codeName: err?.code === 1 ? 'ABORTED' : err?.code === 2 ? 'NETWORK' : err?.code === 3 ? 'DECODE' : err?.code === 4 ? 'SRC_NOT_SUPPORTED' : 'UNKNOWN',
-        networkState: audio.networkState,
-        readyState: audio.readyState,
+        retried: retriedRef.current,
       });
+
+      // Retry with blob URL — bypasses Chrome's network-layer demuxer which fails
+      // on WebM files with Duration=0 and no Cues (common from MediaRecorder).
+      // Blob URLs use a different code path that handles these files correctly.
+      if (!retriedRef.current && !blobUrl) {
+        retriedRef.current = true;
+        console.log('🔄 Retrying audio with blob URL...');
+        try {
+          const response = await fetch(audioUrl);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          setBlobUrl(url);
+          // The audio element will be updated via the src prop change
+          return; // Don't set error state yet — retry in progress
+        } catch (fetchErr) {
+          console.error('❌ Blob URL retry failed:', fetchErr);
+        }
+      }
+
+      setIsLoading(false);
+      setHasError(true);
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -86,7 +110,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
-  }, [audioUrl]);
+  }, [audioUrl, blobUrl]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -114,14 +138,14 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
   const handleSpeedChange = (speed: number) => {
     const audio = audioRef.current;
     if (!audio) return;
-    
+
     audio.playbackRate = speed;
     setPlaybackRate(speed);
   };
 
   const formatTime = (timeInSeconds: number): string => {
     if (!isFinite(timeInSeconds)) return '0:00';
-    
+
     const minutes = Math.floor(timeInSeconds / 60);
     const seconds = Math.floor(timeInSeconds % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -162,9 +186,9 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       {/* Speed Control */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            variant="ghost"
+            size="sm"
             className="flex-shrink-0 h-8 px-2 text-xs font-medium min-w-[45px]"
           >
             {playbackRate}x
@@ -195,7 +219,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       {/* Hidden Audio Element */}
       <audio
         ref={audioRef}
-        src={audioUrl}
+        src={blobUrl || audioUrl}
         preload="auto"
       />
     </div>
