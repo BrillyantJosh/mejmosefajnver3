@@ -3,10 +3,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Loader2, MessageSquarePlus } from "lucide-react";
-import { SimplePool } from "nostr-tools";
-import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 interface Profile {
   pubkey: string;
@@ -21,13 +21,10 @@ interface NewChatDialogProps {
 }
 
 export default function NewChatDialog({ onSelectUser }: NewChatDialogProps) {
-  const { parameters } = useSystemParameters();
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-
-  const relays = parameters?.relays || [];
 
   useEffect(() => {
     if (!open) {
@@ -37,66 +34,43 @@ export default function NewChatDialog({ onSelectUser }: NewChatDialogProps) {
   }, [open]);
 
   useEffect(() => {
-    if (searchQuery.length < 2 || relays.length === 0) {
+    if (searchQuery.length < 2) {
       setProfiles([]);
       return;
     }
 
     const searchProfiles = async () => {
       setIsSearching(true);
-      const pool = new SimplePool();
-      
       try {
-        console.log('🔍 Searching profiles for:', searchQuery);
-        
-        const events = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [0],
-            limit: 1000, // Povečan limit za boljše rezultate
-          }),
-          new Promise<any[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Search timeout')), 10000)
-          )
-        ]);
-
-        console.log('📊 Fetched events:', events.length);
-
-        const foundProfiles: Profile[] = [];
-        const query = searchQuery.toLowerCase();
-
-        events.forEach(event => {
-          try {
-            const content = JSON.parse(event.content);
-            const name = content.name?.toLowerCase() || '';
-            const displayName = content.display_name?.toLowerCase() || '';
-
-            if (name.includes(query) || displayName.includes(query)) {
-              foundProfiles.push({
-                pubkey: event.pubkey,
-                name: content.name,
-                display_name: content.display_name,
-                picture: content.picture,
-                about: content.about,
-              });
-            }
-          } catch (error) {
-            console.error('Error parsing profile:', error);
-          }
+        const res = await fetch(`${API_URL}/api/functions/list-profiles`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ search: searchQuery }),
         });
+        const data = await res.json();
 
-        console.log('✅ Found profiles:', foundProfiles.length);
-        setProfiles(foundProfiles.slice(0, 30));
+        if (data?.profiles) {
+          setProfiles(data.profiles.slice(0, 30).map((p: any) => ({
+            pubkey: p.pubkey,
+            name: p.name,
+            display_name: p.display_name,
+            picture: p.picture,
+            about: p.about,
+          })));
+        } else {
+          setProfiles([]);
+        }
       } catch (error) {
-        console.error('❌ Error searching profiles:', error);
+        console.error('Error searching profiles:', error);
+        setProfiles([]);
       } finally {
         setIsSearching(false);
-        pool.close(relays);
       }
     };
 
-    const timeoutId = setTimeout(searchProfiles, 400);
+    const timeoutId = setTimeout(searchProfiles, 300);
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, relays]);
+  }, [searchQuery]);
 
   const handleSelectUser = (pubkey: string) => {
     onSelectUser(pubkey);
@@ -122,8 +96,8 @@ export default function NewChatDialog({ onSelectUser }: NewChatDialogProps) {
         <div className="flex-1 overflow-hidden px-6 pb-6">
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search by name (min 2 characters)..." 
+            <Input
+              placeholder="Search by name..."
               className="pl-9"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

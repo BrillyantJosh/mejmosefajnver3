@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { 
+import {
   Drawer,
   DrawerClose,
   DrawerContent,
@@ -14,9 +14,9 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer";
 import { MessageSquarePlus, Search, Loader2, X } from "lucide-react";
-import { SimplePool } from 'nostr-tools/pool';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSystemParameters } from '@/contexts/SystemParametersContext';
+
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 interface Profile {
   pubkey: string;
@@ -36,9 +36,6 @@ export default function NewChatDrawer({ onSelectUser }: NewChatDrawerProps) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
   const { session } = useAuth();
-  const { parameters } = useSystemParameters();
-
-  const relays = parameters?.relays || [];
 
   // Reset when drawer closes
   useEffect(() => {
@@ -48,58 +45,48 @@ export default function NewChatDrawer({ onSelectUser }: NewChatDrawerProps) {
     }
   }, [open]);
 
-  // Search profiles
+  // Search profiles via server-side DB (same as Transparency module)
   useEffect(() => {
-    if (!searchQuery || !open) {
+    if (!searchQuery || searchQuery.length < 2 || !open) {
       setProfiles([]);
       return;
     }
 
     const searchProfiles = async () => {
-      if (!relays || relays.length === 0) {
-        console.warn('No relays available yet');
-        return;
-      }
-      
       setSearching(true);
       try {
-        const pool = new SimplePool();
-        const query = searchQuery.toLowerCase();
-        
-        const events = await pool.querySync(relays, {
-          kinds: [0],
-          limit: 500
+        const res = await fetch(`${API_URL}/api/functions/list-profiles`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ search: searchQuery }),
         });
+        const data = await res.json();
 
-        const foundProfiles = events
-          .map(event => {
-            try {
-              const content = JSON.parse(event.content);
-              return {
-                pubkey: event.pubkey,
-                ...content
-              };
-            } catch {
-              return null;
-            }
-          })
-          .filter((p): p is Profile => {
-            if (!p || p.pubkey === session?.nostrHexId) return false;
-            const name = p.name?.toLowerCase() || '';
-            const displayName = p.display_name?.toLowerCase() || '';
-            const about = p.about?.toLowerCase() || '';
-            return name.includes(query) || displayName.includes(query) || about.includes(query);
-          });
-
-        setProfiles(foundProfiles);
+        if (data?.profiles) {
+          setProfiles(
+            data.profiles
+              .filter((p: any) => p.pubkey !== session?.nostrHexId)
+              .slice(0, 30)
+              .map((p: any) => ({
+                pubkey: p.pubkey,
+                name: p.name,
+                display_name: p.display_name,
+                picture: p.picture,
+                about: p.about,
+              }))
+          );
+        } else {
+          setProfiles([]);
+        }
       } catch (error) {
         console.error('Search error:', error);
+        setProfiles([]);
       } finally {
         setSearching(false);
       }
     };
 
-    const debounce = setTimeout(searchProfiles, 500);
+    const debounce = setTimeout(searchProfiles, 300);
     return () => clearTimeout(debounce);
   }, [searchQuery, open, session?.nostrHexId]);
 
@@ -134,7 +121,7 @@ export default function NewChatDrawer({ onSelectUser }: NewChatDrawerProps) {
             </DrawerClose>
           </div>
         </DrawerHeader>
-        
+
         <div className="p-4 space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -152,12 +139,12 @@ export default function NewChatDrawer({ onSelectUser }: NewChatDrawerProps) {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : searchQuery && profiles.length === 0 ? (
+            ) : searchQuery && searchQuery.length >= 2 && profiles.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <p>No users found</p>
                 <p className="text-sm mt-1">Try a different search term</p>
               </div>
-            ) : !searchQuery ? (
+            ) : !searchQuery || searchQuery.length < 2 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Search className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p>Start typing to search for users</p>
