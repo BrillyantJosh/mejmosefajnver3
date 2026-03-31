@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Play, Pause, Volume2, Loader2 } from 'lucide-react';
@@ -15,142 +15,136 @@ interface AudioPlayerProps {
 }
 
 export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(initialDuration || 0);
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const loadedRef = useRef(false);
+  const [ready, setReady] = useState(false);
 
   const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2];
 
-  // Cleanup blob URL on unmount
+  // Create a persistent Audio element (not managed by React rendering)
   useEffect(() => {
-    return () => {
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
-  }, [blobUrl]);
+    const audio = new Audio();
+    audio.preload = 'none';
+    audioRef.current = audio;
 
-  // Audio event listeners — only active after blob is loaded
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !blobUrl) return;
-
-    const handleReady = () => {
-      if (isFinite(audio.duration) && audio.duration > 0) {
-        setDuration(audio.duration);
-      }
-      setIsLoading(false);
-      // Auto-play after loading — use user gesture context from the click
-      audio.play().then(() => {
-        setIsPlaying(true);
-      }).catch(() => {
-        // Safari may block auto-play — user can click play again
-        setIsPlaying(false);
-      });
-    };
-
-    // Some WebM files never fire loadedmetadata (Duration=0),
-    // but canplay still fires when enough data is buffered
-    const handleLoadedMetadata = () => handleReady();
-    const handleCanPlay = () => {
-      if (isLoading) handleReady();
-    };
-
-    const handleDurationChange = () => {
-      if (isFinite(audio.duration) && audio.duration > 0) {
-        setDuration(audio.duration);
-      }
-    };
-
-    const handleTimeUpdate = () => {
+    const onTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
-      // Track highest currentTime as fallback duration for WebM without Duration
       if (audio.currentTime > 0 && (!isFinite(audio.duration) || audio.duration <= 0)) {
         setDuration(prev => Math.max(prev, audio.currentTime + 0.5));
       }
     };
-
-    const handleEnded = () => {
+    const onDurationChange = () => {
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
+    };
+    const onEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
     };
-
-    const handleError = () => {
-      const err = audio.error;
-      console.error('Error playing audio blob:', {
-        code: err?.code,
-        message: err?.message,
-      });
+    const onError = () => {
+      console.error('Audio error:', audio.error?.message);
       setIsLoading(false);
       setHasError(true);
     };
 
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('canplay', handleCanPlay);
-    audio.addEventListener('durationchange', handleDurationChange);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('error', handleError);
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('durationchange', onDurationChange);
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
 
     return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('canplay', handleCanPlay);
-      audio.removeEventListener('durationchange', handleDurationChange);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('error', handleError);
-    };
-  }, [blobUrl, isLoading]);
-
-  // Load audio as blob — called on first play click
-  const loadAndPlay = useCallback(async () => {
-    if (loadedRef.current && blobUrl) {
-      // Already loaded — just toggle play
-      const audio = audioRef.current;
-      if (audio) {
-        audio.play().then(() => setIsPlaying(true)).catch(() => {});
+      audio.pause();
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('durationchange', onDurationChange);
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
+      audio.src = '';
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
       }
+    };
+  }, []);
+
+  // Load audio as blob and play — called on first play click
+  const loadAndPlay = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    // Already loaded — just play
+    if (ready) {
+      audio.play().then(() => setIsPlaying(true)).catch(() => {});
       return;
     }
 
     setIsLoading(true);
     setHasError(false);
-    loadedRef.current = true;
 
     try {
       const response = await fetch(audioUrl);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      setBlobUrl(url);
-      // Audio element will auto-play via handleLoadedMetadata/handleCanPlay
 
-      // Safety timeout: if audio doesn't become playable within 15s, show error
-      setTimeout(() => {
-        if (isLoading) {
-          console.error('Audio load timeout:', audioUrl);
-          setIsLoading(false);
-          setHasError(true);
-        }
-      }, 15000);
-    } catch (err) {
-      console.error('Error loading audio:', audioUrl, err);
+      // Cleanup previous blob if any
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = url;
+
+      // Set src and wait for canplay BEFORE trying to play
+      audio.src = url;
+
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Audio load timeout')), 15000);
+
+        const onReady = () => {
+          clearTimeout(timeout);
+          cleanup();
+          resolve();
+        };
+        const onErr = () => {
+          clearTimeout(timeout);
+          cleanup();
+          reject(new Error(audio.error?.message || 'Audio decode error'));
+        };
+        const cleanup = () => {
+          audio.removeEventListener('canplay', onReady);
+          audio.removeEventListener('loadeddata', onReady);
+          audio.removeEventListener('error', onErr);
+        };
+
+        audio.addEventListener('canplay', onReady, { once: true });
+        audio.addEventListener('loadeddata', onReady, { once: true });
+        audio.addEventListener('error', onErr, { once: true });
+        audio.load();
+      });
+
+      // Audio is ready — update duration and play
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
+      setReady(true);
+      setIsLoading(false);
+
+      audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    } catch (err: any) {
+      console.error('Error loading audio:', audioUrl, err?.message);
       setIsLoading(false);
       setHasError(true);
-      loadedRef.current = false;
     }
-  }, [audioUrl, blobUrl, isLoading]);
+  };
 
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (!blobUrl) {
-      // First play — load as blob
+    if (!ready) {
       loadAndPlay();
       return;
     }
@@ -159,31 +153,26 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       audio.pause();
       setIsPlaying(false);
     } else {
-      audio.play().catch(() => {});
-      setIsPlaying(true);
+      audio.play().then(() => setIsPlaying(true)).catch(() => {});
     }
   };
 
   const handleSeek = (values: number[]) => {
     const audio = audioRef.current;
-    if (!audio || !blobUrl) return;
-
-    const newTime = values[0];
-    audio.currentTime = newTime;
-    setCurrentTime(newTime);
+    if (!audio || !ready) return;
+    audio.currentTime = values[0];
+    setCurrentTime(values[0]);
   };
 
   const handleSpeedChange = (speed: number) => {
     const audio = audioRef.current;
     if (!audio) return;
-
     audio.playbackRate = speed;
     setPlaybackRate(speed);
   };
 
   const formatTime = (timeInSeconds: number): string => {
     if (!isFinite(timeInSeconds)) return '0:00';
-
     const minutes = Math.floor(timeInSeconds / 60);
     const seconds = Math.floor(timeInSeconds % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -191,7 +180,6 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
 
   return (
     <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg my-1 w-full max-w-full min-w-[280px]">
-      {/* Play/Pause Button */}
       <Button
         size="sm"
         variant="ghost"
@@ -208,22 +196,19 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
         )}
       </Button>
 
-      {/* Waveform Icon */}
       <Volume2 className="h-5 w-5 text-muted-foreground flex-shrink-0" />
 
-      {/* Seek Bar */}
       <div className="flex-1 min-w-[100px] px-2">
         <Slider
           value={[currentTime]}
           max={duration || 100}
           step={0.1}
           onValueChange={handleSeek}
-          disabled={!blobUrl}
+          disabled={!ready}
           className="w-full [&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
         />
       </div>
 
-      {/* Speed Control */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -247,7 +232,6 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Time Display / Error */}
       <span className="text-xs flex-shrink-0 font-mono whitespace-nowrap min-w-[70px] text-right">
         {hasError ? (
           <span className="text-destructive">Ni na voljo</span>
@@ -255,13 +239,6 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
           <span className="text-muted-foreground">{formatTime(currentTime)} / {formatTime(duration)}</span>
         )}
       </span>
-
-      {/* Hidden Audio Element — only gets src after user clicks play */}
-      <audio
-        ref={audioRef}
-        src={blobUrl || undefined}
-        preload="none"
-      />
     </div>
   );
 }
