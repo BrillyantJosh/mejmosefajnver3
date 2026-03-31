@@ -14,153 +14,126 @@ interface AudioPlayerProps {
   initialDuration?: number;
 }
 
-/**
- * Try to load and play audio from a given src.
- * Returns true if playback started, false if it failed.
- */
-function tryLoadAudio(audio: HTMLAudioElement, src: string, timeoutMs = 12000): Promise<boolean> {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => { cleanup(); resolve(false); }, timeoutMs);
-
-    const onReady = () => { clearTimeout(timeout); cleanup(); resolve(true); };
-    const onErr = () => { clearTimeout(timeout); cleanup(); resolve(false); };
-
-    const cleanup = () => {
-      audio.removeEventListener('canplay', onReady);
-      audio.removeEventListener('loadeddata', onReady);
-      audio.removeEventListener('error', onErr);
-    };
-
-    audio.addEventListener('canplay', onReady, { once: true });
-    audio.addEventListener('loadeddata', onReady, { once: true });
-    audio.addEventListener('error', onErr, { once: true });
-
-    audio.src = src;
-    audio.load();
-  });
-}
-
 export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const blobUrlRef = useRef<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(initialDuration || 0);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [ready, setReady] = useState(false);
+  const [activeSrc, setActiveSrc] = useState(audioUrl);
+  const retriedWithBlob = useRef(false);
+  const blobUrlRef = useRef<string | null>(null);
 
   const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2];
 
-  // Create persistent Audio element
+  // Cleanup blob URL on unmount
   useEffect(() => {
-    const audio = new Audio();
-    audio.preload = 'none';
-    audioRef.current = audio;
+    return () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
 
-    const onTimeUpdate = () => {
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleLoadedMetadata = () => {
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
+      setIsLoading(false);
+    };
+
+    const handleCanPlay = () => {
+      // Fallback for WebM files that skip loadedmetadata
+      setIsLoading(false);
+    };
+
+    const handleDurationChange = () => {
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
+    };
+
+    const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
       if (audio.currentTime > 0 && (!isFinite(audio.duration) || audio.duration <= 0)) {
         setDuration(prev => Math.max(prev, audio.currentTime + 0.5));
       }
     };
-    const onDurationChange = () => {
-      if (isFinite(audio.duration) && audio.duration > 0) {
-        setDuration(audio.duration);
-      }
-    };
-    const onEnded = () => {
+
+    const handleEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
     };
 
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    audio.addEventListener('durationchange', onDurationChange);
-    audio.addEventListener('ended', onEnded);
+    const handleError = async () => {
+      const err = audio.error;
+      const msg = err?.message || '';
 
-    return () => {
-      audio.pause();
-      audio.removeEventListener('timeupdate', onTimeUpdate);
-      audio.removeEventListener('durationchange', onDurationChange);
-      audio.removeEventListener('ended', onEnded);
-      audio.src = '';
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = null;
-      }
-    };
-  }, []);
-
-  const loadAndPlay = async () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (ready) {
-      audio.play().then(() => setIsPlaying(true)).catch(() => {});
-      return;
-    }
-
-    setIsLoading(true);
-    setHasError(false);
-
-    try {
-      // Strategy 1: Try direct URL first (works on Safari, some Chrome versions)
-      let loaded = await tryLoadAudio(audio, audioUrl, 8000);
-
-      if (loaded) {
-        console.log('Audio loaded via direct URL');
-      } else {
-        // Strategy 2: Fetch as blob (works on Chrome with malformed WebM)
-        console.log('Direct URL failed, retrying with blob URL...');
-        const response = await fetch(audioUrl);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = url;
-
-        loaded = await tryLoadAudio(audio, url, 12000);
-
-        if (!loaded) {
-          throw new Error('Both direct and blob URL loading failed');
+      // Only retry with blob for the specific Chrome FFmpegDemuxer seek failure
+      if (!retriedWithBlob.current && (msg.includes('demuxer') || msg.includes('PIPELINE') || err?.code === 2)) {
+        retriedWithBlob.current = true;
+        console.log('🔄 FFmpegDemuxer error — retrying with blob URL...');
+        try {
+          const response = await fetch(audioUrl);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+          blobUrlRef.current = url;
+          setHasError(false);
+          setIsLoading(true);
+          setActiveSrc(url);
+          return; // Don't set error — retry in progress
+        } catch (fetchErr) {
+          console.error('Blob retry failed:', fetchErr);
         }
-        console.log('Audio loaded via blob URL');
       }
 
-      if (isFinite(audio.duration) && audio.duration > 0) {
-        setDuration(audio.duration);
-      }
-      setReady(true);
-      setIsLoading(false);
-      audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
-    } catch (err: any) {
-      console.error('Error loading audio:', audioUrl, err?.message);
+      console.error('Error loading audio:', activeSrc, { code: err?.code, message: msg });
       setIsLoading(false);
       setHasError(true);
-    }
-  };
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('durationchange', handleDurationChange);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('durationchange', handleDurationChange);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
+    };
+  }, [activeSrc, audioUrl]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (!ready) {
-      loadAndPlay();
-      return;
-    }
-
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
     } else {
-      audio.play().then(() => setIsPlaying(true)).catch(() => {});
+      audio.play().then(() => {
+        setIsPlaying(true);
+      }).catch(err => {
+        console.error('Error playing audio:', err);
+      });
     }
   };
 
   const handleSeek = (values: number[]) => {
     const audio = audioRef.current;
-    if (!audio || !ready) return;
+    if (!audio) return;
     audio.currentTime = values[0];
     setCurrentTime(values[0]);
   };
@@ -205,7 +178,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
           max={duration || 100}
           step={0.1}
           onValueChange={handleSeek}
-          disabled={!ready}
+          disabled={isLoading}
           className="w-full [&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
         />
       </div>
@@ -240,6 +213,12 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
           <span className="text-muted-foreground">{formatTime(currentTime)} / {formatTime(duration)}</span>
         )}
       </span>
+
+      <audio
+        ref={audioRef}
+        src={activeSrc}
+        preload="auto"
+      />
     </div>
   );
 }
