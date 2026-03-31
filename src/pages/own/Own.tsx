@@ -303,14 +303,23 @@ export default function Own() {
     const text = msg.text.trim();
     const userRole = getUserRole(msg.senderPubkey);
 
-    // 1) New structure: "audio:<relative-path>" or "audio:<path>|dur:<seconds>"
+    // 1) New structure: "audio:<path>|dur:<seconds>|transcript:<text>"
     if (text.startsWith("audio:")) {
       const raw = text.slice("audio:".length).trim();
 
+      // Extract transcript (always last field, greedy match)
+      let beforeTranscript = raw;
+      let transcript: string | undefined;
+      const transcriptIdx = raw.indexOf('|transcript:');
+      if (transcriptIdx !== -1) {
+        transcript = raw.slice(transcriptIdx + '|transcript:'.length);
+        beforeTranscript = raw.slice(0, transcriptIdx);
+      }
+
       // Parse optional duration metadata: "path|dur:45"
-      let path = raw;
+      let path = beforeTranscript;
       let audioDuration: number | undefined;
-      const durMatch = raw.match(/^(.+)\|dur:(\d+)$/);
+      const durMatch = beforeTranscript.match(/^(.+)\|dur:(\d+)$/);
       if (durMatch) {
         path = durMatch[1];
         audioDuration = parseInt(durMatch[2], 10);
@@ -325,6 +334,7 @@ export default function Own() {
         audioPath: path,
         audioUrl,
         audioDuration,
+        hasTranscript: !!transcript,
       });
 
       return {
@@ -336,6 +346,7 @@ export default function Own() {
         type: "audio" as const,
         audioUrl,
         audioDuration,
+        transcript,
         isCurrentUser: msg.senderPubkey === session?.nostrHexId,
       };
     }

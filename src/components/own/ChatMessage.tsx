@@ -11,6 +11,7 @@ interface ChatMessageProps {
   content?: string;
   audioUrl?: string;
   audioDuration?: number;
+  transcript?: string;
   isCurrentUser?: boolean;
   messageId?: string;
   isLashed?: boolean;
@@ -27,6 +28,7 @@ export default function ChatMessage({
   content,
   audioUrl,
   audioDuration,
+  transcript,
   isCurrentUser = false,
   messageId,
   isLashed = false,
@@ -76,6 +78,11 @@ export default function ChatMessage({
           {showLashButton && <LashButton />}
           <Card className={`p-2 md:p-3 flex-1 min-w-0 ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
             <AudioPlayer audioUrl={audioUrl} initialDuration={audioDuration} />
+            {transcript && (
+              <p className="text-sm text-muted-foreground mt-2 pt-2 border-t border-border/50 italic whitespace-pre-wrap break-words">
+                {transcript}
+              </p>
+            )}
           </Card>
         </div>
       </div>

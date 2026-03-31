@@ -18,6 +18,7 @@ interface Message {
   content?: string;
   audioUrl?: string;
   audioDuration?: number;
+  transcript?: string;
   isCurrentUser?: boolean;
 }
 
@@ -162,6 +163,7 @@ export default function ChatView({
                   content={msg.content}
                   audioUrl={msg.audioUrl}
                   audioDuration={msg.audioDuration}
+                  transcript={msg.transcript}
                   isCurrentUser={msg.isCurrentUser}
                   messageId={msg.id}
                   isLashed={lashedEventIds.has(msg.id)}

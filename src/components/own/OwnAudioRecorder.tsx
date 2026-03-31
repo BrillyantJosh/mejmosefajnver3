@@ -5,6 +5,8 @@ import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
 
+const API_URL = import.meta.env.VITE_API_URL ?? '';
+
 interface OwnAudioRecorderProps {
   processEventId: string;
   senderPubkey: string;
@@ -268,36 +270,73 @@ export default function OwnAudioRecorder({
       const fileName = `${timestamp}_${randomStr}.${extension}`;
       const filePath = `${senderPubkey}-${processEventId}/${fileName}`;
 
-      console.log('🎵 Uploading OWN audio:', {
+      console.log('🎵 Uploading OWN audio + transcribing:', {
         filePath,
         size: audioBlobRef.current.size,
         type: mimeType,
         attempt: retryCount + 1,
       });
 
-      const { error: uploadError } = await ownSupabase.storage
-        .from("dm-audio")
-        .upload(filePath, audioBlobRef.current, {
-          contentType: mimeType,
-          cacheControl: "3600",
-          upsert: false,
-        });
+      // Run upload and speech-to-text transcription in parallel
+      const audioBlob = audioBlobRef.current;
+      const cleanMime = mimeType.split(';')[0];
 
-      if (uploadError) {
-        console.error("Upload error:", uploadError);
+      const [uploadResult, sttResult] = await Promise.allSettled([
+        // Upload to storage
+        ownSupabase.storage
+          .from("dm-audio")
+          .upload(filePath, audioBlob, {
+            contentType: mimeType,
+            cacheControl: "3600",
+            upsert: false,
+          }),
+        // Transcribe via Groq Whisper
+        (async () => {
+          try {
+            const file = new File([audioBlob], `recording.${extension}`, { type: cleanMime });
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('language', 'sl');
+            const res = await fetch(`${API_URL}/api/voice/stt`, { method: 'POST', body: formData });
+            if (!res.ok) throw new Error(`STT ${res.status}`);
+            const data = await res.json();
+            return data.text?.trim() || '';
+          } catch (err) {
+            console.warn('🔇 STT transcription failed (audio will be sent without transcript):', err);
+            return '';
+          }
+        })(),
+      ]);
+
+      // Check upload result
+      if (uploadResult.status === 'rejected') {
+        console.error("Upload error:", uploadResult.reason);
         setUploadFailed(true);
         setRetryCount(prev => prev + 1);
-        const errMsg = uploadError?.message || uploadError?.error || "Upload failed";
+        toast.error("Upload failed — tap retry");
+        return;
+      }
+      const uploadData = uploadResult.value;
+      if (uploadData.error) {
+        console.error("Upload error:", uploadData.error);
+        setUploadFailed(true);
+        setRetryCount(prev => prev + 1);
+        const errMsg = uploadData.error?.message || uploadData.error?.error || "Upload failed";
         toast.error(`${errMsg} — tap retry`);
         return;
       }
 
-      // Send the audio path to the chat (Nostr content uses "audio:" prefix)
-      // Include duration metadata so it shows immediately in chat
-      // Use ref value as primary (more reliable than state after auto-stop)
+      // Extract transcript (empty string if STT failed — graceful degradation)
+      const transcript = sttResult.status === 'fulfilled' ? (sttResult.value || '') : '';
+      if (transcript) {
+        console.log('📝 Transcript:', transcript.substring(0, 100) + (transcript.length > 100 ? '...' : ''));
+      }
+
+      // Build message: audio:path|dur:seconds|transcript:text
       const durValue = recordingTimeRef.current > 0 ? recordingTimeRef.current : recordingTime;
       const durSuffix = durValue > 0 ? `|dur:${durValue}` : '';
-      const sent = await onSendAudio(`audio:${filePath}${durSuffix}`);
+      const transcriptSuffix = transcript ? `|transcript:${transcript}` : '';
+      const sent = await onSendAudio(`audio:${filePath}${durSuffix}${transcriptSuffix}`);
 
       if (!sent) {
         setUploadFailed(true);
