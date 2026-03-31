@@ -39,14 +39,25 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     const audio = audioRef.current;
     if (!audio || !blobUrl) return;
 
-    const handleLoadedMetadata = () => {
+    const handleReady = () => {
       if (isFinite(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration);
       }
       setIsLoading(false);
-      // Auto-play after loading
-      audio.play().catch(() => {});
-      setIsPlaying(true);
+      // Auto-play after loading — use user gesture context from the click
+      audio.play().then(() => {
+        setIsPlaying(true);
+      }).catch(() => {
+        // Safari may block auto-play — user can click play again
+        setIsPlaying(false);
+      });
+    };
+
+    // Some WebM files never fire loadedmetadata (Duration=0),
+    // but canplay still fires when enough data is buffered
+    const handleLoadedMetadata = () => handleReady();
+    const handleCanPlay = () => {
+      if (isLoading) handleReady();
     };
 
     const handleDurationChange = () => {
@@ -79,6 +90,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('canplay', handleCanPlay);
     audio.addEventListener('durationchange', handleDurationChange);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
@@ -86,21 +98,21 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
 
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('canplay', handleCanPlay);
       audio.removeEventListener('durationchange', handleDurationChange);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
-  }, [blobUrl]);
+  }, [blobUrl, isLoading]);
 
   // Load audio as blob — called on first play click
   const loadAndPlay = useCallback(async () => {
-    if (loadedRef.current || blobUrl) {
+    if (loadedRef.current && blobUrl) {
       // Already loaded — just toggle play
       const audio = audioRef.current;
       if (audio) {
-        audio.play().catch(() => {});
-        setIsPlaying(true);
+        audio.play().then(() => setIsPlaying(true)).catch(() => {});
       }
       return;
     }
@@ -115,14 +127,23 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       setBlobUrl(url);
-      // Audio element will auto-play via handleLoadedMetadata
+      // Audio element will auto-play via handleLoadedMetadata/handleCanPlay
+
+      // Safety timeout: if audio doesn't become playable within 15s, show error
+      setTimeout(() => {
+        if (isLoading) {
+          console.error('Audio load timeout:', audioUrl);
+          setIsLoading(false);
+          setHasError(true);
+        }
+      }, 15000);
     } catch (err) {
       console.error('Error loading audio:', audioUrl, err);
       setIsLoading(false);
       setHasError(true);
       loadedRef.current = false;
     }
-  }, [audioUrl, blobUrl]);
+  }, [audioUrl, blobUrl, isLoading]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
