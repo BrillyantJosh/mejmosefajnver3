@@ -14,6 +14,32 @@ interface AudioPlayerProps {
   initialDuration?: number;
 }
 
+/**
+ * Try to load and play audio from a given src.
+ * Returns true if playback started, false if it failed.
+ */
+function tryLoadAudio(audio: HTMLAudioElement, src: string, timeoutMs = 12000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => { cleanup(); resolve(false); }, timeoutMs);
+
+    const onReady = () => { clearTimeout(timeout); cleanup(); resolve(true); };
+    const onErr = () => { clearTimeout(timeout); cleanup(); resolve(false); };
+
+    const cleanup = () => {
+      audio.removeEventListener('canplay', onReady);
+      audio.removeEventListener('loadeddata', onReady);
+      audio.removeEventListener('error', onErr);
+    };
+
+    audio.addEventListener('canplay', onReady, { once: true });
+    audio.addEventListener('loadeddata', onReady, { once: true });
+    audio.addEventListener('error', onErr, { once: true });
+
+    audio.src = src;
+    audio.load();
+  });
+}
+
 export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
@@ -27,7 +53,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
 
   const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2];
 
-  // Create a persistent Audio element (not managed by React rendering)
+  // Create persistent Audio element
   useEffect(() => {
     const audio = new Audio();
     audio.preload = 'none';
@@ -48,23 +74,16 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       setIsPlaying(false);
       setCurrentTime(0);
     };
-    const onError = () => {
-      console.error('Audio error:', audio.error?.message);
-      setIsLoading(false);
-      setHasError(true);
-    };
 
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('durationchange', onDurationChange);
     audio.addEventListener('ended', onEnded);
-    audio.addEventListener('error', onError);
 
     return () => {
       audio.pause();
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('durationchange', onDurationChange);
       audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('error', onError);
       audio.src = '';
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
@@ -73,12 +92,10 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     };
   }, []);
 
-  // Load audio as blob and play — called on first play click
   const loadAndPlay = async () => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    // Already loaded — just play
     if (ready) {
       audio.play().then(() => setIsPlaying(true)).catch(() => {});
       return;
@@ -88,50 +105,34 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     setHasError(false);
 
     try {
-      const response = await fetch(audioUrl);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+      // Strategy 1: Try direct URL first (works on Safari, some Chrome versions)
+      let loaded = await tryLoadAudio(audio, audioUrl, 8000);
 
-      // Cleanup previous blob if any
-      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-      blobUrlRef.current = url;
+      if (loaded) {
+        console.log('Audio loaded via direct URL');
+      } else {
+        // Strategy 2: Fetch as blob (works on Chrome with malformed WebM)
+        console.log('Direct URL failed, retrying with blob URL...');
+        const response = await fetch(audioUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = url;
 
-      // Set src and wait for canplay BEFORE trying to play
-      audio.src = url;
+        loaded = await tryLoadAudio(audio, url, 12000);
 
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Audio load timeout')), 15000);
+        if (!loaded) {
+          throw new Error('Both direct and blob URL loading failed');
+        }
+        console.log('Audio loaded via blob URL');
+      }
 
-        const onReady = () => {
-          clearTimeout(timeout);
-          cleanup();
-          resolve();
-        };
-        const onErr = () => {
-          clearTimeout(timeout);
-          cleanup();
-          reject(new Error(audio.error?.message || 'Audio decode error'));
-        };
-        const cleanup = () => {
-          audio.removeEventListener('canplay', onReady);
-          audio.removeEventListener('loadeddata', onReady);
-          audio.removeEventListener('error', onErr);
-        };
-
-        audio.addEventListener('canplay', onReady, { once: true });
-        audio.addEventListener('loadeddata', onReady, { once: true });
-        audio.addEventListener('error', onErr, { once: true });
-        audio.load();
-      });
-
-      // Audio is ready — update duration and play
       if (isFinite(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration);
       }
       setReady(true);
       setIsLoading(false);
-
       audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     } catch (err: any) {
       console.error('Error loading audio:', audioUrl, err?.message);
