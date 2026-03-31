@@ -16,132 +16,111 @@ interface AudioPlayerProps {
 
 export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const blobUrlRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(initialDuration || 0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [activeSrc, setActiveSrc] = useState(audioUrl);
-  const retriedWithBlob = useRef(false);
-  const blobUrlRef = useRef<string | null>(null);
+  const [ready, setReady] = useState(false);
 
   const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2];
 
-  // Cleanup blob URL on unmount
+  // Setup audio element events
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onDurationChange = () => {
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
+    };
+    const onTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+      if (audio.currentTime > 0 && (!isFinite(audio.duration) || audio.duration <= 0)) {
+        setDuration(prev => Math.max(prev, audio.currentTime + 0.5));
+      }
+    };
+    const onEnded = () => { setIsPlaying(false); setCurrentTime(0); };
+    const onError = () => {
+      console.error('Audio error:', audio.error?.code, audio.error?.message);
+      setIsLoading(false);
+      setHasError(true);
+    };
+
+    audio.addEventListener('durationchange', onDurationChange);
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
+
+    return () => {
+      audio.removeEventListener('durationchange', onDurationChange);
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
+    };
+  }, []);
+
+  // Cleanup blob on unmount
   useEffect(() => {
     return () => {
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
     };
   }, []);
 
-  useEffect(() => {
+  const loadAndPlay = async () => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handleLoadedMetadata = () => {
-      if (isFinite(audio.duration) && audio.duration > 0) {
-        setDuration(audio.duration);
-      }
-      setIsLoading(false);
-    };
+    if (ready) {
+      audio.play().then(() => setIsPlaying(true)).catch(() => {});
+      return;
+    }
 
-    const handleCanPlay = () => {
-      // Fallback for WebM files that skip loadedmetadata
-      setIsLoading(false);
-    };
+    setIsLoading(true);
+    setHasError(false);
 
-    const handleDurationChange = () => {
-      if (isFinite(audio.duration) && audio.duration > 0) {
-        setDuration(audio.duration);
-      }
-    };
-
-    const handleTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
-      if (audio.currentTime > 0 && (!isFinite(audio.duration) || audio.duration <= 0)) {
-        setDuration(prev => Math.max(prev, audio.currentTime + 0.5));
-      }
-    };
-
-    const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    };
-
-    const handleError = async () => {
-      const err = audio.error;
-      const msg = err?.message || '';
-
-      // Only retry with blob for the specific Chrome FFmpegDemuxer seek failure
-      if (!retriedWithBlob.current && (msg.includes('demuxer') || msg.includes('PIPELINE') || err?.code === 2)) {
-        retriedWithBlob.current = true;
-        console.log('🔄 FFmpegDemuxer error — retrying with blob URL...');
-        try {
-          const response = await fetch(audioUrl);
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const blob = await response.blob();
-          const url = URL.createObjectURL(blob);
-          if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-          blobUrlRef.current = url;
-          setHasError(false);
-          setIsLoading(true);
-          setActiveSrc(url);
-          return; // Don't set error — retry in progress
-        } catch (fetchErr) {
-          console.error('Blob retry failed:', fetchErr);
-        }
-      }
-
-      console.error('Error loading audio:', activeSrc, { code: err?.code, message: msg });
-      setIsLoading(false);
-      setHasError(true);
-    };
-
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('canplay', handleCanPlay);
-    audio.addEventListener('durationchange', handleDurationChange);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('error', handleError);
-
-    return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('canplay', handleCanPlay);
-      audio.removeEventListener('durationchange', handleDurationChange);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('error', handleError);
-    };
-  }, [activeSrc, audioUrl]);
-
-  // Retry with blob URL when playback is stuck (plays silence, no error)
-  const retryWithBlob = async () => {
-    const audio = audioRef.current;
-    if (!audio || retriedWithBlob.current) return;
-    retriedWithBlob.current = true;
-
-    console.log('🔄 Playback stuck — retrying with blob URL...');
     try {
+      // Fetch as blob — works on both Chrome and Safari
+      // Chrome needs blob URL for stereo Opus + Duration=0 WebM files
+      // Safari also handles blob URLs fine
       const response = await fetch(audioUrl);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      const url = URL.createObjectURL(blob);
       blobUrlRef.current = url;
 
-      const wasPlaying = !audio.paused;
-      setActiveSrc(url);
+      // Set src and immediately try to play
+      audio.src = url;
 
-      // Wait a tick for React to update the <audio> src, then play
-      setTimeout(() => {
-        const a = audioRef.current;
-        if (a && wasPlaying) {
-          a.play().then(() => setIsPlaying(true)).catch(() => {});
-        }
-      }, 100);
-    } catch (err) {
-      console.error('Blob retry failed:', err);
+      // play() returns a promise — resolves when playback starts
+      await audio.play();
+
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
+
+      setReady(true);
+      setIsLoading(false);
+      setIsPlaying(true);
+    } catch (err: any) {
+      // play() rejected — might be autoplay policy or decode error
+      console.error('Error loading/playing audio:', err?.message || err);
+
+      // If we got the blob loaded but play failed (autoplay policy),
+      // mark as ready so user can click play again
+      if (audio.src && audio.readyState >= 2) {
+        setReady(true);
+        setIsLoading(false);
+        setIsPlaying(false);
+      } else {
+        setIsLoading(false);
+        setHasError(true);
+      }
     }
   };
 
@@ -149,34 +128,22 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     const audio = audioRef.current;
     if (!audio) return;
 
+    if (!ready) {
+      loadAndPlay();
+      return;
+    }
+
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
     } else {
-      audio.play().then(() => {
-        setIsPlaying(true);
-
-        // Detect stuck playback: if after 1.5s currentTime is still 0,
-        // the audio loaded but isn't actually producing sound (stereo
-        // Opus + Duration=0 on Chrome). Retry with blob URL.
-        if (!retriedWithBlob.current) {
-          setTimeout(() => {
-            const a = audioRef.current;
-            if (a && !a.paused && a.currentTime < 0.1) {
-              a.pause();
-              retryWithBlob();
-            }
-          }, 1500);
-        }
-      }).catch(err => {
-        console.error('Error playing audio:', err);
-      });
+      audio.play().then(() => setIsPlaying(true)).catch(() => {});
     }
   };
 
   const handleSeek = (values: number[]) => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !ready) return;
     audio.currentTime = values[0];
     setCurrentTime(values[0]);
   };
@@ -188,11 +155,9 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     setPlaybackRate(speed);
   };
 
-  const formatTime = (timeInSeconds: number): string => {
-    if (!isFinite(timeInSeconds)) return '0:00';
-    const minutes = Math.floor(timeInSeconds / 60);
-    const seconds = Math.floor(timeInSeconds % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  const formatTime = (t: number): string => {
+    if (!isFinite(t)) return '0:00';
+    return `${Math.floor(t / 60)}:${Math.floor(t % 60).toString().padStart(2, '0')}`;
   };
 
   return (
@@ -204,13 +169,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
         disabled={isLoading || hasError}
         className="flex-shrink-0 h-9 w-9 p-0"
       >
-        {isLoading ? (
-          <Loader2 className="h-5 w-5 animate-spin" />
-        ) : isPlaying ? (
-          <Pause className="h-5 w-5" />
-        ) : (
-          <Play className="h-5 w-5" />
-        )}
+        {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
       </Button>
 
       <Volume2 className="h-5 w-5 text-muted-foreground flex-shrink-0" />
@@ -221,47 +180,31 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
           max={duration || 100}
           step={0.1}
           onValueChange={handleSeek}
-          disabled={isLoading}
+          disabled={!ready}
           className="w-full [&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
         />
       </div>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex-shrink-0 h-8 px-2 text-xs font-medium min-w-[45px]"
-          >
+          <Button variant="ghost" size="sm" className="flex-shrink-0 h-8 px-2 text-xs font-medium min-w-[45px]">
             {playbackRate}x
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-[60px]">
-          {playbackSpeeds.map((speed) => (
-            <DropdownMenuItem
-              key={speed}
-              onClick={() => handleSpeedChange(speed)}
-              className={playbackRate === speed ? 'bg-accent' : ''}
-            >
-              {speed}x
+          {playbackSpeeds.map(s => (
+            <DropdownMenuItem key={s} onClick={() => handleSpeedChange(s)} className={playbackRate === s ? 'bg-accent' : ''}>
+              {s}x
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
 
       <span className="text-xs flex-shrink-0 font-mono whitespace-nowrap min-w-[70px] text-right">
-        {hasError ? (
-          <span className="text-destructive">Ni na voljo</span>
-        ) : (
-          <span className="text-muted-foreground">{formatTime(currentTime)} / {formatTime(duration)}</span>
-        )}
+        {hasError ? <span className="text-destructive">Ni na voljo</span> : <span className="text-muted-foreground">{formatTime(currentTime)} / {formatTime(duration)}</span>}
       </span>
 
-      <audio
-        ref={audioRef}
-        src={activeSrc}
-        preload="auto"
-      />
+      <audio ref={audioRef} preload="none" />
     </div>
   );
 }
