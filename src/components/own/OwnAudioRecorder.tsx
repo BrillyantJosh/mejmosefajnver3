@@ -121,10 +121,11 @@ export default function OwnAudioRecorder({
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
+          channelCount: 1,
           echoCancellation: true,
           noiseSuppression: { ideal: true },
           autoGainControl: { ideal: true },
-          sampleRate: { ideal: 44100 },
+          sampleRate: { ideal: 48000 },
         },
       });
       streamRef.current = stream;

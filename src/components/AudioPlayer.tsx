@@ -115,6 +115,36 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     };
   }, [activeSrc, audioUrl]);
 
+  // Retry with blob URL when playback is stuck (plays silence, no error)
+  const retryWithBlob = async () => {
+    const audio = audioRef.current;
+    if (!audio || retriedWithBlob.current) return;
+    retriedWithBlob.current = true;
+
+    console.log('🔄 Playback stuck — retrying with blob URL...');
+    try {
+      const response = await fetch(audioUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = url;
+
+      const wasPlaying = !audio.paused;
+      setActiveSrc(url);
+
+      // Wait a tick for React to update the <audio> src, then play
+      setTimeout(() => {
+        const a = audioRef.current;
+        if (a && wasPlaying) {
+          a.play().then(() => setIsPlaying(true)).catch(() => {});
+        }
+      }, 100);
+    } catch (err) {
+      console.error('Blob retry failed:', err);
+    }
+  };
+
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -125,6 +155,19 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     } else {
       audio.play().then(() => {
         setIsPlaying(true);
+
+        // Detect stuck playback: if after 1.5s currentTime is still 0,
+        // the audio loaded but isn't actually producing sound (stereo
+        // Opus + Duration=0 on Chrome). Retry with blob URL.
+        if (!retriedWithBlob.current) {
+          setTimeout(() => {
+            const a = audioRef.current;
+            if (a && !a.paused && a.currentTime < 0.1) {
+              a.pause();
+              retryWithBlob();
+            }
+          }, 1500);
+        }
       }).catch(err => {
         console.error('Error playing audio:', err);
       });
