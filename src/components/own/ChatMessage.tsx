@@ -79,9 +79,12 @@ export default function ChatMessage({
           <Card className={`p-2 md:p-3 flex-1 min-w-0 ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
             <AudioPlayer audioUrl={audioUrl} initialDuration={audioDuration} />
             {transcript && (
-              <p className="text-sm text-muted-foreground mt-2 pt-2 border-t border-border/50 italic whitespace-pre-wrap break-words">
-                {transcript}
-              </p>
+              <div className="mt-2 pt-2 border-t border-border/50">
+                <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1">Transcription</p>
+                <p className="text-sm text-muted-foreground italic whitespace-pre-wrap break-words">
+                  {transcript}
+                </p>
+              </div>
             )}
           </Card>
         </div>
