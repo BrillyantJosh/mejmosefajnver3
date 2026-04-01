@@ -534,7 +534,7 @@ export default function DiscountSell() {
           {/* ============ STEP 1: Select Wallet ============ */}
           {step === 1 && (
             <div className="space-y-6">
-              <div className="rounded-2xl border-2 border-border bg-card p-6">
+              <div className="rounded-2xl border-2 border-border bg-card p-4 sm:p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">
                   Select Wallet to Sell From
                 </h2>
@@ -549,7 +549,7 @@ export default function DiscountSell() {
                         <button
                           key={w.walletId}
                           onClick={() => setSelectedWallet(w.walletId)}
-                          className={`w-full rounded-xl border-2 px-5 py-4 text-left transition-all ${
+                          className={`w-full rounded-xl border-2 px-3 sm:px-5 py-3 sm:py-4 text-left transition-all ${
                             selectedWallet === w.walletId
                               ? "border-primary bg-primary/5"
                               : "border-border hover:border-muted-foreground/30"
@@ -649,7 +649,7 @@ export default function DiscountSell() {
           {/* ============ STEP 2: Select Currency ============ */}
           {step === 2 && (
             <div className="space-y-6">
-              <div className="rounded-2xl border-2 border-border bg-card p-6">
+              <div className="rounded-2xl border-2 border-border bg-card p-4 sm:p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">
                   Select Payout Currency
                 </h2>
@@ -772,7 +772,7 @@ export default function DiscountSell() {
               <div className="flex justify-between">
                 <button
                   onClick={() => setStep(1)}
-                  className="rounded-xl border border-border px-6 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  className="rounded-xl border border-border px-4 sm:px-6 py-2.5 sm:py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Back
                 </button>
@@ -794,7 +794,7 @@ export default function DiscountSell() {
           {/* ============ STEP 3: Enter Amount & Preview ============ */}
           {step === 3 && (
             <div className="space-y-6">
-              <div className="rounded-2xl border-2 border-border bg-card p-6">
+              <div className="rounded-2xl border-2 border-border bg-card p-4 sm:p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">
                   Enter LANA Amount
                 </h2>
@@ -845,7 +845,7 @@ export default function DiscountSell() {
 
                   {/* Payout Breakdown */}
                   {parsedLana > 0 && exchangeRate > 0 && (
-                    <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-5 space-y-3">
+                    <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-3 sm:p-5 space-y-3">
                       <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">
                         Payout Breakdown
                       </h3>
@@ -885,7 +885,7 @@ export default function DiscountSell() {
                           <span className="font-bold text-foreground">
                             Your Payout
                           </span>
-                          <span className="font-mono font-bold text-lg text-primary">
+                          <span className="font-mono font-bold text-base sm:text-lg text-primary whitespace-nowrap">
                             {formatFiat(netFiat, selectedCurrency)}{" "}
                             {selectedCurrency}
                           </span>
@@ -936,7 +936,7 @@ export default function DiscountSell() {
               <div className="flex justify-between">
                 <button
                   onClick={() => setStep(2)}
-                  className="rounded-xl border border-border px-6 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  className="rounded-xl border border-border px-4 sm:px-6 py-2.5 sm:py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Back
                 </button>
@@ -958,40 +958,38 @@ export default function DiscountSell() {
           {/* ============ STEP 4: Confirm Transaction ============ */}
           {step === 4 && (
             <div className="space-y-6">
-              <div className="rounded-2xl border-2 border-border bg-card p-6">
+              <div className="rounded-2xl border-2 border-border bg-card p-4 sm:p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">
                   Confirm Transaction
                 </h2>
 
                 {/* Summary */}
-                <div className="rounded-xl bg-muted/30 p-4 space-y-2 text-sm mb-6">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">From Wallet</span>
-                    <span className="font-mono text-foreground">
-                      {selectedWallet.slice(0, 12)}...
-                      {selectedWallet.slice(-8)}
+                <div className="rounded-xl bg-muted/30 p-3 sm:p-4 space-y-2 text-sm mb-6">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground flex-shrink-0">From Wallet</span>
+                    <span className="font-mono text-foreground text-xs sm:text-sm truncate">
+                      {selectedWallet.slice(0, 8)}...{selectedWallet.slice(-6)}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      To Buyback Wallet
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground flex-shrink-0">
+                      To Buyback
                     </span>
-                    <span className="font-mono text-foreground">
-                      {BUYBACK_WALLET.slice(0, 12)}...
-                      {BUYBACK_WALLET.slice(-8)}
+                    <span className="font-mono text-foreground text-xs sm:text-sm truncate">
+                      {BUYBACK_WALLET.slice(0, 8)}...{BUYBACK_WALLET.slice(-6)}
                     </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">Amount</span>
-                    <span className="font-mono font-bold text-foreground">
+                    <span className="font-mono font-bold text-foreground whitespace-nowrap">
                       {parsedLana.toLocaleString()} LANA
                     </span>
                   </div>
-                  <div className="border-t border-border pt-2 flex justify-between">
+                  <div className="border-t border-border pt-2 flex justify-between gap-2">
                     <span className="font-bold text-foreground">
                       Your Payout
                     </span>
-                    <span className="font-mono font-bold text-primary">
+                    <span className="font-mono font-bold text-primary whitespace-nowrap">
                       {formatFiat(netFiat, selectedCurrency)} {selectedCurrency}
                     </span>
                   </div>
@@ -1049,7 +1047,7 @@ export default function DiscountSell() {
               <div className="flex justify-between">
                 <button
                   onClick={() => setStep(3)}
-                  className="rounded-xl border border-border px-6 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  className="rounded-xl border border-border px-4 sm:px-6 py-2.5 sm:py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Back
                 </button>
@@ -1201,7 +1199,7 @@ export default function DiscountSell() {
                   <>
                     <button
                       onClick={handleReset}
-                      className="rounded-xl border border-border px-6 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      className="rounded-xl border border-border px-4 sm:px-6 py-2.5 sm:py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                     >
                       Back
                     </button>

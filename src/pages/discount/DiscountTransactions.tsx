@@ -135,9 +135,9 @@ function TransactionCard({
 
         {/* Expanded details */}
         {expanded && (
-          <div className="mt-3 pt-3 border-t space-y-3 text-sm">
+          <div className="mt-3 pt-3 border-t space-y-3 text-sm overflow-hidden">
             {/* FIAT breakdown */}
-            <div className="p-3 bg-muted rounded-lg space-y-1">
+            <div className="p-2 sm:p-3 bg-muted rounded-lg space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Gross</span>
                 <span>{formatFiat(tx.grossFiat, tx.currency)}</span>
@@ -244,15 +244,15 @@ function TransactionCard({
                       <span>{payout.paidAt || "N/A"}</span>
                     </div>
                     {payout.paidToAccount && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Account</span>
-                        <span className="font-mono">{payout.paidToAccount}</span>
+                      <div className="flex justify-between gap-2 min-w-0">
+                        <span className="text-muted-foreground flex-shrink-0">Account</span>
+                        <span className="font-mono truncate">{payout.paidToAccount}</span>
                       </div>
                     )}
                     {payout.reference && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Reference</span>
-                        <span>{payout.reference}</span>
+                      <div className="flex justify-between gap-2 min-w-0">
+                        <span className="text-muted-foreground flex-shrink-0">Reference</span>
+                        <span className="truncate">{payout.reference}</span>
                       </div>
                     )}
                     <div className="flex justify-between">
