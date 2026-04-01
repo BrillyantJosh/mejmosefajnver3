@@ -1,7 +1,30 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { AudioPlayer } from "@/components/AudioPlayer";
-import { Heart } from "lucide-react";
+import { Heart, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+function TranscriptToggle({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2 pt-2 border-t border-border/50">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
+      >
+        <FileText className="h-3.5 w-3.5 flex-shrink-0" />
+        <span>Transcription</span>
+        {open ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+      </button>
+      {open && (
+        <p className="text-sm text-muted-foreground italic whitespace-pre-wrap break-words mt-2">
+          {text}
+        </p>
+      )}
+    </div>
+  );
+}
 
 interface ChatMessageProps {
   sender: string;
@@ -78,14 +101,7 @@ export default function ChatMessage({
           {showLashButton && <LashButton />}
           <Card className={`p-2 md:p-3 flex-1 min-w-0 ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
             <AudioPlayer audioUrl={audioUrl} initialDuration={audioDuration} />
-            {transcript && (
-              <div className="mt-2 pt-2 border-t border-border/50">
-                <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider mb-1">Transcription</p>
-                <p className="text-sm text-muted-foreground italic whitespace-pre-wrap break-words">
-                  {transcript}
-                </p>
-              </div>
-            )}
+            {transcript && <TranscriptToggle text={transcript} />}
           </Card>
         </div>
       </div>
