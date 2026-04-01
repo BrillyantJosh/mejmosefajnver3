@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Play, Pause, Volume2, Loader2 } from 'lucide-react';
+import { Play, Pause, Volume2, Loader2, RotateCcw, Download } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -155,10 +155,59 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     setPlaybackRate(speed);
   };
 
+  const handleRetry = () => {
+    setHasError(false);
+    setReady(false);
+    loadedRef.current = false;
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    // Small delay then auto-play
+    setTimeout(() => loadAndPlay(), 100);
+  };
+
+  const handleDownload = async () => {
+    try {
+      const response = await fetch(audioUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = audioUrl.split('/').pop() || 'audio.webm';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Fallback: open in new tab
+      window.open(audioUrl, '_blank');
+    }
+  };
+
   const formatTime = (t: number): string => {
     if (!isFinite(t)) return '0:00';
     return `${Math.floor(t / 60)}:${Math.floor(t % 60).toString().padStart(2, '0')}`;
   };
+
+  // Error state — show retry + download buttons
+  if (hasError) {
+    return (
+      <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg my-1 w-full max-w-full min-w-[280px]">
+        <span className="text-xs text-destructive flex-shrink-0">Ni na voljo</span>
+        <div className="flex-1" />
+        <Button size="sm" variant="ghost" onClick={handleRetry} className="h-7 gap-1 text-xs">
+          <RotateCcw className="h-3.5 w-3.5" />
+          Retry
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleDownload} className="h-7 gap-1 text-xs">
+          <Download className="h-3.5 w-3.5" />
+          Download
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg my-1 w-full max-w-full min-w-[280px]">
@@ -166,7 +215,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
         size="sm"
         variant="ghost"
         onClick={togglePlay}
-        disabled={isLoading || hasError}
+        disabled={isLoading}
         className="flex-shrink-0 h-9 w-9 p-0"
       >
         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
@@ -201,7 +250,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       </DropdownMenu>
 
       <span className="text-xs flex-shrink-0 font-mono whitespace-nowrap min-w-[70px] text-right">
-        {hasError ? <span className="text-destructive">Ni na voljo</span> : <span className="text-muted-foreground">{formatTime(currentTime)} / {formatTime(duration)}</span>}
+        <span className="text-muted-foreground">{formatTime(currentTime)} / {formatTime(duration)}</span>
       </span>
 
       <audio ref={audioRef} preload="none" />
