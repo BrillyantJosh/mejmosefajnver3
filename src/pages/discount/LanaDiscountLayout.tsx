@@ -9,7 +9,7 @@ const discountNavItems = [
 
 export default function LanaDiscountLayout() {
   return (
-    <div className="max-w-4xl mx-auto pb-20">
+    <div className="max-w-4xl mx-auto pb-20 px-4 sm:px-6">
       <div className="mb-3 sm:mb-6" />
       <Outlet />
       <SubNavigation items={discountNavItems} variant="bottom" />

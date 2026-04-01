@@ -196,17 +196,17 @@ function TransactionCard({
             </div>
 
             {/* Wallet addresses */}
-            <div className="flex justify-between items-start">
+            <div className="space-y-1">
               <span className="text-muted-foreground">Sender</span>
-              <span className="font-mono text-xs text-right break-all max-w-[55%]">
+              <p className="font-mono text-xs break-all bg-muted p-1.5 rounded">
                 {tx.senderWallet}
-              </span>
+              </p>
             </div>
-            <div className="flex justify-between items-start">
+            <div className="space-y-1">
               <span className="text-muted-foreground">Buyback Wallet</span>
-              <span className="font-mono text-xs text-right break-all max-w-[55%]">
+              <p className="font-mono text-xs break-all bg-muted p-1.5 rounded">
                 {tx.buybackWallet}
-              </span>
+              </p>
             </div>
 
             {/* RPC verification */}

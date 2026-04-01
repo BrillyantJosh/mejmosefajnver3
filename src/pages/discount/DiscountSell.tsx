@@ -1226,7 +1226,7 @@ export default function DiscountSell() {
       {/* QR Scanner Modal */}
       {isScannerOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="bg-card border-2 border-border rounded-2xl p-6 max-w-md w-full mx-4 space-y-4">
+          <div className="bg-card border-2 border-border rounded-2xl p-4 sm:p-6 max-w-md w-full mx-4 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-foreground">Scan WIF Private Key</h3>
               <button
@@ -1238,7 +1238,7 @@ export default function DiscountSell() {
             </div>
             <div
               id="qr-reader-discount"
-              className="rounded-xl overflow-hidden bg-black min-h-[280px]"
+              className="rounded-xl overflow-hidden bg-black min-h-[200px] sm:min-h-[280px]"
             />
             {!isCameraReady && !scanError && (
               <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">

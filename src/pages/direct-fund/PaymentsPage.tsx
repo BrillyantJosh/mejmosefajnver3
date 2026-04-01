@@ -43,14 +43,14 @@ export default function PaymentsPage() {
   return (
     <div className="space-y-6">
       {/* Summary */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Awaiting Payment</p>
-          <p className="text-2xl font-bold text-amber-500 mt-1">{pendingPayments.length}</p>
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <div className="rounded-xl border p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide">Awaiting Payment</p>
+          <p className="text-xl sm:text-2xl font-bold text-amber-500 mt-1">{pendingPayments.length}</p>
         </div>
-        <div className="rounded-xl border p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Completed</p>
-          <p className="text-2xl font-bold text-emerald-500 mt-1">{confirmedPayments.length}</p>
+        <div className="rounded-xl border p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide">Completed</p>
+          <p className="text-xl sm:text-2xl font-bold text-emerald-500 mt-1">{confirmedPayments.length}</p>
         </div>
       </div>
 
@@ -70,14 +70,14 @@ export default function PaymentsPage() {
           {pendingPayments.map(p => (
             <div
               key={p.id}
-              className={`rounded-xl border p-4 transition-colors ${
+              className={`rounded-xl border p-3 sm:p-4 transition-colors ${
                 p.overdueDays > 0
                   ? 'border-red-300 dark:border-red-500/30 bg-red-50/50 dark:bg-red-500/5'
                   : 'hover:bg-muted/30'
               }`}
             >
-              <div className="flex items-start justify-between">
-                <div className="space-y-1.5">
+              <div className="flex items-start justify-between gap-2 min-w-0">
+                <div className="space-y-1.5 min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     {p.orderType && (
                       <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
@@ -103,8 +103,8 @@ export default function PaymentsPage() {
                     </div>
                   )}
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold tabular-nums">{formatFiat(p.amount, p.currency)}</p>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-base sm:text-lg font-bold tabular-nums whitespace-nowrap">{formatFiat(p.amount, p.currency)}</p>
                   {p.lanaTxHash && (
                     <a
                       href={`https://chainz.cryptoid.info/lana/tx.dws?${p.lanaTxHash}`}

@@ -55,11 +55,11 @@ export default function BudgetsPage() {
   return (
     <div className="space-y-6">
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
         {Object.entries(byCurrency).map(([cur, data]) => (
-          <div key={cur} className="rounded-xl border p-4 text-center">
-            <p className="text-xs text-muted-foreground uppercase">{cur}</p>
-            <p className="text-xl font-bold mt-1">{formatFiat(data.available, cur)}</p>
+          <div key={cur} className="rounded-xl border p-3 sm:p-4 text-center">
+            <p className="text-[10px] sm:text-xs text-muted-foreground uppercase">{cur}</p>
+            <p className="text-lg sm:text-xl font-bold mt-1">{formatFiat(data.available, cur)}</p>
             <p className="text-[10px] text-muted-foreground">of {formatFiat(data.total, cur)}</p>
           </div>
         ))}
@@ -75,21 +75,21 @@ export default function BudgetsPage() {
             : 'text-muted-foreground';
 
           return (
-            <div key={b.id} className="rounded-xl border p-4 space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{b.note || `Budget #${b.id}`}</p>
-                    <span className={`text-[10px] font-semibold ${statusColor}`}>
+            <div key={b.id} className="rounded-xl border p-3 sm:p-4 space-y-3">
+              <div className="flex items-start justify-between gap-2 min-w-0">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium truncate">{b.note || `Budget #${b.id}`}</p>
+                    <span className={`text-[10px] font-semibold flex-shrink-0 ${statusColor}`}>
                       {b.status.toUpperCase()}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                  <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
                     {shortenId(b.walletId)}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold tabular-nums">
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-bold tabular-nums whitespace-nowrap">
                     {formatFiat(b.availableAmount, b.investmentCurrency)}
                   </p>
                   <p className="text-[10px] text-muted-foreground">available</p>
@@ -98,9 +98,9 @@ export default function BudgetsPage() {
 
               {/* Progress bar */}
               <div>
-                <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                  <span>Progress</span>
-                  <span className="tabular-nums">
+                <div className="flex justify-between text-[10px] text-muted-foreground mb-1 gap-1">
+                  <span className="flex-shrink-0">Progress</span>
+                  <span className="tabular-nums truncate">
                     {formatFiat(b.investedAmount, b.investmentCurrency)} / {formatFiat(b.investmentAmount, b.investmentCurrency)}
                   </span>
                 </div>

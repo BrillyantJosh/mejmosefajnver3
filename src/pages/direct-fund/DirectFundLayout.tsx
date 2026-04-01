@@ -9,10 +9,10 @@ const navItems = [
 
 export default function DirectFundLayout() {
   return (
-    <div className="max-w-4xl mx-auto pb-20">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Direct Fund</h1>
-        <p className="text-muted-foreground">Investment budgets and pending payments</p>
+    <div className="max-w-4xl mx-auto pb-20 px-4 sm:px-6">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold">Direct Fund</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">Investment budgets and pending payments</p>
       </div>
 
       <Outlet />
