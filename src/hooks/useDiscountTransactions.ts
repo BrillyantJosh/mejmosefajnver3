@@ -135,23 +135,42 @@ export const useDiscountTransactions = () => {
 
       console.log(`[discount] Fetched ${buybackEvents.length} KIND 30936 events, ${payoutEvents.length} KIND 30937 events`);
 
-      // Parse buyback transactions — show all, newest first by transaction ID
+      const userHexId = session.nostrHexId;
+
+      // Parse buyback transactions — filter by current user + deduplicate by txHash
+      const seenTxHashes = new Set<string>();
       const parsedTransactions = buybackEvents
         .map(parseBuybackEvent)
-        .filter((t): t is BuybackTransaction => t !== null)
+        .filter((t): t is BuybackTransaction => {
+          if (!t) return false;
+          // Only show transactions belonging to the logged-in user
+          if (t.userHex && t.userHex !== userHexId) return false;
+          // Deduplicate by txHash (same TX published multiple times)
+          if (seenTxHashes.has(t.txHash)) return false;
+          seenTxHashes.add(t.txHash);
+          return true;
+        })
         .sort((a, b) => {
-          // Sort by numeric ID descending (newest transaction = highest ID)
           const idA = parseInt(a.id) || 0;
           const idB = parseInt(b.id) || 0;
           if (idA !== idB) return idB - idA;
           return b.createdAt - a.createdAt;
         });
 
-      // Parse payouts
+      // Parse payouts — filter by current user + deduplicate by id
+      const seenPayoutIds = new Set<string>();
       const parsedPayouts = payoutEvents
         .map(parsePayoutEvent)
-        .filter((p): p is FiatPayout => p !== null)
+        .filter((p): p is FiatPayout => {
+          if (!p) return false;
+          if (p.userHex && p.userHex !== userHexId) return false;
+          if (seenPayoutIds.has(p.id)) return false;
+          seenPayoutIds.add(p.id);
+          return true;
+        })
         .sort((a, b) => b.createdAt - a.createdAt);
+
+      console.log(`[discount] User ${userHexId.slice(0, 8)}...: ${parsedTransactions.length} transactions, ${parsedPayouts.length} payouts (from ${buybackEvents.length} raw events)`);
 
       setTransactions(parsedTransactions);
       setPayouts(parsedPayouts);
