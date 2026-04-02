@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { SimplePool } from "nostr-tools";
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { LanaEvent, ScheduleEntry } from "./useNostrEvents";
+
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 interface NostrProfile {
   name?: string;
@@ -10,14 +11,12 @@ interface NostrProfile {
   about?: string;
 }
 
-export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
+export function useNostrPublicEvent(dTag: string, _systemRelays?: string[]) {
   const { parameters } = useSystemParameters();
   const [event, setEvent] = useState<LanaEvent | null>(null);
   const [profile, setProfile] = useState<NostrProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const relays = systemRelays && systemRelays.length > 0 ? systemRelays : (parameters?.relays || []);
 
   useEffect(() => {
     if (!dTag) {
@@ -25,11 +24,12 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
       return;
     }
 
-    const pool = new SimplePool();
+    // Wait until system parameters are loaded (relays needed server-side)
+    if (!parameters?.relays || parameters.relays.length === 0) {
+      return; // Will re-trigger when parameters load
+    }
+
     let isMounted = true;
-    const isMobile = /Mobile|Android|iPhone/i.test(navigator.userAgent);
-    const EVENT_TIMEOUT = isMobile ? 15000 : 10000;
-    const PROFILE_TIMEOUT = isMobile ? 8000 : 5000;
 
     const parseEvent = (rawEvent: any): LanaEvent | null => {
       try {
@@ -45,12 +45,12 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
         const title = getTagValue('title');
         const status = getTagValue('status') as 'active' | 'archived' | 'canceled';
         const startStr = getTagValue('start');
-        const dTag = getTagValue('d');
+        const eventDTag = getTagValue('d');
         const language = getTagValue('language');
         const eventType = getTagValue('event_type');
         const organizerPubkey = getTagValue('p');
 
-        if (!title || !status || !startStr || !dTag || !language || !eventType || !organizerPubkey) {
+        if (!title || !status || !startStr || !eventDTag || !language || !eventType || !organizerPubkey) {
           return null;
         }
 
@@ -65,14 +65,11 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
 
         const latStr = getTagValue('lat');
         const lonStr = getTagValue('lon');
-        const lat = latStr ? parseFloat(latStr) : undefined;
-        const lon = lonStr ? parseFloat(lonStr) : undefined;
 
         const capacityStr = getTagValue('capacity');
         const fiatValueStr = getTagValue('fiat_value');
         const maxGuestsStr = getTagValue('max_guests');
 
-        // Parse schedule tags for multi-day events
         const scheduleTags = tags.filter((t: string[]) => t[0] === 'schedule');
         const schedule: ScheduleEntry[] = scheduleTags
           .map((t: string[]) => {
@@ -101,19 +98,20 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
           youtubeUrl: getTagValue('youtube'),
           youtubeRecordingUrl: getTagValue('youtube_recording'),
           location: getTagValue('location'),
-          lat,
-          lon,
+          lat: latStr ? parseFloat(latStr) : undefined,
+          lon: lonStr ? parseFloat(lonStr) : undefined,
           capacity: capacityStr ? parseInt(capacityStr, 10) : undefined,
           cover: getTagValue('cover'),
           donationWallet: getTagValue('donation_wallet'),
           donationWalletUnreg: getTagValue('donation_wallet_unreg'),
+          donationWalletType: (getTagValue('donation_wallet_type') as 'registered' | 'unregistered') || undefined,
           fiatValue: fiatValueStr ? parseFloat(fiatValueStr) : undefined,
           guests: getAllTagValues('guest'),
           attachments: getAllTagValues('attachment'),
           category: getTagValue('category'),
           recording: getTagValue('recording'),
           maxGuests: maxGuestsStr ? parseInt(maxGuestsStr, 10) : undefined,
-          dTag,
+          dTag: eventDTag,
           timezone: getTagValue('timezone'),
           schedule,
         };
@@ -128,18 +126,22 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
         setLoading(true);
         setError(null);
 
-        // Fetch event by d tag (KIND 36677 - Parameterized Replaceable Event)
-        const events = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [36677],
-            "#d": [dTag]
+        // Use server-side relay query (more reliable than browser SimplePool,
+        // especially in Facebook/Instagram in-app browsers that block WebSockets)
+        const response = await fetch(`${API_URL}/api/functions/query-nostr-events`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filter: { kinds: [36677], '#d': [dTag] },
+            timeout: 15000,
           }),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout')), EVENT_TIMEOUT)
-          )
-        ]);
+        });
 
         if (!isMounted) return;
+
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        const data = await response.json();
+        const events = data.events || [];
 
         if (events.length === 0) {
           setError('Event not found');
@@ -148,7 +150,7 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
         }
 
         // Get the most recent event (by created_at) since it's a replaceable event
-        const rawEvent = events.reduce((latest, current) => 
+        const rawEvent = events.reduce((latest: any, current: any) =>
           current.created_at > latest.created_at ? current : latest
         );
         const parsedEvent = parseEvent(rawEvent);
@@ -161,27 +163,29 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
 
         setEvent(parsedEvent);
 
-        // Fetch organizer profile
-        const profileEvents = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [0],
-            authors: [rawEvent.pubkey]
-          }),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout')), PROFILE_TIMEOUT)
-          )
-        ]);
+        // Fetch organizer profile via server
+        try {
+          const profileRes = await fetch(`${API_URL}/api/functions/query-nostr-events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filter: { kinds: [0], authors: [rawEvent.pubkey] },
+              timeout: 8000,
+            }),
+          });
 
-        if (!isMounted) return;
+          if (!isMounted) return;
 
-        if (profileEvents.length > 0) {
-          try {
-            const profileData = JSON.parse(profileEvents[0].content);
-            setProfile(profileData);
-          } catch (e) {
-            console.error('Failed to parse profile:', e);
+          if (profileRes.ok) {
+            const profileData = await profileRes.json();
+            const profileEvents = profileData.events || [];
+            if (profileEvents.length > 0) {
+              try {
+                setProfile(JSON.parse(profileEvents[0].content));
+              } catch {}
+            }
           }
-        }
+        } catch {}
 
         setLoading(false);
       } catch (err) {
@@ -194,11 +198,8 @@ export function useNostrPublicEvent(dTag: string, systemRelays?: string[]) {
 
     fetchEvent();
 
-    return () => {
-      isMounted = false;
-      pool.close(relays);
-    };
-  }, [dTag, relays]);
+    return () => { isMounted = false; };
+  }, [dTag, parameters?.relays]);
 
   return { event, profile, loading, error };
 }
