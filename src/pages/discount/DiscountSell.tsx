@@ -709,12 +709,37 @@ export default function DiscountSell() {
                 </p>
               )}
 
+              {/* Missing payout account warning */}
+              {selectedCurrency && !getPayoutInfo() && (
+                <div className="rounded-xl border-2 border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Banknote className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                        Payout Account Required
+                      </p>
+                      <p className="text-xs text-amber-600 dark:text-amber-500">
+                        No payout account found for <strong>{selectedCurrency}</strong> in your profile.
+                        You must add your bank account details (IBAN, SWIFT/BIC) before you can sell LANA.
+                      </p>
+                      <a
+                        href="/profile"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 hover:underline"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Go to Profile to add payment details
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-end">
                 <button
                   onClick={() => setStep(3)}
-                  disabled={!selectedWallet || tooManyUtxos || utxoLoading || !selectedCurrency}
+                  disabled={!selectedWallet || tooManyUtxos || utxoLoading || !selectedCurrency || !getPayoutInfo()}
                   className={`rounded-xl px-6 py-3 font-semibold text-white transition-all ${
-                    selectedWallet && !tooManyUtxos && !utxoLoading && selectedCurrency
+                    selectedWallet && !tooManyUtxos && !utxoLoading && selectedCurrency && getPayoutInfo()
                       ? "bg-primary hover:bg-primary/90 shadow-lg"
                       : "bg-muted-foreground/30 cursor-not-allowed"
                   }`}
