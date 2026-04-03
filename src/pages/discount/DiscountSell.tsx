@@ -201,12 +201,14 @@ export default function DiscountSell() {
     return Object.keys(parameters.exchangeRates);
   }, [parameters?.exchangeRates]);
 
-  // Pre-select first currency
+  // Auto-set currency from user's profile (KIND 0) — not changeable
   useEffect(() => {
-    if (!selectedCurrency && activeCurrencies.length > 0) {
+    if (!selectedCurrency && profile?.currency && activeCurrencies.includes(profile.currency)) {
+      setSelectedCurrency(profile.currency);
+    } else if (!selectedCurrency && activeCurrencies.length > 0) {
       setSelectedCurrency(activeCurrencies[0]);
     }
-  }, [activeCurrencies, selectedCurrency]);
+  }, [activeCurrencies, selectedCurrency, profile?.currency]);
 
   // Validate private key against selected wallet (debounced)
   useEffect(() => {
@@ -660,6 +662,20 @@ export default function DiscountSell() {
                 )}
               </div>
 
+              {/* Payout currency from profile */}
+              {selectedCurrency && (
+                <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Payout Currency</p>
+                    <p className="text-sm font-semibold">{selectedCurrency}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Exchange Rate</p>
+                    <p className="text-sm font-mono">1 LANA = {parameters?.exchangeRates?.[selectedCurrency] || '...'} {selectedCurrency}</p>
+                  </div>
+                </div>
+              )}
+
               {/* UTXO consolidation warning */}
               {selectedWallet && tooManyUtxos && (
                 <div className="rounded-xl border-2 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4 space-y-3">
@@ -695,10 +711,10 @@ export default function DiscountSell() {
 
               <div className="flex justify-end">
                 <button
-                  onClick={() => setStep(2)}
-                  disabled={!selectedWallet || tooManyUtxos || utxoLoading}
+                  onClick={() => setStep(3)}
+                  disabled={!selectedWallet || tooManyUtxos || utxoLoading || !selectedCurrency}
                   className={`rounded-xl px-6 py-3 font-semibold text-white transition-all ${
-                    selectedWallet && !tooManyUtxos && !utxoLoading
+                    selectedWallet && !tooManyUtxos && !utxoLoading && selectedCurrency
                       ? "bg-primary hover:bg-primary/90 shadow-lg"
                       : "bg-muted-foreground/30 cursor-not-allowed"
                   }`}
@@ -998,7 +1014,7 @@ export default function DiscountSell() {
 
               <div className="flex justify-between">
                 <button
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(1)}
                   className="rounded-xl border border-border px-4 sm:px-6 py-2.5 sm:py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Back
