@@ -587,57 +587,45 @@ export default function DiscountSell() {
                               : "border-border hover:border-muted-foreground/30"
                           } ${isFrozen ? "opacity-60" : ""}`}
                         >
-                          <div className="flex items-start gap-4">
-                            {/* Wallet info */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-mono text-sm font-medium text-foreground">
-                                  {shortAddr}
+                          <div className="space-y-2">
+                            {/* Top row: wallet address + frozen badge */}
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-mono text-xs sm:text-sm font-medium text-foreground truncate">
+                                {shortAddr}
+                              </span>
+                              {isFrozen && (
+                                <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-1.5 py-0.5 rounded flex-shrink-0">
+                                  Frozen
                                 </span>
-                                {isFrozen && (
-                                  <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-1.5 py-0.5 rounded">
-                                    Frozen
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                <span className="inline-flex items-center gap-1">
-                                  <span className="font-medium text-foreground/70">
-                                    Type:
-                                  </span>
-                                  {w.walletType}
-                                </span>
-                                {w.note && (
-                                  <span className="inline-flex items-center gap-1">
-                                    <span className="font-medium text-foreground/70">
-                                      Note:
-                                    </span>
-                                    {w.note}
-                                  </span>
-                                )}
-                              </div>
+                              )}
                             </div>
 
-                            {/* Balance */}
-                            <div className="text-right flex-shrink-0">
+                            {/* Middle row: type + note */}
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                              <span>{w.walletType}</span>
+                              {w.note && (
+                                <span className="truncate max-w-[200px]">{w.note}</span>
+                              )}
+                            </div>
+
+                            {/* Bottom row: balance */}
+                            <div>
                               {balancesLoading &&
                               balances[w.walletId] === undefined ? (
-                                <div className="h-4 w-20 animate-pulse bg-muted rounded" />
+                                <div className="h-4 w-24 animate-pulse bg-muted rounded" />
                               ) : balances[w.walletId] !== undefined ? (
-                                <div>
-                                  <span className="font-mono text-sm font-bold text-foreground">
-                                    {balances[w.walletId].toLocaleString(
-                                      undefined,
-                                      {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                      }
-                                    )}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground ml-1">
+                                <span className="font-mono text-sm font-bold text-foreground">
+                                  {balances[w.walletId].toLocaleString(
+                                    undefined,
+                                    {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    }
+                                  )}
+                                  <span className="text-xs text-muted-foreground font-normal ml-1">
                                     LANA
                                   </span>
-                                </div>
+                                </span>
                               ) : (
                                 <span className="text-xs text-muted-foreground">
                                   ---
