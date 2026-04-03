@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event as NostrEvent } from 'nostr-tools';
-import { useSystemParameters } from '@/contexts/SystemParametersContext';
+
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 export interface ClosedCase {
   id: string;
@@ -19,86 +19,79 @@ export interface ClosedCase {
   initialContent: string;
 }
 
+async function queryServer(filter: Record<string, any>, timeout = 15000): Promise<any[]> {
+  const res = await fetch(`${API_URL}/api/functions/query-nostr-events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filter, timeout }),
+  });
+  if (!res.ok) throw new Error(`Server error: ${res.status}`);
+  const data = await res.json();
+  return data.events || [];
+}
+
 export const useNostrClosedCases = () => {
   const [closedCases, setClosedCases] = useState<ClosedCase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { parameters } = useSystemParameters();
 
   useEffect(() => {
     const fetchClosedCases = async () => {
-      if (!parameters?.relays || parameters.relays.length === 0) {
-        console.warn('No relays available');
-        setIsLoading(false);
-        return;
-      }
-
-      const relays = parameters.relays;
-      const pool = new SimplePool();
-
       try {
-        console.log('🔍 Fetching KIND 37044 master process records...');
-        
-        // Step 1: Fetch all KIND 37044 events (broader query, no tag filter)
-        const recordEvents = await pool.querySync(relays, {
-          kinds: [37044],
-          limit: 500
-        });
+        console.log('🔍 Fetching KIND 37044 master process records via server...');
+
+        // Step 1: Fetch all KIND 37044 events via server-side relay query
+        const recordEvents = await queryServer({ kinds: [37044], limit: 500 });
 
         console.log(`📋 Found ${recordEvents.length} KIND 37044 events total`);
 
         // Step 2: Filter for closed status client-side
-        const closedRecords = recordEvents.filter((event: NostrEvent) => {
-          const statusTag = event.tags.find(tag => tag[0] === 'status');
+        const closedRecords = recordEvents.filter((event: any) => {
+          const statusTag = event.tags?.find((tag: string[]) => tag[0] === 'status');
           return statusTag?.[1] === 'closed';
         });
 
         console.log(`✅ Filtered to ${closedRecords.length} closed process records`);
 
         if (closedRecords.length === 0) {
-          console.warn('No closed process records found');
           setClosedCases([]);
           setIsLoading(false);
-          pool.close(relays);
           return;
         }
 
-        // Step 3: Extract all referenced KIND 87044 IDs from "d" tags
+        // Step 3: Extract referenced KIND 87044 IDs
         const processStartIds = closedRecords
-          .map(e => e.tags.find(t => t[0] === 'd')?.[1])
+          .map((e: any) => e.tags?.find((t: string[]) => t[0] === 'd')?.[1])
           .filter(Boolean) as string[];
 
         const uniqueStartIds = Array.from(new Set(processStartIds));
-        
-        console.log(`🔗 Found ${uniqueStartIds.length} unique KIND 87044 references`);
 
-        // Step 4: Fetch all KIND 87044 (process start) events
+        // Step 4: Fetch KIND 87044 (process start) events
         const startEvents = uniqueStartIds.length > 0
-          ? await pool.querySync(relays, {
-              kinds: [87044],
-              ids: uniqueStartIds
-            })
+          ? await queryServer({ kinds: [87044], ids: uniqueStartIds })
           : [];
 
         console.log(`📥 Fetched ${startEvents.length} KIND 87044 start events`);
 
-        // Step 5: Create a map for quick lookup
-        const startById = new Map(startEvents.map(e => [e.id, e]));
+        // Step 5: Create lookup map
+        const startById = new Map(startEvents.map((e: any) => [e.id, e]));
 
-        // Step 6: Merge KIND 37044 + KIND 87044 data into ClosedCase
-        const cases: ClosedCase[] = closedRecords.map((record: NostrEvent) => {
-          const dTag = record.tags.find(t => t[0] === 'd');
+        // Step 6: Merge into ClosedCase objects
+        const cases: ClosedCase[] = closedRecords.map((record: any) => {
+          const tags: string[][] = record.tags || [];
+          const dTag = tags.find(t => t[0] === 'd');
           const processId = dTag?.[1] || record.id;
           const start = processId ? startById.get(processId) : undefined;
+          const startTags: string[][] = start?.tags || [];
 
-          const statusTag = record.tags.find(t => t[0] === 'status');
-          const titleTag = record.tags.find(t => t[0] === 'title');
-          const langTagRecord = record.tags.find(t => t[0] === 'lang');
-          const langTagStart = start?.tags.find(t => t[0] === 'lang');
-          const topicTag = record.tags.find(t => t[0] === 'topic') || start?.tags.find(t => t[0] === 'topic');
-          const openedAtTag = record.tags.find(t => t[0] === 'opened_at');
-          const closedAtTag = record.tags.find(t => t[0] === 'closed_at');
+          const statusTag = tags.find(t => t[0] === 'status');
+          const titleTag = tags.find(t => t[0] === 'title');
+          const langTagRecord = tags.find(t => t[0] === 'lang');
+          const langTagStart = startTags.find(t => t[0] === 'lang');
+          const topicTag = tags.find(t => t[0] === 'topic') || startTags.find(t => t[0] === 'topic');
+          const openedAtTag = tags.find(t => t[0] === 'opened_at');
+          const closedAtTag = tags.find(t => t[0] === 'closed_at');
 
-          const participantsRecord = record.tags.filter(t => t[0] === 'p');
+          const participantsRecord = tags.filter(t => t[0] === 'p');
           const participants = participantsRecord.map(t => t[1]);
 
           const lang = langTagRecord?.[1] || langTagStart?.[1] || 'en';
@@ -133,26 +126,16 @@ export const useNostrClosedCases = () => {
         cases.sort((a, b) => b.closedAt - a.closedAt);
 
         console.log(`🎯 Final closed cases: ${cases.length}`);
-        if (cases.length > 0) {
-          console.log('📄 Sample case:', {
-            id: cases[0].id,
-            topic: cases[0].topic,
-            participants: cases[0].participants.length,
-            content: cases[0].content.substring(0, 100)
-          });
-        }
-
         setClosedCases(cases);
       } catch (error) {
         console.error('❌ Error fetching closed cases:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 
     fetchClosedCases();
-  }, [parameters]);
+  }, []);
 
   return { closedCases, isLoading };
 };
