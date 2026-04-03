@@ -381,6 +381,11 @@ export default function Pending() {
                       </span>
                     </div>
 
+                    <p className="text-[11px] text-muted-foreground/70 pt-1">
+                      Note: A 10% service fee is applied to each payment to support the Unconditional Payment infrastructure.
+                      The amounts shown above already include this fee.
+                    </p>
+
                     {hasUnconfirmed && remainingBalance < 0 && (confirmedBalance + unconfirmedBalance - totalLana) >= 0 && (
                       <Alert className="border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-800">
                         <AlertTriangle className="h-4 w-4 text-orange-500" />
