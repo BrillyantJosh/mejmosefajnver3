@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   QrCode,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { Html5Qrcode } from "html5-qrcode";
 import { useAuth } from "@/contexts/AuthContext";
@@ -91,6 +92,9 @@ export default function DiscountSell() {
   const [selectedWallet, setSelectedWallet] = useState("");
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [balancesLoading, setBalancesLoading] = useState(false);
+  const [utxoCount, setUtxoCount] = useState<number | null>(null);
+  const [utxoLoading, setUtxoLoading] = useState(false);
+  const MAX_UTXOS = 20;
 
   // Step 2: Select Currency
   const [selectedCurrency, setSelectedCurrency] = useState("");
@@ -164,6 +168,32 @@ export default function DiscountSell() {
     };
     fetchBalances();
   }, [availableWallets, parameters?.electrumServers]);
+
+  // Check UTXO count when wallet is selected
+  useEffect(() => {
+    if (!selectedWallet) {
+      setUtxoCount(null);
+      return;
+    }
+    const checkUtxos = async () => {
+      setUtxoLoading(true);
+      try {
+        const { data } = await supabase.functions.invoke('get-utxo-info', {
+          body: { address: selectedWallet, electrumServers: parameters?.electrumServers || [] }
+        });
+        if (data?.success) {
+          setUtxoCount(data.utxoCount || 0);
+        }
+      } catch (e) {
+        console.error('UTXO check failed:', e);
+      } finally {
+        setUtxoLoading(false);
+      }
+    };
+    checkUtxos();
+  }, [selectedWallet, parameters?.electrumServers]);
+
+  const tooManyUtxos = utxoCount !== null && utxoCount > MAX_UTXOS;
 
   // Available currencies from system params
   const activeCurrencies = useMemo(() => {
@@ -630,12 +660,45 @@ export default function DiscountSell() {
                 )}
               </div>
 
+              {/* UTXO consolidation warning */}
+              {selectedWallet && tooManyUtxos && (
+                <div className="rounded-xl border-2 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                        Wallet Consolidation Required
+                      </p>
+                      <p className="text-xs text-red-600 dark:text-red-500">
+                        This wallet has <strong>{utxoCount} UTXOs</strong> which exceeds the maximum of {MAX_UTXOS} inputs per transaction.
+                        You must consolidate your wallet before you can sell LANA.
+                      </p>
+                      <a
+                        href="https://youtu.be/kBi4MKcc4qM?si=bIeWS_dlgHjFproo"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:underline"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Watch: How to consolidate your wallet
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedWallet && utxoLoading && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Checking wallet UTXOs...
+                </p>
+              )}
+
               <div className="flex justify-end">
                 <button
                   onClick={() => setStep(2)}
-                  disabled={!selectedWallet}
+                  disabled={!selectedWallet || tooManyUtxos || utxoLoading}
                   className={`rounded-xl px-6 py-3 font-semibold text-white transition-all ${
-                    selectedWallet
+                    selectedWallet && !tooManyUtxos && !utxoLoading
                       ? "bg-primary hover:bg-primary/90 shadow-lg"
                       : "bg-muted-foreground/30 cursor-not-allowed"
                   }`}
