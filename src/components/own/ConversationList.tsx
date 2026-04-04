@@ -69,10 +69,7 @@ export default function ConversationList({ conversations, selectedId, onSelect }
               )}
             </div>
 
-            <div className="mt-2 flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs">
-                {conv.status}
-              </Badge>
+            <div className="mt-2">
               <Badge className={`text-xs border ${phaseInfo.bg} ${phaseInfo.color}`}>
                 {phaseInfo.emoji} {phaseInfo.label}
               </Badge>
