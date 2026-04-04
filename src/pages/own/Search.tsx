@@ -202,54 +202,74 @@ export default function Search() {
                     </div>
                   </div>
 
-                  {facilitator && (
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">Facilitator</span>
-                      <div className="flex items-center gap-2 mt-1">
-                        <UserAvatar
-                          pubkey={ownCase.pubkey}
-                          picture={facilitator.picture}
-                          name={facilitator.display_name || facilitator.full_name || `${ownCase.pubkey.slice(0, 8)}...`}
-                          className="h-6 w-6"
-                        />
-                        <span className="font-medium">
-                          {facilitator.display_name || facilitator.full_name || `${ownCase.pubkey.slice(0, 8)}...`}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                  {/* Roles — grouped by role, no duplicates */}
+                  {(() => {
+                    const roles = ownCase.participantRoles || [];
+                    const facilitatorEntry = roles.find(r => r.role === 'facilitator');
+                    const initiatorEntry = roles.find(r => r.role === 'initiator');
+                    const participantEntries = roles.filter(r => r.role === 'participant');
+                    const guestEntries = roles.filter(r => r.role === 'guest');
+                    // Dedupe: don't show facilitator again in other sections
+                    const facilitatorPk = facilitatorEntry?.pubkey;
 
-                  {ownCase.participants.length > 0 && (
-                    <div className="text-sm">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                        <Users className="h-4 w-4" />
-                        <span>Participants ({ownCase.participants.length})</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {Array.from(new Set(ownCase.participants)).slice(0, 5).map((pubkey) => {
-                          const profile = profiles.get(pubkey);
-                          return (
-                            <div key={pubkey} className="flex items-center gap-1.5 bg-secondary px-2 py-1 rounded-md">
-                              <UserAvatar
-                                pubkey={pubkey}
-                                picture={profile?.picture}
-                                name={profile?.display_name || profile?.full_name || `${pubkey.slice(0, 2)} ${pubkey.slice(2, 8)}...`}
-                                className="h-5 w-5"
-                              />
-                              <span className="text-xs">
-                                {profile?.display_name || profile?.full_name || `${pubkey.slice(0, 2)} ${pubkey.slice(2, 8)}...`}
-                              </span>
+                    const renderPerson = (pubkey: string, size: string = 'text-xs', avatarSize: string = 'h-5 w-5') => {
+                      const profile = profiles.get(pubkey);
+                      const name = profile?.display_name || profile?.full_name || `${pubkey.slice(0, 8)}...`;
+                      return (
+                        <div key={pubkey} className="flex items-center gap-1.5 bg-muted/50 border border-border/50 px-2 py-1 rounded-md">
+                          <UserAvatar pubkey={pubkey} picture={profile?.picture} name={name} className={avatarSize} />
+                          <span className={size}>{name}</span>
+                        </div>
+                      );
+                    };
+
+                    return (
+                      <div className="space-y-3">
+                        {/* Facilitator */}
+                        {facilitatorEntry && (
+                          <div>
+                            <span className="text-xs text-muted-foreground font-medium">Facilitator</span>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {renderPerson(facilitatorEntry.pubkey, 'text-sm font-medium', 'h-6 w-6')}
                             </div>
-                          );
-                        })}
-                        {ownCase.participants.length > 5 && (
-                          <Badge variant="secondary" className="text-xs">
-                            +{ownCase.participants.length - 5} more
-                          </Badge>
+                          </div>
+                        )}
+
+                        {/* Initiator (if different from facilitator) */}
+                        {initiatorEntry && initiatorEntry.pubkey !== facilitatorPk && (
+                          <div>
+                            <span className="text-xs text-muted-foreground font-medium">Initiator</span>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {renderPerson(initiatorEntry.pubkey, 'text-sm font-medium', 'h-6 w-6')}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Participants */}
+                        {participantEntries.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground font-medium">Participants ({participantEntries.length})</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {participantEntries.filter(p => p.pubkey !== facilitatorPk).map(p => renderPerson(p.pubkey, 'text-sm', 'h-6 w-6'))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Guests */}
+                        {guestEntries.length > 0 && (
+                          <div>
+                            <span className="text-xs text-muted-foreground font-medium">Guests ({guestEntries.length})</span>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {guestEntries.filter(g => g.pubkey !== facilitatorPk).map(g => renderPerson(g.pubkey))}
+                            </div>
+                          </div>
                         )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-3 border-t">
                     <div className="flex gap-2 flex-wrap">

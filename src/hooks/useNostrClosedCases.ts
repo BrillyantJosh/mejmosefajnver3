@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
+export interface ParticipantWithRole {
+  pubkey: string;
+  role: 'initiator' | 'facilitator' | 'participant' | 'guest';
+}
+
 export interface ClosedCase {
   id: string;
   recordId: string;
@@ -10,6 +15,7 @@ export interface ClosedCase {
   status: string;
   lang: string;
   participants: string[];
+  participantRoles: ParticipantWithRole[];
   title?: string;
   topic?: string;
   triggerEventId?: string;
@@ -93,6 +99,10 @@ export const useNostrClosedCases = () => {
 
           const participantsRecord = tags.filter(t => t[0] === 'p');
           const participants = participantsRecord.map(t => t[1]);
+          const participantRoles: ParticipantWithRole[] = participantsRecord.map(t => ({
+            pubkey: t[1],
+            role: (t[3] || 'participant') as ParticipantWithRole['role'],
+          }));
 
           const lang = langTagRecord?.[1] || langTagStart?.[1] || 'en';
           const closedAt = closedAtTag ? parseInt(closedAtTag[1]) : record.created_at;
@@ -112,6 +122,7 @@ export const useNostrClosedCases = () => {
             status: statusTag?.[1] || 'closed',
             lang,
             participants,
+            participantRoles,
             title: titleTag?.[1],
             topic: topicTag?.[1],
             triggerEventId: processId,

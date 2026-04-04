@@ -4,7 +4,7 @@ import { Shield, Search, Briefcase } from "lucide-react";
 
 const ownNavItems = [
   { title: "OWN", path: "/own", icon: Shield },
-  { title: "Search", path: "/own/search", icon: Search },
+  { title: "Cases", path: "/own/search", icon: Search },
   { title: "MY cases", path: "/own/my-cases", icon: Briefcase },
 ];
 
