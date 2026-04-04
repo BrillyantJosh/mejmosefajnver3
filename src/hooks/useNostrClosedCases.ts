@@ -140,18 +140,48 @@ export const useNostrClosedCases = () => {
           ? await queryServer({ kinds: [87944], '#e': caseIds, limit: 500 })
           : [];
 
+        // Build a map: processId → roles from transcript messages
+        const transcriptRolesMap = new Map<string, ParticipantWithRole[]>();
         const transcriptProcessIds = new Set<string>();
+
         for (const evt of transcriptEvents) {
           const eTags = (evt.tags || []).filter((t: string[]) => t[0] === 'e');
-          for (const tag of eTags) {
-            transcriptProcessIds.add(tag[1]);
-          }
+          const processId = eTags[0]?.[1];
+          if (processId) transcriptProcessIds.add(processId);
+
+          // Extract roles from transcript content messages
+          try {
+            const content = JSON.parse(evt.content);
+            const roleMap = new Map<string, string>();
+            for (const msg of (content.messages || [])) {
+              if (msg.sender_pubkey && msg.role && !roleMap.has(msg.sender_pubkey)) {
+                roleMap.set(msg.sender_pubkey, msg.role);
+              }
+            }
+            if (processId && roleMap.size > 0) {
+              const roles: ParticipantWithRole[] = Array.from(roleMap.entries()).map(([pubkey, role]) => ({
+                pubkey,
+                role: role as ParticipantWithRole['role'],
+              }));
+              transcriptRolesMap.set(processId, roles);
+            }
+          } catch {}
         }
 
-        const casesWithTranscript = cases.filter(c => {
-          const cleanId = c.id.replace(/^own:/, '');
-          return transcriptProcessIds.has(cleanId);
-        });
+        const casesWithTranscript = cases
+          .filter(c => {
+            const cleanId = c.id.replace(/^own:/, '');
+            return transcriptProcessIds.has(cleanId);
+          })
+          .map(c => {
+            // Override participantRoles from transcript if available
+            const cleanId = c.id.replace(/^own:/, '');
+            const transcriptRoles = transcriptRolesMap.get(cleanId);
+            if (transcriptRoles && transcriptRoles.length > 0) {
+              return { ...c, participantRoles: transcriptRoles };
+            }
+            return c;
+          });
 
         // Sort by closed date, newest first
         casesWithTranscript.sort((a, b) => b.closedAt - a.closedAt);
