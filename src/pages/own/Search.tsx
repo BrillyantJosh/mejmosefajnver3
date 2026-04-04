@@ -277,18 +277,22 @@ export default function Search() {
                         <span className="text-xs md:text-sm text-muted-foreground">Pricing not available</span>
                       )}
                     </div>
-                    {visibility === 'public' && lanAmount > 0 && (
-                      <Button 
-                        className="bg-cyan-600 hover:bg-cyan-700 w-full md:w-auto text-sm"
-                        onClick={() => handleGetTranscript(ownCase.id, ownCase.recordId, ownCase.title || ownCase.topic || ownCase.initialContent)}
-                        disabled={revenueLoading || paymentsLoading}
-                      >
-                        {paymentsLoading && (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
-                        {paymentsLoading ? 'Checking...' : isPaid ? 'View Transcript' : 'Get Transcript'}
-                      </Button>
-                    )}
+                    <Button
+                      className="bg-cyan-600 hover:bg-cyan-700 w-full md:w-auto text-sm"
+                      onClick={() => {
+                        if (visibility === 'public' && (isPaid || lanAmount <= 0)) {
+                          navigate(`/own/transcript/${ownCase.id}`);
+                        } else {
+                          handleGetTranscript(ownCase.id, ownCase.recordId, ownCase.title || ownCase.topic || ownCase.initialContent);
+                        }
+                      }}
+                      disabled={revenueLoading || paymentsLoading}
+                    >
+                      {paymentsLoading && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      {paymentsLoading ? 'Checking...' : isPaid ? 'View Transcript' : 'View Transcript'}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
