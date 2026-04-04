@@ -122,11 +122,31 @@ export const useNostrClosedCases = () => {
           };
         });
 
-        // Step 7: Sort by closed date, newest first
-        cases.sort((a, b) => b.closedAt - a.closedAt);
+        // Step 7: Check which cases have KIND 87944 transcripts
+        // Only show cases that have a published transcript
+        const caseIds = cases.map(c => c.id.replace(/^own:/, ''));
+        const transcriptEvents = caseIds.length > 0
+          ? await queryServer({ kinds: [87944], '#e': caseIds, limit: 500 })
+          : [];
 
-        console.log(`🎯 Final closed cases: ${cases.length}`);
-        setClosedCases(cases);
+        const transcriptProcessIds = new Set<string>();
+        for (const evt of transcriptEvents) {
+          const eTags = (evt.tags || []).filter((t: string[]) => t[0] === 'e');
+          for (const tag of eTags) {
+            transcriptProcessIds.add(tag[1]);
+          }
+        }
+
+        const casesWithTranscript = cases.filter(c => {
+          const cleanId = c.id.replace(/^own:/, '');
+          return transcriptProcessIds.has(cleanId);
+        });
+
+        // Sort by closed date, newest first
+        casesWithTranscript.sort((a, b) => b.closedAt - a.closedAt);
+
+        console.log(`🎯 Closed cases: ${cases.length} total, ${casesWithTranscript.length} with transcript`);
+        setClosedCases(casesWithTranscript);
       } catch (error) {
         console.error('❌ Error fetching closed cases:', error);
       } finally {
