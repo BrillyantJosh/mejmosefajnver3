@@ -174,11 +174,16 @@ export const useNostrClosedCases = () => {
             return transcriptProcessIds.has(cleanId);
           })
           .map(c => {
-            // Override participantRoles from transcript if available
+            // Merge: transcript roles (accurate) + remaining p-tag pubkeys (as guests)
             const cleanId = c.id.replace(/^own:/, '');
             const transcriptRoles = transcriptRolesMap.get(cleanId);
             if (transcriptRoles && transcriptRoles.length > 0) {
-              return { ...c, participantRoles: transcriptRoles };
+              const knownPubkeys = new Set(transcriptRoles.map(r => r.pubkey));
+              // Add any p-tag pubkeys NOT in transcript as guests
+              const remaining = c.participants
+                .filter(pk => !knownPubkeys.has(pk))
+                .map(pk => ({ pubkey: pk, role: 'guest' as ParticipantWithRole['role'] }));
+              return { ...c, participantRoles: [...transcriptRoles, ...remaining] };
             }
             return c;
           });
