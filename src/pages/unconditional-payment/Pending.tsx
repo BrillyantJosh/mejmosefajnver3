@@ -185,7 +185,7 @@ export default function Pending() {
             <SelectTrigger>
               <SelectValue placeholder="Choose a wallet..." />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position="popper" side="bottom" align="start" sideOffset={4} className="max-h-[300px] overflow-y-auto">
               {wallets
                 .filter(wallet => !wallet.walletType?.toLowerCase().includes('lana8wonder'))
                 .map(wallet => {
