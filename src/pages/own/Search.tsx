@@ -280,7 +280,7 @@ export default function Search() {
                     <Button
                       className="bg-cyan-600 hover:bg-cyan-700 w-full md:w-auto text-sm"
                       onClick={() => {
-                        if (visibility === 'public' && (isPaid || lanAmount <= 0)) {
+                        if (isPaid || lanAmount <= 0) {
                           navigate(`/own/transcript/${ownCase.id}`);
                         } else {
                           handleGetTranscript(ownCase.id, ownCase.recordId, ownCase.title || ownCase.topic || ownCase.initialContent);
