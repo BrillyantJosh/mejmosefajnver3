@@ -63,15 +63,15 @@ export default function Transcript() {
   const getRoleBadgeColor = (role: string) => {
     switch (role.toLowerCase()) {
       case 'facilitator':
-        return 'bg-purple-500/10 text-purple-700 hover:bg-purple-500/20';
+        return 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
       case 'initiator':
-        return 'bg-blue-500/10 text-blue-700 hover:bg-blue-500/20';
+        return 'bg-gray-300 text-gray-900 dark:bg-gray-600 dark:text-gray-100';
       case 'participant':
-        return 'bg-green-500/10 text-green-700 hover:bg-green-500/20';
+        return 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
       case 'guest':
-        return 'bg-gray-500/10 text-gray-700 hover:bg-gray-500/20';
+        return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
       default:
-        return 'bg-secondary';
+        return 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
     }
   };
 
@@ -210,7 +210,7 @@ export default function Transcript() {
               return (
                 <div
                   key={`${message.source_event_id}-${message.seq}`}
-                  className="flex gap-3 p-3 sm:p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
+                  className="flex gap-3 p-3 sm:p-4 rounded-lg bg-muted/40 border border-border/50"
                 >
                   <UserAvatar
                     pubkey={message.sender_pubkey}
@@ -221,7 +221,7 @@ export default function Transcript() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="font-medium text-sm">
+                      <span className="font-semibold text-sm sm:text-base">
                         {profile?.display_name || profile?.full_name || `${message.sender_pubkey.slice(0, 8)}...`}
                       </span>
                       <Badge className={getRoleBadgeColor(message.role)} variant="secondary">
@@ -251,7 +251,7 @@ export default function Transcript() {
 
                     {/* Text message */}
                     {parsed.type === 'text' && (
-                      <p className="text-sm whitespace-pre-wrap break-words">{parsed.content}</p>
+                      <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">{parsed.content}</p>
                     )}
 
                     {/* Attachments */}
