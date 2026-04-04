@@ -7,8 +7,42 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ArrowLeft, Calendar, Clock, Image as ImageIcon, Mic, File } from 'lucide-react';
+import { AudioPlayer } from '@/components/AudioPlayer';
 import { format } from 'date-fns';
 import { useMemo } from 'react';
+
+const API_URL = import.meta.env.VITE_API_URL ?? '';
+
+function parseMessageContent(text: string): { type: 'text' | 'audio'; content: string; audioUrl?: string; audioDuration?: number; transcript?: string } {
+  if (text.startsWith('audio:')) {
+    const raw = text.slice('audio:'.length).trim();
+
+    // Extract transcript
+    let beforeTranscript = raw;
+    let transcript: string | undefined;
+    const transcriptIdx = raw.indexOf('|transcript:');
+    if (transcriptIdx !== -1) {
+      transcript = raw.slice(transcriptIdx + '|transcript:'.length);
+      beforeTranscript = raw.slice(0, transcriptIdx);
+    }
+
+    // Extract duration
+    let path = beforeTranscript;
+    let audioDuration: number | undefined;
+    const durMatch = beforeTranscript.match(/^(.+)\|dur:(\d+)$/);
+    if (durMatch) {
+      path = durMatch[1];
+      audioDuration = parseInt(durMatch[2], 10);
+    }
+
+    const audioUrl = path.startsWith('http')
+      ? path
+      : `${API_URL}/api/storage/dm-audio/${path}`;
+
+    return { type: 'audio', content: transcript || '', audioUrl, audioDuration, transcript };
+  }
+  return { type: 'text', content: text };
+}
 
 export default function Transcript() {
   const { caseId } = useParams<{ caseId: string }>();
@@ -171,22 +205,23 @@ export default function Transcript() {
             {transcript.data.messages.map((message) => {
               const profile = profiles.get(message.sender_pubkey);
               const icon = getMessageTypeIcon(message.type);
+              const parsed = parseMessageContent(message.text);
 
               return (
                 <div
                   key={`${message.source_event_id}-${message.seq}`}
-                  className="flex gap-3 p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
+                  className="flex gap-3 p-3 sm:p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
                 >
                   <UserAvatar
                     pubkey={message.sender_pubkey}
                     picture={profile?.picture}
                     name={profile?.display_name || profile?.full_name || `${message.sender_pubkey.slice(0, 8)}...`}
-                    className="h-10 w-10 flex-shrink-0"
+                    className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
                   />
-                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="font-medium">
+                      <span className="font-medium text-sm">
                         {profile?.display_name || profile?.full_name || `${message.sender_pubkey.slice(0, 8)}...`}
                       </span>
                       <Badge className={getRoleBadgeColor(message.role)} variant="secondary">
@@ -201,31 +236,45 @@ export default function Transcript() {
                         </span>
                       )}
                     </div>
-                    
-                    <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>
-                    
+
+                    {/* Audio message */}
+                    {parsed.type === 'audio' && parsed.audioUrl && (
+                      <div className="mt-1">
+                        <AudioPlayer audioUrl={parsed.audioUrl} initialDuration={parsed.audioDuration} />
+                        {parsed.transcript && (
+                          <p className="text-xs text-muted-foreground italic mt-1 whitespace-pre-wrap break-words">
+                            {parsed.transcript}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Text message */}
+                    {parsed.type === 'text' && (
+                      <p className="text-sm whitespace-pre-wrap break-words">{parsed.content}</p>
+                    )}
+
+                    {/* Attachments */}
                     {message.attachments && message.attachments.length > 0 && (
                       <div className="mt-2 space-y-2">
                         {message.attachments.map((attachment, idx) => (
-                          <div key={idx} className="text-xs text-muted-foreground">
+                          <div key={idx}>
                             {attachment.kind === 'image' && (
                               <img
                                 src={attachment.url}
                                 alt="Attachment"
-                                className="max-w-xs rounded border"
+                                className="max-w-full sm:max-w-xs rounded border"
                               />
                             )}
                             {attachment.kind === 'audio' && (
-                              <audio controls className="max-w-xs">
-                                <source src={attachment.url} />
-                              </audio>
+                              <AudioPlayer audioUrl={attachment.url} />
                             )}
                             {attachment.kind === 'file' && (
                               <a
                                 href={attachment.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-500 hover:underline"
+                                className="text-sm text-blue-500 hover:underline"
                               >
                                 📎 Download file
                               </a>
