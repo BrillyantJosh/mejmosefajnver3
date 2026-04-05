@@ -210,7 +210,7 @@ const Projects = () => {
         </Button>
       </div>
 
-      <ProjectsSummaryBar />
+      <ProjectsSummaryBar projects={filteredProjects} donationSummary={donationSummary} isLoading={isLoading} />
 
       {/* Filter Tabs */}
       <div className="flex flex-wrap gap-2">

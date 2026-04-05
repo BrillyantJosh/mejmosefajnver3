@@ -1,19 +1,15 @@
-import { useNostrProjects, ProjectData } from "@/hooks/useNostrProjects";
-import { useNostrAllProjectDonations } from "@/hooks/useNostrAllProjectDonations";
+import { ProjectData } from "@/hooks/useNostrProjects";
+import { AllProjectsDonationSummary } from "@/hooks/useNostrAllProjectDonations";
 import { Target, TrendingUp, Loader2 } from "lucide-react";
 import { useMemo } from "react";
 
-const ProjectsSummaryBar = () => {
-  const { projects, isLoading: projectsLoading } = useNostrProjects();
-  
-  // Extract visible project IDs
-  const visibleProjectIds = useMemo(() => 
-    projects.map(p => p.id), 
-    [projects]
-  );
-  
-  const { summary, isLoading: donationsLoading } = useNostrAllProjectDonations(visibleProjectIds);
+interface ProjectsSummaryBarProps {
+  projects: ProjectData[];
+  donationSummary: AllProjectsDonationSummary;
+  isLoading?: boolean;
+}
 
+const ProjectsSummaryBar = ({ projects, donationSummary, isLoading = false }: ProjectsSummaryBarProps) => {
   const totalGoal = useMemo(() => {
     return projects.reduce((sum, project) => {
       const goal = parseFloat(project.fiatGoal);
@@ -21,7 +17,13 @@ const ProjectsSummaryBar = () => {
     }, 0);
   }, [projects]);
 
-  const isLoading = projectsLoading || donationsLoading;
+  const totalRaised = useMemo(() => {
+    let sum = 0;
+    for (const p of projects) {
+      sum += donationSummary.perProject.get(p.id) || 0;
+    }
+    return sum;
+  }, [projects, donationSummary.perProject]);
 
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -30,8 +32,8 @@ const ProjectsSummaryBar = () => {
     }).format(amount);
   };
 
-  const progressPercentage = totalGoal > 0 
-    ? Math.min((summary.totalRaisedFiat / totalGoal) * 100, 100) 
+  const progressPercentage = totalGoal > 0
+    ? Math.min((totalRaised / totalGoal) * 100, 100)
     : 0;
 
   if (isLoading) {
@@ -65,7 +67,7 @@ const ProjectsSummaryBar = () => {
         <div className="hidden md:flex flex-1 max-w-xs mx-4">
           <div className="w-full">
             <div className="h-3 bg-muted rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500"
                 style={{ width: `${progressPercentage}%` }}
               />
@@ -84,7 +86,7 @@ const ProjectsSummaryBar = () => {
           <div>
             <p className="text-sm text-muted-foreground">Total Raised</p>
             <p className="text-xl font-bold text-foreground">
-              €{formatAmount(summary.totalRaisedFiat)}
+              €{formatAmount(totalRaised)}
             </p>
           </div>
         </div>
@@ -93,7 +95,7 @@ const ProjectsSummaryBar = () => {
       {/* Mobile progress bar */}
       <div className="md:hidden mt-4">
         <div className="h-3 bg-muted rounded-full overflow-hidden">
-          <div 
+          <div
             className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500"
             style={{ width: `${progressPercentage}%` }}
           />
