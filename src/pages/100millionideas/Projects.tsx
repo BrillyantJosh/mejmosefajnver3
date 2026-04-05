@@ -38,30 +38,32 @@ const Projects = () => {
     : projects.filter(p => !overrides[p.id]?.hidden);
 
   // Apply user filter
+  // "Open" = still collecting funds (not completed, not blocked)
+  // "Funded" = admin marked as completed (fully funded / finished)
   const filteredProjects = useMemo(() => {
     switch (filter) {
       case 'open':
         return visibleProjects.filter(p =>
-          p.status === 'active' && !p.isBlocked && !overrides[p.id]?.completed
+          !overrides[p.id]?.completed && !p.isBlocked
         );
       case 'completed':
-        return visibleProjects.filter(p => !!overrides[p.id]?.completed);
       case 'funded':
-        return visibleProjects.filter(p =>
-          p.status === 'active' && !p.isBlocked && !overrides[p.id]?.completed && p.wallet
-        );
+        return visibleProjects.filter(p => !!overrides[p.id]?.completed);
       case 'all':
       default:
         return visibleProjects;
     }
   }, [visibleProjects, filter, overrides]);
 
+  const openCount = visibleProjects.filter(p => !overrides[p.id]?.completed && !p.isBlocked).length;
+  const completedCount = visibleProjects.filter(p => !!overrides[p.id]?.completed).length;
+
   const filterOptions: { value: ProjectFilter; label: string; count: number }[] = useMemo(() => [
-    { value: 'open', label: 'Open', count: visibleProjects.filter(p => p.status === 'active' && !p.isBlocked && !overrides[p.id]?.completed).length },
+    { value: 'open', label: 'Open', count: openCount },
     { value: 'all', label: 'All', count: visibleProjects.length },
-    { value: 'completed', label: 'Completed', count: visibleProjects.filter(p => !!overrides[p.id]?.completed).length },
-    { value: 'funded', label: 'Funded', count: visibleProjects.filter(p => p.status === 'active' && !p.isBlocked && !overrides[p.id]?.completed && p.wallet).length },
-  ], [visibleProjects, overrides]);
+    { value: 'completed', label: 'Completed', count: completedCount },
+    { value: 'funded', label: 'Funded', count: completedCount },
+  ], [visibleProjects, openCount, completedCount]);
 
   const publishNostrEvent = async (eventTemplate: { kind: number; tags: string[][]; content: string }) => {
     if (!session?.nostrPrivateKey) return;
