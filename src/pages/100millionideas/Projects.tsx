@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNostrProjects } from "@/hooks/useNostrProjects";
 import ProjectCard from "@/components/100millionideas/ProjectCard";
 import ProjectsSummaryBar from "@/components/100millionideas/ProjectsSummaryBar";
@@ -11,6 +11,8 @@ import { ProjectOverrides } from "@/types/admin";
 import { finalizeEvent } from "nostr-tools";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+
+type ProjectFilter = 'open' | 'all' | 'completed' | 'funded';
 
 const hexToBytes = (hex: string): Uint8Array => {
   const bytes = new Uint8Array(hex.length / 2);
@@ -26,6 +28,7 @@ const Projects = () => {
   const { is100MAdmin, appSettings, updateProjectOverrides } = useAdmin();
   const { session } = useAuth();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [filter, setFilter] = useState<ProjectFilter>('open');
 
   const overrides: ProjectOverrides = appSettings?.project_overrides || {};
 
@@ -33,6 +36,32 @@ const Projects = () => {
   const visibleProjects = is100MAdmin
     ? projects
     : projects.filter(p => !overrides[p.id]?.hidden);
+
+  // Apply user filter
+  const filteredProjects = useMemo(() => {
+    switch (filter) {
+      case 'open':
+        return visibleProjects.filter(p =>
+          p.status === 'active' && !p.isBlocked && !overrides[p.id]?.completed
+        );
+      case 'completed':
+        return visibleProjects.filter(p => !!overrides[p.id]?.completed);
+      case 'funded':
+        return visibleProjects.filter(p =>
+          p.status === 'active' && !p.isBlocked && !overrides[p.id]?.completed && p.wallet
+        );
+      case 'all':
+      default:
+        return visibleProjects;
+    }
+  }, [visibleProjects, filter, overrides]);
+
+  const filterOptions: { value: ProjectFilter; label: string; count: number }[] = useMemo(() => [
+    { value: 'open', label: 'Open', count: visibleProjects.filter(p => p.status === 'active' && !p.isBlocked && !overrides[p.id]?.completed).length },
+    { value: 'all', label: 'All', count: visibleProjects.length },
+    { value: 'completed', label: 'Completed', count: visibleProjects.filter(p => !!overrides[p.id]?.completed).length },
+    { value: 'funded', label: 'Funded', count: visibleProjects.filter(p => p.status === 'active' && !p.isBlocked && !overrides[p.id]?.completed && p.wallet).length },
+  ], [visibleProjects, overrides]);
 
   const publishNostrEvent = async (eventTemplate: { kind: number; tags: string[][]; content: string }) => {
     if (!session?.nostrPrivateKey) return;
@@ -164,21 +193,41 @@ const Projects = () => {
 
       <ProjectsSummaryBar />
 
+      {/* Filter Tabs */}
+      <div className="flex flex-wrap gap-2">
+        {filterOptions.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => setFilter(opt.value)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              filter === opt.value
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+            }`}
+          >
+            {opt.label}
+            <span className={`ml-1.5 text-xs ${filter === opt.value ? 'text-primary-foreground/70' : 'text-muted-foreground/60'}`}>
+              {opt.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           <span className="ml-2 text-muted-foreground">Loading projects...</span>
         </div>
-      ) : visibleProjects.length === 0 ? (
+      ) : filteredProjects.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">No projects found yet.</p>
+          <p className="text-muted-foreground">No projects found for this filter.</p>
           <p className="text-sm text-muted-foreground mt-2">
-            Be the first to create a project on LanaCrowd!
+            Try selecting a different filter above.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {visibleProjects.map((project) => (
+          {filteredProjects.map((project) => (
             <ProjectCard
               key={project.eventId}
               project={project}
