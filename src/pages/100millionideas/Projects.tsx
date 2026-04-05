@@ -76,9 +76,9 @@ const Projects = () => {
     const completedCount = visibleProjects.filter(p => !!overrides[p.id]?.completed).length;
     return [
       { value: 'open' as ProjectFilter, label: 'Open', count: openCount },
-      { value: 'all' as ProjectFilter, label: 'All', count: visibleProjects.length },
       { value: 'funded' as ProjectFilter, label: 'Funded', count: fundedCount },
       { value: 'completed' as ProjectFilter, label: 'Completed', count: completedCount },
+      { value: 'all' as ProjectFilter, label: 'All', count: visibleProjects.length },
     ];
   }, [visibleProjects, overrides, donationSummary.perProject]);
 
