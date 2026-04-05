@@ -85,11 +85,12 @@ export function useAiAdvisorUnconditionalPayments() {
     
     console.log(`📋 Unconditional Payments: ${proposals.length} proposals, ${relevantPayments.length} relevant payments (of ${payments.length} total)`);
     
-    // Filter for pending (unpaid) - DO NOT filter by expiration to match Pending.tsx behavior
-    // Each item will have isExpired flag for display purposes
+    // Filter for pending (unpaid) where user is the PAYER (not recipient)
+    // This matches Pending.tsx behavior — only show what the user needs to pay
+    const userPubkey = session?.nostrHexId;
     const pendingProposals = proposals.filter(p => {
       const isPaid = paidProposalDTags.has(p.d) || paidProposalEventIds.has(p.eventId);
-      return !isPaid;
+      return !isPaid && p.payerPubkey === userPubkey;
     });
 
     // Count completed (paid)
