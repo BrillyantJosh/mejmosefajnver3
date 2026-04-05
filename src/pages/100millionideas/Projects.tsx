@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { useNostrProjects } from "@/hooks/useNostrProjects";
+import { useNostrProjects, ProjectData } from "@/hooks/useNostrProjects";
+import { useNostrAllProjectDonations } from "@/hooks/useNostrAllProjectDonations";
 import ProjectCard from "@/components/100millionideas/ProjectCard";
 import ProjectsSummaryBar from "@/components/100millionideas/ProjectsSummaryBar";
 import { Loader2, Layers } from "lucide-react";
@@ -37,33 +38,49 @@ const Projects = () => {
     ? projects
     : projects.filter(p => !overrides[p.id]?.hidden);
 
+  // Fetch per-project donation totals for funded detection
+  const projectIds = useMemo(() => visibleProjects.map(p => p.id), [visibleProjects]);
+  const { summary: donationSummary } = useNostrAllProjectDonations(projectIds);
+
+  // Check if a project is fully funded (raised >= 99% of goal)
+  const isFullyFunded = (p: ProjectData): boolean => {
+    const goal = parseFloat(p.fiatGoal);
+    if (!goal || goal <= 0) return false;
+    const raised = donationSummary.perProject.get(p.id) || 0;
+    return raised >= goal * 0.99;
+  };
+
   // Apply user filter
-  // "Open" = still collecting funds (not completed, not blocked)
-  // "Funded" = admin marked as completed (fully funded / finished)
+  // "Open" = still collecting funds (not fully funded, not completed, not blocked)
+  // "Funded" = fully funded (raised >= 99% of goal)
+  // "Completed" = admin marked as completed
   const filteredProjects = useMemo(() => {
     switch (filter) {
       case 'open':
         return visibleProjects.filter(p =>
-          !overrides[p.id]?.completed && !p.isBlocked
+          !overrides[p.id]?.completed && !p.isBlocked && !isFullyFunded(p)
         );
-      case 'completed':
       case 'funded':
+        return visibleProjects.filter(p => isFullyFunded(p) && !overrides[p.id]?.completed);
+      case 'completed':
         return visibleProjects.filter(p => !!overrides[p.id]?.completed);
       case 'all':
       default:
         return visibleProjects;
     }
-  }, [visibleProjects, filter, overrides]);
+  }, [visibleProjects, filter, overrides, donationSummary.perProject]);
 
-  const openCount = visibleProjects.filter(p => !overrides[p.id]?.completed && !p.isBlocked).length;
-  const completedCount = visibleProjects.filter(p => !!overrides[p.id]?.completed).length;
-
-  const filterOptions: { value: ProjectFilter; label: string; count: number }[] = useMemo(() => [
-    { value: 'open', label: 'Open', count: openCount },
-    { value: 'all', label: 'All', count: visibleProjects.length },
-    { value: 'completed', label: 'Completed', count: completedCount },
-    { value: 'funded', label: 'Funded', count: completedCount },
-  ], [visibleProjects, openCount, completedCount]);
+  const filterOptions: { value: ProjectFilter; label: string; count: number }[] = useMemo(() => {
+    const openCount = visibleProjects.filter(p => !overrides[p.id]?.completed && !p.isBlocked && !isFullyFunded(p)).length;
+    const fundedCount = visibleProjects.filter(p => isFullyFunded(p) && !overrides[p.id]?.completed).length;
+    const completedCount = visibleProjects.filter(p => !!overrides[p.id]?.completed).length;
+    return [
+      { value: 'open' as ProjectFilter, label: 'Open', count: openCount },
+      { value: 'all' as ProjectFilter, label: 'All', count: visibleProjects.length },
+      { value: 'funded' as ProjectFilter, label: 'Funded', count: fundedCount },
+      { value: 'completed' as ProjectFilter, label: 'Completed', count: completedCount },
+    ];
+  }, [visibleProjects, overrides, donationSummary.perProject]);
 
   const publishNostrEvent = async (eventTemplate: { kind: number; tags: string[][]; content: string }) => {
     if (!session?.nostrPrivateKey) return;

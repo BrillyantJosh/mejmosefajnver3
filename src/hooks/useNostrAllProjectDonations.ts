@@ -5,13 +5,15 @@ import { supabase } from '@/integrations/supabase/client';
 export interface AllProjectsDonationSummary {
   totalRaisedFiat: number;
   donationCount: number;
+  perProject: Map<string, number>; // projectId → totalFiat raised
 }
 
 export const useNostrAllProjectDonations = (visibleProjectIds: string[]) => {
   const { parameters } = useSystemParameters();
   const [summary, setSummary] = useState<AllProjectsDonationSummary>({
     totalRaisedFiat: 0,
-    donationCount: 0
+    donationCount: 0,
+    perProject: new Map(),
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -45,12 +47,11 @@ export const useNostrAllProjectDonations = (visibleProjectIds: string[]) => {
 
         let totalFiat = 0;
         let count = 0;
+        const perProject = new Map<string, number>();
 
         allDonationEvents.forEach((event: any) => {
-          // Get the project ID from donation event
           const projectTag = event.tags.find((t: string[]) => t[0] === 'project')?.[1];
 
-          // Skip donations for projects not in visible list
           if (!projectTag || !visibleProjectIds.includes(projectTag)) {
             return;
           }
@@ -61,13 +62,15 @@ export const useNostrAllProjectDonations = (visibleProjectIds: string[]) => {
             if (!isNaN(amount)) {
               totalFiat += amount;
               count++;
+              perProject.set(projectTag, (perProject.get(projectTag) || 0) + amount);
             }
           }
         });
 
         setSummary({
           totalRaisedFiat: totalFiat,
-          donationCount: count
+          donationCount: count,
+          perProject,
         });
       } catch (error) {
         console.error('Error fetching all donations:', error);
