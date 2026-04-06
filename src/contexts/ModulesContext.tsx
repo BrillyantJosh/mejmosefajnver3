@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -373,9 +373,9 @@ const DEFAULT_MODULES: ModuleConfig[] = [
   },
   {
     id: 'shop',
-    title: 'Shop',
-    description: 'Point of sale and invoice payments with LanaCoins',
-    icon: Store,
+    title: 'Send Lana',
+    description: 'Send LanaCoins and manage invoice payments',
+    icon: Send,
     path: '/shop/sell',
     gradient: 'from-emerald-500 to-green-500',
     enabled: true,
