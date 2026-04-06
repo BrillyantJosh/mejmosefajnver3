@@ -310,7 +310,7 @@ export default function RegisterWallet() {
                     <SelectValue placeholder="Select wallet type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {walletTypes?.filter(type => type.name !== 'Lana.Discount').map((type) => (
+                    {walletTypes?.filter(type => type.name !== 'Lana.Discount' && type.name !== 'LanaPays.Us').map((type) => (
                       <SelectItem key={type.id} value={type.name}>
                         <div className="flex flex-col">
                           <span className="font-medium">{type.name}</span>
