@@ -3,11 +3,12 @@ import { useAdmin } from '@/contexts/AdminContext';
 import { useNostrWallets } from '@/hooks/useNostrWallets';
 import { useWalletBalances } from '@/hooks/useWalletBalances';
 
-const WATCHED_TYPES = new Set(['Wallet', 'Main Wallet', 'Lana.Discount']);
+const WATCHED_TYPES = new Set(['Wallet', 'Main Wallet']);
 
 /**
- * Checks if the user's combined balance on Wallet + Main Wallet + Lana.Discount
+ * Checks if the user's combined balance on Wallet + Main Wallet
  * exceeds the admin-configured "warning_before_split" limit.
+ * Lana.Discount wallets are excluded — they are managed separately.
  */
 export function useWarningBeforeSplit() {
   const { appSettings } = useAdmin();

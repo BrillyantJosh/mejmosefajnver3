@@ -224,30 +224,36 @@ export default function Wallet() {
               {walletsWithBalances.some(w => w.balanceLoading) ? (
                 <Skeleton className="h-12 w-48" />
               ) : (
-                <>
-                  <p className="text-4xl font-bold text-green-600">
-                    {formatNumber(
-                      walletsWithBalances.reduce((sum, w) => {
-                        const fiat = getFiatValue(w.balance || 0);
-                        return sum + fiat.value;
-                      }, 0)
-                    )}{' '}
-                    {getFiatValue(0).currency}
-                  </p>
-                  <p className="text-lg text-muted-foreground">
-                    ≈ {formatNumber(
-                      walletsWithBalances.reduce((sum, w) => sum + (w.balance || 0), 0)
-                    )}{' '}
-                    LANA
-                  </p>
-                  {walletsWithBalances.reduce((sum, w) => sum + (w.unconfirmedBalance || 0), 0) !== 0 && (
-                    <p className="text-sm text-orange-500 font-medium">
-                      + {formatNumber(
-                        walletsWithBalances.reduce((sum, w) => sum + (w.unconfirmedBalance || 0), 0)
-                      )} LANA pending
-                    </p>
-                  )}
-                </>
+                (() => {
+                  // Exclude Lana.Discount wallets from total balance
+                  const countedWallets = walletsWithBalances.filter(w => w.walletType !== 'Lana.Discount');
+                  return (
+                    <>
+                      <p className="text-4xl font-bold text-green-600">
+                        {formatNumber(
+                          countedWallets.reduce((sum, w) => {
+                            const fiat = getFiatValue(w.balance || 0);
+                            return sum + fiat.value;
+                          }, 0)
+                        )}{' '}
+                        {getFiatValue(0).currency}
+                      </p>
+                      <p className="text-lg text-muted-foreground">
+                        ≈ {formatNumber(
+                          countedWallets.reduce((sum, w) => sum + (w.balance || 0), 0)
+                        )}{' '}
+                        LANA
+                      </p>
+                      {countedWallets.reduce((sum, w) => sum + (w.unconfirmedBalance || 0), 0) !== 0 && (
+                        <p className="text-sm text-orange-500 font-medium">
+                          + {formatNumber(
+                            countedWallets.reduce((sum, w) => sum + (w.unconfirmedBalance || 0), 0)
+                          )} LANA pending
+                        </p>
+                      )}
+                    </>
+                  );
+                })()
               )}
             </div>
           </CardContent>
