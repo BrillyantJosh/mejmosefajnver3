@@ -5,10 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlusCircle, Pencil, ImageOff } from "lucide-react";
 import { useNostrUserProjects, UserProjectData } from "@/hooks/useNostrUserProjects";
+import { useAdmin } from "@/contexts/AdminContext";
+import { ProjectOverrides } from "@/types/admin";
 
 const MyProjects = () => {
   const navigate = useNavigate();
   const { projects, isLoading } = useNostrUserProjects();
+  const { appSettings } = useAdmin();
+  const overrides: ProjectOverrides = appSettings?.project_overrides || {};
 
   if (isLoading) {
     return (
@@ -56,7 +60,7 @@ const MyProjects = () => {
       ) : (
         <div className="space-y-4">
           {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+            <ProjectCard key={project.id} project={project} isCompleted={!!overrides[project.id]?.completed} />
           ))}
         </div>
       )}
@@ -64,17 +68,18 @@ const MyProjects = () => {
   );
 };
 
-const ProjectCard = ({ project }: { project: UserProjectData }) => {
+const ProjectCard = ({ project, isCompleted }: { project: UserProjectData; isCompleted: boolean }) => {
   const navigate = useNavigate();
 
   const progressPercent = Math.min(project.percentFunded, 100);
+  const isFullyFunded = project.fiatGoal > 0 && project.totalRaised >= project.fiatGoal * 0.99;
 
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
         <div className="flex flex-col sm:flex-row">
           {/* Cover image */}
-          <div className="sm:w-40 h-32 sm:h-auto bg-muted flex-shrink-0">
+          <div className="sm:w-40 h-32 sm:h-auto bg-muted flex-shrink-0 relative">
             {project.coverImage ? (
               <img
                 src={project.coverImage}
@@ -86,16 +91,32 @@ const ProjectCard = ({ project }: { project: UserProjectData }) => {
                 <ImageOff className="h-8 w-8 text-muted-foreground/50" />
               </div>
             )}
+            {/* Status overlay on image */}
+            {(isFullyFunded || isCompleted) && (
+              <div className="absolute top-2 left-2">
+                {isCompleted ? (
+                  <Badge className="bg-gray-600 text-white text-xs">Completed</Badge>
+                ) : isFullyFunded ? (
+                  <Badge className="bg-green-500 text-white text-xs">Funded ✓</Badge>
+                ) : null}
+              </div>
+            )}
           </div>
 
           {/* Content */}
           <div className="flex-1 p-4 flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <h3 className="font-semibold text-lg">{project.title}</h3>
                 <Badge variant={project.status === "active" ? "default" : "secondary"}>
                   {project.status}
                 </Badge>
+                {isFullyFunded && !isCompleted && (
+                  <Badge className="bg-green-500 text-white">Funded ✓</Badge>
+                )}
+                {isCompleted && (
+                  <Badge variant="secondary">Completed</Badge>
+                )}
                 {project.isBlocked && (
                   <Badge variant="destructive">Blocked</Badge>
                 )}
