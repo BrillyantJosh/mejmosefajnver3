@@ -146,11 +146,30 @@ const Projects = () => {
 
   const handleToggleCompleted = async (dTag: string, comment?: string) => {
     if (!session?.nostrHexId) return;
+
+    const current = overrides[dTag] || {};
+    const nowCompleted = !current.completed;
+
+    // Block completing a project that is not fully funded
+    if (nowCompleted) {
+      const project = visibleProjects.find(p => p.id === dTag);
+      if (project) {
+        const goal = parseFloat(project.fiatGoal);
+        const raised = donationSummary.perProject.get(dTag) || 0;
+        if (goal > 0 && raised < goal * 0.99) {
+          toast({
+            title: "Cannot complete project",
+            description: `This project has raised €${raised.toFixed(0)} of €${goal.toFixed(0)} goal (${Math.round((raised / goal) * 100)}%). A project can only be marked as completed once it is fully funded.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
+
     setActionLoading(dTag);
 
     try {
-      const current = overrides[dTag] || {};
-      const nowCompleted = !current.completed;
 
       // Publish KIND 60201 completion event to Nostr
       if (nowCompleted && comment) {
