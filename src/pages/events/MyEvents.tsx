@@ -7,17 +7,30 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Calendar, Globe, MapPin, Edit, Users, ChevronDown, ChevronUp, Plus, QrCode } from "lucide-react";
+import { Calendar, Globe, MapPin, Edit, Users, ChevronDown, ChevronUp, Plus, QrCode, Download, CheckCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { LanaEvent, ScheduleEntry, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNostrEventRegistrationsBatch, EventRegistration } from "@/hooks/useNostrEventRegistrations";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
+import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { useTranslation } from '@/i18n/I18nContext';
 import eventsTranslations from '@/i18n/modules/events';
+import { toast } from "@/hooks/use-toast";
 
-function AttendeeRow({ registration }: { registration: EventRegistration }) {
+interface TicketRecord {
+  nostr_hex_id: string;
+  wallet_address: string;
+  tx_id: string;
+  amount_lana: number;
+  amount_eur: number;
+  wallet_type: string;
+  created_at: string;
+}
+
+function AttendeeRow({ registration, ticket }: { registration: EventRegistration; ticket?: TicketRecord }) {
   const { profile } = useNostrProfileCache(registration.pubkey);
   const { t } = useTranslation(eventsTranslations);
   const displayName = profile?.display_name || profile?.full_name || registration.pubkey.slice(0, 8) + '...';
@@ -25,7 +38,17 @@ function AttendeeRow({ registration }: { registration: EventRegistration }) {
   return (
     <div className="flex items-center gap-2 py-2">
       <UserAvatar pubkey={registration.pubkey} picture={profile?.picture} name={displayName} className="h-8 w-8" />
-      <span className="text-sm flex-1 truncate">{displayName}</span>
+      <div className="flex-1 min-w-0">
+        <span className="text-sm truncate block">{displayName}</span>
+        {ticket && (
+          <span className="text-[10px] text-green-600 flex items-center gap-1">
+            <CheckCircle className="h-3 w-3" />
+            {ticket.amount_lana > 0 ? `${ticket.amount_lana.toFixed(2)} LANA` : ''}
+            {ticket.amount_eur > 0 ? ` (€${ticket.amount_eur.toFixed(2)})` : ''}
+            {ticket.wallet_type && ` · ${ticket.wallet_type}`}
+          </span>
+        )}
+      </div>
       <Badge variant={registration.status === 'going' ? 'default' : 'secondary'} className="text-xs">
         {registration.status === 'going' ? t('my.goingStatus') : t('my.interestedStatus')}
       </Badge>
@@ -41,12 +64,63 @@ interface EventCardWithRegistrationsProps {
 
 function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardWithRegistrationsProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const { t } = useTranslation(eventsTranslations);
   const status = getEventStatus(event);
   const isPast = event.end ? event.end < new Date() : new Date(event.start.getTime() + 2 * 60 * 60 * 1000) < new Date();
-  
+
   const goingCount = registrations.filter(r => r.status === 'going').length;
   const interestedCount = registrations.filter(r => r.status === 'interested').length;
+
+  // Fetch profiles for CSV export
+  const pubkeys = registrations.map(r => r.pubkey);
+  const { profiles } = useNostrProfilesCacheBulk(pubkeys);
+
+  // Fetch tickets (payment data) when opened
+  useEffect(() => {
+    if (!isOpen || !event.dTag) return;
+    supabase
+      .from('event_tickets')
+      .select('nostr_hex_id, wallet_address, tx_id, amount_lana, amount_eur, wallet_type, created_at')
+      .eq('event_dtag', event.dTag)
+      .then(({ data }) => {
+        if (data) setTickets(data as TicketRecord[]);
+      });
+  }, [isOpen, event.dTag]);
+
+  const ticketMap = new Map(tickets.map(t => [t.nostr_hex_id, t]));
+  const paidCount = tickets.length;
+
+  const exportCSV = () => {
+    const header = 'Display Name,Nostr Pubkey,Status,Paid,Amount LANA,Amount EUR,Wallet Type,TX Hash,Registration Date\n';
+    const rows = registrations.map(reg => {
+      const profile = profiles.get(reg.pubkey);
+      const name = (profile?.display_name || profile?.full_name || '').replace(/,/g, ' ');
+      const ticket = ticketMap.get(reg.pubkey);
+      return [
+        name,
+        reg.pubkey,
+        reg.status,
+        ticket ? 'Yes' : 'No',
+        ticket?.amount_lana?.toFixed(2) || '',
+        ticket?.amount_eur?.toFixed(2) || '',
+        ticket?.wallet_type || '',
+        ticket?.tx_id || '',
+        format(new Date(reg.created_at * 1000), 'yyyy-MM-dd HH:mm'),
+      ].join(',');
+    }).join('\n');
+
+    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${event.title.replace(/[^a-zA-Z0-9]/g, '_')}_registrations.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: 'CSV exported', description: `${registrations.length} registrations exported` });
+  };
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -117,6 +191,11 @@ function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardW
                   {interestedCount > 0 && (
                     <Badge variant="secondary" className="text-xs">{t('my.interestedBadge', { count: String(interestedCount) })}</Badge>
                   )}
+                  {paidCount > 0 && (
+                    <Badge className="bg-green-500/10 text-green-700 dark:text-green-400 text-xs border border-green-500/20">
+                      {paidCount} paid
+                    </Badge>
+                  )}
                 </div>
                 {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </div>
@@ -124,15 +203,23 @@ function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardW
           </div>
 
           <CollapsibleContent>
-            <div className="mt-3 max-h-64 overflow-y-auto">
+            <div className="mt-3">
               {registrations.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">{t('my.noRegistrations')}</p>
               ) : (
-                <div className="divide-y">
-                  {registrations.map(reg => (
-                    <AttendeeRow key={reg.id} registration={reg} />
-                  ))}
-                </div>
+                <>
+                  <div className="max-h-64 overflow-y-auto divide-y">
+                    {registrations.map(reg => (
+                      <AttendeeRow key={reg.id} registration={reg} ticket={ticketMap.get(reg.pubkey)} />
+                    ))}
+                  </div>
+                  <div className="mt-3 pt-3 border-t flex justify-end">
+                    <Button variant="outline" size="sm" onClick={exportCSV} className="gap-1.5 text-xs">
+                      <Download className="h-3.5 w-3.5" />
+                      Export CSV
+                    </Button>
+                  </div>
+                </>
               )}
             </div>
           </CollapsibleContent>
