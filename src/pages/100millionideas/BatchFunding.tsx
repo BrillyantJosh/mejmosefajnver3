@@ -157,9 +157,9 @@ const BatchFunding = () => {
   const [processingStatus, setProcessingStatus] = useState<string>("");
   const [result, setResult] = useState<BatchResult | null>(null);
 
-  // Filter active projects that have a wallet address (exclude hidden and blocked)
+  // Filter open projects only: active, has wallet, not hidden, not blocked, not completed
   const activeProjects = projects.filter(p =>
-    p.status === 'active' && p.wallet && !p.isBlocked && !projectOverrides[p.id]?.hidden
+    p.status === 'active' && p.wallet && !p.isBlocked && !projectOverrides[p.id]?.hidden && !projectOverrides[p.id]?.completed
   );
 
   // Initialize entries when projects load
