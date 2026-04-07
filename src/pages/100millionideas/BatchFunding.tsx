@@ -143,7 +143,7 @@ const BatchFunding = () => {
 
   // Fetch per-project donations for fully funded detection
   const allProjectIds = useMemo(() => projects.map(p => p.id), [projects]);
-  const { summary: donationSummary } = useNostrAllProjectDonations(allProjectIds);
+  const { summary: donationSummary, isLoading: donationsLoading } = useNostrAllProjectDonations(allProjectIds);
 
   const [step, setStep] = useState<BatchStep>('select');
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
@@ -176,12 +176,20 @@ const BatchFunding = () => {
     return true;
   });
 
-  // Initialize entries when projects load
+  // Sync entries with activeProjects (re-filter when donations load)
+  const activeProjectIds = useMemo(() => activeProjects.map(p => p.id).join(','), [activeProjects]);
   useEffect(() => {
-    if (activeProjects.length > 0 && entries.length === 0) {
-      setEntries(activeProjects.map(p => ({ project: p, lanaAmount: "" })));
+    if (activeProjects.length > 0 && !donationsLoading) {
+      setEntries(prev => {
+        // Preserve any amounts already entered
+        const prevMap = new Map(prev.map(e => [e.project.id, e.lanaAmount]));
+        return activeProjects.map(p => ({
+          project: p,
+          lanaAmount: prevMap.get(p.id) || "",
+        }));
+      });
     }
-  }, [activeProjects.length]);
+  }, [activeProjectIds, donationsLoading]);
 
   // Fetch wallet balances
   useEffect(() => {
