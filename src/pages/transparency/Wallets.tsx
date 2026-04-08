@@ -215,6 +215,9 @@ export default function Wallets() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">
                         {profile.display_name || profile.name || 'Anonymous'}
+                        {profile.display_name && profile.name && profile.name !== profile.display_name && (
+                          <span className="text-muted-foreground font-normal ml-1">@{profile.name}</span>
+                        )}
                       </p>
                       <p className="text-sm text-muted-foreground truncate">
                         {profile.location && `${profile.location} • `}
