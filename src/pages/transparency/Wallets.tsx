@@ -11,6 +11,7 @@ import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { supabase } from "@/integrations/supabase/client";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
+import { useNostrPaymentScore } from "@/hooks/useNostrPaymentScore";
 import lana8wonderBg from "@/assets/lana8wonder-bg.png";
 import knightsBg from "@/assets/knights-bg.png";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -43,6 +44,7 @@ export default function Wallets() {
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(selectedProfile?.pubkey || null);
   const { parameters } = useSystemParameters();
   const { profile: currentUserProfile } = useNostrProfile();
+  const { score: paymentScore } = useNostrPaymentScore(selectedProfile?.pubkey);
   const [walletsWithBalances, setWalletsWithBalances] = useState<WalletWithBalance[]>([]);
 
   const filteredProfiles = profiles.filter(
@@ -243,6 +245,45 @@ export default function Wallets() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Payment Score */}
+          {paymentScore && (() => {
+            const scoreNum = parseFloat(paymentScore.score);
+            const scoreColor = scoreNum >= 7 ? 'text-green-600 dark:text-green-400' : scoreNum >= 5 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400';
+            const scoreBg = scoreNum >= 7 ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800' : scoreNum >= 5 ? 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800';
+
+            const formatLanoshi = (l: string) => { const v = parseInt(l, 10); return isNaN(v) ? l : (v / 100_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' LANA'; };
+            const formatPeriod = (start: string, end: string) => {
+              const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+              const fmt = (ym: string) => { const [y, m] = ym.split('-'); return `${months[parseInt(m,10)-1] || m} ${y}`; };
+              return `${fmt(start)} – ${fmt(end)}`;
+            };
+
+            return (
+              <Card className={`mb-6 border ${scoreBg}`}>
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className={`h-5 w-5 flex-shrink-0 ${scoreColor}`} />
+                      <span className="text-sm font-medium text-muted-foreground">Payment Score</span>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className={`text-2xl font-bold ${scoreColor}`}>{paymentScore.score}</span>
+                      <span className="text-sm text-muted-foreground">/10</span>
+                    </div>
+                    <div className="sm:ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      {paymentScore.periodStart && paymentScore.periodEnd && (
+                        <span>{formatPeriod(paymentScore.periodStart, paymentScore.periodEnd)}</span>
+                      )}
+                      {paymentScore.paidLanoshi && paymentScore.proposedLanoshi && (
+                        <span>Paid {formatLanoshi(paymentScore.paidLanoshi)} / {formatLanoshi(paymentScore.proposedLanoshi)}</span>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Frozen Account Warning */}
           {(() => {
