@@ -102,23 +102,36 @@ const ProjectRow = ({ entry, index, exchangeRate, onAmountChange }: ProjectRowPr
       </div>
 
       {/* Amount input */}
-      <div className="w-36 flex-shrink-0">
+      <div className="w-40 flex-shrink-0">
         {isFullyFunded ? (
           <div className="text-center">
             <span className="text-xs font-semibold text-green-600 bg-green-500/10 px-2 py-1 rounded">Fully Funded</span>
           </div>
         ) : (
           <>
-            <Input
-              type="number"
-              value={entry.lanaAmount}
-              onChange={(e) => handleChange(e.target.value)}
-              placeholder="0.00"
-              step="0.01"
-              min="0"
-              max={maxLana > 0 ? maxLana.toFixed(2) : undefined}
-              className="text-right"
-            />
+            <div className="flex gap-1">
+              <Input
+                type="number"
+                value={entry.lanaAmount}
+                onChange={(e) => handleChange(e.target.value)}
+                placeholder="0.00"
+                step="0.01"
+                min="0"
+                max={maxLana > 0 ? maxLana.toFixed(2) : undefined}
+                className="text-right flex-1"
+              />
+              {maxLana > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="px-2 h-9 text-xs font-bold shrink-0"
+                  onClick={() => onAmountChange(index, maxLana.toFixed(2))}
+                >
+                  MAX
+                </Button>
+              )}
+            </div>
             {lana > 0 && (
               <p className="text-xs text-muted-foreground text-right mt-1">
                 {fiat.toFixed(2)} {currency}
