@@ -27,7 +27,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
 
   const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2];
 
-  // Setup audio element events
+  // Setup audio element events + cleanup
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -56,17 +56,17 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     audio.addEventListener('error', onError);
 
     return () => {
+      // Stop playback and release resources on unmount
+      audio.pause();
+      audio.src = '';
       audio.removeEventListener('durationchange', onDurationChange);
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('error', onError);
-    };
-  }, []);
-
-  // Cleanup blob on unmount
-  useEffect(() => {
-    return () => {
-      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
     };
   }, []);
 
