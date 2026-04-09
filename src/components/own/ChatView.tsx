@@ -376,18 +376,29 @@ export default function ChatView({
             )}
           </div>
           {/* Text input row */}
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Type a message..."
+          <div className="flex items-end gap-2">
+            <textarea
+              placeholder="Type a message... (Shift+Enter for new line)"
               value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onChange={(e) => {
+                setMessageText(e.target.value);
+                // Auto-resize
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendText();
+                }
+              }}
               disabled={isSending}
-              className="flex-1 min-w-0 px-3 py-2 rounded-lg border bg-background text-base"
+              rows={1}
+              className="flex-1 min-w-0 px-3 py-2 rounded-lg border bg-background text-base resize-none"
+              style={{ minHeight: '40px', maxHeight: '160px' }}
             />
-            <Button 
-              size="icon" 
+            <Button
+              size="icon"
               className="bg-cyan-500 hover:bg-cyan-600 shrink-0 h-10 w-10"
               onClick={handleSendText}
               disabled={!messageText.trim() || isSending}
