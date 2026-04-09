@@ -177,13 +177,19 @@ export default function ChatView({
     setVisibleCount(prev => prev + MESSAGES_PER_PAGE);
   };
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const handleSendText = async () => {
     if (!messageText.trim() || !onSendMessage) return;
-    
+
     setIsSending(true);
     const success = await onSendMessage(messageText.trim());
     if (success) {
       setMessageText("");
+      // Reset textarea height back to single line
+      if (textareaRef.current) {
+        textareaRef.current.style.height = '40px';
+      }
     }
     setIsSending(false);
   };
@@ -378,6 +384,7 @@ export default function ChatView({
           {/* Text input row */}
           <div className="flex items-end gap-2">
             <textarea
+              ref={textareaRef}
               placeholder="Type a message... (Shift+Enter for new line)"
               value={messageText}
               onChange={(e) => {
