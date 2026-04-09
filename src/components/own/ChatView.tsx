@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, Send, MessageCircle, History, ImagePlus, Loader2 } from "lucide-react";
+import { ArrowLeft, Send, MessageCircle, History, ImagePlus, Camera, Loader2 } from "lucide-react";
 import ChatMessage from "./ChatMessage";
 import OwnAudioRecorder from "./OwnAudioRecorder";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
@@ -17,7 +17,8 @@ function ImageUploadButton({ processEventId, senderPubkey, onSendImage }: {
   senderPubkey: string;
   onSendImage: (path: string) => Promise<boolean>;
 }) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const albumInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,28 +61,54 @@ function ImageUploadButton({ processEventId, senderPubkey, onSendImage }: {
       toast.error('Upload failed');
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+      if (albumInputRef.current) albumInputRef.current.value = '';
     }
   };
 
   return (
     <>
+      {/* Camera capture (mobile: opens camera directly) */}
       <input
-        ref={fileInputRef}
+        ref={cameraInputRef}
         type="file"
         accept="image/*"
         capture="environment"
         className="hidden"
         onChange={handleFileSelect}
       />
-      <Button
-        size="icon"
-        variant="ghost"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={uploading}
-      >
-        {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-      </Button>
+      {/* Album/gallery picker (no capture = shows file picker) */}
+      <input
+        ref={albumInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+      {uploading ? (
+        <Button size="icon" variant="ghost" disabled>
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </Button>
+      ) : (
+        <>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => cameraInputRef.current?.click()}
+            title="Take photo"
+          >
+            <Camera className="h-4 w-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => albumInputRef.current?.click()}
+            title="Choose from album"
+          >
+            <ImagePlus className="h-4 w-4" />
+          </Button>
+        </>
+      )}
     </>
   );
 }
