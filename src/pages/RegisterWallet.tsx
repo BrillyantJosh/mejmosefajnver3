@@ -366,6 +366,20 @@ export default function RegisterWallet() {
         </CardContent>
       </Card>
 
+      <div className="text-center mt-6">
+        <p className="text-sm text-muted-foreground">
+          Don't have a wallet?{' '}
+          <a
+            href="https://lanapaper.online"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary font-medium hover:underline"
+          >
+            Create a new one →
+          </a>
+        </p>
+      </div>
+
       <QRScanner
         isOpen={qrScannerOpen}
         onClose={() => setQrScannerOpen(false)}
