@@ -678,7 +678,7 @@ export default function DiscountSell() {
                         You must consolidate your wallet before you can sell LANA.
                       </p>
                       <a
-                        href="https://youtu.be/kBi4MKcc4qM?si=bIeWS_dlgHjFproo"
+                        href="https://youtu.be/dWniYXwdWqk"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:underline"

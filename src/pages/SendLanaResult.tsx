@@ -259,7 +259,7 @@ export default function SendLanaResult() {
                   After consolidation, you can retry the transaction.
                 </p>
                 <a
-                  href="https://youtu.be/kBi4MKcc4qM"
+                  href="https://youtu.be/dWniYXwdWqk"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline hover:no-underline"

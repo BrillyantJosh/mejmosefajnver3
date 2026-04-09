@@ -28,6 +28,11 @@ const lana8wonderVideos = [
 
 const videos = [
   {
+    id: "consolidate-wallet",
+    question: "How to Consolidate Your Wallet?",
+    youtubeId: "dWniYXwdWqk",
+  },
+  {
     id: "registrar",
     question: "How to use Registrar?",
     youtubeId: "kBi4MKcc4qM",

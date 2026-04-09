@@ -183,7 +183,7 @@ export default function SendLana() {
               You cannot empty the wallet until you consolidate. However, you can still send smaller amounts.
             </p>
             <a
-              href="https://youtu.be/kBi4MKcc4qM"
+              href="https://youtu.be/dWniYXwdWqk"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-sm font-medium underline hover:no-underline"
