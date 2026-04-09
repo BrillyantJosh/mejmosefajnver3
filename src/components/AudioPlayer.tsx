@@ -75,7 +75,10 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     if (!audio) return;
 
     if (ready) {
-      audio.play().then(() => setIsPlaying(true)).catch(() => {});
+      audio.play().then(() => {
+        audio.playbackRate = playbackRate;
+        setIsPlaying(true);
+      }).catch(() => {});
       return;
     }
 
@@ -99,6 +102,8 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
 
       // play() returns a promise — resolves when playback starts
       await audio.play();
+      // Apply current playback rate after play starts
+      audio.playbackRate = playbackRate;
 
       if (isFinite(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration);
@@ -137,7 +142,10 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       audio.pause();
       setIsPlaying(false);
     } else {
-      audio.play().then(() => setIsPlaying(true)).catch(() => {});
+      audio.play().then(() => {
+        audio.playbackRate = playbackRate;
+        setIsPlaying(true);
+      }).catch(() => {});
     }
   };
 
