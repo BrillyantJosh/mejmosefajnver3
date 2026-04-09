@@ -141,7 +141,7 @@ export default function ChatMessage({
       <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
         {showLashButton && <LashButton />}
         <Card className={`p-2 md:p-3 max-w-[85vw] md:max-w-md ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
-          <p className="text-sm break-words">{content}</p>
+          <p className="text-sm break-words whitespace-pre-wrap">{content}</p>
         </Card>
       </div>
     </div>
