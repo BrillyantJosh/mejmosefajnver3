@@ -1,13 +1,90 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, Send, MessageCircle, History } from "lucide-react";
+import { ArrowLeft, Send, MessageCircle, History, ImagePlus, Loader2 } from "lucide-react";
 import ChatMessage from "./ChatMessage";
 import OwnAudioRecorder from "./OwnAudioRecorder";
+import { ownSupabase } from "@/lib/ownSupabaseClient";
+import { toast } from "sonner";
 
 const MESSAGES_PER_PAGE = 30;
+const API_URL = import.meta.env.VITE_API_URL ?? '';
+
+function ImageUploadButton({ processEventId, senderPubkey, onSendImage }: {
+  processEventId: string;
+  senderPubkey: string;
+  onSendImage: (path: string) => Promise<boolean>;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image too large (max 10MB)');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const timestamp = Date.now();
+      const randomStr = Math.random().toString(36).substring(7);
+      const ext = file.name.split('.').pop() || 'jpg';
+      const fileName = `${timestamp}_${randomStr}.${ext}`;
+      const filePath = `${senderPubkey}-${processEventId}/${fileName}`;
+
+      const { error } = await ownSupabase.storage
+        .from('dm-images')
+        .upload(filePath, file, { contentType: file.type, cacheControl: '3600', upsert: false });
+
+      if (error) {
+        toast.error(error.message || 'Image upload failed');
+        return;
+      }
+
+      const sent = await onSendImage(`image:${filePath}`);
+      if (sent) {
+        toast.success('Image sent');
+      } else {
+        toast.error('Failed to send image');
+      }
+    } catch (err) {
+      toast.error('Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+      <Button
+        size="icon"
+        variant="ghost"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploading}
+      >
+        {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+      </Button>
+    </>
+  );
+}
 
 interface Message {
   id: string;
@@ -19,6 +96,7 @@ interface Message {
   audioUrl?: string;
   audioDuration?: number;
   transcript?: string;
+  imageUrl?: string;
   isCurrentUser?: boolean;
 }
 
@@ -231,6 +309,7 @@ export default function ChatView({
                   audioUrl={msg.audioUrl}
                   audioDuration={msg.audioDuration}
                   transcript={msg.transcript}
+                  imageUrl={msg.imageUrl}
                   isCurrentUser={msg.isCurrentUser}
                   messageId={msg.id}
                   isLashed={lashedEventIds.has(msg.id)}
@@ -251,15 +330,24 @@ export default function ChatView({
       {/* Input */}
       <Card className="p-2 md:p-4 sticky bottom-0">
         <div className="flex flex-col gap-2">
-          {/* Audio recorder - full width on mobile when active */}
-          {processEventId && senderPubkey && onSendAudio && (
-            <OwnAudioRecorder 
-              processEventId={processEventId}
-              senderPubkey={senderPubkey}
-              onSendAudio={onSendAudio}
-              compact
-            />
-          )}
+          {/* Audio recorder + Image upload */}
+          <div className="flex items-center gap-2">
+            {processEventId && senderPubkey && onSendAudio && (
+              <OwnAudioRecorder
+                processEventId={processEventId}
+                senderPubkey={senderPubkey}
+                onSendAudio={onSendAudio}
+                compact
+              />
+            )}
+            {processEventId && senderPubkey && onSendAudio && (
+              <ImageUploadButton
+                processEventId={processEventId}
+                senderPubkey={senderPubkey}
+                onSendImage={onSendAudio}
+              />
+            )}
+          </div>
           {/* Text input row */}
           <div className="flex items-center gap-2">
             <input

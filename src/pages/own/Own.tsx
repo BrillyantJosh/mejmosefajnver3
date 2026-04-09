@@ -15,9 +15,10 @@ import { useNostrLash } from "@/hooks/useNostrLash";
 import { useNostrUnpaidLashes } from "@/hooks/useNostrUnpaidLashes";
 import { useSupabaseLashCounts } from "@/hooks/useSupabaseLashCounts";
 
-// Audio storage: local Express server (not Supabase)
+// Storage: local Express server
 const OWN_API_URL = import.meta.env.VITE_API_URL ?? '';
 const DM_AUDIO_BUCKET = "dm-audio";
+const DM_IMAGES_BUCKET = "dm-images";
 
 // Helper to convert hex string to Uint8Array
 const hexToBytes = (hex: string): Uint8Array => {
@@ -372,7 +373,26 @@ export default function Own() {
         isCurrentUser: msg.senderPubkey === session?.nostrHexId,
       };
     }
-    
+
+    // 3) Image message: "image:<relative-path>"
+    if (text.startsWith("image:")) {
+      const imagePath = text.slice("image:".length).trim();
+      const imageUrl = imagePath.startsWith("http")
+        ? imagePath
+        : `${OWN_API_URL}/api/storage/${DM_IMAGES_BUCKET}/${imagePath}`;
+
+      return {
+        id: msg.id,
+        sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),
+        senderPubkey: msg.senderPubkey,
+        role: userRole,
+        timestamp: new Date(msg.timestamp * 1000).toLocaleString(),
+        type: "image" as const,
+        imageUrl,
+        isCurrentUser: msg.senderPubkey === session?.nostrHexId,
+      };
+    }
+
     return {
       id: msg.id,
       sender: profiles.get(msg.senderPubkey)?.full_name || msg.senderPubkey.slice(0, 8),

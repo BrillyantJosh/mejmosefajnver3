@@ -30,11 +30,12 @@ interface ChatMessageProps {
   sender: string;
   role?: string;
   timestamp: string;
-  type: 'text' | 'audio';
+  type: 'text' | 'audio' | 'image';
   content?: string;
   audioUrl?: string;
   audioDuration?: number;
   transcript?: string;
+  imageUrl?: string;
   isCurrentUser?: boolean;
   messageId?: string;
   isLashed?: boolean;
@@ -52,6 +53,7 @@ export default function ChatMessage({
   audioUrl,
   audioDuration,
   transcript,
+  imageUrl,
   isCurrentUser = false,
   messageId,
   isLashed = false,
@@ -102,6 +104,29 @@ export default function ChatMessage({
           <Card className={`p-2 md:p-3 flex-1 min-w-0 ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
             <AudioPlayer audioUrl={audioUrl} initialDuration={audioDuration} />
             {transcript && <TranscriptToggle text={transcript} />}
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'image' && imageUrl) {
+    return (
+      <div className={`flex flex-col mb-4 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
+        <div className="text-xs text-muted-foreground mb-1 max-w-[calc(100vw-4rem)] truncate">
+          {sender}{role && ` (${role})`} • {timestamp}
+        </div>
+        <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
+          {showLashButton && <LashButton />}
+          <Card className={`p-1 md:p-2 ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
+            <a href={imageUrl} target="_blank" rel="noopener noreferrer">
+              <img
+                src={imageUrl}
+                alt="Shared image"
+                className="max-w-[280px] sm:max-w-sm rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                loading="lazy"
+              />
+            </a>
           </Card>
         </div>
       </div>
