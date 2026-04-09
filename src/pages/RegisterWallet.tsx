@@ -242,7 +242,15 @@ export default function RegisterWallet() {
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground">
-                The wallet address must be a valid Lana wallet ID
+                The wallet address must be a valid Lana wallet ID.{' '}
+                <a
+                  href="https://lanapaper.online"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary font-medium hover:underline"
+                >
+                  Don't have one? Create a new wallet →
+                </a>
               </p>
 
               {/* Validation Status Indicators */}
@@ -365,20 +373,6 @@ export default function RegisterWallet() {
           </form>
         </CardContent>
       </Card>
-
-      <div className="text-center mt-6">
-        <p className="text-sm text-muted-foreground">
-          Don't have a wallet?{' '}
-          <a
-            href="https://lanapaper.online"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary font-medium hover:underline"
-          >
-            Create a new one →
-          </a>
-        </p>
-      </div>
 
       <QRScanner
         isOpen={qrScannerOpen}
