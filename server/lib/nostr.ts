@@ -905,3 +905,100 @@ export async function discoverNewProfiles(db: any): Promise<void> {
 export function getAuthorizedPubkey(): string {
   return AUTHORIZED_PUBKEY;
 }
+
+/**
+ * Sync project funded status: fetches KIND 31234 projects and KIND 60200 donations,
+ * then updates project_overrides.funded in app_settings DB.
+ * Runs periodically via heartbeat (every 30 min).
+ */
+export async function syncProjectFundedStatus(db: any): Promise<void> {
+  const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+  let relays: string[] = [];
+  if (row?.relays) {
+    try {
+      const parsed = JSON.parse(row.relays);
+      if (Array.isArray(parsed) && parsed.length > 0) relays = parsed;
+    } catch {}
+  }
+  if (relays.length === 0) {
+    console.log('⚠️ syncProjectFundedStatus: No relays available, skipping');
+    return;
+  }
+
+  try {
+    // Fetch KIND 31234 projects and KIND 60200 donations in parallel
+    const [projectEvents, donationEvents] = await Promise.all([
+      queryEventsFromRelays(relays, { kinds: [31234], limit: 500 }, 15000),
+      queryEventsFromRelays(relays, { kinds: [60200], limit: 1000 }, 15000),
+    ]);
+
+    console.log(`📊 syncProjectFundedStatus: ${projectEvents.length} projects, ${donationEvents.length} donations`);
+
+    // Deduplicate projects by d-tag (keep newest)
+    const projectsByDTag = new Map<string, any>();
+    for (const evt of projectEvents) {
+      const dTag = evt.tags?.find((t: string[]) => t[0] === 'd')?.[1];
+      if (!dTag) continue;
+      const existing = projectsByDTag.get(dTag);
+      if (!existing || evt.created_at > existing.created_at) {
+        projectsByDTag.set(dTag, evt);
+      }
+    }
+
+    // Aggregate donations per project
+    const donationsPerProject = new Map<string, number>();
+    for (const evt of donationEvents) {
+      const projectTag = evt.tags?.find((t: string[]) => t[0] === 'project')?.[1];
+      if (!projectTag) continue;
+      const amountStr = evt.tags?.find((t: string[]) => t[0] === 'amount_fiat')?.[1];
+      if (!amountStr) continue;
+      const amount = parseFloat(amountStr);
+      if (!isNaN(amount)) {
+        donationsPerProject.set(projectTag, (donationsPerProject.get(projectTag) || 0) + amount);
+      }
+    }
+
+    // Load current overrides
+    const settingsRow = db.prepare("SELECT value FROM app_settings WHERE key = '100millionideas_project_overrides'").get() as any;
+    let overrides: Record<string, any> = {};
+    if (settingsRow?.value) {
+      try { overrides = JSON.parse(settingsRow.value); } catch {}
+    }
+
+    let changed = 0;
+
+    // Check each project
+    for (const [dTag, evt] of projectsByDTag) {
+      const fiatGoalStr = evt.tags?.find((t: string[]) => t[0] === 'fiat_goal')?.[1];
+      const fiatGoal = parseFloat(fiatGoalStr || '0');
+      if (fiatGoal <= 0) continue;
+
+      const totalRaised = donationsPerProject.get(dTag) || 0;
+      const isFunded = totalRaised >= fiatGoal * 0.99;
+
+      const current = overrides[dTag] || {};
+      const wasFunded = !!current.funded;
+
+      if (isFunded && !wasFunded) {
+        overrides[dTag] = { ...current, funded: true };
+        changed++;
+      } else if (!isFunded && wasFunded) {
+        overrides[dTag] = { ...current, funded: false };
+        changed++;
+      }
+    }
+
+    // Save if anything changed
+    if (changed > 0) {
+      db.prepare("UPDATE app_settings SET value = ?, updated_at = datetime('now') WHERE key = '100millionideas_project_overrides'").run(JSON.stringify(overrides));
+      console.log(`✅ syncProjectFundedStatus: Updated ${changed} project funded statuses`);
+    } else {
+      console.log('✅ syncProjectFundedStatus: No changes needed');
+    }
+
+    const fundedCount = Object.values(overrides).filter((o: any) => o.funded).length;
+    console.log(`📊 syncProjectFundedStatus: ${fundedCount} funded of ${projectsByDTag.size} total projects`);
+  } catch (error) {
+    console.error('❌ syncProjectFundedStatus error:', error);
+  }
+}

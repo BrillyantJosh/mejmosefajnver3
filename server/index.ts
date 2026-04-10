@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb, closeDb } from './db/connection';
-import { fetchKind38888, refreshStaleProfiles, discoverNewProfiles, cleanupOrphanedProfiles } from './lib/nostr';
+import { fetchKind38888, refreshStaleProfiles, discoverNewProfiles, cleanupOrphanedProfiles, syncProjectFundedStatus } from './lib/nostr';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -134,6 +134,12 @@ async function syncKind38888ToDb(): Promise<boolean> {
   } catch (err) {
     console.error('❌ Startup profile discovery failed:', err);
   }
+  // Sync project funded status on startup
+  try {
+    await syncProjectFundedStatus(db);
+  } catch (err) {
+    console.error('❌ Startup project funded sync failed:', err);
+  }
 })();
 
 // =============================================
@@ -207,6 +213,15 @@ const heartbeatTimer = setInterval(async () => {
       await withTimeout(() => cleanupOrphanedProfiles(db), 'cleanupOrphanedProfiles', 300000);
     } catch (err) {
       console.error('❌ Error cleaning up orphaned profiles:', err);
+    }
+  }
+
+  // Sync project funded status (KIND 31234 + KIND 60200) every 30 heartbeats (= every 30 minutes)
+  if (heartbeatCount % 30 === 0) {
+    try {
+      await withTimeout(() => syncProjectFundedStatus(db), 'syncProjectFundedStatus', 120000);
+    } catch (err) {
+      console.error('❌ Error syncing project funded status:', err);
     }
   }
 

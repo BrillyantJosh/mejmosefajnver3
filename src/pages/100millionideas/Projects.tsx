@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNostrProjects, ProjectData } from "@/hooks/useNostrProjects";
-import { useNostrAllProjectDonations } from "@/hooks/useNostrAllProjectDonations";
+import { useNostrAllProjectDonations } from "@/hooks/useNostrAllProjectDonations"; // still used by SummaryBar
 import ProjectCard from "@/components/100millionideas/ProjectCard";
 import ProjectsSummaryBar from "@/components/100millionideas/ProjectsSummaryBar";
 import { Loader2, Layers } from "lucide-react";
@@ -38,22 +38,14 @@ const Projects = () => {
     ? projects
     : projects.filter(p => !overrides[p.id]?.hidden);
 
-  // Fetch per-project donation totals for funded detection
+  // Fetch donations for SummaryBar (Total Raised display)
   const projectIds = useMemo(() => visibleProjects.map(p => p.id), [visibleProjects]);
-  const { summary: donationSummary } = useNostrAllProjectDonations(projectIds);
+  const { summary: donationSummary, isLoading: donationsLoading } = useNostrAllProjectDonations(projectIds);
 
-  // Check if a project is fully funded (raised >= 99% of goal)
-  const isFullyFunded = (p: ProjectData): boolean => {
-    const goal = parseFloat(p.fiatGoal);
-    if (!goal || goal <= 0) return false;
-    const raised = donationSummary.perProject.get(p.id) || 0;
-    return raised >= goal * 0.99;
-  };
+  // Funded status comes from DB (synced by heartbeat every 30 min from KIND 60200)
+  const isFullyFunded = (p: ProjectData): boolean => !!overrides[p.id]?.funded;
 
   // Apply user filter
-  // "Open" = still collecting funds (not fully funded, not completed, not blocked)
-  // "Funded" = fully funded (raised >= 99% of goal)
-  // "Completed" = admin marked as completed
   const filteredProjects = useMemo(() => {
     switch (filter) {
       case 'open':
@@ -68,7 +60,7 @@ const Projects = () => {
       default:
         return visibleProjects;
     }
-  }, [visibleProjects, filter, overrides, donationSummary.perProject]);
+  }, [visibleProjects, filter, overrides]);
 
   const filterOptions: { value: ProjectFilter; label: string; count: number }[] = useMemo(() => {
     const openCount = visibleProjects.filter(p => !overrides[p.id]?.completed && !p.isBlocked && !isFullyFunded(p)).length;

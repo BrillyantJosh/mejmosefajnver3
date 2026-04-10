@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import { useNostrProjects, ProjectData } from "@/hooks/useNostrProjects";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { useNostrProjectDonations } from "@/hooks/useNostrProjectDonations";
-import { useNostrAllProjectDonations } from "@/hooks/useNostrAllProjectDonations";
 import { useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdmin } from "@/contexts/AdminContext";
@@ -154,10 +153,6 @@ const BatchFunding = () => {
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
   const projectOverrides = appSettings?.project_overrides || {};
 
-  // Fetch per-project donations for fully funded detection
-  const allProjectIds = useMemo(() => projects.map(p => p.id), [projects]);
-  const { summary: donationSummary, isLoading: donationsLoading } = useNostrAllProjectDonations(allProjectIds);
-
   const [step, setStep] = useState<BatchStep>('select');
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
@@ -176,23 +171,18 @@ const BatchFunding = () => {
   const [processingStatus, setProcessingStatus] = useState<string>("");
   const [result, setResult] = useState<BatchResult | null>(null);
 
-  // Filter open projects only: active, has wallet, not hidden, not blocked, not completed, not fully funded
+  // Filter open projects: active, has wallet, not hidden, not blocked, not completed, not funded
+  // Funded status comes from DB (synced by heartbeat from KIND 60200)
   const activeProjects = projects.filter(p => {
     if (p.status !== 'active' || !p.wallet || p.isBlocked) return false;
-    if (projectOverrides[p.id]?.hidden || projectOverrides[p.id]?.completed) return false;
-    // Exclude fully funded (raised >= 99% of goal)
-    const goal = parseFloat(p.fiatGoal);
-    if (goal > 0) {
-      const raised = donationSummary.perProject.get(p.id) || 0;
-      if (raised >= goal * 0.99) return false;
-    }
+    if (projectOverrides[p.id]?.hidden || projectOverrides[p.id]?.completed || projectOverrides[p.id]?.funded) return false;
     return true;
   });
 
-  // Sync entries with activeProjects (re-filter when donations load)
+  // Sync entries with activeProjects
   const activeProjectIds = useMemo(() => activeProjects.map(p => p.id).join(','), [activeProjects]);
   useEffect(() => {
-    if (activeProjects.length > 0 && !donationsLoading) {
+    if (activeProjects.length > 0) {
       setEntries(prev => {
         // Preserve any amounts already entered
         const prevMap = new Map(prev.map(e => [e.project.id, e.lanaAmount]));
