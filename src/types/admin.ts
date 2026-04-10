@@ -19,6 +19,11 @@ export interface ProjectOverrides {
   [dTag: string]: ProjectOverride;
 }
 
+export interface AuthorizedCreator {
+  nostrHexId: string;
+  maxAmount: number;
+}
+
 export interface AppSettings {
   app_name: string;
   theme_colors: ThemeColors;
@@ -27,6 +32,7 @@ export interface AppSettings {
   warning_before_split?: number; // Max LANA balance across Wallet + Main Wallet + Lana.Discount before SPLIT warning
   project_type_settings?: ProjectTypeSettings;
   millionideas_admins?: string[];
+  authorized_creators?: AuthorizedCreator[];
   project_overrides?: ProjectOverrides;
   // Lana Discount settings
   discount_commission_lanapays?: number;  // Commission % for LanaPays.Us wallets (default 30)

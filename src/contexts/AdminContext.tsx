@@ -18,6 +18,7 @@ interface AdminContextType {
   updateWarningBeforeSplit: (amount: number | null) => Promise<void>;
   updateProjectTypeSettings: (settings: ProjectTypeSettings) => Promise<void>;
   update100MAdmins: (admins: string[]) => Promise<void>;
+  updateAuthorizedCreators: (creators: any[]) => Promise<void>;
   updateProjectOverrides: (overrides: ProjectOverrides) => Promise<void>;
   updateDiscountSettings: (settings: Partial<Pick<AppSettings, 'discount_commission_lanapays' | 'discount_commission_other' | 'discount_min_sell_eur' | 'discount_min_sell_usd' | 'discount_min_sell_gbp' | 'discount_buyback_wallet' | 'discount_api_url' | 'discount_api_key'>>) => Promise<void>;
   loadAppSettings: () => Promise<void>;
@@ -85,6 +86,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         warning_before_split: warningBeforeSplit,
         project_type_settings: (getValue('project_type_settings') as ProjectTypeSettings) || defaultProjectTypeSettings,
         millionideas_admins: (getValue('100millionideas_admins') as string[]) || [],
+        authorized_creators: (getValue('100millionideas_authorized_creators') as any[]) || [],
         project_overrides: (getValue('100millionideas_project_overrides') as ProjectOverrides) || {},
         discount_commission_lanapays: (getValue('discount_commission_lanapays') as number) ?? 30,
         discount_commission_other: (getValue('discount_commission_other') as number) ?? 21,
@@ -282,6 +284,21 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateAuthorizedCreators = async (creators: any[]) => {
+    if (!session?.nostrHexId) {
+      toast({ title: "Error", description: "Not authenticated", variant: "destructive" });
+      return;
+    }
+    try {
+      await invokeSettingsUpdate('100millionideas_authorized_creators', creators);
+      setAppSettings(prev => prev ? { ...prev, authorized_creators: creators } : null);
+      toast({ title: "Success", description: "Authorized creators updated" });
+    } catch (error) {
+      console.error('Error updating authorized creators:', error);
+      toast({ title: "Error", description: "Failed to update authorized creators", variant: "destructive" });
+    }
+  };
+
   const updateProjectOverrides = async (overrides: ProjectOverrides) => {
     if (!session?.nostrHexId) {
       toast({ title: "Error", description: "Not authenticated", variant: "destructive" });
@@ -359,6 +376,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         updateWarningBeforeSplit,
         updateProjectTypeSettings,
         update100MAdmins,
+        updateAuthorizedCreators,
         updateProjectOverrides,
         updateDiscountSettings,
         loadAppSettings,

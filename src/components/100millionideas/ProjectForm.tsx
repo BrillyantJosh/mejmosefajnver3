@@ -111,7 +111,13 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
   // Per-type settings from admin
   const pts = appSettings?.project_type_settings;
   const currentTypeConfig = pts?.[projectType as keyof typeof pts];
-  const maxAllowedAmount = currentTypeConfig?.maxAmount ?? 200;
+  const typeMaxAmount = currentTypeConfig?.maxAmount ?? 200;
+
+  // Check if current user has a custom higher limit as authorized creator
+  const creatorOverride = appSettings?.authorized_creators?.find(
+    (c: any) => c.nostrHexId === session?.nostrHexId
+  );
+  const maxAllowedAmount = Math.max(typeMaxAmount, creatorOverride?.maxAmount ?? 0);
 
   // Filter PROJECT_TYPES to only show admin-enabled types
   const enabledProjectTypes = PROJECT_TYPES.filter(

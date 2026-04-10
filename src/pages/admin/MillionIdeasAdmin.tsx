@@ -5,12 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { ProjectTypeSettings } from "@/types/admin";
-import { Lightbulb, UserPlus, X } from "lucide-react";
+import { ProjectTypeSettings, AuthorizedCreator } from "@/types/admin";
+import { Lightbulb, UserPlus, UserCheck, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 
 export default function MillionIdeasAdmin() {
-  const { appSettings, updateNewProjects100M, updateProjectTypeSettings, update100MAdmins } = useAdmin();
+  const { appSettings, updateNewProjects100M, updateProjectTypeSettings, update100MAdmins, updateAuthorizedCreators } = useAdmin();
 
   // --- Project Type Settings ---
   const defaultPTS: ProjectTypeSettings = {
@@ -26,10 +27,20 @@ export default function MillionIdeasAdmin() {
   const [admins, setAdmins] = useState<string[]>(appSettings?.millionideas_admins || []);
   const [newAdminHex, setNewAdminHex] = useState("");
 
+  // --- Authorized Creators ---
+  const [creators, setCreators] = useState<AuthorizedCreator[]>(appSettings?.authorized_creators || []);
+  const [newCreatorHex, setNewCreatorHex] = useState("");
+  const [newCreatorMaxAmount, setNewCreatorMaxAmount] = useState("");
+
+  // Fetch profiles for authorized creators
+  const creatorPubkeys = creators.map(c => c.nostrHexId);
+  const { profiles: creatorProfiles } = useNostrProfilesCacheBulk(creatorPubkeys);
+
   useEffect(() => {
     if (appSettings) {
       setLocalPTS(appSettings.project_type_settings || defaultPTS);
       setAdmins(appSettings.millionideas_admins || []);
+      setCreators(appSettings.authorized_creators || []);
     }
   }, [appSettings]);
 
@@ -71,6 +82,33 @@ export default function MillionIdeasAdmin() {
   const handleRemoveAdmin = async (hex: string) => {
     const updated = admins.filter(a => a !== hex);
     await update100MAdmins(updated);
+  };
+
+  const handleAddCreator = async () => {
+    const hex = newCreatorHex.trim().toLowerCase();
+    const maxAmount = parseInt(newCreatorMaxAmount, 10);
+    if (!hex) return;
+    if (!/^[0-9a-f]{64}$/.test(hex)) {
+      toast({ title: "Error", description: "Invalid Nostr HEX ID — must be 64 hex characters", variant: "destructive" });
+      return;
+    }
+    if (isNaN(maxAmount) || maxAmount <= 0) {
+      toast({ title: "Error", description: "Please enter a valid max amount greater than 0", variant: "destructive" });
+      return;
+    }
+    if (creators.find(c => c.nostrHexId === hex)) {
+      toast({ title: "Error", description: "This creator is already added", variant: "destructive" });
+      return;
+    }
+    const updated = [...creators, { nostrHexId: hex, maxAmount }];
+    await updateAuthorizedCreators(updated);
+    setNewCreatorHex("");
+    setNewCreatorMaxAmount("");
+  };
+
+  const handleRemoveCreator = async (hex: string) => {
+    const updated = creators.filter(c => c.nostrHexId !== hex);
+    await updateAuthorizedCreators(updated);
   };
 
   return (
@@ -189,6 +227,72 @@ export default function MillionIdeasAdmin() {
                   </Button>
                 </div>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Authorized Project Creators */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserCheck className="h-5 w-5" />
+            Authorized Project Creators
+          </CardTitle>
+          <CardDescription>
+            Users who can create projects with custom higher funding limits. Their max amount overrides the global project type limits if higher.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input
+              value={newCreatorHex}
+              onChange={(e) => setNewCreatorHex(e.target.value)}
+              placeholder="Nostr HEX ID (64 characters)"
+              className="font-mono text-sm flex-1"
+            />
+            <Input
+              type="number"
+              value={newCreatorMaxAmount}
+              onChange={(e) => setNewCreatorMaxAmount(e.target.value)}
+              placeholder="Max amount (EUR)"
+              className="w-full sm:w-40"
+              min="1"
+            />
+            <Button onClick={handleAddCreator} className="shrink-0">Add</Button>
+          </div>
+
+          {creators.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No authorized creators added. All users use global project type limits.</p>
+          ) : (
+            <div className="space-y-2">
+              {creators.map((creator) => {
+                const profile = creatorProfiles.get(creator.nostrHexId);
+                const displayName = profile?.display_name || profile?.full_name;
+                return (
+                  <div key={creator.nostrHexId} className="flex items-center justify-between gap-3 p-3 border rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        {displayName && (
+                          <span className="font-medium text-sm">{displayName}</span>
+                        )}
+                        <span className="text-xs font-semibold text-green-600 bg-green-500/10 px-2 py-0.5 rounded">
+                          Max: {creator.maxAmount} EUR
+                        </span>
+                      </div>
+                      <p className="font-mono text-xs text-muted-foreground truncate mt-0.5">{creator.nostrHexId}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
+                      onClick={() => handleRemoveCreator(creator.nostrHexId)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
