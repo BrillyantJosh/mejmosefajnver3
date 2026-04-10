@@ -87,7 +87,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         default_rooms: (getValue('default_rooms') as string[]) || ["general"],
         new_projects_100millionideas: getValue('100millionideas_new_projects_enabled') !== false,
         warning_before_split: warningBeforeSplit,
-        project_type_settings: (getValue('project_type_settings') as ProjectTypeSettings) || defaultProjectTypeSettings,
+        project_type_settings: { ...defaultProjectTypeSettings, ...((getValue('project_type_settings') as Partial<ProjectTypeSettings>) || {}) },
         millionideas_admins: (getValue('100millionideas_admins') as string[]) || [],
         authorized_creators: (getValue('100millionideas_authorized_creators') as any[]) || [],
         project_overrides: (getValue('100millionideas_project_overrides') as ProjectOverrides) || {},

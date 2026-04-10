@@ -22,9 +22,10 @@ export default function MillionIdeasAdmin() {
     OnlineEvent: { enabled: true, maxAmount: 200 },
     Event: { enabled: true, maxAmount: 200 },
   };
-  const [localPTS, setLocalPTS] = useState<ProjectTypeSettings>(
-    appSettings?.project_type_settings || defaultPTS
-  );
+  const [localPTS, setLocalPTS] = useState<ProjectTypeSettings>({
+    ...defaultPTS,
+    ...(appSettings?.project_type_settings || {}),
+  });
 
   // --- Module Admins ---
   const [admins, setAdmins] = useState<string[]>(appSettings?.millionideas_admins || []);
@@ -41,7 +42,7 @@ export default function MillionIdeasAdmin() {
 
   useEffect(() => {
     if (appSettings) {
-      setLocalPTS(appSettings.project_type_settings || defaultPTS);
+      setLocalPTS({ ...defaultPTS, ...(appSettings.project_type_settings || {}) });
       setAdmins(appSettings.millionideas_admins || []);
       setCreators(appSettings.authorized_creators || []);
     }
