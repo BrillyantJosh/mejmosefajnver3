@@ -33,10 +33,15 @@ const Projects = () => {
 
   const overrides: ProjectOverrides = appSettings?.project_overrides || {};
 
-  // For non-admins, filter out hidden projects
+  // For non-admins: filter out hidden projects AND pending (unapproved) projects
+  // Exception: project owner can always see their own pending project
   const visibleProjects = is100MAdmin
     ? projects
-    : projects.filter(p => !overrides[p.id]?.hidden);
+    : projects.filter(p => {
+        if (overrides[p.id]?.hidden) return false;
+        if (overrides[p.id]?.approved === false && p.ownerPubkey !== session?.nostrHexId) return false;
+        return true;
+      });
 
   // Fetch donations for SummaryBar (Total Raised display)
   const projectIds = useMemo(() => visibleProjects.map(p => p.id), [visibleProjects]);
