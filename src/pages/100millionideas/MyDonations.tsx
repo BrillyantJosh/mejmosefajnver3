@@ -124,7 +124,7 @@ const DonationCard = ({ donation, projectTitle }: DonationCardProps) => {
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <span>{format(new Date(donation.timestampPaid * 1000), 'dd/MM/yyyy')}</span>
               <a
-                href={`https://explorer.lanacoin.com/tx/${donation.txId}`}
+                href={`https://chainz.cryptoid.info/lana/tx.dws?${donation.txId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-primary hover:underline"
