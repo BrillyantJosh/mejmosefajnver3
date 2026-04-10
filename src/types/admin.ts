@@ -5,6 +5,9 @@ export interface ProjectTypeConfig {
 
 export interface ProjectTypeSettings {
   Inspiration: ProjectTypeConfig;
+  Enhancement: ProjectTypeConfig;
+  Agreement: ProjectTypeConfig;
+  Awareness: ProjectTypeConfig;
   OnlineEvent: ProjectTypeConfig;
   Event: ProjectTypeConfig;
 }

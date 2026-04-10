@@ -18,6 +18,9 @@ import { useNostrWallets } from "@/hooks/useNostrWallets";
 
 const PROJECT_TYPES = [
   { value: "Inspiration", label: "Inspiration" },
+  { value: "Enhancement", label: "Enhancement" },
+  { value: "Agreement", label: "Agreement" },
+  { value: "Awareness", label: "Awareness" },
   { value: "OnlineEvent", label: "Online Event" },
   { value: "Event", label: "Event" },
 ];

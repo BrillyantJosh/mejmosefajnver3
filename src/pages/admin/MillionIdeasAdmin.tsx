@@ -16,6 +16,9 @@ export default function MillionIdeasAdmin() {
   // --- Project Type Settings ---
   const defaultPTS: ProjectTypeSettings = {
     Inspiration: { enabled: true, maxAmount: 200 },
+    Enhancement: { enabled: true, maxAmount: 200 },
+    Agreement: { enabled: true, maxAmount: 200 },
+    Awareness: { enabled: true, maxAmount: 200 },
     OnlineEvent: { enabled: true, maxAmount: 200 },
     Event: { enabled: true, maxAmount: 200 },
   };
@@ -151,7 +154,7 @@ export default function MillionIdeasAdmin() {
           <CardDescription>Enable or disable project types and set maximum funding amounts for each</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {(["Inspiration", "OnlineEvent", "Event"] as const).map((type) => {
+          {(["Inspiration", "Enhancement", "Agreement", "Awareness", "OnlineEvent", "Event"] as const).map((type) => {
             const label = type === "OnlineEvent" ? "Online Event" : type;
             return (
               <div key={type} className="p-3 border rounded-lg space-y-3">

@@ -65,6 +65,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
       const defaultProjectTypeSettings: ProjectTypeSettings = {
         Inspiration: { enabled: true, maxAmount: 200 },
+        Enhancement: { enabled: true, maxAmount: 200 },
+        Agreement: { enabled: true, maxAmount: 200 },
+        Awareness: { enabled: true, maxAmount: 200 },
         OnlineEvent: { enabled: true, maxAmount: 200 },
         Event: { enabled: true, maxAmount: 200 },
       };
