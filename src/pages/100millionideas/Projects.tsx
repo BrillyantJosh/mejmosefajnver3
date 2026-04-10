@@ -295,6 +295,7 @@ const Projects = () => {
               isHidden={!!overrides[project.id]?.hidden}
               isCompleted={!!overrides[project.id]?.completed}
               isApproved={overrides[project.id]?.approved !== false}
+              isFunded={!!overrides[project.id]?.funded}
               completionComment={overrides[project.id]?.completionComment}
               onToggleHidden={handleToggleHidden}
               onToggleCompleted={handleToggleCompleted}

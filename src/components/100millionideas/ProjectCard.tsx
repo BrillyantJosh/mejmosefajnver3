@@ -26,6 +26,7 @@ interface ProjectCardProps {
   isHidden?: boolean;
   isCompleted?: boolean;
   isApproved?: boolean;
+  isFunded?: boolean;
   completionComment?: string;
   onToggleHidden?: (dTag: string) => void;
   onToggleCompleted?: (dTag: string, comment?: string) => void;
@@ -47,6 +48,7 @@ const ProjectCard = ({
   isHidden,
   isCompleted,
   isApproved = true,
+  isFunded = false,
   completionComment,
   onToggleHidden,
   onToggleCompleted,
@@ -65,7 +67,8 @@ const ProjectCard = ({
   const goalAmount = parseFloat(project.fiatGoal) || 0;
   const backers = donations.length;
   const fundedPercentage = goalAmount > 0 ? Math.min(Math.round((currentFunding / goalAmount) * 100), 100) : 0;
-  const isFullyFunded = goalAmount > 0 && currentFunding >= goalAmount * 0.99;
+  // Use DB-cached funded status (from heartbeat) instead of local calculation
+  const isFullyFunded = isFunded;
 
   const handleSupportProject = () => {
     navigate(`/100millionideas/project/${project.id}`);
