@@ -101,6 +101,31 @@ const Projects = () => {
     }
   };
 
+  const handleToggleApproved = async (dTag: string) => {
+    if (!session?.nostrHexId) return;
+    setActionLoading(dTag);
+    try {
+      const current = overrides[dTag] || {};
+      const nowApproved = current.approved === false; // toggle: false → true, undefined/true → false
+      const updated = {
+        ...overrides,
+        [dTag]: { ...current, approved: nowApproved },
+      };
+      await updateProjectOverrides(updated);
+      toast({
+        title: nowApproved ? "Project Approved" : "Project set to Pending",
+        description: nowApproved
+          ? "Users can now donate to this project"
+          : "Donations are paused until approved",
+      });
+    } catch (error) {
+      console.error('Error toggling approval:', error);
+      toast({ title: "Error", description: "Failed to update approval status", variant: "destructive" });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleToggleHidden = async (dTag: string) => {
     if (!session?.nostrHexId) return;
     setActionLoading(dTag);
@@ -272,9 +297,11 @@ const Projects = () => {
               isModuleAdmin={is100MAdmin}
               isHidden={!!overrides[project.id]?.hidden}
               isCompleted={!!overrides[project.id]?.completed}
+              isApproved={overrides[project.id]?.approved !== false}
               completionComment={overrides[project.id]?.completionComment}
               onToggleHidden={handleToggleHidden}
               onToggleCompleted={handleToggleCompleted}
+              onToggleApproved={handleToggleApproved}
               actionLoading={actionLoading}
             />
           ))}

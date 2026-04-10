@@ -16,6 +16,7 @@ export interface ProjectOverride {
   hidden?: boolean;
   completed?: boolean;
   completionComment?: string;
+  approved?: boolean;
 }
 
 export interface ProjectOverrides {

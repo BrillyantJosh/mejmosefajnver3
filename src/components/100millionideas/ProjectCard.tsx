@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Heart, Users, EyeOff, Eye, Trophy, Loader2 } from "lucide-react";
+import { Heart, Users, EyeOff, Eye, Trophy, Loader2, Clock, CheckCircle } from "lucide-react";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { useNostrProjectDonations } from "@/hooks/useNostrProjectDonations";
 import { ProjectData } from "@/hooks/useNostrProjects";
@@ -25,9 +25,11 @@ interface ProjectCardProps {
   isModuleAdmin?: boolean;
   isHidden?: boolean;
   isCompleted?: boolean;
+  isApproved?: boolean;
   completionComment?: string;
   onToggleHidden?: (dTag: string) => void;
   onToggleCompleted?: (dTag: string, comment?: string) => void;
+  onToggleApproved?: (dTag: string) => void;
   actionLoading?: string | null;
 }
 
@@ -44,9 +46,11 @@ const ProjectCard = ({
   isModuleAdmin,
   isHidden,
   isCompleted,
+  isApproved = true,
   completionComment,
   onToggleHidden,
   onToggleCompleted,
+  onToggleApproved,
   actionLoading,
 }: ProjectCardProps) => {
   const { profile } = useNostrProfileCache(project.ownerPubkey);
@@ -132,6 +136,12 @@ const ProjectCard = ({
                   Hidden
                 </Badge>
               )}
+              {!isApproved && (
+                <Badge className="bg-amber-500 text-white gap-1">
+                  <Clock className="h-3 w-3" />
+                  Pending Approval
+                </Badge>
+              )}
               {isFullyFunded && (
                 <Badge className="bg-green-500 text-white">Funded ✓</Badge>
               )}
@@ -197,10 +207,10 @@ const ProjectCard = ({
           <Button
             className="w-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleSupportProject}
-            disabled={isFullyFunded}
+            disabled={isFullyFunded || !isApproved}
           >
             <Heart className="h-4 w-4 mr-2" />
-            {isFullyFunded ? 'Fully Funded' : 'Support Project'}
+            {isFullyFunded ? 'Fully Funded' : !isApproved ? 'Pending Approval' : 'Support Project'}
           </Button>
 
           {/* Admin Controls */}
@@ -238,6 +248,25 @@ const ProjectCard = ({
                   <Trophy className="h-3.5 w-3.5" />
                 )}
                 {isCompleted ? "Completed ✓" : "Complete"}
+              </Button>
+              <Button
+                variant={isApproved ? "default" : "outline"}
+                size="sm"
+                className={`flex-1 gap-1 ${isApproved ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'border-amber-300 text-amber-600'}`}
+                disabled={isThisLoading}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleApproved?.(project.id);
+                }}
+              >
+                {isThisLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : isApproved ? (
+                  <CheckCircle className="h-3.5 w-3.5" />
+                ) : (
+                  <Clock className="h-3.5 w-3.5" />
+                )}
+                {isApproved ? "Approved ✓" : "Approve"}
               </Button>
             </div>
           )}
