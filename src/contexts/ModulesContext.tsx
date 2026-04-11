@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -390,6 +390,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-teal-500 to-cyan-500',
     enabled: true,
     order: 29
+  },
+  {
+    id: 'meet',
+    title: 'Lana Meet',
+    description: 'Video meetings with real-time translation',
+    icon: Video,
+    path: '/meet',
+    gradient: 'from-sky-500 to-indigo-500',
+    enabled: true,
+    order: 2.5
   }
 ];
 
@@ -453,7 +463,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'splitwatcher': 'SPLIT Watcher',
     'reportloss': 'Report Loss',
     'shop': 'Shop',
-    'lanadiscount': 'Lana Discount'
+    'lanadiscount': 'Lana Discount',
+    'meet': 'Lana Meet'
   };
   return mapping[id] || id;
 };
@@ -493,7 +504,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'SPLIT Watcher': 'splitwatcher',
     'Report Loss': 'reportloss',
     'Shop': 'shop',
-    'Lana Discount': 'lanadiscount'
+    'Lana Discount': 'lanadiscount',
+    'Lana Meet': 'meet'
   };
   return mapping[id] || null;
 };
