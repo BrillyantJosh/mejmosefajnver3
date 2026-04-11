@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Video, Plus, Users } from "lucide-react";
+import { Video, Users, CalendarPlus } from "lucide-react";
 
 export default function MeetLayout() {
   const meetNavItems = [
@@ -8,6 +8,11 @@ export default function MeetLayout() {
       title: "Join",
       path: "/meet",
       icon: Video
+    },
+    {
+      title: "Načrtovani",
+      path: "/meet/schedule",
+      icon: CalendarPlus
     },
     {
       title: "Active",

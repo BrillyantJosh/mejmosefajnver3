@@ -126,6 +126,7 @@ import DiscountSell from "./pages/discount/DiscountSell";
 import MeetLayout from "./pages/meet/MeetLayout";
 import MeetJoin from "./pages/meet/MeetJoin";
 import MeetActive from "./pages/meet/MeetActive";
+import MeetSchedule from "./pages/meet/MeetSchedule";
 
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
@@ -366,6 +367,7 @@ const App = () => (
                   </Route>
                   <Route path="/meet" element={<MeetLayout />}>
                     <Route index element={<MeetJoin />} />
+                    <Route path="schedule" element={<MeetSchedule />} />
                     <Route path="active" element={<MeetActive />} />
                   </Route>
                   <Route
