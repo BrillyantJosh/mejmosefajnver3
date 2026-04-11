@@ -1,15 +1,21 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarPlus, Copy, Check, ExternalLink, Trash2, Clock, Users, Video, RefreshCw } from "lucide-react";
+import { CalendarPlus, Copy, Check, Trash2, Clock, Users, Video, RefreshCw, Globe, Lock, Search, X, UserPlus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
 import { toast } from "sonner";
+import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
 
 const MEET_BASE_URL = "https://meet.lanaloves.us";
+
+interface Invitee {
+  pubkey: string;
+  name: string;
+}
 
 interface Meeting {
   id: string;
@@ -19,6 +25,8 @@ interface Meeting {
   createdBy: string;
   createdByName: string;
   createdAt: string;
+  visibility: 'public' | 'private';
+  invitees: Invitee[];
   isLive: boolean;
   participantCount: number;
 }
@@ -47,7 +55,7 @@ function createAuthToken(session: { nostrHexId: string; nostrPrivateKey: string;
 function generateSlug(title: string): string {
   return title.trim().toLowerCase()
     .replace(/[čć]/g, 'c').replace(/[šś]/g, 's').replace(/[žź]/g, 'z')
-    .replace(/đ/g, 'd').replace(/ž/g, 'z')
+    .replace(/đ/g, 'd')
     .replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
     .slice(0, 40);
 }
@@ -66,12 +74,17 @@ function isInPast(iso: string): boolean {
 
 export default function MeetSchedule() {
   const { session } = useAuth();
+  const { profiles } = useNostrKind0Profiles();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  const [invitees, setInvitees] = useState<Invitee[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Set default date/time to tomorrow at 10:00
@@ -82,10 +95,31 @@ export default function MeetSchedule() {
     setTime('10:00');
   }, []);
 
+  // Filter profiles for invitee search
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim() || !profiles) return [];
+    const words = searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    const alreadyInvited = new Set(invitees.map(i => i.pubkey));
+    return profiles
+      .filter(p => {
+        if (p.pubkey === session?.nostrHexId) return false; // exclude self
+        if (alreadyInvited.has(p.pubkey)) return false;
+        const searchable = [p.name, p.display_name, p.pubkey, p.location, p.about]
+          .filter(Boolean).join(' ').toLowerCase();
+        return words.every(word => searchable.includes(word));
+      })
+      .slice(0, 8);
+  }, [searchQuery, profiles, invitees, session?.nostrHexId]);
+
   const fetchMeetings = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${MEET_BASE_URL}/api/meetings`);
+      let url = `${MEET_BASE_URL}/api/meetings`;
+      if (session) {
+        const token = createAuthToken(session);
+        url += `?auth=${token}`;
+      }
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setMeetings(data.meetings || []);
@@ -95,7 +129,7 @@ export default function MeetSchedule() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     fetchMeetings();
@@ -108,6 +142,10 @@ export default function MeetSchedule() {
       toast.error('Izpolni vsa polja');
       return;
     }
+    if (visibility === 'private' && invitees.length === 0) {
+      toast.error('Dodaj vsaj enega udeleženca za zasebni sestanek');
+      return;
+    }
 
     setCreating(true);
     try {
@@ -118,7 +156,14 @@ export default function MeetSchedule() {
       const res = await fetch(`${MEET_BASE_URL}/api/meetings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), roomId, scheduledAt, authToken: token }),
+        body: JSON.stringify({
+          title: title.trim(),
+          roomId,
+          scheduledAt,
+          authToken: token,
+          visibility,
+          invitees: visibility === 'private' ? invitees : [],
+        }),
       });
 
       if (!res.ok) {
@@ -129,8 +174,9 @@ export default function MeetSchedule() {
       const meeting = await res.json();
       toast.success('Sestanek ustvarjen!');
       setTitle('');
+      setInvitees([]);
+      setVisibility('public');
 
-      // Copy link
       const link = `${MEET_BASE_URL}/${meeting.roomId}`;
       await navigator.clipboard.writeText(link);
       toast.success('Povezava kopirana v odložišče');
@@ -175,6 +221,18 @@ export default function MeetSchedule() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const addInvitee = (pubkey: string, name: string) => {
+    if (!invitees.some(i => i.pubkey === pubkey)) {
+      setInvitees(prev => [...prev, { pubkey, name }]);
+    }
+    setSearchQuery('');
+    setShowSearch(false);
+  };
+
+  const removeInvitee = (pubkey: string) => {
+    setInvitees(prev => prev.filter(i => i.pubkey !== pubkey));
+  };
+
   return (
     <div className="space-y-4 px-3 sm:px-4 pb-24">
       <div className="flex items-center justify-between mb-4">
@@ -208,27 +266,116 @@ export default function MeetSchedule() {
           <div className="flex gap-2">
             <div className="flex-1 space-y-1.5">
               <Label htmlFor="meet-date" className="text-xs text-muted-foreground">Datum</Label>
-              <Input
-                id="meet-date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
+              <Input id="meet-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div className="flex-1 space-y-1.5">
               <Label htmlFor="meet-time" className="text-xs text-muted-foreground">Ura</Label>
-              <Input
-                id="meet-time"
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-              />
+              <Input id="meet-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
             </div>
           </div>
+
+          {/* Visibility Toggle */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Vidnost</Label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={visibility === 'public' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1"
+                onClick={() => setVisibility('public')}
+              >
+                <Globe className="mr-1.5 h-3.5 w-3.5" />
+                Javni
+              </Button>
+              <Button
+                type="button"
+                variant={visibility === 'private' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1"
+                onClick={() => setVisibility('private')}
+              >
+                <Lock className="mr-1.5 h-3.5 w-3.5" />
+                Zasebni
+              </Button>
+            </div>
+          </div>
+
+          {/* Invitees (only for private) */}
+          {visibility === 'private' && (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Povabljeni udeleženci</Label>
+
+              {/* Invitee chips */}
+              {invitees.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {invitees.map(inv => (
+                    <span key={inv.pubkey} className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs px-2 py-1 rounded-full">
+                      {inv.name}
+                      <button onClick={() => removeInvitee(inv.pubkey)} className="hover:text-destructive">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Search input */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Išči po imenu ali Nostr HEX ID..."
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setShowSearch(true); }}
+                  onFocus={() => setShowSearch(true)}
+                  className="pl-8 h-9 text-sm"
+                />
+              </div>
+
+              {/* Search results dropdown */}
+              {showSearch && searchQuery.trim() && (
+                <div className="border rounded-md bg-card max-h-48 overflow-y-auto">
+                  {searchResults.length === 0 ? (
+                    <div className="p-3 text-xs text-muted-foreground text-center">
+                      Ni rezultatov za "{searchQuery}"
+                    </div>
+                  ) : (
+                    searchResults.map(p => (
+                      <button
+                        key={p.pubkey}
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/50 text-left transition-colors"
+                        onClick={() => addInvitee(p.pubkey, p.display_name || p.name || p.pubkey.slice(0, 12))}
+                      >
+                        <UserPlus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{p.display_name || p.name || 'Anon'}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono truncate">{p.pubkey.slice(0, 16)}...</p>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* Manual hex ID entry */}
+              {showSearch && searchQuery.trim().length >= 64 && !searchResults.some(r => r.pubkey === searchQuery.trim()) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={() => addInvitee(searchQuery.trim(), searchQuery.trim().slice(0, 12) + '...')}
+                >
+                  <UserPlus className="mr-1.5 h-3 w-3" />
+                  Dodaj {searchQuery.trim().slice(0, 12)}...
+                </Button>
+              )}
+            </div>
+          )}
+
           <Button
             onClick={handleCreate}
             className="w-full"
-            disabled={creating || !title.trim() || !date || !time}
+            disabled={creating || !title.trim() || !date || !time || (visibility === 'private' && invitees.length === 0)}
           >
             {creating ? (
               <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
@@ -268,6 +415,11 @@ export default function MeetSchedule() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-sm truncate">{m.title}</p>
+                        {m.visibility === 'private' ? (
+                          <Lock className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                        ) : (
+                          <Globe className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                        )}
                         {m.isLive && (
                           <span className="text-[10px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-1.5 py-0.5 rounded-full">V ŽIVO</span>
                         )}
@@ -286,6 +438,9 @@ export default function MeetSchedule() {
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {m.createdByName}
+                        {m.visibility === 'private' && m.invitees?.length > 0 && (
+                          <span className="ml-1">· {m.invitees.length} povabljenih</span>
+                        )}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
