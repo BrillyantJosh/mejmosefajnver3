@@ -3,9 +3,10 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle, Video, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt } from "lucide-react";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, Video as VideoIcon, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt, Zap, Users, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import LazyYouTube from "@/components/LazyYouTube";
+import { finalizeEvent } from "nostr-tools";
 import { formatDistanceToNow, format, endOfWeek } from "date-fns";
 import { useNostrEventsAll, LanaEvent } from "@/hooks/useNostrEvents";
 import { useRecentConversations } from "@/hooks/useRecentConversations";
@@ -15,6 +16,28 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
+const MEET_BASE_URL = "https://meet.lanaloves.us";
+
+function createMeetAuthToken(session: { nostrHexId: string; nostrPrivateKey: string; profileName?: string; profileDisplayName?: string; profileLang?: string }): string {
+  const privateKeyBytes = new Uint8Array(
+    session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
+  );
+  const content = JSON.stringify({
+    name: session.profileDisplayName || session.profileName || 'Anon',
+    lang: session.profileLang || 'sl',
+  });
+  const eventTemplate = {
+    kind: 22242,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [['relay', 'meet.lanaloves.us'], ['action', 'join']],
+    content,
+    pubkey: session.nostrHexId,
+  };
+  const signedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
+  const json = JSON.stringify(signedEvent);
+  return btoa(unescape(encodeURIComponent(json)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 interface ActiveVotingProposal {
   id: string;
@@ -311,6 +334,20 @@ export default function Home() {
     gcTime: 10 * 60 * 1000,
   });
 
+  // --- Active Meet Rooms (React Query — cached) ---
+  const { data: activeMeetRooms = [] } = useQuery<Array<{ roomId: string; participants: number }>>({
+    queryKey: ['active-meet-rooms'],
+    queryFn: async () => {
+      const res = await fetch(`${MEET_BASE_URL}/api/rooms`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.rooms || []).filter((r: any) => r.participants > 0);
+    },
+    staleTime: 15 * 1000,
+    gcTime: 60 * 1000,
+    refetchInterval: 15 * 1000,
+  });
+
   // Filter online events: this week only, upcoming/active
   const now = new Date();
   const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
@@ -322,6 +359,13 @@ export default function Home() {
   const liveUpcoming = liveEvents
     .filter(e => e.status === 'active' && (e.end ? e.end >= now : e.start >= new Date(now.getTime() - 2 * 60 * 60 * 1000)))
     .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  // Filter events happening RIGHT NOW (started and not ended yet)
+  const happeningNow = [...onlineThisWeek, ...liveUpcoming].filter(ev => {
+    const started = ev.start <= now;
+    const notEnded = ev.end ? ev.end >= now : ev.start >= new Date(now.getTime() - 2 * 60 * 60 * 1000);
+    return started && notEnded;
+  });
 
   // Pagination
   const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
@@ -512,6 +556,67 @@ export default function Home() {
 
           {/* Sidebar — right */}
           <div className="w-full lg:w-72 flex-shrink-0 space-y-4">
+            {/* Lana Meet — Active Rooms */}
+            {session && activeMeetRooms.length > 0 && (
+              <Card className="border-green-400/40 dark:border-green-600/40 bg-gradient-to-br from-green-500/5 to-emerald-500/5">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Zap className="h-5 w-5 text-green-500" />
+                    Lana Meet
+                    <Badge variant="default" className="ml-auto bg-green-500 text-[10px] px-1.5 animate-pulse">
+                      LIVE
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-1.5">
+                    {activeMeetRooms.slice(0, 4).map((room) => (
+                      <button
+                        key={room.roomId}
+                        onClick={() => {
+                          const token = createMeetAuthToken(session);
+                          window.open(`${MEET_BASE_URL}/${room.roomId}?lana_token=${token}`, '_blank');
+                        }}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-green-500/10 transition-colors text-left group"
+                      >
+                        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse flex-shrink-0" />
+                        <span className="text-sm truncate flex-1">{room.roomId}</span>
+                        <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                          <Users className="h-2.5 w-2.5" />
+                          {room.participants}
+                        </span>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    ))}
+                  </div>
+                  <Link
+                    to="/meet"
+                    className="flex items-center justify-center px-3 py-2 mt-2 rounded-lg text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-500/10 transition-colors"
+                  >
+                    Open Lana Meet →
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Lana Meet — No active rooms, show quick link */}
+            {session && activeMeetRooms.length === 0 && (
+              <Link to="/meet" className="block">
+                <Card className="hover:shadow-md transition-shadow hover:border-green-400/40">
+                  <CardContent className="py-3 px-4 flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
+                      <Zap className="h-4.5 w-4.5 text-green-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">Lana Meet</p>
+                      <p className="text-[10px] text-muted-foreground">Start an instant video call</p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  </CardContent>
+                </Card>
+              </Link>
+            )}
+
             {/* Pending Invoices Card */}
             {session && pendingInvoices.length > 0 && (
               <Link to="/shop/pay" className="block">
@@ -554,64 +659,38 @@ export default function Home() {
               </Link>
             )}
 
-            {/* Events Card — most time-sensitive */}
-            {!loadingEvents && (onlineThisWeek.length > 0 || liveUpcoming.length > 0) && (
-              <Card>
+            {/* Events Card — only showing events happening RIGHT NOW */}
+            {!loadingEvents && happeningNow.length > 0 && (
+              <Card className="border-red-400/30">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-indigo-500" />
+                    <Calendar className="h-5 w-5 text-red-500" />
                     Events
+                    <Badge variant="destructive" className="ml-auto text-[10px] px-1.5 animate-pulse">
+                      LIVE
+                    </Badge>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-0 space-y-4">
-                  {/* Online Events — this week */}
-                  {onlineThisWeek.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <Globe className="h-3.5 w-3.5 text-blue-500" />
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Online this week</span>
-                      </div>
-                      <div className="space-y-1">
-                        {onlineThisWeek.slice(0, 5).map((ev) => (
-                          <Link
-                            key={ev.id}
-                            to={`/events/detail/${encodeURIComponent(ev.dTag)}`}
-                            className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:bg-secondary/50 transition-colors"
-                          >
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(ev.start, 'EEE HH:mm')}</span>
-                            <span className="truncate">{ev.title}</span>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                <CardContent className="pt-0 space-y-1">
+                  {happeningNow.slice(0, 5).map((ev) => (
+                    <Link
+                      key={ev.id}
+                      to={`/events/detail/${encodeURIComponent(ev.dTag)}`}
+                      className="flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm hover:bg-secondary/50 transition-colors group"
+                    >
+                      <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                      {ev.isOnline ? (
+                        <Globe className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                      ) : (
+                        <MapPin className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
+                      )}
+                      <span className="truncate flex-1">{ev.title}</span>
+                    </Link>
+                  ))}
 
-                  {/* Live Events */}
-                  {liveUpcoming.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <MapPin className="h-3.5 w-3.5 text-red-500" />
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Live</span>
-                      </div>
-                      <div className="space-y-1">
-                        {liveUpcoming.slice(0, 5).map((ev) => (
-                          <Link
-                            key={ev.id}
-                            to={`/events/detail/${encodeURIComponent(ev.dTag)}`}
-                            className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:bg-secondary/50 transition-colors"
-                          >
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(ev.start, 'dd.MM.')}</span>
-                            <span className="truncate">{ev.title}</span>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Link to all events */}
                   <Link
                     to="/events"
-                    className="flex items-center justify-center px-3 py-2 rounded-lg text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
+                    className="flex items-center justify-center px-3 py-2 mt-1 rounded-lg text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
                   >
                     View all events →
                   </Link>
@@ -696,7 +775,7 @@ export default function Home() {
                     to="/video-instructions"
                     className="flex items-center gap-2 px-3 py-2.5 mt-3 rounded-lg text-sm font-medium border border-dashed border-violet-500/30 hover:bg-violet-500/5 transition-colors group"
                   >
-                    <Video className="h-4 w-4 text-violet-500 flex-shrink-0 group-hover:scale-110 transition-transform" />
+                    <VideoIcon className="h-4 w-4 text-violet-500 flex-shrink-0 group-hover:scale-110 transition-transform" />
                     <span>Video Instructions</span>
                   </Link>
                 </CardContent>
