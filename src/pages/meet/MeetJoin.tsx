@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Zap, Video, ExternalLink, Users, Globe, Lock, Eye, EyeOff } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Zap, Video, ExternalLink, Users, Globe, Lock, Eye, EyeOff, Radio } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
 import { toast } from "sonner";
@@ -64,6 +65,8 @@ export default function MeetJoin() {
   const { t } = useTranslation(meetTranslations);
   const [isPrivate, setIsPrivate] = useState(false);
   const [customName, setCustomName] = useState('');
+  const [streamToYouTube, setStreamToYouTube] = useState(false);
+  const [youtubeStreamKey, setYoutubeStreamKey] = useState('');
   const [publicRooms, setPublicRooms] = useState<ActiveRoom[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -126,7 +129,13 @@ export default function MeetJoin() {
       .replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 50)
       + (hasCustom ? '-' + Math.floor(Math.random() * 100) : '');
 
-    // Create meeting record with visibility
+    // Validate YouTube stream key if streaming is enabled
+    if (streamToYouTube && !youtubeStreamKey.trim()) {
+      toast.error(t('instant.streamKeyRequired'));
+      return;
+    }
+
+    // Create meeting record with visibility and streaming preferences
     try {
       await fetch(`${MEET_BASE_URL}/api/meetings`, {
         method: 'POST',
@@ -137,17 +146,31 @@ export default function MeetJoin() {
           authToken: token,
           visibility: isPrivate ? 'private' : 'public',
           invitees: [],
+          streaming: streamToYouTube,
+          streamKey: streamToYouTube ? youtubeStreamKey.trim() : undefined,
         }),
       });
     } catch {
       // Meeting record creation is optional — room still works
     }
 
-    const url = `${MEET_BASE_URL}/${slug}?lana_token=${token}`;
+    // Build URL with streaming config override
+    let url = `${MEET_BASE_URL}/${slug}?lana_token=${token}`;
+    if (streamToYouTube) {
+      url += '#config.liveStreamingEnabled=true';
+    }
+
     window.open(url, '_blank');
-    toast.success(isPrivate ? t('instant.privateMeetingCreated') : t('instant.publicMeetingCreated'));
+
+    const messages: string[] = [];
+    messages.push(isPrivate ? t('instant.privateMeetingCreated') : t('instant.publicMeetingCreated'));
+    if (streamToYouTube) messages.push(t('instant.streamingEnabled'));
+    toast.success(messages.join(' • '));
+
     setCustomName('');
-  }, [session, isPrivate, customName, t]);
+    setStreamToYouTube(false);
+    setYoutubeStreamKey('');
+  }, [session, isPrivate, customName, streamToYouTube, youtubeStreamKey, t]);
 
   const handleJoinRoom = useCallback((roomId: string) => {
     if (!session) return;
@@ -207,6 +230,37 @@ export default function MeetJoin() {
               className="h-9 text-sm"
               maxLength={50}
             />
+          </div>
+
+          {/* YouTube Streaming Option */}
+          <div className="space-y-2.5 pt-1 border-t border-border/50">
+            <span className="text-xs text-muted-foreground font-medium">{t('instant.streamingSection')}</span>
+
+            {/* Stream to YouTube */}
+            <label className="flex items-center gap-2.5 cursor-pointer group">
+              <Checkbox
+                checked={streamToYouTube}
+                onCheckedChange={(v) => setStreamToYouTube(v === true)}
+                className="data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600"
+              />
+              <Radio className="h-3.5 w-3.5 text-red-600/70 group-hover:text-red-600 transition-colors" />
+              <span className="text-sm">{t('instant.streamToYouTube')}</span>
+            </label>
+
+            {/* YouTube Stream Key (shown only when streaming is checked) */}
+            {streamToYouTube && (
+              <div className="ml-7 space-y-1 animate-in slide-in-from-top-1 duration-200">
+                <label className="text-xs text-muted-foreground">{t('instant.streamKey')}</label>
+                <Input
+                  value={youtubeStreamKey}
+                  onChange={(e) => setYoutubeStreamKey(e.target.value)}
+                  placeholder={t('instant.streamKeyPlaceholder')}
+                  className="h-8 text-sm font-mono"
+                  type="password"
+                />
+                <p className="text-[10px] text-muted-foreground/70">{t('instant.streamKeyHelp')}</p>
+              </div>
+            )}
           </div>
 
           {/* Start Button */}
