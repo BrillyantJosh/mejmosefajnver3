@@ -154,10 +154,10 @@ export default function MeetJoin() {
       // Meeting record creation is optional — room still works
     }
 
-    // Build URL with streaming config override
+    // Build URL with streaming config override (hash is not sent to server — safe for keys)
     let url = `${MEET_BASE_URL}/${slug}?lana_token=${token}`;
     if (streamToYouTube) {
-      url += '#config.liveStreamingEnabled=true';
+      url += '#config.liveStreamingEnabled=true&lana_streamKey=' + encodeURIComponent(youtubeStreamKey.trim());
     }
 
     window.open(url, '_blank');
