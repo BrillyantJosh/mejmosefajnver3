@@ -360,13 +360,6 @@ export default function Home() {
     .filter(e => e.status === 'active' && (e.end ? e.end >= now : e.start >= new Date(now.getTime() - 2 * 60 * 60 * 1000)))
     .sort((a, b) => a.start.getTime() - b.start.getTime());
 
-  // Filter events happening RIGHT NOW (started and not ended yet)
-  const happeningNow = [...onlineThisWeek, ...liveUpcoming].filter(ev => {
-    const started = ev.start <= now;
-    const notEnded = ev.end ? ev.end >= now : ev.start >= new Date(now.getTime() - 2 * 60 * 60 * 1000);
-    return started && notEnded;
-  });
-
   // Pagination
   const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
   const paginatedItems = items.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
@@ -659,38 +652,64 @@ export default function Home() {
               </Link>
             )}
 
-            {/* Events Card — only showing events happening RIGHT NOW */}
-            {!loadingEvents && happeningNow.length > 0 && (
-              <Card className="border-red-400/30">
+            {/* Events Card — most time-sensitive */}
+            {!loadingEvents && (onlineThisWeek.length > 0 || liveUpcoming.length > 0) && (
+              <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-red-500" />
+                    <Calendar className="h-5 w-5 text-indigo-500" />
                     Events
-                    <Badge variant="destructive" className="ml-auto text-[10px] px-1.5 animate-pulse">
-                      LIVE
-                    </Badge>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-0 space-y-1">
-                  {happeningNow.slice(0, 5).map((ev) => (
-                    <Link
-                      key={ev.id}
-                      to={`/events/detail/${encodeURIComponent(ev.dTag)}`}
-                      className="flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm hover:bg-secondary/50 transition-colors group"
-                    >
-                      <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-                      {ev.isOnline ? (
-                        <Globe className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
-                      ) : (
-                        <MapPin className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
-                      )}
-                      <span className="truncate flex-1">{ev.title}</span>
-                    </Link>
-                  ))}
+                <CardContent className="pt-0 space-y-4">
+                  {/* Online Events — this week */}
+                  {onlineThisWeek.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Globe className="h-3.5 w-3.5 text-blue-500" />
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Online this week</span>
+                      </div>
+                      <div className="space-y-1">
+                        {onlineThisWeek.slice(0, 5).map((ev) => (
+                          <Link
+                            key={ev.id}
+                            to={`/events/detail/${encodeURIComponent(ev.dTag)}`}
+                            className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:bg-secondary/50 transition-colors"
+                          >
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(ev.start, 'EEE HH:mm')}</span>
+                            <span className="truncate">{ev.title}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
+                  {/* Live Events */}
+                  {liveUpcoming.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <MapPin className="h-3.5 w-3.5 text-red-500" />
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Live</span>
+                      </div>
+                      <div className="space-y-1">
+                        {liveUpcoming.slice(0, 5).map((ev) => (
+                          <Link
+                            key={ev.id}
+                            to={`/events/detail/${encodeURIComponent(ev.dTag)}`}
+                            className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:bg-secondary/50 transition-colors"
+                          >
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(ev.start, 'dd.MM.')}</span>
+                            <span className="truncate">{ev.title}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Link to all events */}
                   <Link
                     to="/events"
-                    className="flex items-center justify-center px-3 py-2 mt-1 rounded-lg text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
+                    className="flex items-center justify-center px-3 py-2 rounded-lg text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
                   >
                     View all events →
                   </Link>
