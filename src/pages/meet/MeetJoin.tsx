@@ -1,31 +1,24 @@
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Video, ExternalLink, Copy, Check, Clock, Users, Globe, Lock } from "lucide-react";
+import { Zap, Video, ExternalLink, Users, Globe, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
 import { toast } from "sonner";
 
 const MEET_BASE_URL = "https://meet.lanaloves.us";
 
-interface MeetingOrRoom {
-  type: 'meeting' | 'room';
-  id: string;
-  title: string;
+interface ActiveRoom {
   roomId: string;
-  scheduledAt?: string;
-  createdByName?: string;
+  participants: number;
   visibility?: 'public' | 'private';
-  invitees?: { pubkey: string; name: string }[];
-  isLive: boolean;
-  participantCount: number;
+  title?: string;
+  createdByName?: string;
 }
 
 function generateRoomName(): string {
-  const adjectives = ['lana', 'zeleni', 'modri', 'hitri', 'tihi', 'jasni', 'topli'];
-  const nouns = ['svet', 'gozd', 'potok', 'veter', 'ogenj', 'kamen', 'zvon'];
+  const adjectives = ['lana', 'zeleni', 'modri', 'hitri', 'tihi', 'jasni', 'topli', 'svetli', 'mirni', 'zlati'];
+  const nouns = ['svet', 'gozd', 'potok', 'veter', 'ogenj', 'kamen', 'zvon', 'oblak', 'luna', 'reka'];
   const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
   const noun = nouns[Math.floor(Math.random() * nouns.length)];
   const num = Math.floor(Math.random() * 100);
@@ -53,24 +46,16 @@ function createAuthToken(session: { nostrHexId: string; nostrPrivateKey: string;
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString('sl-SI', {
-    weekday: 'short', day: 'numeric', month: 'short',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
 export default function MeetJoin() {
   const { session } = useAuth();
-  const [roomName, setRoomName] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [items, setItems] = useState<MeetingOrRoom[]>([]);
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [publicRooms, setPublicRooms] = useState<ActiveRoom[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch active rooms + scheduled meetings
+  // Fetch active public rooms
   useEffect(() => {
     if (!session) return;
-    const fetchAll = async () => {
+    const fetchRooms = async () => {
       try {
         const token = createAuthToken(session);
         const [roomsRes, meetingsRes] = await Promise.allSettled([
@@ -78,215 +63,193 @@ export default function MeetJoin() {
           fetch(`${MEET_BASE_URL}/api/meetings?auth=${token}`),
         ]);
 
-        const combined: MeetingOrRoom[] = [];
+        const activeRooms: ActiveRoom[] = [];
 
-        // Active rooms
+        // Get all active rooms from translation server
         if (roomsRes.status === 'fulfilled' && roomsRes.value.ok) {
           const data = await roomsRes.value.json();
           for (const r of data.rooms || []) {
-            combined.push({
-              type: 'room',
-              id: `room-${r.roomId}`,
-              title: r.roomId,
+            activeRooms.push({
               roomId: r.roomId,
-              isLive: true,
-              participantCount: r.participants,
+              participants: r.participants,
+              visibility: 'public', // default — will be overridden by meeting data
             });
           }
         }
 
-        // Scheduled meetings
+        // Merge meeting metadata (visibility, title, creator)
         if (meetingsRes.status === 'fulfilled' && meetingsRes.value.ok) {
           const data = await meetingsRes.value.json();
           for (const m of data.meetings || []) {
-            // Skip if already in rooms list as active
-            if (!combined.some(c => c.roomId === m.roomId)) {
-              combined.push({
-                type: 'meeting',
-                id: m.id,
-                title: m.title,
-                roomId: m.roomId,
-                scheduledAt: m.scheduledAt,
-                createdByName: m.createdByName,
-                visibility: m.visibility,
-                invitees: m.invitees,
-                isLive: m.isLive,
-                participantCount: m.participantCount,
-              });
-            } else {
-              // Merge meeting info into existing room entry
-              const existing = combined.find(c => c.roomId === m.roomId);
-              if (existing) {
-                existing.title = m.title;
-                existing.scheduledAt = m.scheduledAt;
-                existing.createdByName = m.createdByName;
-                existing.visibility = m.visibility;
-                existing.invitees = m.invitees;
-              }
+            const existing = activeRooms.find(r => r.roomId === m.roomId);
+            if (existing) {
+              existing.visibility = m.visibility || 'public';
+              existing.title = m.title;
+              existing.createdByName = m.createdByName;
             }
           }
         }
 
-        // Sort: live first, then by scheduled time
-        combined.sort((a, b) => {
-          if (a.isLive && !b.isLive) return -1;
-          if (!a.isLive && b.isLive) return 1;
-          if (a.scheduledAt && b.scheduledAt) return new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime();
-          return 0;
-        });
-
-        setItems(combined);
+        // Only show public rooms (filter out private ones)
+        setPublicRooms(activeRooms.filter(r => r.visibility !== 'private'));
       } catch { /* silent */ }
+      setLoading(false);
     };
 
-    fetchAll();
-    const interval = setInterval(fetchAll, 15000);
+    fetchRooms();
+    const interval = setInterval(fetchRooms, 15000);
     return () => clearInterval(interval);
   }, [session]);
 
-  const handleJoin = useCallback((room: string) => {
+  const handleInstantMeet = useCallback(async () => {
     if (!session) return;
-    if (!room.trim()) { toast.error('Vnesi ime sobe'); return; }
+    const room = generateRoomName();
     const token = createAuthToken(session);
     const slug = room.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+    // Create meeting record with visibility
+    try {
+      await fetch(`${MEET_BASE_URL}/api/meetings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: room,
+          roomId: slug,
+          authToken: token,
+          visibility: isPrivate ? 'private' : 'public',
+          invitees: [],
+        }),
+      });
+    } catch {
+      // Meeting record creation is optional — room still works
+    }
+
     const url = `${MEET_BASE_URL}/${slug}?lana_token=${token}`;
     window.open(url, '_blank');
+    toast.success(isPrivate ? 'Zasebni sestanek ustvarjen' : 'Javni sestanek ustvarjen');
+  }, [session, isPrivate]);
+
+  const handleJoinRoom = useCallback((roomId: string) => {
+    if (!session) return;
+    const token = createAuthToken(session);
+    const url = `${MEET_BASE_URL}/${roomId}?lana_token=${token}`;
+    window.open(url, '_blank');
   }, [session]);
-
-  const handleQuickStart = useCallback(() => {
-    const room = generateRoomName();
-    setRoomName(room);
-    handleJoin(room);
-  }, [handleJoin]);
-
-  const handleCopyLink = useCallback(() => {
-    if (!roomName.trim()) { toast.error('Najprej vnesi ime sobe'); return; }
-    const slug = roomName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    navigator.clipboard.writeText(`${MEET_BASE_URL}/${slug}`);
-    setCopied(true);
-    toast.success('Povezava kopirana');
-    setTimeout(() => setCopied(false), 2000);
-  }, [roomName]);
-
-  const displayName = session?.profileDisplayName || session?.profileName || 'Anon';
-  const displayLang = session?.profileLang || 'sl';
 
   return (
     <div className="space-y-4 px-3 sm:px-4 pb-24">
       <div className="flex items-center gap-2 mb-4">
-        <Video className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+        <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
         <h1 className="text-lg sm:text-2xl font-bold">Lana Meet</h1>
       </div>
 
-      {/* Quick Start */}
-      <Card className="border-primary/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Hitri začetek</CardTitle>
-          <CardDescription>Ustvari novo sobo in takoj začni sestanek</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={handleQuickStart} className="w-full" size="lg">
-            <Video className="mr-2 h-5 w-5" />
-            Novi sestanek
+      {/* Instant Meeting */}
+      <Card className="border-primary/20 overflow-hidden">
+        <CardContent className="p-4 space-y-3">
+          {/* Visibility Toggle */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">Vrsta sestanka</span>
+            <button
+              onClick={() => setIsPrivate(!isPrivate)}
+              className={`
+                flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all
+                ${isPrivate
+                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                  : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30'
+                }
+              `}
+            >
+              {isPrivate ? (
+                <>
+                  <EyeOff className="h-3.5 w-3.5" />
+                  Zasebni
+                </>
+              ) : (
+                <>
+                  <Eye className="h-3.5 w-3.5" />
+                  Javni
+                </>
+              )}
+            </button>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            {isPrivate
+              ? 'Zasebni sestanek — ne prikazuje se na seznamu aktivnih sob. Samo osebe s povezavo se lahko pridružijo.'
+              : 'Javni sestanek — viden na seznamu aktivnih sob. Kdorkoli se lahko pridruži.'
+            }
+          </p>
+
+          {/* Start Button */}
+          <Button onClick={handleInstantMeet} className="w-full" size="lg">
+            <Zap className="mr-2 h-5 w-5" />
+            Začni sestanek
           </Button>
         </CardContent>
       </Card>
 
-      {/* Join Room */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Pridruži se sobi</CardTitle>
-          <CardDescription>Vnesi ime sobe ali prilepi povezavo</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="room-name" className="text-xs text-muted-foreground">Ime sobe</Label>
-            <Input
-              id="room-name"
-              placeholder="npr. moj-sestanek"
-              value={roomName}
-              onChange={(e) => setRoomName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleJoin(roomName)}
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={() => handleJoin(roomName)} className="flex-1" disabled={!roomName.trim()}>
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Pridruži se
-            </Button>
-            <Button variant="outline" onClick={handleCopyLink} disabled={!roomName.trim()}>
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Active Public Rooms */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5 px-1">
+          <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-muted-foreground">Aktivni javni pogovori</h2>
+        </div>
 
-      {/* Active rooms + Scheduled meetings */}
-      {items.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-muted-foreground px-1">Aktivni in načrtovani</h2>
-          {items.map((item) => (
-            <Card
-              key={item.id}
-              className={`cursor-pointer hover:border-primary/30 transition-colors ${item.isLive ? 'border-green-500/50 bg-green-500/5' : ''}`}
-              onClick={() => handleJoin(item.roomId)}
-            >
-              <CardContent className="p-3 flex items-center justify-between">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className={`p-1.5 rounded-full flex-shrink-0 ${item.isLive ? 'bg-green-500/10' : 'bg-primary/10'}`}>
-                    <Video className={`h-3.5 w-3.5 ${item.isLive ? 'text-green-500' : 'text-primary'}`} />
+        {loading && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="h-4 w-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                Nalagam...
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {!loading && publicRooms.length === 0 && (
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm text-muted-foreground text-center py-2">
+                Ni aktivnih javnih pogovorov. Začni prvega! 🚀
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {!loading && publicRooms.map((room) => (
+          <Card
+            key={room.roomId}
+            className="cursor-pointer hover:border-primary/30 transition-colors border-green-500/40 bg-green-500/5"
+            onClick={() => handleJoinRoom(room.roomId)}
+          >
+            <CardContent className="p-3 flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="bg-green-500/10 p-1.5 rounded-full flex-shrink-0">
+                  <Video className="h-3.5 w-3.5 text-green-500" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-medium text-sm truncate">{room.title || room.roomId}</p>
+                    <span className="text-[10px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                      V ŽIVO
+                    </span>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className="font-medium text-sm truncate">{item.title}</p>
-                      {item.visibility === 'private' && <Lock className="h-3 w-3 text-amber-500 flex-shrink-0" />}
-                      {item.visibility === 'public' && item.type === 'meeting' && <Globe className="h-3 w-3 text-blue-500 flex-shrink-0" />}
-                      {item.isLive && (
-                        <span className="text-[10px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-1.5 py-0.5 rounded-full flex-shrink-0">V ŽIVO</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      {item.scheduledAt && (
-                        <span className="flex items-center gap-0.5">
-                          <Clock className="h-2.5 w-2.5" />
-                          {formatDateTime(item.scheduledAt)}
-                        </span>
-                      )}
-                      {item.participantCount > 0 && (
-                        <span className="flex items-center gap-0.5">
-                          <Users className="h-2.5 w-2.5" />
-                          {item.participantCount}
-                        </span>
-                      )}
-                      {item.createdByName && <span>{item.createdByName}</span>}
-                    </div>
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-0.5">
+                      <Users className="h-2.5 w-2.5" />
+                      {room.participants} {room.participants === 1 ? 'udeleženec' : 'udeležencev'}
+                    </span>
+                    {room.createdByName && <span>• {room.createdByName}</span>}
                   </div>
                 </div>
-                <Button size="sm" variant="ghost" className="flex-shrink-0">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Session Info */}
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Prijavljen kot</span>
-            <span className="font-medium">{displayName}</span>
-          </div>
-          <div className="flex items-center justify-between text-sm mt-1">
-            <span className="text-muted-foreground">Jezik</span>
-            <span className="font-medium">{displayLang.toUpperCase()}</span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-3">
-            Tvoje ime in jezik sta samodejno nastavljena iz tvojega profila. Prevod deluje v realnem času za vse udeležence.
-          </p>
-        </CardContent>
-      </Card>
+              </div>
+              <Button size="sm" variant="ghost" className="flex-shrink-0 text-green-600 dark:text-green-400 hover:text-green-700 hover:bg-green-500/10">
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
