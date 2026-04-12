@@ -334,14 +334,39 @@ export default function Home() {
     gcTime: 10 * 60 * 1000,
   });
 
-  // --- Active Meet Rooms (React Query — cached) ---
-  const { data: activeMeetRooms = [] } = useQuery<Array<{ roomId: string; participants: number }>>({
-    queryKey: ['active-meet-rooms'],
+  // --- Active Meet Rooms (React Query — cached, merges rooms + meetings for metadata) ---
+  const { data: activeMeetRooms = [] } = useQuery<Array<{ roomId: string; participants: number; title?: string; createdByName?: string }>>({
+    queryKey: ['active-meet-rooms', session?.nostrHexId],
     queryFn: async () => {
-      const res = await fetch(`${MEET_BASE_URL}/api/rooms`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      return (data.rooms || []).filter((r: any) => r.participants > 0);
+      const [roomsRes, meetingsRes] = await Promise.allSettled([
+        fetch(`${MEET_BASE_URL}/api/rooms`),
+        session ? fetch(`${MEET_BASE_URL}/api/meetings?auth=${createMeetAuthToken(session)}`) : Promise.reject('no session'),
+      ]);
+
+      const rooms: Array<{ roomId: string; participants: number; title?: string; createdByName?: string }> = [];
+
+      if (roomsRes.status === 'fulfilled' && roomsRes.value.ok) {
+        const data = await roomsRes.value.json();
+        for (const r of data.rooms || []) {
+          if (r.participants > 0) {
+            rooms.push({ roomId: r.roomId, participants: r.participants });
+          }
+        }
+      }
+
+      // Merge meeting metadata (title, creator)
+      if (meetingsRes.status === 'fulfilled' && meetingsRes.value.ok) {
+        const data = await meetingsRes.value.json();
+        for (const m of data.meetings || []) {
+          const existing = rooms.find(r => r.roomId === m.roomId);
+          if (existing) {
+            existing.title = m.title;
+            existing.createdByName = m.createdByName;
+          }
+        }
+      }
+
+      return rooms;
     },
     staleTime: 15 * 1000,
     gcTime: 60 * 1000,
@@ -573,12 +598,17 @@ export default function Home() {
                         className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-green-500/10 transition-colors text-left group"
                       >
                         <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse flex-shrink-0" />
-                        <span className="text-sm truncate flex-1">{room.roomId}</span>
-                        <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                          <Users className="h-2.5 w-2.5" />
-                          {room.participants}
-                        </span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm truncate block">{room.title || room.roomId}</span>
+                          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                            <span className="flex items-center gap-0.5">
+                              <Users className="h-2.5 w-2.5" />
+                              {room.participants}
+                            </span>
+                            {room.createdByName && <span>• {room.createdByName}</span>}
+                          </span>
+                        </div>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                       </button>
                     ))}
                   </div>

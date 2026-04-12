@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Zap, Video, ExternalLink, Users, Globe, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
@@ -18,13 +19,23 @@ interface ActiveRoom {
   createdByName?: string;
 }
 
+const ROOM_NAMES = [
+  'quiet-fire', 'gentle-storm', 'hidden-strength', 'calm-passion', 'deep-light',
+  'silent-force', 'cold-warmth', 'unseen-current', 'inner-flame', 'quiet-determination',
+  'soft-strength', 'calm-wildness', 'silent-explosion', 'gentle-power', 'deep-silence',
+  'luminous-darkness', 'dormant-energy', 'restrained-power', 'soft-resistance', 'quiet-victory',
+  'hidden-passion', 'inner-storm', 'calm-intensity', 'gentle-resolve', 'quiet-pulse',
+  'deep-breath', 'silent-presence', 'soft-energy', 'hidden-light', 'grounded-power',
+  'quiet-transformation', 'deep-stability', 'soft-sharpness', 'inner-peace', 'restrained-passion',
+  'quiet-growth', 'hidden-harmony', 'calm-energy', 'quiet-clarity', 'deep-presence',
+  'soft-resolve', 'quiet-truth', 'inner-light', 'steady-power', 'quiet-depth',
+  'hidden-direction', 'gentle-stability', 'silent-breakthrough', 'deep-power', 'quiet-spark',
+];
+
 function generateRoomName(): string {
-  const adjectives = ['lana', 'zeleni', 'modri', 'hitri', 'tihi', 'jasni', 'topli', 'svetli', 'mirni', 'zlati'];
-  const nouns = ['svet', 'gozd', 'potok', 'veter', 'ogenj', 'kamen', 'zvon', 'oblak', 'luna', 'reka'];
-  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  const name = ROOM_NAMES[Math.floor(Math.random() * ROOM_NAMES.length)];
   const num = Math.floor(Math.random() * 100);
-  return `${adj}-${noun}-${num}`;
+  return `${name}-${num}`;
 }
 
 function createAuthToken(session: { nostrHexId: string; nostrPrivateKey: string; profileName?: string; profileDisplayName?: string; profileLang?: string }): string {
@@ -52,6 +63,7 @@ export default function MeetJoin() {
   const { session } = useAuth();
   const { t } = useTranslation(meetTranslations);
   const [isPrivate, setIsPrivate] = useState(false);
+  const [customName, setCustomName] = useState('');
   const [publicRooms, setPublicRooms] = useState<ActiveRoom[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -106,9 +118,13 @@ export default function MeetJoin() {
 
   const handleInstantMeet = useCallback(async () => {
     if (!session) return;
-    const room = generateRoomName();
+    const hasCustom = customName.trim().length > 0;
+    const title = hasCustom ? customName.trim() : generateRoomName();
     const token = createAuthToken(session);
-    const slug = room.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const slug = title.toLowerCase()
+      .replace(/[čć]/g, 'c').replace(/[šś]/g, 's').replace(/[žź]/g, 'z').replace(/đ/g, 'd')
+      .replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 50)
+      + (hasCustom ? '-' + Math.floor(Math.random() * 100) : '');
 
     // Create meeting record with visibility
     try {
@@ -116,7 +132,7 @@ export default function MeetJoin() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: room,
+          title,
           roomId: slug,
           authToken: token,
           visibility: isPrivate ? 'private' : 'public',
@@ -130,7 +146,8 @@ export default function MeetJoin() {
     const url = `${MEET_BASE_URL}/${slug}?lana_token=${token}`;
     window.open(url, '_blank');
     toast.success(isPrivate ? t('instant.privateMeetingCreated') : t('instant.publicMeetingCreated'));
-  }, [session, isPrivate, t]);
+    setCustomName('');
+  }, [session, isPrivate, customName, t]);
 
   const handleJoinRoom = useCallback((roomId: string) => {
     if (!session) return;
@@ -179,6 +196,18 @@ export default function MeetJoin() {
           <p className="text-xs text-muted-foreground">
             {isPrivate ? t('instant.privateDesc') : t('instant.publicDesc')}
           </p>
+
+          {/* Optional custom name */}
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">{t('instant.customName')}</label>
+            <Input
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              placeholder={t('instant.customNamePlaceholder')}
+              className="h-9 text-sm"
+              maxLength={50}
+            />
+          </div>
 
           {/* Start Button */}
           <Button onClick={handleInstantMeet} className="w-full" size="lg">
