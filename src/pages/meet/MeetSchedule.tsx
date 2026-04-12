@@ -9,6 +9,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
 import { toast } from "sonner";
 import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
+import { useTranslation } from "@/i18n/I18nContext";
+import meetTranslations from "@/i18n/modules/meet";
 
 const MEET_BASE_URL = "https://meet.lanaloves.us";
 
@@ -60,20 +62,13 @@ function generateSlug(title: string): string {
     .slice(0, 40);
 }
 
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString('sl-SI', {
-    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
 function isInPast(iso: string): boolean {
   return new Date(iso) < new Date();
 }
 
 export default function MeetSchedule() {
   const { session } = useAuth();
+  const { t, lang } = useTranslation(meetTranslations);
   const { profiles } = useNostrKind0Profiles();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +81,16 @@ export default function MeetSchedule() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Date formatting based on current language
+  const formatDateTime = useCallback((iso: string): string => {
+    const d = new Date(iso);
+    const locale = lang === 'sl' ? 'sl-SI' : lang === 'de' ? 'de-DE' : lang === 'hu' ? 'hu-HU' : lang === 'it' ? 'it-IT' : 'en-US';
+    return d.toLocaleDateString(locale, {
+      weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  }, [lang]);
 
   // Set default date/time to tomorrow at 10:00
   useEffect(() => {
@@ -102,7 +107,7 @@ export default function MeetSchedule() {
     const alreadyInvited = new Set(invitees.map(i => i.pubkey));
     return profiles
       .filter(p => {
-        if (p.pubkey === session?.nostrHexId) return false; // exclude self
+        if (p.pubkey === session?.nostrHexId) return false;
         if (alreadyInvited.has(p.pubkey)) return false;
         const searchable = [p.name, p.display_name, p.pubkey, p.location, p.about]
           .filter(Boolean).join(' ').toLowerCase();
@@ -139,11 +144,11 @@ export default function MeetSchedule() {
 
   const handleCreate = async () => {
     if (!session || !title.trim() || !date || !time) {
-      toast.error('Izpolni vsa polja');
+      toast.error(t('schedule.fillAllFields'));
       return;
     }
     if (visibility === 'private' && invitees.length === 0) {
-      toast.error('Dodaj vsaj enega udeleženca za zasebni sestanek');
+      toast.error(t('schedule.addInvitee'));
       return;
     }
 
@@ -168,22 +173,22 @@ export default function MeetSchedule() {
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Napaka pri ustvarjanju');
+        throw new Error(err.error || t('schedule.errorCreating'));
       }
 
       const meeting = await res.json();
-      toast.success('Sestanek ustvarjen!');
+      toast.success(t('schedule.meetingCreated'));
       setTitle('');
       setInvitees([]);
       setVisibility('public');
 
       const link = `${MEET_BASE_URL}/${meeting.roomId}`;
       await navigator.clipboard.writeText(link);
-      toast.success('Povezava kopirana v odložišče');
+      toast.success(t('schedule.linkCopied'));
 
       fetchMeetings();
     } catch (err: any) {
-      toast.error(err.message || 'Napaka');
+      toast.error(err.message || t('schedule.error'));
     } finally {
       setCreating(false);
     }
@@ -198,11 +203,11 @@ export default function MeetSchedule() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        toast.success('Sestanek izbrisan');
+        toast.success(t('schedule.meetingDeleted'));
         fetchMeetings();
       }
     } catch {
-      toast.error('Napaka pri brisanju');
+      toast.error(t('schedule.errorDeleting'));
     }
   };
 
@@ -217,7 +222,7 @@ export default function MeetSchedule() {
     const link = `${MEET_BASE_URL}/${roomId}`;
     await navigator.clipboard.writeText(link);
     setCopiedId(meetingId);
-    toast.success('Povezava kopirana');
+    toast.success(t('schedule.linkCopiedShort'));
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -238,7 +243,7 @@ export default function MeetSchedule() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <CalendarPlus className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-          <h1 className="text-lg sm:text-2xl font-bold">Načrtovani sestanki</h1>
+          <h1 className="text-lg sm:text-2xl font-bold">{t('schedule.title')}</h1>
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={fetchMeetings} disabled={loading}>
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -248,35 +253,35 @@ export default function MeetSchedule() {
       {/* Create Meeting */}
       <Card className="border-primary/20">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Ustvari sestanek</CardTitle>
+          <CardTitle className="text-base">{t('schedule.createMeeting')}</CardTitle>
           <CardDescription>
-            Načrtuj sestanek in deli povezavo udeležencem
+            {t('schedule.createDesc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="meet-title" className="text-xs text-muted-foreground">Naziv sestanka</Label>
+            <Label htmlFor="meet-title" className="text-xs text-muted-foreground">{t('schedule.meetingTitle')}</Label>
             <Input
               id="meet-title"
-              placeholder="npr. Tedni sestanek ekipe"
+              placeholder={t('schedule.titlePlaceholder')}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
           </div>
           <div className="flex gap-2">
             <div className="flex-1 space-y-1.5">
-              <Label htmlFor="meet-date" className="text-xs text-muted-foreground">Datum</Label>
+              <Label htmlFor="meet-date" className="text-xs text-muted-foreground">{t('schedule.date')}</Label>
               <Input id="meet-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div className="flex-1 space-y-1.5">
-              <Label htmlFor="meet-time" className="text-xs text-muted-foreground">Ura</Label>
+              <Label htmlFor="meet-time" className="text-xs text-muted-foreground">{t('schedule.time')}</Label>
               <Input id="meet-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
             </div>
           </div>
 
           {/* Visibility Toggle */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Vidnost</Label>
+            <Label className="text-xs text-muted-foreground">{t('schedule.visibility')}</Label>
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -286,7 +291,7 @@ export default function MeetSchedule() {
                 onClick={() => setVisibility('public')}
               >
                 <Globe className="mr-1.5 h-3.5 w-3.5" />
-                Javni
+                {t('schedule.public')}
               </Button>
               <Button
                 type="button"
@@ -296,7 +301,7 @@ export default function MeetSchedule() {
                 onClick={() => setVisibility('private')}
               >
                 <Lock className="mr-1.5 h-3.5 w-3.5" />
-                Zasebni
+                {t('schedule.private')}
               </Button>
             </div>
           </div>
@@ -304,7 +309,7 @@ export default function MeetSchedule() {
           {/* Invitees (only for private) */}
           {visibility === 'private' && (
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Povabljeni udeleženci</Label>
+              <Label className="text-xs text-muted-foreground">{t('schedule.invitedParticipants')}</Label>
 
               {/* Invitee chips */}
               {invitees.length > 0 && (
@@ -324,7 +329,7 @@ export default function MeetSchedule() {
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
-                  placeholder="Išči po imenu ali Nostr HEX ID..."
+                  placeholder={t('schedule.searchPlaceholder')}
                   value={searchQuery}
                   onChange={(e) => { setSearchQuery(e.target.value); setShowSearch(true); }}
                   onFocus={() => setShowSearch(true)}
@@ -337,7 +342,7 @@ export default function MeetSchedule() {
                 <div className="border rounded-md bg-card max-h-48 overflow-y-auto">
                   {searchResults.length === 0 ? (
                     <div className="p-3 text-xs text-muted-foreground text-center">
-                      Ni rezultatov za "{searchQuery}"
+                      {t('schedule.noResults', { query: searchQuery })}
                     </div>
                   ) : (
                     searchResults.map(p => (
@@ -366,7 +371,7 @@ export default function MeetSchedule() {
                   onClick={() => addInvitee(searchQuery.trim(), searchQuery.trim().slice(0, 12) + '...')}
                 >
                   <UserPlus className="mr-1.5 h-3 w-3" />
-                  Dodaj {searchQuery.trim().slice(0, 12)}...
+                  {t('schedule.add', { id: searchQuery.trim().slice(0, 12) })}
                 </Button>
               )}
             </div>
@@ -382,7 +387,7 @@ export default function MeetSchedule() {
             ) : (
               <CalendarPlus className="mr-2 h-4 w-4" />
             )}
-            Ustvari in kopiraj povezavo
+            {t('schedule.createAndCopy')}
           </Button>
         </CardContent>
       </Card>
@@ -397,7 +402,7 @@ export default function MeetSchedule() {
       {!loading && meetings.length === 0 && (
         <Card>
           <CardContent className="py-8 text-center">
-            <p className="text-sm text-muted-foreground">Ni načrtovanih sestankov</p>
+            <p className="text-sm text-muted-foreground">{t('schedule.noMeetings')}</p>
           </CardContent>
         </Card>
       )}
@@ -421,7 +426,9 @@ export default function MeetSchedule() {
                           <Globe className="h-3 w-3 text-blue-500 flex-shrink-0" />
                         )}
                         {m.isLive && (
-                          <span className="text-[10px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-1.5 py-0.5 rounded-full">V ŽIVO</span>
+                          <span className="text-[10px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-1.5 py-0.5 rounded-full">
+                            {t('instant.live')}
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
@@ -439,20 +446,20 @@ export default function MeetSchedule() {
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {m.createdByName}
                         {m.visibility === 'private' && m.invitees?.length > 0 && (
-                          <span className="ml-1">· {m.invitees.length} povabljenih</span>
+                          <span className="ml-1">· {t('schedule.invited', { count: m.invitees.length })}</span>
                         )}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <Button size="sm" variant="ghost" onClick={() => handleCopyLink(m.roomId, m.id)} title="Kopiraj povezavo">
+                      <Button size="sm" variant="ghost" onClick={() => handleCopyLink(m.roomId, m.id)} title={t('schedule.copyLink')}>
                         {copiedId === m.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
                       </Button>
                       <Button size="sm" variant={m.isLive || past ? "default" : "outline"} onClick={() => handleJoin(m.roomId)}>
                         <Video className="h-3.5 w-3.5 mr-1" />
-                        {m.isLive ? 'Vstopi' : past ? 'Začni' : 'Pridruži se'}
+                        {m.isLive ? t('schedule.enter') : past ? t('schedule.start') : t('schedule.join')}
                       </Button>
                       {isMine && (
-                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => handleDelete(m.id)} title="Izbriši">
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => handleDelete(m.id)} title={t('schedule.delete')}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       )}

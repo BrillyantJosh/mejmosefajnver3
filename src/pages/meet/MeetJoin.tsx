@@ -5,6 +5,8 @@ import { Zap, Video, ExternalLink, Users, Globe, Lock, Eye, EyeOff } from "lucid
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
 import { toast } from "sonner";
+import { useTranslation } from "@/i18n/I18nContext";
+import meetTranslations from "@/i18n/modules/meet";
 
 const MEET_BASE_URL = "https://meet.lanaloves.us";
 
@@ -48,6 +50,7 @@ function createAuthToken(session: { nostrHexId: string; nostrPrivateKey: string;
 
 export default function MeetJoin() {
   const { session } = useAuth();
+  const { t } = useTranslation(meetTranslations);
   const [isPrivate, setIsPrivate] = useState(false);
   const [publicRooms, setPublicRooms] = useState<ActiveRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +75,7 @@ export default function MeetJoin() {
             activeRooms.push({
               roomId: r.roomId,
               participants: r.participants,
-              visibility: 'public', // default — will be overridden by meeting data
+              visibility: 'public',
             });
           }
         }
@@ -126,8 +129,8 @@ export default function MeetJoin() {
 
     const url = `${MEET_BASE_URL}/${slug}?lana_token=${token}`;
     window.open(url, '_blank');
-    toast.success(isPrivate ? 'Zasebni sestanek ustvarjen' : 'Javni sestanek ustvarjen');
-  }, [session, isPrivate]);
+    toast.success(isPrivate ? t('instant.privateMeetingCreated') : t('instant.publicMeetingCreated'));
+  }, [session, isPrivate, t]);
 
   const handleJoinRoom = useCallback((roomId: string) => {
     if (!session) return;
@@ -140,7 +143,7 @@ export default function MeetJoin() {
     <div className="space-y-4 px-3 sm:px-4 pb-24">
       <div className="flex items-center gap-2 mb-4">
         <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-        <h1 className="text-lg sm:text-2xl font-bold">Lana Meet</h1>
+        <h1 className="text-lg sm:text-2xl font-bold">{t('instant.title')}</h1>
       </div>
 
       {/* Instant Meeting */}
@@ -148,7 +151,7 @@ export default function MeetJoin() {
         <CardContent className="p-4 space-y-3">
           {/* Visibility Toggle */}
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-muted-foreground">Vrsta sestanka</span>
+            <span className="text-sm font-medium text-muted-foreground">{t('instant.meetingType')}</span>
             <button
               onClick={() => setIsPrivate(!isPrivate)}
               className={`
@@ -162,28 +165,25 @@ export default function MeetJoin() {
               {isPrivate ? (
                 <>
                   <EyeOff className="h-3.5 w-3.5" />
-                  Zasebni
+                  {t('instant.private')}
                 </>
               ) : (
                 <>
                   <Eye className="h-3.5 w-3.5" />
-                  Javni
+                  {t('instant.public')}
                 </>
               )}
             </button>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            {isPrivate
-              ? 'Zasebni sestanek — ne prikazuje se na seznamu aktivnih sob. Samo osebe s povezavo se lahko pridružijo.'
-              : 'Javni sestanek — viden na seznamu aktivnih sob. Kdorkoli se lahko pridruži.'
-            }
+            {isPrivate ? t('instant.privateDesc') : t('instant.publicDesc')}
           </p>
 
           {/* Start Button */}
           <Button onClick={handleInstantMeet} className="w-full" size="lg">
             <Zap className="mr-2 h-5 w-5" />
-            Začni sestanek
+            {t('instant.startMeeting')}
           </Button>
         </CardContent>
       </Card>
@@ -192,7 +192,7 @@ export default function MeetJoin() {
       <div className="space-y-2">
         <div className="flex items-center gap-1.5 px-1">
           <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-muted-foreground">Aktivni javni pogovori</h2>
+          <h2 className="text-sm font-semibold text-muted-foreground">{t('instant.activePublicRooms')}</h2>
         </div>
 
         {loading && (
@@ -200,7 +200,7 @@ export default function MeetJoin() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <div className="h-4 w-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                Nalagam...
+                {t('instant.loading')}
               </div>
             </CardContent>
           </Card>
@@ -210,7 +210,7 @@ export default function MeetJoin() {
           <Card>
             <CardContent className="p-4">
               <p className="text-sm text-muted-foreground text-center py-2">
-                Ni aktivnih javnih pogovorov. Začni prvega! 🚀
+                {t('instant.noActiveRooms')}
               </p>
             </CardContent>
           </Card>
@@ -231,13 +231,16 @@ export default function MeetJoin() {
                   <div className="flex items-center gap-1.5">
                     <p className="font-medium text-sm truncate">{room.title || room.roomId}</p>
                     <span className="text-[10px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-1.5 py-0.5 rounded-full flex-shrink-0">
-                      V ŽIVO
+                      {t('instant.live')}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                     <span className="flex items-center gap-0.5">
                       <Users className="h-2.5 w-2.5" />
-                      {room.participants} {room.participants === 1 ? 'udeleženec' : 'udeležencev'}
+                      {room.participants === 1
+                        ? t('instant.participant', { count: room.participants })
+                        : t('instant.participants', { count: room.participants })
+                      }
                     </span>
                     {room.createdByName && <span>• {room.createdByName}</span>}
                   </div>

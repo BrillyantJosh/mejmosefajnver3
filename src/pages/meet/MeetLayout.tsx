@@ -1,23 +1,22 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Zap, CalendarPlus, Users } from "lucide-react";
+import { Zap, CalendarPlus } from "lucide-react";
+import { useTranslation } from "@/i18n/I18nContext";
+import meetTranslations from "@/i18n/modules/meet";
 
 export default function MeetLayout() {
+  const { t } = useTranslation(meetTranslations);
+
   const meetNavItems = [
     {
-      title: "Instant",
+      title: t('nav.instant'),
       path: "/meet",
       icon: Zap
     },
     {
-      title: "Načrtovani",
+      title: t('nav.scheduled'),
       path: "/meet/schedule",
       icon: CalendarPlus
-    },
-    {
-      title: "Active",
-      path: "/meet/active",
-      icon: Users
     }
   ];
 
