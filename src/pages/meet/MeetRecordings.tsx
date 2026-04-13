@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Film, Download, Play, Clock, HardDrive, RefreshCw, Timer } from "lucide-react";
+import { Film, Download, Play, Clock, HardDrive, RefreshCw, Timer, AlertTriangle } from "lucide-react";
 import { useTranslation } from "@/i18n/I18nContext";
 import meetTranslations from "@/i18n/modules/meet";
 
@@ -19,15 +19,32 @@ interface Recording {
   remainingDays: number;
 }
 
+interface StorageInfo {
+  diskTotal: number;
+  diskUsed: number;
+  diskAvailable: number;
+  diskUsedPercent: number;
+  recordingsSize: number;
+  recordingsSizeFormatted: string;
+  cleanupThreshold: number;
+}
+
 function formatDate(ts: number): string {
   const d = new Date(ts * 1000);
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
     + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(0) + ' MB';
+  return (bytes / 1024).toFixed(0) + ' KB';
+}
+
 export default function MeetRecordings() {
   const { t } = useTranslation(meetTranslations);
   const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -40,6 +57,7 @@ export default function MeetRecordings() {
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       setRecordings(data.recordings || []);
+      setStorage(data.storage || null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
@@ -75,6 +93,10 @@ export default function MeetRecordings() {
     );
   }
 
+  const diskPercent = storage?.diskUsedPercent ?? 0;
+  const isWarning = diskPercent >= 75;
+  const isCritical = diskPercent >= (storage?.cleanupThreshold ?? 90);
+
   return (
     <div className="px-4 space-y-4 pb-24">
       {/* Header */}
@@ -89,6 +111,58 @@ export default function MeetRecordings() {
       </div>
 
       <p className="text-xs text-muted-foreground">{t('recordings.description')}</p>
+
+      {/* Storage Usage Bar */}
+      {storage && (
+        <Card className={isCritical ? 'border-red-500/50' : isWarning ? 'border-yellow-500/30' : ''}>
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <HardDrive className="w-4 h-4" />
+                Server Storage
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {isCritical && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
+                <span className={isCritical ? 'text-red-500 font-semibold' : isWarning ? 'text-yellow-500' : ''}>
+                  {diskPercent}% used
+                </span>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden mb-2">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  isCritical ? 'bg-red-500' :
+                  isWarning ? 'bg-yellow-500' :
+                  'bg-primary'
+                }`}
+                style={{ width: `${Math.min(diskPercent, 100)}%` }}
+              />
+            </div>
+
+            <div className="flex justify-between text-[11px] text-muted-foreground">
+              <span>
+                Recordings: <span className="font-medium text-foreground">{storage.recordingsSizeFormatted}</span>
+              </span>
+              <span>
+                {formatBytes(storage.diskUsed)} / {formatBytes(storage.diskTotal)}
+              </span>
+            </div>
+
+            {isCritical && (
+              <p className="text-[11px] text-red-500 mt-1.5">
+                Auto-cleanup active: oldest recordings will be deleted to free space
+              </p>
+            )}
+            {!isCritical && diskPercent >= 80 && (
+              <p className="text-[11px] text-yellow-500 mt-1.5">
+                Auto-cleanup starts at {storage.cleanupThreshold}% — oldest recordings deleted first
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recordings list */}
       {recordings.length === 0 ? (
