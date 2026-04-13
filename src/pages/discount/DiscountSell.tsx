@@ -479,8 +479,11 @@ export default function DiscountSell() {
           Sell LanaCoin
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Sell your registered LanaCoins and receive an instant cash payout.
+          Sell your registered LanaCoins and receive a cash payout.
         </p>
+        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-xs text-blue-700 dark:text-blue-400 mt-2">
+          <strong>Payout timing:</strong> Funds are paid out as consumer spending generates revenue. This may take from a few days up to the next Split cycle. An exact timeframe cannot be guaranteed in advance.
+        </div>
       </div>
 
       {/* Step Indicator */}
