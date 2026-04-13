@@ -36,7 +36,7 @@ export default function MeetRecordings() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${MEET_BASE_URL}/api/recordings`);
+      const res = await fetch(`${MEET_BASE_URL}/api/recordings?_t=${Date.now()}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       setRecordings(data.recordings || []);
