@@ -5,6 +5,7 @@ const meet = {
   'nav.instant': 'Instant',
   'nav.scheduled': 'Scheduled',
   'nav.sessions': 'Sessions',
+  'nav.recordings': 'Past Events',
 
   // ── MeetJoin (Instant) ──
   'instant.title': 'Lana Meet',
@@ -78,6 +79,16 @@ const meet = {
   'sessions.noSessions': 'No translation sessions yet.',
   'sessions.loginRequired': 'Log in to view your translation sessions.',
   'sessions.retry': 'Retry',
+
+  // ── MeetRecordings (Past Events) ──
+  'recordings.title': 'Past Events',
+  'recordings.description': 'Recordings are available for 30 days. Download for YouTube or watch here.',
+  'recordings.noRecordings': 'No recordings available.',
+  'recordings.play': 'Play',
+  'recordings.close': 'Close',
+  'recordings.download': 'Download',
+  'recordings.daysLeft': '{count} days left',
+  'recordings.retry': 'Retry',
 } as const;
 
 export type MeetKey = keyof typeof meet;
@@ -90,6 +101,7 @@ const translations: TranslationDict<MeetKey> = {
     'nav.instant': 'Hitri',
     'nav.scheduled': 'Načrtovani',
     'nav.sessions': 'Seje',
+    'nav.recordings': 'Pretekli',
 
     // ── MeetJoin (Instant) ──
     'instant.title': 'Lana Meet',
@@ -161,12 +173,21 @@ const translations: TranslationDict<MeetKey> = {
     'sessions.noSessions': 'Še ni prevajalskih sej.',
     'sessions.loginRequired': 'Prijavite se za ogled prevajalskih sej.',
     'sessions.retry': 'Poskusi znova',
+    'recordings.title': 'Pretekli dogodki',
+    'recordings.description': 'Posnetki so na voljo 30 dni. Prenesi za YouTube ali si oglej tukaj.',
+    'recordings.noRecordings': 'Ni posnetkov.',
+    'recordings.play': 'Predvajaj',
+    'recordings.close': 'Zapri',
+    'recordings.download': 'Prenesi',
+    'recordings.daysLeft': 'Še {count} dni',
+    'recordings.retry': 'Poskusi znova',
   },
 
   de: {
     'nav.instant': 'Sofort',
     'nav.scheduled': 'Geplant',
     'nav.sessions': 'Sitzungen',
+    'nav.recordings': 'Vergangene',
     'instant.title': 'Lana Meet',
     'instant.meetingType': 'Meeting-Typ',
     'instant.private': 'Privat',
@@ -234,12 +255,21 @@ const translations: TranslationDict<MeetKey> = {
     'sessions.noSessions': 'Noch keine Übersetzungssitzungen.',
     'sessions.loginRequired': 'Melden Sie sich an, um Ihre Übersetzungssitzungen anzuzeigen.',
     'sessions.retry': 'Erneut versuchen',
+    'recordings.title': 'Vergangene Veranstaltungen',
+    'recordings.description': 'Aufnahmen sind 30 Tage verfügbar. Herunterladen für YouTube oder hier ansehen.',
+    'recordings.noRecordings': 'Keine Aufnahmen verfügbar.',
+    'recordings.play': 'Abspielen',
+    'recordings.close': 'Schließen',
+    'recordings.download': 'Herunterladen',
+    'recordings.daysLeft': '{count} Tage übrig',
+    'recordings.retry': 'Erneut versuchen',
   },
 
   hu: {
     'nav.instant': 'Azonnali',
     'nav.scheduled': 'Tervezett',
     'nav.sessions': 'Munkamenetek',
+    'nav.recordings': 'Korábbi',
     'instant.title': 'Lana Meet',
     'instant.meetingType': 'Találkozó típusa',
     'instant.private': 'Privát',
@@ -307,12 +337,21 @@ const translations: TranslationDict<MeetKey> = {
     'sessions.noSessions': 'Még nincsenek fordítási munkamenetek.',
     'sessions.loginRequired': 'Jelentkezzen be a fordítási munkamenetek megtekintéséhez.',
     'sessions.retry': 'Újrapróbálás',
+    'recordings.title': 'Korábbi események',
+    'recordings.description': 'A felvételek 30 napig elérhetőek. Letölthető YouTube-ra vagy itt lejátszható.',
+    'recordings.noRecordings': 'Nincsenek felvételek.',
+    'recordings.play': 'Lejátszás',
+    'recordings.close': 'Bezárás',
+    'recordings.download': 'Letöltés',
+    'recordings.daysLeft': '{count} nap van hátra',
+    'recordings.retry': 'Újrapróbálás',
   },
 
   it: {
     'nav.instant': 'Istantaneo',
     'nav.scheduled': 'Programmati',
     'nav.sessions': 'Sessioni',
+    'nav.recordings': 'Passati',
     'instant.title': 'Lana Meet',
     'instant.meetingType': 'Tipo di riunione',
     'instant.private': 'Privato',
@@ -380,6 +419,14 @@ const translations: TranslationDict<MeetKey> = {
     'sessions.noSessions': 'Nessuna sessione di traduzione ancora.',
     'sessions.loginRequired': 'Accedi per visualizzare le tue sessioni di traduzione.',
     'sessions.retry': 'Riprova',
+    'recordings.title': 'Eventi passati',
+    'recordings.description': 'Le registrazioni sono disponibili per 30 giorni. Scarica per YouTube o guarda qui.',
+    'recordings.noRecordings': 'Nessuna registrazione disponibile.',
+    'recordings.play': 'Riproduci',
+    'recordings.close': 'Chiudi',
+    'recordings.download': 'Scarica',
+    'recordings.daysLeft': '{count} giorni rimasti',
+    'recordings.retry': 'Riprova',
   },
 };
 

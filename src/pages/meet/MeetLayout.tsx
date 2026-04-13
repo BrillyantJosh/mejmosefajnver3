@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Zap, CalendarPlus, BarChart3 } from "lucide-react";
+import { Zap, CalendarPlus, BarChart3, Film } from "lucide-react";
 import { useTranslation } from "@/i18n/I18nContext";
 import meetTranslations from "@/i18n/modules/meet";
 
@@ -22,6 +22,11 @@ export default function MeetLayout() {
       title: t('nav.sessions'),
       path: "/meet/sessions",
       icon: BarChart3
+    },
+    {
+      title: t('nav.recordings'),
+      path: "/meet/recordings",
+      icon: Film
     }
   ];
 
