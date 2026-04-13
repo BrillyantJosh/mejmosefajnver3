@@ -4,6 +4,7 @@ const meet = {
   // ── Navigation (Layout) ──
   'nav.instant': 'Instant',
   'nav.scheduled': 'Scheduled',
+  'nav.sessions': 'Sessions',
 
   // ── MeetJoin (Instant) ──
   'instant.title': 'Lana Meet',
@@ -64,6 +65,16 @@ const meet = {
   'schedule.start': 'Start',
   'schedule.join': 'Join',
   'schedule.delete': 'Delete',
+
+  // ── MeetSessions ──
+  'sessions.title': 'Translation Sessions',
+  'sessions.totalCost': 'Total Cost',
+  'sessions.totalEur': 'Total EUR',
+  'sessions.sessionCount': 'Sessions',
+  'sessions.currentRate': 'Current Rate',
+  'sessions.noSessions': 'No translation sessions yet.',
+  'sessions.loginRequired': 'Log in to view your translation sessions.',
+  'sessions.retry': 'Retry',
 } as const;
 
 export type MeetKey = keyof typeof meet;
@@ -75,6 +86,7 @@ const translations: TranslationDict<MeetKey> = {
     // ── Navigacija ──
     'nav.instant': 'Hitri',
     'nav.scheduled': 'Načrtovani',
+    'nav.sessions': 'Seje',
 
     // ── MeetJoin (Instant) ──
     'instant.title': 'Lana Meet',
@@ -135,11 +147,20 @@ const translations: TranslationDict<MeetKey> = {
     'schedule.start': 'Začni',
     'schedule.join': 'Pridruži se',
     'schedule.delete': 'Izbriši',
+    'sessions.title': 'Prevajalske seje',
+    'sessions.totalCost': 'Skupni stroški',
+    'sessions.totalEur': 'Skupno EUR',
+    'sessions.sessionCount': 'Seje',
+    'sessions.currentRate': 'Trenutni tečaj',
+    'sessions.noSessions': 'Še ni prevajalskih sej.',
+    'sessions.loginRequired': 'Prijavite se za ogled prevajalskih sej.',
+    'sessions.retry': 'Poskusi znova',
   },
 
   de: {
     'nav.instant': 'Sofort',
     'nav.scheduled': 'Geplant',
+    'nav.sessions': 'Sitzungen',
     'instant.title': 'Lana Meet',
     'instant.meetingType': 'Meeting-Typ',
     'instant.private': 'Privat',
@@ -196,11 +217,20 @@ const translations: TranslationDict<MeetKey> = {
     'schedule.start': 'Starten',
     'schedule.join': 'Beitreten',
     'schedule.delete': 'Löschen',
+    'sessions.title': 'Übersetzungssitzungen',
+    'sessions.totalCost': 'Gesamtkosten',
+    'sessions.totalEur': 'Gesamt EUR',
+    'sessions.sessionCount': 'Sitzungen',
+    'sessions.currentRate': 'Aktueller Kurs',
+    'sessions.noSessions': 'Noch keine Übersetzungssitzungen.',
+    'sessions.loginRequired': 'Melden Sie sich an, um Ihre Übersetzungssitzungen anzuzeigen.',
+    'sessions.retry': 'Erneut versuchen',
   },
 
   hu: {
     'nav.instant': 'Azonnali',
     'nav.scheduled': 'Tervezett',
+    'nav.sessions': 'Munkamenetek',
     'instant.title': 'Lana Meet',
     'instant.meetingType': 'Találkozó típusa',
     'instant.private': 'Privát',
@@ -257,11 +287,20 @@ const translations: TranslationDict<MeetKey> = {
     'schedule.start': 'Indítás',
     'schedule.join': 'Csatlakozás',
     'schedule.delete': 'Törlés',
+    'sessions.title': 'Fordítási munkamenetek',
+    'sessions.totalCost': 'Összes költség',
+    'sessions.totalEur': 'Összes EUR',
+    'sessions.sessionCount': 'Munkamenetek',
+    'sessions.currentRate': 'Aktuális árfolyam',
+    'sessions.noSessions': 'Még nincsenek fordítási munkamenetek.',
+    'sessions.loginRequired': 'Jelentkezzen be a fordítási munkamenetek megtekintéséhez.',
+    'sessions.retry': 'Újrapróbálás',
   },
 
   it: {
     'nav.instant': 'Istantaneo',
     'nav.scheduled': 'Programmati',
+    'nav.sessions': 'Sessioni',
     'instant.title': 'Lana Meet',
     'instant.meetingType': 'Tipo di riunione',
     'instant.private': 'Privato',
@@ -318,6 +357,14 @@ const translations: TranslationDict<MeetKey> = {
     'schedule.start': 'Avvia',
     'schedule.join': 'Partecipa',
     'schedule.delete': 'Elimina',
+    'sessions.title': 'Sessioni di traduzione',
+    'sessions.totalCost': 'Costo totale',
+    'sessions.totalEur': 'Totale EUR',
+    'sessions.sessionCount': 'Sessioni',
+    'sessions.currentRate': 'Tasso attuale',
+    'sessions.noSessions': 'Nessuna sessione di traduzione ancora.',
+    'sessions.loginRequired': 'Accedi per visualizzare le tue sessioni di traduzione.',
+    'sessions.retry': 'Riprova',
   },
 };
 
