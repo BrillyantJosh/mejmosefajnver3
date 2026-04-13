@@ -112,6 +112,7 @@ export const useNostrGroupMessages = (
         {
           kinds: [87046],
           '#e': [processEventId],
+          limit: 50,
         },
         {
           onevent(event: Event) {

@@ -9,7 +9,7 @@ import OwnAudioRecorder from "./OwnAudioRecorder";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
 import { toast } from "sonner";
 
-const MESSAGES_PER_PAGE = 30;
+const MESSAGES_PER_PAGE = 20;
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 function ImageUploadButton({ processEventId, senderPubkey, onSendImage }: {
