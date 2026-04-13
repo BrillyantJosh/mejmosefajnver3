@@ -697,30 +697,46 @@ export default function DiscountSell() {
                 </p>
               )}
 
-              {/* Missing payout account warning */}
-              {selectedCurrency && !getPayoutInfo() && (
-                <div className="rounded-xl border-2 border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <Banknote className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-                    <div className="space-y-2">
-                      <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                        Payout Account Required
-                      </p>
-                      <p className="text-xs text-amber-600 dark:text-amber-500">
-                        No payout account found for <strong>{selectedCurrency}</strong> in your profile.
-                        You must add your bank account details (IBAN, SWIFT/BIC) before you can sell LANA.
-                      </p>
-                      <a
-                        href="/profile"
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 hover:underline"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        Go to Profile to add payment details
-                      </a>
+              {/* Currency-payment method mismatch warning */}
+              {selectedCurrency && !getPayoutInfo() && (() => {
+                const availableMethods = (profile?.payment_methods || []).filter((pm: any) => pm.scope === 'payout' || pm.scope === 'both');
+                return (
+                  <div className="rounded-xl border-2 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <Banknote className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                      <div className="space-y-2">
+                        <p className="text-sm font-bold text-red-700 dark:text-red-400">
+                          Currency Mismatch
+                        </p>
+                        <p className="text-xs text-red-600 dark:text-red-500">
+                          You selected <strong>{selectedCurrency}</strong> as your payout currency, but you don't have a payment method configured for {selectedCurrency}.
+                        </p>
+                        {availableMethods.length > 0 && (
+                          <div className="text-xs text-red-600 dark:text-red-500">
+                            <p className="font-medium">Your available payment methods:</p>
+                            <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                              {availableMethods.map((pm: any, i: number) => (
+                                <li key={i}>
+                                  <strong>{pm.currency}</strong> — {pm.label || pm.scheme}
+                                  {pm.fields?.iban && <span className="font-mono ml-1">(...{pm.fields.iban.slice(-4)})</span>}
+                                  {pm.fields?.account_number && <span className="font-mono ml-1">(...{pm.fields.account_number.slice(-4)})</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <p className="text-xs text-red-600 dark:text-red-500">
+                          Please either select a currency that matches your payment method, or{' '}
+                          <a href="/profile" className="font-medium underline hover:text-red-800 dark:hover:text-red-300">
+                            update your profile
+                          </a>{' '}
+                          to add a payment method for {selectedCurrency}.
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               <div className="flex justify-end">
                 <button
@@ -781,16 +797,31 @@ export default function DiscountSell() {
                     {(() => {
                       const info = getPayoutInfo();
                       if (!info) {
+                        const availableMethods = (profile?.payment_methods || []).filter((pm: any) => pm.scope === 'payout' || pm.scope === 'both');
                         return (
-                          <div className="rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/30 dark:border-red-800 p-4">
-                            <p className="text-sm text-red-700 dark:text-red-400 font-medium mb-1">
-                              No payout account found for {selectedCurrency}
+                          <div className="rounded-lg border-2 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4 space-y-2">
+                            <p className="text-sm text-red-700 dark:text-red-400 font-bold">
+                              Currency Mismatch
                             </p>
                             <p className="text-xs text-red-600 dark:text-red-500">
-                              Your Nostr profile does not contain payment
-                              information for this currency. Please update your
-                              profile with payout details (e.g. IBAN) before
-                              proceeding.
+                              You selected <strong>{selectedCurrency}</strong> but your profile has no payment method for this currency.
+                            </p>
+                            {availableMethods.length > 0 && (
+                              <div className="text-xs text-red-600 dark:text-red-500">
+                                <p className="font-medium">Your payment methods support:</p>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {availableMethods.map((pm: any, i: number) => (
+                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 font-medium">
+                                      {pm.currency} — {pm.label || pm.scheme}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            <p className="text-xs text-red-600 dark:text-red-500">
+                              Select a matching currency above, or{' '}
+                              <a href="/profile" className="font-medium underline">update your profile</a>{' '}
+                              to add a {selectedCurrency} payment method.
                             </p>
                           </div>
                         );
