@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Film, Download, Play, Clock, HardDrive, RefreshCw, Timer, AlertTriangle } from "lucide-react";
+import { Film, Download, Play, Clock, HardDrive, RefreshCw, Timer, AlertTriangle, Share2, Check } from "lucide-react";
 import { useTranslation } from "@/i18n/I18nContext";
 import meetTranslations from "@/i18n/modules/meet";
 
@@ -48,6 +48,43 @@ export default function MeetRecordings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const shareVideo = useCallback(async (r: Recording) => {
+    const videoUrl = `${MEET_BASE_URL}/api/recordings/${r.id}/video`;
+
+    // Try native share first (mobile)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Recording: ${r.roomName}`,
+          text: `Meeting recording from ${new Date(r.recordedAt * 1000).toLocaleDateString()}`,
+          url: videoUrl,
+        });
+        return;
+      } catch (e) {
+        // User cancelled or share failed, fall through to clipboard
+        if ((e as Error).name === 'AbortError') return;
+      }
+    }
+
+    // Fallback: copy link to clipboard
+    try {
+      await navigator.clipboard.writeText(videoUrl);
+      setCopiedId(r.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      // Final fallback
+      const input = document.createElement('input');
+      input.value = videoUrl;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      setCopiedId(r.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  }, []);
 
   const fetchRecordings = useCallback(async () => {
     setLoading(true);
@@ -238,6 +275,18 @@ export default function MeetRecordings() {
                         <Download className="w-3.5 h-3.5 mr-1" />
                         {t('recordings.download')}
                       </a>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={copiedId === r.id ? "default" : "outline"}
+                      className="flex-1"
+                      onClick={() => shareVideo(r)}
+                    >
+                      {copiedId === r.id ? (
+                        <><Check className="w-3.5 h-3.5 mr-1" /> Copied!</>
+                      ) : (
+                        <><Share2 className="w-3.5 h-3.5 mr-1" /> Share</>
+                      )}
                     </Button>
                   </div>
                 </div>
