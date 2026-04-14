@@ -50,7 +50,7 @@ export const BusinessUnitCard = ({ unit }: BusinessUnitCardProps) => {
         )}
         <div className="mt-4 flex items-center gap-2 flex-wrap">
           <span className="inline-flex items-center gap-1.5 bg-green-600 text-white px-3 py-1.5 rounded-full text-sm font-sans font-bold shadow-sm">
-            🌿 5% Abundance
+            🌿 {unit.cashbackPercent}% Abundance
           </span>
           <span className="inline-flex items-center gap-1 bg-primary/10 text-primary px-2.5 py-1 rounded-full text-xs font-sans font-medium">
             <Leaf className="w-3 h-3" />

@@ -257,7 +257,7 @@ export default function BusinessUnitDetail() {
                               {TYPE_LABELS[listing.type] || listing.type}
                             </span>
                             <span className="text-xs font-sans font-bold text-white bg-green-600 px-2.5 py-1 rounded-full shadow-sm">
-                              🌿 5%
+                              🌿 {listing.cashbackPercent}%
                             </span>
                           </div>
                           <span className="text-sm font-semibold font-sans">

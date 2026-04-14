@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { useNostrBusinessUnits } from './useNostrBusinessUnits';
+
+const SHOP_BASE_URL = 'https://shop.lanapays.us';
+const DEFAULT_CASHBACK = 5;
+
+/** Prepend shop base URL if image is a relative upload path */
+function fixImageUrl(url: string): string {
+  return url.startsWith('/api/uploads/') ? `${SHOP_BASE_URL}${url}` : url;
+}
 
 export interface EcoListing {
   id: string;
@@ -45,9 +54,14 @@ export interface EcoListing {
   sprayLog: string;
   soilTestYear: string;
   video: string;
+  cashbackPercent: number;
 }
 
-const parseListing = (event: any): EcoListing | null => {
+const parseListing = (
+  event: any,
+  cashbackMap: Map<string, number>,
+  suspendedIds: Set<string>,
+): EcoListing | null => {
   try {
     const tags = event.tags;
     const getTag = (tagName: string) => tags.find((t: string[]) => t[0] === tagName)?.[1] || '';
@@ -55,19 +69,33 @@ const parseListing = (event: any): EcoListing | null => {
     const priceTag = tags.find((t: string[]) => t[0] === 'price');
     const geoTag = tags.find((t: string[]) => t[0] === 'geo');
 
+    const unitRef = getTag('a');
+    const title = getTag('title');
+    const status = getTag('status') || 'active';
+
+    // Skip if no title or not active
+    if (!title || status !== 'active') return null;
+
+    // Skip if unit is suspended
+    const unitId = unitRef.split(':')[2] || '';
+    if (unitId && suspendedIds.has(unitId)) return null;
+
+    // Get cashback from map
+    const cashbackPercent = unitId ? (cashbackMap.get(unitId) || DEFAULT_CASHBACK) : DEFAULT_CASHBACK;
+
     return {
       id: event.id,
       pubkey: event.pubkey,
       created_at: event.created_at,
       content: event.content || '',
       listingId: getTag('d'),
-      unitRef: getTag('a'),
-      title: getTag('title'),
+      unitRef,
+      title,
       type: getTag('type'),
       price: priceTag?.[1] || '',
       priceCurrency: priceTag?.[2] || 'EUR',
       unit: getTag('unit'),
-      status: getTag('status') || 'active',
+      status,
       stock: getTag('stock'),
       minOrder: getTag('min_order'),
       maxOrder: getTag('max_order'),
@@ -88,8 +116,8 @@ const parseListing = (event: any): EcoListing | null => {
       capacity: getTag('capacity'),
       durationMin: getTag('duration_min'),
       bookingRequired: getTag('booking_required'),
-      images: getAllTags('image'),
-      thumbs: getAllTags('thumb'),
+      images: getAllTags('image').map(fixImageUrl),
+      thumbs: getAllTags('thumb').map(fixImageUrl),
       payment: getAllTags('payment'),
       lud16: getTag('lud16'),
       geoLat: geoTag?.[1] || '',
@@ -98,6 +126,7 @@ const parseListing = (event: any): EcoListing | null => {
       sprayLog: getTag('spray_log'),
       soilTestYear: getTag('soil_test_year'),
       video: getTag('video'),
+      cashbackPercent,
     };
   } catch (error) {
     console.error('Error parsing listing:', error);
@@ -107,6 +136,7 @@ const parseListing = (event: any): EcoListing | null => {
 
 export const useNostrListings = () => {
   const { parameters } = useSystemParameters();
+  const { cashbackMap, suspendedIds } = useNostrBusinessUnits();
   const [listings, setListings] = useState<EcoListing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -148,10 +178,16 @@ export const useNostrListings = () => {
 
         const parsed: EcoListing[] = [];
         byKey.forEach((event) => {
-          const listing = parseListing(event);
-          if (listing && listing.status === 'active') {
+          const listing = parseListing(event, cashbackMap, suspendedIds);
+          if (listing) {
             parsed.push(listing);
           }
+        });
+
+        // Sort: cashback DESC, then date DESC (best deals first)
+        parsed.sort((a, b) => {
+          if (b.cashbackPercent !== a.cashbackPercent) return b.cashbackPercent - a.cashbackPercent;
+          return b.created_at - a.created_at;
         });
 
         console.log('✅ Parsed active listings:', parsed.length);
@@ -165,7 +201,7 @@ export const useNostrListings = () => {
     };
 
     fetchListings();
-  }, [relays.join(',')]);
+  }, [relays.join(','), cashbackMap, suspendedIds]);
 
   return { listings, isLoading };
 };

@@ -214,7 +214,7 @@ export default function LanaPaysDiscover() {
                         {listing.type.charAt(0).toUpperCase() + listing.type.slice(1)}
                       </span>
                       <span className="text-sm font-sans font-bold text-white bg-green-600 px-3 py-1 rounded-full shadow-sm">
-                        🌿 5% Abundance
+                        🌿 {listing.cashbackPercent}% Abundance
                       </span>
                     </div>
                     <span className="text-sm font-semibold font-sans">

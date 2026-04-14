@@ -159,7 +159,7 @@ export default function ListingDetail() {
 
           {/* Cashback badge */}
           <span className="inline-flex items-center gap-1.5 bg-green-600 text-white px-3 py-1.5 rounded-full text-sm font-sans font-bold shadow-sm">
-            🌿 5% Abundance
+            🌿 {listing.cashbackPercent}% Abundance
           </span>
 
           {/* Description */}

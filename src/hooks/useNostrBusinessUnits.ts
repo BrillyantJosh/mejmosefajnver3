@@ -2,6 +2,15 @@ import { useState, useEffect } from 'react';
 import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
+const SHOP_BASE_URL = 'https://shop.lanapays.us';
+const PROCESSOR_PUBKEY = '79730aba75d71584e8a4f9d0cc1173085e75590ce489760078d2bf6f5210d692';
+const DEFAULT_CASHBACK = 5;
+
+/** Prepend shop base URL if image is a relative upload path */
+function fixImageUrl(url: string): string {
+  return url.startsWith('/api/uploads/') ? `${SHOP_BASE_URL}${url}` : url;
+}
+
 export interface OpeningHours {
   version: string;
   timezone: string;
@@ -49,9 +58,10 @@ export interface BusinessUnit {
   note?: string;
   content: string;
   created_at: number;
+  cashbackPercent: number;
 }
 
-const parseBusinessUnit = (event: any): BusinessUnit | null => {
+const parseBusinessUnit = (event: any): Omit<BusinessUnit, 'cashbackPercent'> | null => {
   try {
     const tags = event.tags;
     const getTag = (tagName: string) => tags.find((t: string[]) => t[0] === tagName)?.[1];
@@ -75,6 +85,8 @@ const parseBusinessUnit = (event: any): BusinessUnit | null => {
       }
     }
 
+    const logoRaw = getTag('logo');
+
     return {
       id: event.id,
       unit_id: getTag('unit_id') || getTag('d') || '',
@@ -96,12 +108,12 @@ const parseBusinessUnit = (event: any): BusinessUnit | null => {
       currency: getTag('currency') || '',
       category: getTag('category') || '',
       category_detail: getTag('category_detail') || '',
-      images: getAllTags('image'),
+      images: getAllTags('image').map(fixImageUrl),
       status: getTag('status') || 'active',
       opening_hours,
       video: getTag('video'),
       url: getTag('url'),
-      logo: getTag('logo'),
+      logo: logoRaw ? fixImageUrl(logoRaw) : undefined,
       note: getTag('note'),
       content: event.content || '',
       created_at: event.created_at,
@@ -112,9 +124,60 @@ const parseBusinessUnit = (event: any): BusinessUnit | null => {
   }
 };
 
+/** Build cashback map from KIND 30902 fee policy events */
+function buildCashbackMap(events: any[]): Map<string, number> {
+  const map = new Map<string, number>();
+  // Deduplicate by d-tag, keep newest
+  const byDTag = new Map<string, any>();
+  for (const event of events) {
+    const dTag = event.tags.find((t: string[]) => t[0] === 'd')?.[1] || '';
+    const existing = byDTag.get(dTag);
+    if (!existing || event.created_at > existing.created_at) {
+      byDTag.set(dTag, event);
+    }
+  }
+  for (const event of byDTag.values()) {
+    const getTag = (name: string) => event.tags.find((t: string[]) => t[0] === name)?.[1] || '';
+    const unitId = getTag('unit_id');
+    const status = getTag('status');
+    if (!unitId || status !== 'active') continue;
+    const lanaDiscount = parseFloat(getTag('lana_discount_per') || '0');
+    if (lanaDiscount > 0 && lanaDiscount <= 20) {
+      map.set(unitId, lanaDiscount);
+    }
+  }
+  return map;
+}
+
+/** Build suspended unit IDs set from KIND 30903 events */
+function buildSuspendedIds(events: any[]): Set<string> {
+  const byDTag = new Map<string, any>();
+  for (const event of events) {
+    const dTag = event.tags.find((t: string[]) => t[0] === 'd')?.[1] || '';
+    const existing = byDTag.get(dTag);
+    if (!existing || event.created_at > existing.created_at) {
+      byDTag.set(dTag, event);
+    }
+  }
+  const suspended = new Set<string>();
+  for (const [unitId, event] of byDTag) {
+    const status = event.tags.find((t: string[]) => t[0] === 'status')?.[1] || '';
+    const activeUntil = event.tags.find((t: string[]) => t[0] === 'active_until')?.[1] || '';
+    if (status === 'suspended') {
+      if (activeUntil && parseInt(activeUntil) <= Math.floor(Date.now() / 1000)) {
+        continue; // expired
+      }
+      suspended.add(unitId);
+    }
+  }
+  return suspended;
+}
+
 export const useNostrBusinessUnits = () => {
   const { parameters } = useSystemParameters();
   const [businessUnits, setBusinessUnits] = useState<BusinessUnit[]>([]);
+  const [cashbackMap, setCashbackMap] = useState<Map<string, number>>(new Map());
+  const [suspendedIds, setSuspendedIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
 
   const relays = parameters?.relays || [];
@@ -125,45 +188,55 @@ export const useNostrBusinessUnits = () => {
       return;
     }
 
-    const fetchBusinessUnits = async () => {
+    const fetchAll = async () => {
       const pool = new SimplePool();
-      
+
       try {
-        const events = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [30901],
-            limit: 500,
-          }),
-          new Promise<any[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Business units fetch timeout')), 15000)
-          )
+        const timeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
+          Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))]);
+
+        // Fetch all 3 KINDs in parallel
+        const [unitEvents, feeEvents, suspensionEvents] = await Promise.all([
+          timeout(pool.querySync(relays, { kinds: [30901], limit: 500 }), 15000),
+          timeout(pool.querySync(relays, { kinds: [30902], authors: [PROCESSOR_PUBKEY] }), 12000).catch(() => [] as any[]),
+          timeout(pool.querySync(relays, { kinds: [30903] }), 12000).catch(() => [] as any[]),
         ]);
 
-        console.log('📦 Fetched business units:', events.length);
+        console.log('📦 Fetched: units=%d, fees=%d, suspensions=%d', unitEvents.length, feeEvents.length, suspensionEvents.length);
 
-        const units: BusinessUnit[] = [];
+        // Build cashback map and suspended set
+        const cbMap = buildCashbackMap(feeEvents);
+        const susIds = buildSuspendedIds(suspensionEvents);
+        setCashbackMap(cbMap);
+        setSuspendedIds(susIds);
+
+        // Deduplicate units by d-tag (NIP-33)
         const unitMap = new Map<string, any>();
-
-        // Keep only the latest event for each unit_id (NIP-33 replace-by-d)
-        events.forEach(event => {
+        unitEvents.forEach((event: any) => {
           const unitId = event.tags.find((t: string[]) => t[0] === 'd')?.[1];
           if (!unitId) return;
-
           const existing = unitMap.get(unitId);
           if (!existing || event.created_at > existing.created_at) {
             unitMap.set(unitId, event);
           }
         });
 
-        // Parse all unique units
-        unitMap.forEach(event => {
-          const unit = parseBusinessUnit(event);
-          if (unit && unit.status === 'active') {
-            units.push(unit);
+        // Parse, filter suspended, attach cashback
+        const units: BusinessUnit[] = [];
+        unitMap.forEach((event) => {
+          const parsed = parseBusinessUnit(event);
+          if (parsed && parsed.status === 'active' && parsed.name && !susIds.has(parsed.unit_id)) {
+            units.push({
+              ...parsed,
+              cashbackPercent: cbMap.get(parsed.unit_id) || DEFAULT_CASHBACK,
+            });
           }
         });
 
-        console.log('✅ Parsed active business units:', units.length);
+        // Sort by name
+        units.sort((a, b) => a.name.localeCompare(b.name));
+
+        console.log('✅ Active business units: %d (cashback entries: %d, suspended: %d)', units.length, cbMap.size, susIds.size);
         setBusinessUnits(units);
       } catch (error) {
         console.error('Error fetching business units:', error);
@@ -173,8 +246,8 @@ export const useNostrBusinessUnits = () => {
       }
     };
 
-    fetchBusinessUnits();
+    fetchAll();
   }, [relays.join(',')]);
 
-  return { businessUnits, isLoading };
+  return { businessUnits, cashbackMap, suspendedIds, isLoading };
 };
