@@ -246,6 +246,7 @@ export default function BusinessUnitDetail() {
                             alt={listing.title}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             loading="lazy"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
                           />
                         </div>
                       )}

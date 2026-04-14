@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Leaf, MapPin } from "lucide-react";
 import { BusinessUnit } from "@/hooks/useNostrBusinessUnits";
 import { Link } from "react-router-dom";
@@ -7,18 +8,22 @@ interface BusinessUnitCardProps {
 }
 
 export const BusinessUnitCard = ({ unit }: BusinessUnitCardProps) => {
+  const [imgError, setImgError] = useState(false);
+  const hasImage = unit.images?.[0] && !imgError;
+
   return (
     <Link
       to={`/lanapays/unit/${unit.unit_id}`}
       className="group bg-card border rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300"
     >
       <div className="aspect-[16/10] overflow-hidden bg-muted">
-        {unit.images?.[0] ? (
+        {hasImage ? (
           <img
             src={unit.images[0]}
             alt={unit.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
+            onError={() => setImgError(true)}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">

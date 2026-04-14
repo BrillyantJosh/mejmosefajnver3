@@ -124,7 +124,7 @@ export const useNostrListings = () => {
       try {
         const events = await Promise.race([
           pool.querySync(relays, {
-            kinds: [36500],
+            kinds: [36502],
             limit: 2000,
           }),
           new Promise<any[]>((_, reject) =>
