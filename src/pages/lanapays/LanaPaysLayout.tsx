@@ -1,12 +1,4 @@
 import { Outlet } from "react-router-dom";
-import SubNavigation from "@/components/layout/SubNavigation";
-import { MapPin, Globe, CreditCard } from "lucide-react";
-
-const lanaPaysNavItems = [
-  { title: "Location", path: "/lanapays/location", icon: MapPin },
-  { title: "Online", path: "/lanapays/online", icon: Globe },
-  { title: "Pay", path: "/lanapays/pay", icon: CreditCard },
-];
 
 export default function LanaPaysLayout() {
   return (
@@ -25,9 +17,6 @@ export default function LanaPaysLayout() {
       <div className="container px-3 md:px-4 py-4 md:py-6">
         <Outlet />
       </div>
-
-      {/* Bottom Navigation */}
-      <SubNavigation items={lanaPaysNavItems} variant="bottom" />
     </div>
   );
 }

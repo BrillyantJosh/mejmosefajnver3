@@ -1,28 +1,53 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useNostrBusinessUnits } from "@/hooks/useNostrBusinessUnits";
+import { useNostrListings, EcoListing } from "@/hooks/useNostrListings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { 
-  ArrowLeft, 
-  MapPin, 
-  Clock, 
-  CreditCard, 
-  Building2, 
+import {
+  ArrowLeft,
+  MapPin,
+  Clock,
+  CreditCard,
+  Building2,
   Globe,
-  ExternalLink
+  ExternalLink,
+  ShoppingBag,
+  Leaf,
+  Loader2,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
+
+const TYPE_LABELS: Record<string, string> = {
+  product: 'Product',
+  subscription: 'Subscription',
+  service: 'Service',
+  experience: 'Experience',
+};
+
+const getYouTubeEmbedUrl = (url: string) => {
+  if (!url) return null;
+  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+  return match ? `https://www.youtube.com/embed/${match[1]}` : null;
+};
 
 export default function BusinessUnitDetail() {
   const { unitId } = useParams<{ unitId: string }>();
   const navigate = useNavigate();
   const { businessUnits, isLoading } = useNostrBusinessUnits();
+  const { listings, isLoading: listingsLoading } = useNostrListings();
 
   const unit = businessUnits.find(u => u.unit_id === unitId);
   const isOnline = unit?.category === "Online";
+
+  // Filter listings for this unit
+  const unitListings = listings.filter(l => {
+    // unitRef format: "30901:<pubkey>:<unitId>"
+    const parts = l.unitRef.split(':');
+    return parts.length >= 3 && parts[2] === unitId;
+  });
 
   if (isLoading) {
     return (
@@ -45,7 +70,7 @@ export default function BusinessUnitDetail() {
             <p className="text-muted-foreground mb-4">
               The business you're looking for doesn't exist or has been removed.
             </p>
-            <Button onClick={() => navigate('/lanapays/location')}>
+            <Button onClick={() => navigate('/lanapays')}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to List
             </Button>
@@ -77,34 +102,11 @@ export default function BusinessUnitDetail() {
     });
   };
 
-  const getYouTubeEmbedUrl = (url: string) => {
-    if (!url) return null;
-    
-    // Handle youtu.be format
-    if (url.includes('youtu.be/')) {
-      const videoId = url.split('youtu.be/')[1]?.split('?')[0];
-      return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
-    }
-    
-    // Handle youtube.com/watch format
-    if (url.includes('youtube.com/watch')) {
-      const videoId = new URL(url).searchParams.get('v');
-      return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
-    }
-    
-    // Already in embed format
-    if (url.includes('youtube.com/embed/')) {
-      return url;
-    }
-    
-    return null;
-  };
-
   return (
     <div className="min-h-screen bg-background pb-8">
       <div className="container py-6 space-y-6">
         {/* Back Button */}
-        <Button variant="ghost" onClick={() => navigate(-1)}>
+        <Button variant="ghost" onClick={() => navigate('/lanapays')}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
@@ -218,7 +220,7 @@ export default function BusinessUnitDetail() {
               </div>
             </div>
 
-            {/* Website - Show prominently for online stores */}
+            {/* Website */}
             {unit.url && (
               <div className="flex items-start gap-3">
                 <Globe className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
@@ -234,8 +236,8 @@ export default function BusinessUnitDetail() {
                     <ExternalLink className="h-3 w-3 flex-shrink-0" />
                   </a>
                   {isOnline && (
-                    <Button 
-                      className="mt-2" 
+                    <Button
+                      className="mt-2"
                       onClick={(e) => {
                         e.stopPropagation();
                         window.open(unit.url, '_blank');
@@ -246,6 +248,85 @@ export default function BusinessUnitDetail() {
                     </Button>
                   )}
                 </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ───── LISTINGS SECTION ───── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingBag className="h-5 w-5" />
+              Listings
+              {!listingsLoading && unitListings.length > 0 && (
+                <Badge variant="secondary" className="ml-1">{unitListings.length}</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {listingsLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading listings...
+              </div>
+            ) : unitListings.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-2">
+                No listings available for this merchant.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {unitListings.map((listing) => (
+                  <div
+                    key={`${listing.pubkey}-${listing.listingId}`}
+                    className="group cursor-pointer bg-muted/30 border rounded-xl overflow-hidden hover:shadow-md transition"
+                    onClick={() => navigate(`/lanapays/listing/${listing.pubkey}/${listing.listingId}`)}
+                  >
+                    {listing.images[0] && (
+                      <div className="aspect-[16/9] overflow-hidden bg-muted">
+                        <img
+                          src={listing.images[0]}
+                          alt={listing.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                          onError={(e) => { e.currentTarget.src = '/placeholder.svg'; }}
+                        />
+                      </div>
+                    )}
+                    <div className="p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <Badge variant="outline" className="text-[10px]">
+                            {TYPE_LABELS[listing.type] || listing.type}
+                          </Badge>
+                        </div>
+                        <span className="text-sm font-semibold">
+                          {listing.price} {listing.priceCurrency}
+                          {listing.unit && (
+                            <span className="text-xs font-normal text-muted-foreground">
+                              /{listing.unit}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <h3 className="font-semibold text-sm truncate">
+                        {listing.title}
+                      </h3>
+                      {listing.eco.length > 0 && (
+                        <div className="flex gap-1 flex-wrap">
+                          {listing.eco.slice(0, 3).map((e) => (
+                            <span
+                              key={e}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300 rounded text-[9px]"
+                            >
+                              <Leaf className="w-2 h-2" />
+                              {e.replace(/_/g, " ")}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>

@@ -42,10 +42,10 @@ import MarketplaceGlobal from "./pages/marketplace/Global";
 import MarketplaceMyOffers from "./pages/marketplace/MyOffers";
 import OfferDetail from "./pages/marketplace/OfferDetail";
 import LanaPaysLayout from "./pages/lanapays/LanaPaysLayout";
-import LanaPaysLocation from "./pages/lanapays/LanaPaysLocation";
-import LanaPaysOnline from "./pages/lanapays/LanaPaysOnline";
+import LanaPaysDiscover from "./pages/lanapays/LanaPaysDiscover";
 import LanaPaysRedirect from "./pages/lanapays/LanaPaysRedirect";
 import BusinessUnitDetail from "./pages/lanapays/BusinessUnitDetail";
+import ListingDetail from "./pages/lanapays/ListingDetail";
 import LanaTransparencyLayout from "./pages/transparency/LanaTransparencyLayout";
 import TransparencyProfiles from "./pages/transparency/Profiles";
 import TransparencyProfileDetail from "./pages/transparency/ProfileDetail";
@@ -233,12 +233,11 @@ const App = () => (
                   </Route>
                   <Route path="/marketplace/offer/:offerId" element={<OfferDetail />} />
                   <Route path="/lanapays" element={<LanaPaysLayout />}>
-                    <Route index element={<LanaPaysLocation />} />
-                    <Route path="location" element={<LanaPaysLocation />} />
-                    <Route path="online" element={<LanaPaysOnline />} />
+                    <Route index element={<LanaPaysDiscover />} />
                     <Route path="pay" element={<LanaPaysRedirect />} />
                   </Route>
                   <Route path="/lanapays/unit/:unitId" element={<BusinessUnitDetail />} />
+                  <Route path="/lanapays/listing/:pubkey/:listingId" element={<ListingDetail />} />
                   <Route path="/transparency" element={<LanaTransparencyLayout />}>
                     <Route index element={<TransparencyLast30 />} />
                     <Route path="last-30" element={<TransparencyLast30 />} />
