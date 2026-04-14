@@ -202,13 +202,14 @@ export default function DiscountSell() {
   }, [parameters?.exchangeRates]);
 
   // Auto-set currency from user's profile (KIND 0) — not changeable
+  // Profile currency takes priority even if fallback was set first
   useEffect(() => {
-    if (!selectedCurrency && profile?.currency && activeCurrencies.includes(profile.currency)) {
+    if (profile?.currency && activeCurrencies.includes(profile.currency)) {
       setSelectedCurrency(profile.currency);
     } else if (!selectedCurrency && activeCurrencies.length > 0) {
       setSelectedCurrency(activeCurrencies[0]);
     }
-  }, [activeCurrencies, selectedCurrency, profile?.currency]);
+  }, [activeCurrencies, profile?.currency]);
 
   // Validate private key against selected wallet (debounced)
   useEffect(() => {

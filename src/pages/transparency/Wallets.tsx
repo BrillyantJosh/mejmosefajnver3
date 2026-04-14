@@ -127,7 +127,8 @@ export default function Wallets() {
   };
 
   const getFiatValue = (lanaBalance: number) => {
-    const currency = currentUserProfile?.currency || 'USD';
+    // Use the SELECTED profile's currency, not the logged-in user's
+    const currency = selectedProfile?.currency || currentUserProfile?.currency || 'EUR';
     const rate = parameters?.exchangeRates?.[currency as 'EUR' | 'USD' | 'GBP'] || 0;
     const fiatValue = lanaBalance * rate;
     return { value: fiatValue, currency };
