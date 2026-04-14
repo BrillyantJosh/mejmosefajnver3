@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarPlus, Copy, Check, Trash2, Clock, Users, Video, RefreshCw, Globe, Lock, Search, X, UserPlus, Radio } from "lucide-react";
+import { CalendarPlus, Copy, Check, Trash2, Clock, Users, Video, RefreshCw, Globe, Lock, Search, X, UserPlus, Radio, ExternalLink } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
 import { toast } from "sonner";
@@ -82,6 +82,7 @@ export default function MeetSchedule() {
   const [showSearch, setShowSearch] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [joinRoomId, setJoinRoomId] = useState<string | null>(null);
+  const [joinMeetingCreator, setJoinMeetingCreator] = useState<string | null>(null);
   const [joinStreamKey, setJoinStreamKey] = useState('');
 
   // Date formatting based on current language
@@ -213,8 +214,9 @@ export default function MeetSchedule() {
     }
   };
 
-  const handleJoinClick = (roomId: string) => {
+  const handleJoinClick = (roomId: string, createdBy: string) => {
     setJoinRoomId(roomId);
+    setJoinMeetingCreator(createdBy);
     setJoinStreamKey('');
   };
 
@@ -466,7 +468,7 @@ export default function MeetSchedule() {
                       <Button size="sm" variant="ghost" onClick={() => handleCopyLink(m.roomId, m.id)} title={t('schedule.copyLink')}>
                         {copiedId === m.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
                       </Button>
-                      <Button size="sm" variant={m.isLive || past ? "default" : "outline"} onClick={() => handleJoinClick(m.roomId)}>
+                      <Button size="sm" variant={m.isLive || past ? "default" : "outline"} onClick={() => handleJoinClick(m.roomId, m.createdBy)}>
                         <Video className="h-3.5 w-3.5 mr-1" />
                         {m.isLive ? t('schedule.enter') : past ? t('schedule.start') : t('schedule.join')}
                       </Button>
@@ -484,7 +486,7 @@ export default function MeetSchedule() {
         </div>
       )}
 
-      {/* Join dialog with optional streaming */}
+      {/* Join dialog with optional streaming (stream key only for creator) */}
       {joinRoomId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setJoinRoomId(null)}>
           <Card className="w-full max-w-sm mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -495,19 +497,30 @@ export default function MeetSchedule() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <Radio className="h-3 w-3" />
-                  {t('instant.streamKey')}
-                </Label>
-                <Input
-                  type="password"
-                  placeholder={t('instant.streamKeyPlaceholder')}
-                  value={joinStreamKey}
-                  onChange={(e) => setJoinStreamKey(e.target.value)}
-                />
-                <p className="text-[11px] text-muted-foreground">{t('schedule.streamKeyOptional')}</p>
-              </div>
+              {joinMeetingCreator === session?.nostrHexId && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Radio className="h-3 w-3" />
+                    {t('instant.streamKey')}
+                  </Label>
+                  <Input
+                    type="password"
+                    placeholder={t('instant.streamKeyPlaceholder')}
+                    value={joinStreamKey}
+                    onChange={(e) => setJoinStreamKey(e.target.value)}
+                  />
+                  <p className="text-[11px] text-muted-foreground">{t('schedule.streamKeyOptional')}</p>
+                  <a
+                    href="https://youtu.be/2gjTqFjHvhs"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-[11px] text-red-500 hover:text-red-400 transition-colors"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {t('instant.streamTutorial')}
+                  </a>
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setJoinRoomId(null)}>
                   {t('schedule.cancel')}

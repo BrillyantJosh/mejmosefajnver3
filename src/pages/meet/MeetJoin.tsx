@@ -259,6 +259,15 @@ export default function MeetJoin() {
                   type="password"
                 />
                 <p className="text-[10px] text-muted-foreground/70">{t('instant.streamKeyHelp')}</p>
+                <a
+                  href="https://youtu.be/2gjTqFjHvhs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-[11px] text-red-500 hover:text-red-400 transition-colors mt-1"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  {t('instant.streamTutorial')}
+                </a>
               </div>
             )}
           </div>

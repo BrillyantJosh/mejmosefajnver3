@@ -32,6 +32,7 @@ const meet = {
   'instant.streamKeyHelp': 'Find your stream key in YouTube Studio > Go Live > Stream settings',
   'instant.streamKeyRequired': 'Enter a YouTube stream key to enable streaming',
   'instant.streamingEnabled': 'YouTube streaming enabled',
+  'instant.streamTutorial': 'Watch: How to set up YouTube streaming',
 
   // ── MeetSchedule ──
   'schedule.title': 'Scheduled meetings',
@@ -128,6 +129,7 @@ const translations: TranslationDict<MeetKey> = {
     'instant.streamKeyHelp': 'Ključ najdeš v YouTube Studio > V živo > Nastavitve pretakanja',
     'instant.streamKeyRequired': 'Vnesi YouTube ključ za pretakanje',
     'instant.streamingEnabled': 'YouTube pretakanje vklopljeno',
+    'instant.streamTutorial': 'Poglej: Kako nastaviti YouTube pretakanje',
 
     // ── MeetSchedule ──
     'schedule.title': 'Načrtovani sestanki',
@@ -212,6 +214,7 @@ const translations: TranslationDict<MeetKey> = {
     'instant.streamKeyHelp': 'Finden Sie Ihren Stream-Schlüssel in YouTube Studio > Livestream > Stream-Einstellungen',
     'instant.streamKeyRequired': 'YouTube Stream-Schlüssel eingeben',
     'instant.streamingEnabled': 'YouTube-Streaming aktiviert',
+    'instant.streamTutorial': 'Anschauen: YouTube-Streaming einrichten',
     'schedule.title': 'Geplante Meetings',
     'schedule.createMeeting': 'Meeting erstellen',
     'schedule.createDesc': 'Planen Sie ein Meeting und teilen Sie den Link mit Teilnehmern',
@@ -294,6 +297,7 @@ const translations: TranslationDict<MeetKey> = {
     'instant.streamKeyHelp': 'A közvetítési kulcsot a YouTube Studio > Élő közvetítés > Közvetítési beállítások alatt találja',
     'instant.streamKeyRequired': 'Adja meg a YouTube közvetítési kulcsot',
     'instant.streamingEnabled': 'YouTube közvetítés engedélyezve',
+    'instant.streamTutorial': 'Nézd meg: YouTube közvetítés beállítása',
     'schedule.title': 'Tervezett találkozók',
     'schedule.createMeeting': 'Találkozó létrehozása',
     'schedule.createDesc': 'Tervezzen egy találkozót és ossza meg a linket a résztvevőkkel',
@@ -376,6 +380,7 @@ const translations: TranslationDict<MeetKey> = {
     'instant.streamKeyHelp': 'Trova la chiave di streaming in YouTube Studio > Trasmetti dal vivo > Impostazioni streaming',
     'instant.streamKeyRequired': 'Inserisci la chiave di streaming YouTube',
     'instant.streamingEnabled': 'Streaming YouTube attivato',
+    'instant.streamTutorial': 'Guarda: Come configurare lo streaming YouTube',
     'schedule.title': 'Riunioni programmate',
     'schedule.createMeeting': 'Crea riunione',
     'schedule.createDesc': 'Programma una riunione e condividi il link con i partecipanti',
