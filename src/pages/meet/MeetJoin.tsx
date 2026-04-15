@@ -64,7 +64,7 @@ export default function MeetJoin() {
   const { session } = useAuth();
   const { t } = useTranslation(meetTranslations);
   const [isPrivate, setIsPrivate] = useState(false);
-  const [customName, setCustomName] = useState('');
+  const [customName, setCustomName] = useState(() => generateRoomName());
   const [streamToYouTube, setStreamToYouTube] = useState(false);
   const [youtubeStreamKey, setYoutubeStreamKey] = useState('');
   const [publicRooms, setPublicRooms] = useState<ActiveRoom[]>([]);
@@ -121,13 +121,17 @@ export default function MeetJoin() {
 
   const handleInstantMeet = useCallback(async () => {
     if (!session) return;
-    const hasCustom = customName.trim().length > 0;
-    const title = hasCustom ? customName.trim() : generateRoomName();
+    const trimmed = customName.trim();
+    if (!trimmed) {
+      toast.error(t('instant.nameRequired'));
+      return;
+    }
+    const title = trimmed;
     const token = createAuthToken(session);
     const slug = title.toLowerCase()
       .replace(/[čć]/g, 'c').replace(/[šś]/g, 's').replace(/[žź]/g, 'z').replace(/đ/g, 'd')
       .replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 50)
-      + (hasCustom ? '-' + Math.floor(Math.random() * 100) : '');
+      + '-' + Math.floor(Math.random() * 100);
 
     // Validate YouTube stream key if streaming is enabled
     if (streamToYouTube && !youtubeStreamKey.trim()) {
@@ -167,7 +171,7 @@ export default function MeetJoin() {
     if (streamToYouTube) messages.push(t('instant.streamingEnabled'));
     toast.success(messages.join(' • '));
 
-    setCustomName('');
+    setCustomName(generateRoomName());
     setStreamToYouTube(false);
     setYoutubeStreamKey('');
   }, [session, isPrivate, customName, streamToYouTube, youtubeStreamKey, t]);
@@ -220,15 +224,18 @@ export default function MeetJoin() {
             {isPrivate ? t('instant.privateDesc') : t('instant.publicDesc')}
           </p>
 
-          {/* Optional custom name */}
+          {/* Required custom name (pre-filled with suggestion) */}
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">{t('instant.customName')}</label>
+            <label className="text-xs text-muted-foreground">
+              {t('instant.customName')} <span className="text-destructive">*</span>
+            </label>
             <Input
               value={customName}
               onChange={(e) => setCustomName(e.target.value)}
               placeholder={t('instant.customNamePlaceholder')}
               className="h-9 text-sm"
               maxLength={50}
+              required
             />
           </div>
 
