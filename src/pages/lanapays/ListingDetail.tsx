@@ -4,6 +4,8 @@ import { useNostrListings } from "@/hooks/useNostrListings";
 import { useNostrBusinessUnits } from "@/hooks/useNostrBusinessUnits";
 import {
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
   MapPin,
   Leaf,
@@ -108,12 +110,30 @@ export default function ListingDetail() {
         <div>
           {allImages.length > 0 ? (
             <div>
-              <div className="aspect-square rounded-xl overflow-hidden bg-muted mb-3">
+              <div className="relative aspect-square rounded-xl overflow-hidden bg-muted mb-3">
                 <img
                   src={allImages[selectedImage]}
                   alt={listing.title}
                   className="w-full h-full object-cover"
                 />
+                {allImages.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setSelectedImage((selectedImage - 1 + allImages.length) % allImages.length)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/65 text-white rounded-full p-1.5 transition"
+                      aria-label="Previous image"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => setSelectedImage((selectedImage + 1) % allImages.length)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/65 text-white rounded-full p-1.5 transition"
+                      aria-label="Next image"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </>
+                )}
               </div>
               {allImages.length > 1 && (
                 <div className="flex gap-2 overflow-x-auto">
