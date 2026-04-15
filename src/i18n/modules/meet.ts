@@ -90,6 +90,15 @@ const meet = {
   'recordings.download': 'Download',
   'recordings.daysLeft': '{count} days left',
   'recordings.retry': 'Retry',
+  'recordings.edit': 'Edit',
+  'recordings.editTitle': 'Edit recording',
+  'recordings.nameLabel': 'Name',
+  'recordings.namePlaceholder': 'Recording name',
+  'recordings.descriptionLabel': 'Description (visible to everyone)',
+  'recordings.descriptionPlaceholder': 'What was this meeting about?',
+  'recordings.cancel': 'Cancel',
+  'recordings.save': 'Save',
+  'recordings.startedBy': 'Started by',
 } as const;
 
 export type MeetKey = keyof typeof meet;
@@ -183,6 +192,15 @@ const translations: TranslationDict<MeetKey> = {
     'recordings.download': 'Prenesi',
     'recordings.daysLeft': 'Še {count} dni',
     'recordings.retry': 'Poskusi znova',
+    'recordings.edit': 'Uredi',
+    'recordings.editTitle': 'Uredi posnetek',
+    'recordings.nameLabel': 'Ime',
+    'recordings.namePlaceholder': 'Ime posnetka',
+    'recordings.descriptionLabel': 'Opis (viden vsem)',
+    'recordings.descriptionPlaceholder': 'O čem je bil sestanek?',
+    'recordings.cancel': 'Prekliči',
+    'recordings.save': 'Shrani',
+    'recordings.startedBy': 'Začel',
   },
 
   de: {
@@ -266,6 +284,15 @@ const translations: TranslationDict<MeetKey> = {
     'recordings.download': 'Herunterladen',
     'recordings.daysLeft': '{count} Tage übrig',
     'recordings.retry': 'Erneut versuchen',
+    'recordings.edit': 'Bearbeiten',
+    'recordings.editTitle': 'Aufnahme bearbeiten',
+    'recordings.nameLabel': 'Name',
+    'recordings.namePlaceholder': 'Name der Aufnahme',
+    'recordings.descriptionLabel': 'Beschreibung (für alle sichtbar)',
+    'recordings.descriptionPlaceholder': 'Worum ging es in diesem Meeting?',
+    'recordings.cancel': 'Abbrechen',
+    'recordings.save': 'Speichern',
+    'recordings.startedBy': 'Gestartet von',
   },
 
   hu: {
@@ -349,6 +376,15 @@ const translations: TranslationDict<MeetKey> = {
     'recordings.download': 'Letöltés',
     'recordings.daysLeft': '{count} nap van hátra',
     'recordings.retry': 'Újrapróbálás',
+    'recordings.edit': 'Szerkesztés',
+    'recordings.editTitle': 'Felvétel szerkesztése',
+    'recordings.nameLabel': 'Név',
+    'recordings.namePlaceholder': 'Felvétel neve',
+    'recordings.descriptionLabel': 'Leírás (mindenki látja)',
+    'recordings.descriptionPlaceholder': 'Miről szólt a találkozó?',
+    'recordings.cancel': 'Mégse',
+    'recordings.save': 'Mentés',
+    'recordings.startedBy': 'Indította',
   },
 
   it: {
@@ -432,6 +468,15 @@ const translations: TranslationDict<MeetKey> = {
     'recordings.download': 'Scarica',
     'recordings.daysLeft': '{count} giorni rimasti',
     'recordings.retry': 'Riprova',
+    'recordings.edit': 'Modifica',
+    'recordings.editTitle': 'Modifica registrazione',
+    'recordings.nameLabel': 'Nome',
+    'recordings.namePlaceholder': 'Nome registrazione',
+    'recordings.descriptionLabel': 'Descrizione (visibile a tutti)',
+    'recordings.descriptionPlaceholder': 'Di cosa parlava questa riunione?',
+    'recordings.cancel': 'Annulla',
+    'recordings.save': 'Salva',
+    'recordings.startedBy': 'Avviato da',
   },
 };
 
