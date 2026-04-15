@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Film, Download, Play, Clock, HardDrive, RefreshCw, Timer, AlertTriangle, Share2, Check, Pencil } from "lucide-react";
+import { Film, Download, Play, Clock, HardDrive, RefreshCw, Timer, AlertTriangle, Share2, Check, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@/i18n/I18nContext";
 import meetTranslations from "@/i18n/modules/meet";
 import { useAuth } from "@/contexts/AuthContext";
@@ -84,6 +84,7 @@ export default function MeetRecordings() {
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const openEdit = useCallback((r: Recording) => {
     setEditingRec(r);
@@ -117,6 +118,28 @@ export default function MeetRecordings() {
       setSaving(false);
     }
   }, [editingRec, editTitle, editDesc, session]);
+
+  const deleteRecording = useCallback(async (r: Recording) => {
+    if (!session) return;
+    const confirmMsg = (t('recordings.confirmDelete') as string).replace('{name}', r.customTitle || r.roomName);
+    if (!confirm(confirmMsg)) return;
+    setDeletingId(r.id);
+    try {
+      const token = createAuthToken(session);
+      const res = await fetch(`${MEET_BASE_URL}/api/recordings/${r.id}?authToken=${encodeURIComponent(token)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Delete failed' }));
+        throw new Error(err.error || 'Delete failed');
+      }
+      setRecordings(prev => prev.filter(x => x.id !== r.id));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Delete failed');
+    } finally {
+      setDeletingId(null);
+    }
+  }, [session, t]);
 
   const shareVideo = useCallback(async (r: Recording) => {
     const videoUrl = `${MEET_BASE_URL}/api/recordings/${r.id}/video`;
@@ -372,14 +395,28 @@ export default function MeetRecordings() {
                       )}
                     </Button>
                     {session && r.creatorPubkey === session.nostrHexId && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openEdit(r)}
-                        title={t('recordings.edit')}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEdit(r)}
+                          title={t('recordings.edit')}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => deleteRecording(r)}
+                          disabled={deletingId === r.id}
+                          title={t('recordings.delete')}
+                        >
+                          {deletingId === r.id
+                            ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            : <Trash2 className="w-3.5 h-3.5" />}
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>

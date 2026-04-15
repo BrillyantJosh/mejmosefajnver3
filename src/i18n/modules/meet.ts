@@ -99,6 +99,8 @@ const meet = {
   'recordings.cancel': 'Cancel',
   'recordings.save': 'Save',
   'recordings.startedBy': 'Started by',
+  'recordings.delete': 'Delete',
+  'recordings.confirmDelete': 'Permanently delete "{name}"? This cannot be undone.',
 } as const;
 
 export type MeetKey = keyof typeof meet;
@@ -201,6 +203,8 @@ const translations: TranslationDict<MeetKey> = {
     'recordings.cancel': 'Prekliči',
     'recordings.save': 'Shrani',
     'recordings.startedBy': 'Začel',
+    'recordings.delete': 'Izbriši',
+    'recordings.confirmDelete': 'Trajno izbriši "{name}"? Tega ni mogoče razveljaviti.',
   },
 
   de: {
@@ -293,6 +297,8 @@ const translations: TranslationDict<MeetKey> = {
     'recordings.cancel': 'Abbrechen',
     'recordings.save': 'Speichern',
     'recordings.startedBy': 'Gestartet von',
+    'recordings.delete': 'Löschen',
+    'recordings.confirmDelete': '"{name}" dauerhaft löschen? Dies kann nicht rückgängig gemacht werden.',
   },
 
   hu: {
@@ -385,6 +391,8 @@ const translations: TranslationDict<MeetKey> = {
     'recordings.cancel': 'Mégse',
     'recordings.save': 'Mentés',
     'recordings.startedBy': 'Indította',
+    'recordings.delete': 'Törlés',
+    'recordings.confirmDelete': 'Véglegesen törli a(z) "{name}" felvételt? Ezt nem lehet visszavonni.',
   },
 
   it: {
@@ -477,6 +485,8 @@ const translations: TranslationDict<MeetKey> = {
     'recordings.cancel': 'Annulla',
     'recordings.save': 'Salva',
     'recordings.startedBy': 'Avviato da',
+    'recordings.delete': 'Elimina',
+    'recordings.confirmDelete': 'Eliminare definitivamente "{name}"? Questa azione non può essere annullata.',
   },
 };
 
