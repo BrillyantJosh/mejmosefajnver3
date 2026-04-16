@@ -13,7 +13,7 @@ import { toast } from "sonner";
 interface AddBeingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAdd: (wif: string, name?: string) => { success: boolean; error?: string; hexId?: string };
+  onAdd: (wif: string, name?: string) => Promise<{ success: boolean; error?: string; hexId?: string }>;
 }
 
 export default function AddBeingDialog({ open, onOpenChange, onAdd }: AddBeingDialogProps) {
@@ -25,14 +25,14 @@ export default function AddBeingDialog({ open, onOpenChange, onAdd }: AddBeingDi
 
   const { profile } = useNostrProfileCache(derivedHexId);
 
-  const handleWifChange = (value: string) => {
+  const handleWifChange = async (value: string) => {
     setWifKey(value.trim());
     setDerivedHexId(null);
     setDeriveError(null);
 
     if (value.trim().length > 30) {
       try {
-        const ids = convertWifToIds(value.trim());
+        const ids = await convertWifToIds(value.trim());
         setDerivedHexId(ids.nostrHexId);
         setDeriveError(null);
       } catch (err: any) {
@@ -48,13 +48,13 @@ export default function AddBeingDialog({ open, onOpenChange, onAdd }: AddBeingDi
     setWifKey(data.trim());
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!derivedHexId) {
       toast.error('Please enter a valid WIF key first');
       return;
     }
 
-    const result = onAdd(wifKey, customName || profile?.display_name || profile?.full_name || undefined);
+    const result = await onAdd(wifKey, customName || profile?.display_name || profile?.full_name || undefined);
     if (result.success) {
       toast.success('Being added successfully');
       setWifKey("");

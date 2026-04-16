@@ -8,17 +8,17 @@ import { useToast } from "@/hooks/use-toast";
 import QRCode from "react-qr-code";
 import {
   generateRandomPrivateKey,
-  privateKeyToWIF,
-  generatePublicKey,
+  privateKeyToStakingWIF,
+  generateCompressedPublicKey,
   generateLanaAddress,
   deriveNostrPublicKey,
   hexToNpub
 } from "@/lib/crypto";
 
 const GenerateWallet = () => {
-  const [privateKeyWIF, setPrivateKeyWIF] = useState("");
+  const [stakingWIF, setStakingWIF] = useState("");
+  const [stakingAddress, setStakingAddress] = useState("");
   const [privateKeyHex, setPrivateKeyHex] = useState("");
-  const [lanaAddress, setLanaAddress] = useState("");
   const [nostrHexId, setNostrHexId] = useState("");
   const [nostrNpubId, setNostrNpubId] = useState("");
   const [description, setDescription] = useState("");
@@ -29,31 +29,24 @@ const GenerateWallet = () => {
   const handleGenerateWallet = async () => {
     setIsGenerating(true);
     try {
-      // Generate random 32-byte private key
       const privKeyHex = generateRandomPrivateKey();
 
-      // Convert to WIF format
-      const wif = await privateKeyToWIF(privKeyHex);
+      const sWif = await privateKeyToStakingWIF(privKeyHex);
+      const compressedPubKey = generateCompressedPublicKey(privKeyHex);
+      const sAddr = await generateLanaAddress(compressedPubKey);
 
-      // Generate UNCOMPRESSED public key (matches server-side transaction signing)
-      const publicKeyHex = generatePublicKey(privKeyHex);
-
-      // Generate LanaCoin address from uncompressed public key
-      const address = await generateLanaAddress(publicKeyHex);
-
-      // Derive Nostr keys
       const nostrHex = deriveNostrPublicKey(privKeyHex);
       const nostrNpub = hexToNpub(nostrHex);
 
-      setPrivateKeyWIF(wif);
+      setStakingWIF(sWif);
+      setStakingAddress(sAddr);
       setPrivateKeyHex(privKeyHex);
-      setLanaAddress(address);
       setNostrHexId(nostrHex);
       setNostrNpubId(nostrNpub);
 
       toast({
         title: "Wallet Generated",
-        description: "Your new LanaCoin wallet has been created successfully.",
+        description: "Your new LanaCoin wallet has been created.",
       });
     } catch (error) {
       console.error("Error generating wallet:", error);
@@ -105,6 +98,13 @@ const GenerateWallet = () => {
               color: #333;
               margin-bottom: 15px;
               font-size: 20px;
+            }
+            h2 {
+              font-size: 14px;
+              color: #555;
+              margin: 15px 0 8px;
+              border-bottom: 1px solid #ddd;
+              padding-bottom: 4px;
             }
             .wallet-section {
               margin: 12px 0;
@@ -164,12 +164,22 @@ const GenerateWallet = () => {
           ${description ? `<div class="description"><strong>Description:</strong> ${description}</div>` : ''}
 
           <div class="wallet-section">
-            <div class="label">LanaCoin Address (Public):</div>
-            <div class="value">${lanaAddress}</div>
+            <div class="label">LanaCoin Address:</div>
+            <div class="value">${stakingAddress}</div>
             <div class="qr-container">
-              ${printRef.current?.querySelector('#address-qr')?.outerHTML || ''}
+              ${printRef.current?.querySelector('#staking-address-qr')?.outerHTML || ''}
             </div>
           </div>
+
+          <div class="wallet-section secret">
+            <div class="label">Private Key WIF (T-prefix) - KEEP SECRET:</div>
+            <div class="value">${stakingWIF}</div>
+            <div class="qr-container">
+              ${printRef.current?.querySelector('#staking-private-qr')?.outerHTML || ''}
+            </div>
+          </div>
+
+          <h2>Nostr Keys</h2>
 
           <div class="wallet-section">
             <div class="label">Nostr Public Key (HEX):</div>
@@ -179,14 +189,6 @@ const GenerateWallet = () => {
           <div class="wallet-section">
             <div class="label">Nostr Public Key (npub):</div>
             <div class="value">${nostrNpubId}</div>
-          </div>
-
-          <div class="wallet-section secret">
-            <div class="label">Private Key (WIF) - KEEP SECRET:</div>
-            <div class="value">${privateKeyWIF}</div>
-            <div class="qr-container">
-              ${printRef.current?.querySelector('#private-qr')?.outerHTML || ''}
-            </div>
           </div>
 
           <div class="wallet-section secret">
@@ -208,7 +210,6 @@ const GenerateWallet = () => {
     printWindow.document.write(printContent);
     printWindow.document.close();
 
-    // Wait for content to load before printing
     setTimeout(() => {
       printWindow.print();
     }, 500);
@@ -245,37 +246,65 @@ const GenerateWallet = () => {
         </CardContent>
       </Card>
 
-      {lanaAddress && privateKeyWIF && (
+      {stakingAddress && stakingWIF && (
         <div ref={printRef} className="space-y-6">
-          {/* LanaCoin Address */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-green-600">LanaCoin Address (Public)</CardTitle>
+              <CardTitle className="text-green-600">LanaCoin Address</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-start gap-4">
                 <div className="flex-1">
                   <div className="font-mono text-sm break-all bg-muted p-4 rounded-md">
-                    {lanaAddress}
+                    {stakingAddress}
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => copyToClipboard(lanaAddress, "LanaCoin Address")}
+                    onClick={() => copyToClipboard(stakingAddress, "Address")}
                     className="mt-2"
                   >
                     <Copy className="h-4 w-4 mr-2" />
                     Copy Address
                   </Button>
                 </div>
-                <div id="address-qr" className="bg-white p-4 rounded-lg border">
-                  <QRCode value={lanaAddress} size={150} />
+                <div id="staking-address-qr" className="bg-white p-4 rounded-lg border">
+                  <QRCode value={stakingAddress} size={150} />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Nostr Public Key (HEX) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-red-600">Private Key WIF (T-prefix) - Keep Secret!</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="flex-1">
+                  <div className="font-mono text-sm break-all bg-muted p-4 rounded-md">
+                    {stakingWIF}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(stakingWIF, "Private Key WIF")}
+                    className="mt-2"
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy WIF
+                  </Button>
+                </div>
+                <div id="staking-private-qr" className="bg-white p-4 rounded-lg border">
+                  <QRCode value={stakingWIF} size={150} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Nostr Keys */}
+          <h2 className="text-xl font-bold text-blue-600">Nostr Keys</h2>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-blue-600">Nostr Public Key (HEX)</CardTitle>
@@ -296,7 +325,6 @@ const GenerateWallet = () => {
             </CardContent>
           </Card>
 
-          {/* Nostr Public Key (npub) */}
           <Card>
             <CardHeader>
               <CardTitle className="text-blue-600">Nostr Public Key (npub)</CardTitle>
@@ -317,35 +345,6 @@ const GenerateWallet = () => {
             </CardContent>
           </Card>
 
-          {/* Private Key (WIF) */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-red-600">Private Key (WIF) - Keep Secret!</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="flex-1">
-                  <div className="font-mono text-sm break-all bg-muted p-4 rounded-md">
-                    {privateKeyWIF}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(privateKeyWIF, "Private Key (WIF)")}
-                    className="mt-2"
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copy WIF
-                  </Button>
-                </div>
-                <div id="private-qr" className="bg-white p-4 rounded-lg border">
-                  <QRCode value={privateKeyWIF} size={150} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Private Key (HEX) */}
           <Card>
             <CardHeader>
               <CardTitle className="text-red-600">Private Key (HEX) - Keep Secret!</CardTitle>
@@ -368,7 +367,7 @@ const GenerateWallet = () => {
 
           {/* Security Warning */}
           <div className="bg-destructive/10 border border-destructive/20 rounded-md p-4 text-sm">
-            <strong className="text-destructive">⚠️ Warning:</strong> Never share your private keys with anyone.
+            <strong className="text-destructive">Warning:</strong> Never share your private keys with anyone.
             Anyone with the WIF or HEX private key can access and spend your funds.
             Store your paper wallet in a secure location and make backup copies.
           </div>

@@ -40,11 +40,11 @@ export function useMyBeings() {
     ...beings.filter(b => b.nostrHexId !== SOZITJE_PUBKEY),
   ];
 
-  const addBeing = useCallback((wif: string, customName?: string): { success: boolean; error?: string; hexId?: string } => {
+  const addBeing = useCallback(async (wif: string, customName?: string): Promise<{ success: boolean; error?: string; hexId?: string }> => {
     if (!userHexId) return { success: false, error: 'Not authenticated' };
 
     try {
-      const ids = convertWifToIds(wif);
+      const ids = await convertWifToIds(wif);
       const hexId = ids.nostrHexId;
 
       if (!hexId || hexId.length !== 64) {

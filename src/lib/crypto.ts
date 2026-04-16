@@ -137,15 +137,29 @@ export function generateRandomPrivateKey(): string {
   return bytesToHex(randomBytes);
 }
 
-// Encode private key to WIF (Wallet Import Format)
+// Encode private key to Dominate WIF (0xB0, uncompressed, prefix '6')
 export async function privateKeyToWIF(privateKeyHex: string): Promise<string> {
-  // Add version byte (0xb0 for LanaCoin)
+  // Add version byte (0xb0 for LanaCoin Dominate)
   const extendedKey = 'b0' + privateKeyHex;
-  
+
   // Calculate checksum (first 4 bytes of double SHA-256)
   const checksumFull = await sha256d(hexToBytes(extendedKey));
   const checksum = bytesToHex(checksumFull).substring(0, 8);
-  
+
+  // Combine and encode to Base58
+  const wifHex = extendedKey + checksum;
+  return base58Encode(hexToBytes(wifHex));
+}
+
+// Encode private key to Staking WIF (0x41, compressed, prefix 'T') — preferred format
+export async function privateKeyToStakingWIF(privateKeyHex: string): Promise<string> {
+  // Add version byte (0x41) + key + compression flag (0x01)
+  const extendedKey = '41' + privateKeyHex + '01';
+
+  // Calculate checksum (first 4 bytes of double SHA-256)
+  const checksumFull = await sha256d(hexToBytes(extendedKey));
+  const checksum = bytesToHex(checksumFull).substring(0, 8);
+
   // Combine and encode to Base58
   const wifHex = extendedKey + checksum;
   return base58Encode(hexToBytes(wifHex));
