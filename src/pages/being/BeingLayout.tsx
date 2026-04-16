@@ -4,7 +4,7 @@ import SubNavigation from "@/components/layout/SubNavigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { Bot, Plus, Trash2, Globe, MessageSquare } from "lucide-react";
+import { Bot, Plus, Trash2, Globe, MessageSquare, Users } from "lucide-react";
 import { useMyBeings } from "@/hooks/useMyBeings";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
@@ -30,6 +30,7 @@ export default function BeingLayout() {
     if (!chatPubkey) return [];
     const website = chatBeingProfile?.raw_metadata?.website as string | undefined;
     const items: Array<{ title: string; path: string; icon?: any; href?: string }> = [
+      { title: "Beings", path: "/being", icon: Users },
       { title: "Chat", path: `/being/chat/${chatPubkey}`, icon: MessageSquare },
     ];
     if (website) {
