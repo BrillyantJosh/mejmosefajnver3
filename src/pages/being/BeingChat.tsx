@@ -716,7 +716,7 @@ export default function BeingChat({ beingPubkey }: BeingChatProps = {}) {
               </Button>
               <Textarea
                 ref={messageInputRef}
-                placeholder="Talk to Sožitje..."
+                placeholder={`Talk to ${sozitjeName}...`}
                 className="flex-1 touch-manipulation min-h-[2.75rem] max-h-[10rem] resize-none text-base md:text-sm py-2.5"
                 value={messageInput}
                 onChange={(e) => setMessageInput(e.target.value)}

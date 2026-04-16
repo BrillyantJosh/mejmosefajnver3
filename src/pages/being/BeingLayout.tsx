@@ -63,7 +63,7 @@ export default function BeingLayout() {
       <div className="space-y-3 mb-6">
         {beings.map((being) => {
           const profile = profiles.get(being.nostrHexId);
-          const displayName = being.name || profile?.display_name || profile?.full_name || being.nostrHexId.slice(0, 12) + '...';
+          const displayName = profile?.display_name || profile?.full_name || being.name || being.nostrHexId.slice(0, 12) + '...';
           const isSozitje = being.nostrHexId === SOZITJE_PUBKEY;
 
           return (
