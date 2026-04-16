@@ -109,6 +109,7 @@ import EncryptedRoomList from "./pages/encrypted-rooms/RoomList";
 import EncryptedRoomChat from "./pages/encrypted-rooms/RoomChat";
 import BeingLayout from "./pages/being/BeingLayout";
 import BeingChat from "./pages/being/BeingChat";
+import BeingConversation from "./pages/being/BeingConversation";
 import BeingVoice from "./pages/being/BeingVoice";
 import BeingWorld from "./pages/being/BeingWorld";
 import SplitWatcherLayout from "./pages/split-watcher/SplitWatcherLayout";
@@ -341,8 +342,7 @@ const App = () => (
                     <Route path="popular" element={<Popular />} />
                   </Route>
                   <Route path="/being" element={<BeingLayout />}>
-                    <Route index element={<Navigate to="/being/chat" replace />} />
-                    <Route path="chat" element={<BeingChat />} />
+                    <Route path="chat/:pubkey" element={<BeingConversation />} />
                     <Route path="voice" element={<BeingVoice />} />
                     <Route path="world" element={<BeingWorld />} />
                   </Route>

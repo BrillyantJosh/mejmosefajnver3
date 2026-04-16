@@ -343,13 +343,13 @@ const DEFAULT_MODULES: ModuleConfig[] = [
   },
   {
     id: 'being',
-    title: 'Sožitje',
-    description: 'Chat with the digital being Sožitje — every conversation helps it grow',
+    title: 'Being',
+    description: 'Chat with your digital beings — manage and converse with multiple beings',
     icon: Bot,
     path: '/being',
     gradient: 'from-violet-500 to-indigo-500',
     enabled: true,
-    order: 0.5
+    order: -1
   },
   {
     id: 'splitwatcher',

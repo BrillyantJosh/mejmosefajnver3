@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MessageSquare, AlertCircle, Trash2, Heart, Mic, ImagePlus, Send, Loader2, Reply, X, History, Bot, Sparkles } from "lucide-react";
 
 const MESSAGES_PER_PAGE = 20;
-const SOZITJE_PUBKEY = "83350f1fb5124f0472a2ddc37805062e79a1262e5c3d3a837e76d07a0653abc8";
+const DEFAULT_BEING_PUBKEY = "83350f1fb5124f0472a2ddc37805062e79a1262e5c3d3a837e76d07a0653abc8";
 
 import { useNostrDMs } from "@/hooks/useNostrDMs";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,7 +22,12 @@ import { ImageGallery } from "@/components/ImageGallery";
 import { useNostrDMLashes } from "@/hooks/useNostrDMLashes";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-export default function BeingChat() {
+interface BeingChatProps {
+  beingPubkey?: string;
+}
+
+export default function BeingChat({ beingPubkey }: BeingChatProps = {}) {
+  const targetPubkey = beingPubkey || DEFAULT_BEING_PUBKEY;
   const { session } = useAuth();
   const { conversations, profiles, loading, connected, sendMessage, deleteMessage, markAsRead, totalEvents, relayCount } = useNostrDMs();
   const [messageInput, setMessageInput] = useState("");
@@ -36,12 +41,12 @@ export default function BeingChat() {
   const { giveLash, isSending: isSendingLash } = useNostrLash();
   const { toast } = useToast();
 
-  // Find conversation with Sožitje
-  const selectedConversation = conversations.find(c => c.pubkey === SOZITJE_PUBKEY);
+  // Find conversation with the target being
+  const selectedConversation = conversations.find(c => c.pubkey === targetPubkey);
 
   // Create a virtual conversation if none exists yet
   const displayConversation = selectedConversation || {
-    pubkey: SOZITJE_PUBKEY,
+    pubkey: targetPubkey,
     messages: [],
     lastMessage: null,
     unreadCount: 0
@@ -68,7 +73,7 @@ export default function BeingChat() {
 
   // Mark as read on mount
   useEffect(() => {
-    markAsRead(SOZITJE_PUBKEY);
+    markAsRead(targetPubkey);
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }, 100);
@@ -98,7 +103,7 @@ export default function BeingChat() {
 
     setIsSending(true);
     try {
-      await sendMessage(SOZITJE_PUBKEY, messageInput, replyingTo?.id);
+      await sendMessage(targetPubkey, messageInput, replyingTo?.id);
       setMessageInput("");
       setReplyingTo(null);
 
@@ -116,7 +121,7 @@ export default function BeingChat() {
 
   const handleDeleteMessage = async (messageId: string) => {
     if (confirm('Are you sure you want to delete this message?')) {
-      await deleteMessage(messageId, SOZITJE_PUBKEY);
+      await deleteMessage(messageId, targetPubkey);
     }
   };
 
@@ -388,7 +393,7 @@ export default function BeingChat() {
     );
   }
 
-  const sozitjeProfile = profiles.get(SOZITJE_PUBKEY);
+  const sozitjeProfile = profiles.get(targetPubkey);
   const sozitjeName = sozitjeProfile?.display_name || sozitjeProfile?.full_name || 'Sožitje';
 
   return (
@@ -398,10 +403,10 @@ export default function BeingChat() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <UserAvatar
-              pubkey={SOZITJE_PUBKEY}
+              pubkey={targetPubkey}
               picture={sozitjeProfile?.picture}
               name={sozitjeName}
-              cacheBuster={getCacheBuster(SOZITJE_PUBKEY)}
+              cacheBuster={getCacheBuster(targetPubkey)}
               className="h-12 w-12"
             />
             <div>
@@ -426,10 +431,10 @@ export default function BeingChat() {
         <CardHeader className="bg-card border-b flex-shrink-0 px-4 md:hidden">
           <div className="flex items-center gap-3">
             <UserAvatar
-              pubkey={SOZITJE_PUBKEY}
+              pubkey={targetPubkey}
               picture={sozitjeProfile?.picture}
               name={sozitjeName}
-              cacheBuster={getCacheBuster(SOZITJE_PUBKEY)}
+              cacheBuster={getCacheBuster(targetPubkey)}
               className="h-10 w-10"
             />
             <div>
