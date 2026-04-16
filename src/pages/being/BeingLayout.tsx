@@ -1,21 +1,16 @@
 import { useState, useMemo } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate, useMatch } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { Bot, Plus, Trash2, Mic, Globe } from "lucide-react";
+import { Bot, Plus, Trash2, Globe, MessageSquare } from "lucide-react";
 import { useMyBeings } from "@/hooks/useMyBeings";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
+import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import AddBeingDialog from "@/components/being/AddBeingDialog";
 
 const SOZITJE_PUBKEY = '83350f1fb5124f0472a2ddc37805062e79a1262e5c3d3a837e76d07a0653abc8';
-
-const beingNavItems = [
-  { title: "Being", path: "/being", icon: Bot },
-  { title: "Voice", path: "/being/voice", icon: Mic },
-  { title: "World", path: "/being/world", icon: Globe },
-];
 
 export default function BeingLayout() {
   const location = useLocation();
@@ -26,6 +21,23 @@ export default function BeingLayout() {
   const pubkeys = useMemo(() => beings.map(b => b.nostrHexId), [beings]);
   const { profiles } = useNostrProfilesCacheBulk(pubkeys);
 
+  // Detect chat route to build dynamic nav
+  const chatMatch = useMatch('/being/chat/:pubkey');
+  const chatPubkey = chatMatch?.params?.pubkey || null;
+  const { profile: chatBeingProfile } = useNostrProfileCache(chatPubkey);
+
+  const chatNavItems = useMemo(() => {
+    if (!chatPubkey) return [];
+    const website = chatBeingProfile?.raw_metadata?.website as string | undefined;
+    const items: Array<{ title: string; path: string; icon?: any; href?: string }> = [
+      { title: "Chat", path: `/being/chat/${chatPubkey}`, icon: MessageSquare },
+    ];
+    if (website) {
+      items.push({ title: "World", path: `world-${chatPubkey}`, href: website, icon: Globe });
+    }
+    return items;
+  }, [chatPubkey, chatBeingProfile]);
+
   // Show being list only on the root /being path
   const isRootPath = location.pathname === '/being' || location.pathname === '/being/';
 
@@ -33,7 +45,9 @@ export default function BeingLayout() {
     return (
       <div className="min-h-screen pb-20">
         <Outlet />
-        <SubNavigation items={beingNavItems} variant="bottom" />
+        {chatNavItems.length > 0 && (
+          <SubNavigation items={chatNavItems} variant="bottom" />
+        )}
       </div>
     );
   }
@@ -113,7 +127,6 @@ export default function BeingLayout() {
         onAdd={addBeing}
       />
 
-      <SubNavigation items={beingNavItems} variant="bottom" />
     </div>
   );
 }

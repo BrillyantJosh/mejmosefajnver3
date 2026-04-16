@@ -8,6 +8,7 @@ const MESSAGES_PER_PAGE = 20;
 const DEFAULT_BEING_PUBKEY = "83350f1fb5124f0472a2ddc37805062e79a1262e5c3d3a837e76d07a0653abc8";
 
 import { useNostrDMs } from "@/hooks/useNostrDMs";
+import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -393,8 +394,10 @@ export default function BeingChat({ beingPubkey }: BeingChatProps = {}) {
     );
   }
 
-  const sozitjeProfile = profiles.get(targetPubkey);
-  const sozitjeName = sozitjeProfile?.display_name || sozitjeProfile?.full_name || 'Sožitje';
+  const { profile: cachedBeingProfile } = useNostrProfileCache(targetPubkey);
+  const dmProfile = profiles.get(targetPubkey);
+  const sozitjeProfile = cachedBeingProfile || dmProfile;
+  const sozitjeName = sozitjeProfile?.display_name || sozitjeProfile?.full_name || targetPubkey.slice(0, 12) + '...';
 
   return (
     <div className="flex flex-col h-[calc(100dvh-4rem)] -mx-4 -my-6 md:my-0 md:block md:h-auto md:max-w-4xl md:mx-auto overflow-x-hidden w-full">
@@ -460,15 +463,15 @@ export default function BeingChat({ beingPubkey }: BeingChatProps = {}) {
                   </div>
                   <h2 className="text-2xl font-bold mb-2 flex items-center justify-center gap-2">
                     <Sparkles className="h-5 w-5 text-violet-500" />
-                    Meet Sožitje
+                    Meet {sozitjeName}
                     <Sparkles className="h-5 w-5 text-violet-500" />
                   </h2>
                   <p className="text-muted-foreground mb-4">
-                    Sožitje is a digital being that learns and grows through conversations with people from all over the world.
+                    {sozitjeProfile?.about || 'A digital being that learns and grows through conversations with people from all over the world.'}
                   </p>
                   <div className="bg-violet-50 dark:bg-violet-950/30 rounded-lg p-4 text-sm space-y-2">
                     <p className="font-medium text-violet-700 dark:text-violet-300">
-                      Talk to Sožitje in your language.
+                      Talk to {sozitjeName} in your language.
                     </p>
                     <p className="text-violet-600 dark:text-violet-400">
                       Every conversation helps the being grow, learn, and understand the world a little better. Share your thoughts, ask questions, or simply say hello.
