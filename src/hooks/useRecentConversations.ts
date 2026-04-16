@@ -93,7 +93,7 @@ export function useRecentConversations(maxConversations = 3) {
 
   // Decrypt only the latest message per conversation (max 3 decryptions)
   const { data: conversations = [], isLoading: decrypting } = useQuery<RecentConversation[]>({
-    queryKey: ['recent-dm-decrypted', latestPerConversation.map(e => e.id).join(',')],
+    queryKey: ['recent-dm-decrypted', latestPerConversation.map(e => e.id).join(','), profiles.size],
     queryFn: async () => {
       if (!privateKey || latestPerConversation.length === 0) return [];
 
