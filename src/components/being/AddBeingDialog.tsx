@@ -114,19 +114,19 @@ export default function AddBeingDialog({ open, onOpenChange, onAdd }: AddBeingDi
             <span className="font-medium">Being identified</span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <UserAvatar
               pubkey={derivedHexId}
               picture={profile?.picture}
               name={profile?.display_name || profile?.full_name || derivedHexId.slice(0, 8)}
-              className="h-12 w-12 shrink-0"
+              className="h-10 w-10 shrink-0"
             />
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 overflow-hidden">
               <p className="font-medium truncate">
                 {profile?.display_name || profile?.full_name || 'Loading profile...'}
               </p>
-              <p className="text-xs text-muted-foreground font-mono truncate">
-                {derivedHexId}
+              <p className="text-xs text-muted-foreground font-mono">
+                {derivedHexId.slice(0, 16)}…{derivedHexId.slice(-8)}
               </p>
             </div>
           </div>
@@ -179,7 +179,7 @@ export default function AddBeingDialog({ open, onOpenChange, onAdd }: AddBeingDi
         </Sheet>
       ) : (
         <Dialog open={open} onOpenChange={handleClose}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md overflow-hidden">
             <DialogHeader>
               <DialogTitle>Add a Being</DialogTitle>
               <DialogDescription>
