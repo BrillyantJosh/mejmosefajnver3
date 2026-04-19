@@ -4,6 +4,43 @@ import { AudioPlayer } from "@/components/AudioPlayer";
 import { Heart, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** Extract YouTube video ID from any youtube.com / youtu.be URL, or null. */
+function getYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+/** Find the first YouTube URL in a string, or null. */
+function findYouTubeUrl(text: string): string | null {
+  const urlMatch = text.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\S+|youtu\.be\/\S+)/i);
+  return urlMatch?.[0] ?? null;
+}
+
+interface YouTubeEmbedProps { videoId: string }
+function YouTubeEmbed({ videoId }: YouTubeEmbedProps) {
+  return (
+    <div className="mt-2 rounded-lg overflow-hidden border border-border/50">
+      <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+        <iframe
+          className="absolute top-0 left-0 w-full h-full"
+          src={`https://www.youtube.com/embed/${videoId}`}
+          title="YouTube video"
+          frameBorder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+    </div>
+  );
+}
+
 function TranscriptToggle({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -141,7 +178,32 @@ export default function ChatMessage({
       <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
         {showLashButton && <LashButton />}
         <Card className={`p-2 md:p-3 max-w-[85vw] md:max-w-md ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
-          <p className="text-sm break-words whitespace-pre-wrap">{content}</p>
+          {(() => {
+            const ytUrl = content ? findYouTubeUrl(content) : null;
+            const ytId = ytUrl ? getYouTubeId(ytUrl) : null;
+            if (ytId) {
+              // Render text with the YouTube URL as a clickable link, then embed below
+              const parts = content!.split(ytUrl!);
+              return (
+                <>
+                  <p className="text-sm break-words whitespace-pre-wrap">
+                    {parts[0]}
+                    <a
+                      href={ytUrl!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline break-all"
+                    >
+                      {ytUrl}
+                    </a>
+                    {parts.slice(1).join(ytUrl!)}
+                  </p>
+                  <YouTubeEmbed videoId={ytId} />
+                </>
+              );
+            }
+            return <p className="text-sm break-words whitespace-pre-wrap">{content}</p>;
+          })()}
         </Card>
       </div>
     </div>
