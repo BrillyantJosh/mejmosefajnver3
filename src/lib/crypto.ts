@@ -217,6 +217,18 @@ export async function generateLanaAddress(publicKeyHex: string): Promise<string>
   return base58Encode(hexToBytes(finalPayload));
 }
 
+/**
+ * Validate and return a LanaCoin wallet address.
+ * LanaCoin P2PKH: starts with L or M, exactly 34 chars, Base58 charset.
+ * Returns the trimmed address if valid, or null if it fails validation.
+ */
+export function sanitizeLanaWalletId(value: string | undefined | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^[LM][1-9A-HJ-NP-Za-km-z]{33}$/.test(trimmed)) return trimmed;
+  return null;
+}
+
 // Convert hex public key to npub format
 export function hexToNpub(hexPubKey: string): string {
   const data = hexToBytes(hexPubKey);

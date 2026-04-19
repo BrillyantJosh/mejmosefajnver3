@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { getProxiedImageUrl } from '@/lib/imageProxy';
+import { sanitizeLanaWalletId } from '@/lib/crypto';
 
 const CACHE_VALIDITY_HOURS = 1;
 
@@ -115,17 +116,19 @@ export const useNostrProfilesCacheBulk = (pubkeys: string[]) => {
               const content = JSON.parse(event.content);
               const originalPicture = content.picture;
               
+              const cleanWalletId = sanitizeLanaWalletId(content.lanaWalletID) ?? content.lanaWalletID;
+
               const freshProfile = {
                 nostr_hex_id: event.pubkey,
                 full_name: content.name,
                 display_name: content.display_name,
                 picture: getProxiedImageUrl(originalPicture),
                 about: content.about,
-                lana_wallet_id: content.lanaWalletID,
+                lana_wallet_id: cleanWalletId,
                 raw_metadata: content,
                 last_fetched_at: new Date().toISOString(),
               };
-              
+
               // Save original URL to database
               freshProfiles.push({
                 nostr_hex_id: event.pubkey,
@@ -133,7 +136,7 @@ export const useNostrProfilesCacheBulk = (pubkeys: string[]) => {
                 display_name: content.display_name,
                 picture: originalPicture, // Original URL for DB
                 about: content.about,
-                lana_wallet_id: content.lanaWalletID,
+                lana_wallet_id: cleanWalletId,
                 raw_metadata: content,
                 last_fetched_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),

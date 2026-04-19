@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { sanitizeLanaWalletId } from '@/lib/crypto';
 
 const CACHE_VALIDITY_HOURS = 1;
 
@@ -48,7 +49,7 @@ export const useNostrProfileCache = (pubkey: string | null) => {
             display_name: content.display_name,
             picture: content.picture,
             about: content.about,
-            lana_wallet_id: content.lanaWalletID,
+            lana_wallet_id: sanitizeLanaWalletId(content.lanaWalletID) ?? content.lanaWalletID,
             last_fetched_at: new Date().toISOString(),
             raw_metadata: content,
           };

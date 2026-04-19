@@ -3,6 +3,7 @@ import { finalizeEvent } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { supabase } from '@/integrations/supabase/client';
+import { sanitizeLanaWalletId } from '@/lib/crypto';
 
 export interface NostrProfile {
   // Standard fields
@@ -102,8 +103,11 @@ export const useNostrProfile = () => {
           display_name: cachedProfile.display_name || rawMetadata.display_name,
           about: cachedProfile.about || rawMetadata.about,
           picture: cachedProfile.picture || rawMetadata.picture,
-          lanaWalletID: cachedProfile.lana_wallet_id || rawMetadata.lanaWalletID,
           ...rawMetadata,
+          // DB value takes precedence over relay — sanitize both to guard against corruption
+          lanaWalletID: sanitizeLanaWalletId(cachedProfile.lana_wallet_id)
+            || sanitizeLanaWalletId(rawMetadata.lanaWalletID)
+            || rawMetadata.lanaWalletID,
           // Extract lang from raw_metadata tags if available
           lang: rawMetadata.lang || session?.profileLang,
         };
@@ -143,8 +147,11 @@ export const useNostrProfile = () => {
           display_name: refreshedProfile.display_name || rawMetadata.display_name,
           about: refreshedProfile.about || rawMetadata.about,
           picture: refreshedProfile.picture || rawMetadata.picture,
-          lanaWalletID: refreshedProfile.lana_wallet_id || rawMetadata.lanaWalletID,
           ...rawMetadata,
+          // DB value takes precedence over relay — sanitize both to guard against corruption
+          lanaWalletID: sanitizeLanaWalletId(refreshedProfile.lana_wallet_id)
+            || sanitizeLanaWalletId(rawMetadata.lanaWalletID)
+            || rawMetadata.lanaWalletID,
           lang: rawMetadata.lang || session?.profileLang,
         });
       } else {
