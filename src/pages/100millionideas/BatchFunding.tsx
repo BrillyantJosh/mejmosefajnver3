@@ -1,11 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { useNostrProjects, ProjectData } from "@/hooks/useNostrProjects";
+import { useLanacrowdProjects, LanacrowdProject } from "@/hooks/useLanacrowdProjects";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
-import { useNostrProjectDonations } from "@/hooks/useNostrProjectDonations";
 import { useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAdmin } from "@/contexts/AdminContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +20,7 @@ import { finalizeEvent } from "nostr-tools";
 type BatchStep = 'select' | 'confirm' | 'processing' | 'result';
 
 interface BatchEntry {
-  project: ProjectData;
+  project: LanacrowdProject;
   lanaAmount: string;
 }
 
@@ -47,9 +45,11 @@ interface ProjectRowProps {
 }
 
 const ProjectRow = ({ entry, index, exchangeRate, onAmountChange }: ProjectRowProps) => {
-  const { totalRaised, donations } = useNostrProjectDonations(entry.project.id);
+  // Donation stats come from SQLite-backed project (precomputed JOIN)
+  const totalRaised = entry.project.totalRaised ?? 0;
+  const donationCount = entry.project.donationCount ?? 0;
 
-  const goalFiat = parseFloat(entry.project.fiatGoal) || 0;
+  const goalFiat = entry.project.fiatGoal || 0;
   const remainingFiat = Math.max(goalFiat - totalRaised, 0);
   const currency = entry.project.currency || 'EUR';
   const maxLana = exchangeRate > 0 ? remainingFiat / exchangeRate : 0;
@@ -89,7 +89,7 @@ const ProjectRow = ({ entry, index, exchangeRate, onAmountChange }: ProjectRowPr
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-sm truncate">{entry.project.title}</p>
         <span className="text-xs text-muted-foreground">
-          {totalRaised.toFixed(2)} {currency} raised · {donations.length} backers
+          {totalRaised.toFixed(2)} {currency} raised · {donationCount} backers
         </span>
         {isFullyFunded ? (
           <p className="text-xs font-semibold text-green-600">✓ Fully Funded</p>
@@ -148,10 +148,9 @@ const BatchFunding = () => {
   const { session } = useAuth();
   const { toast } = useToast();
   const { parameters } = useSystemParameters();
-  const { appSettings } = useAdmin();
-  const { projects, isLoading: projectsLoading } = useNostrProjects();
+  // Open filter already excludes hidden/completed/funded/draft at the server
+  const { projects, isLoading: projectsLoading } = useLanacrowdProjects('open', 1, '');
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
-  const projectOverrides = appSettings?.project_overrides || {};
 
   const [step, setStep] = useState<BatchStep>('select');
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
@@ -171,13 +170,8 @@ const BatchFunding = () => {
   const [processingStatus, setProcessingStatus] = useState<string>("");
   const [result, setResult] = useState<BatchResult | null>(null);
 
-  // Filter open projects: active, has wallet, not hidden, not blocked, not completed, not funded
-  // Funded status comes from DB (synced by heartbeat from KIND 60200)
-  const activeProjects = projects.filter(p => {
-    if (p.status !== 'active' || !p.wallet || p.isBlocked) return false;
-    if (projectOverrides[p.id]?.hidden || projectOverrides[p.id]?.completed || projectOverrides[p.id]?.funded) return false;
-    return true;
-  });
+  // Filter: needs a wallet (server 'open' filter already removes hidden/completed/funded/draft)
+  const activeProjects = projects.filter(p => p.status === 'active' && !!p.wallet);
 
   // Sync entries with activeProjects
   const activeProjectIds = useMemo(() => activeProjects.map(p => p.id).join(','), [activeProjects]);
@@ -192,7 +186,7 @@ const BatchFunding = () => {
         }));
       });
     }
-  }, [activeProjectIds, donationsLoading]);
+  }, [activeProjectIds]);
 
   // Fetch wallet balances
   useEffect(() => {
