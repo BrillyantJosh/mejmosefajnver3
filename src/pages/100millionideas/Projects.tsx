@@ -50,13 +50,12 @@ const Projects = () => {
   } | null>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams({ filter });
-    if (is100MAdmin && session?.nostrHexId) params.set('adminPubkey', session.nostrHexId);
-    fetch(`/api/lanacrowd/summary?${params}`)
+    // Summary always shows public (approved + visible) stats, regardless of admin role.
+    fetch(`/api/lanacrowd/summary?filter=${filter}`)
       .then(r => r.ok ? r.json() : null)
       .then(s => setSummary(s))
       .catch(() => setSummary(null));
-  }, [filter, is100MAdmin, session?.nostrHexId, actionLoading]);
+  }, [filter, actionLoading]);
 
   const publishNostrEvent = async (eventTemplate: { kind: number; tags: string[][]; content: string }) => {
     if (!session?.nostrPrivateKey) return;

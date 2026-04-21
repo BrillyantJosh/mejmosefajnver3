@@ -469,11 +469,15 @@ router.get('/my-donations/:pubkey', (req, res) => {
 router.get('/summary', (req, res) => {
   const db = getDb();
   const filter = (req.query.filter as string) || 'open';
-  const adminPubkey = req.query.adminPubkey as string | undefined;
-  const isAdmin = adminPubkey && getAdmins().includes(adminPubkey);
 
-  const conditions: string[] = ["status != 'draft'"];
-  if (!isAdmin) conditions.push('is_hidden = 0');
+  // Summary always reflects what USERS see: approved + visible + non-draft only.
+  // Admins see pending/hidden in the list for moderation, but those don't count
+  // toward public statistics.
+  const conditions: string[] = [
+    "status != 'draft'",
+    'is_hidden = 0',
+    'is_approved = 1',
+  ];
   switch (filter) {
     case 'open':      conditions.push('is_funded = 0', 'is_completed = 0'); break;
     case 'funded':    conditions.push('is_funded = 1', 'is_completed = 0'); break;
