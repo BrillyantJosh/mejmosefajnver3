@@ -105,10 +105,12 @@ router.get('/projects', (req, res) => {
   const conditions: string[] = [];
   const params: any[] = [];
 
+  // Drafts are never shown in the public listing (only visible in my-projects)
+  conditions.push("status != 'draft'");
+
   // Non-admins can't see hidden projects
   if (!isAdmin) {
     conditions.push('is_hidden = 0');
-    conditions.push("status != 'draft'");
   }
 
   switch (filter) {
