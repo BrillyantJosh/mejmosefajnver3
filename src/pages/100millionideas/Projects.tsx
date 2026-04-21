@@ -1,8 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLanacrowdProjects, ProjectFilter } from "@/hooks/useLanacrowdProjects";
 import ProjectCard from "@/components/100millionideas/ProjectCard";
 import { Loader2, Layers, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Card, CardContent } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
 import { useAdmin } from "@/contexts/AdminContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,11 +43,20 @@ const Projects = () => {
     is100MAdmin ? session?.nostrHexId : undefined,
   );
 
-  // Totals across all visible projects (for summary bar)
-  const totalRaisedAll = useMemo(
-    () => projects.reduce((sum, p) => sum + (p.totalRaised ?? 0), 0),
-    [projects]
-  );
+  // Totals across ALL projects in current filter (not just current page) — from /summary
+  const [summary, setSummary] = useState<{
+    totalProjects: number; totalGoal: number; totalRaised: number;
+    remaining: number; percentFunded: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams({ filter });
+    if (is100MAdmin && session?.nostrHexId) params.set('adminPubkey', session.nostrHexId);
+    fetch(`/api/lanacrowd/summary?${params}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(s => setSummary(s))
+      .catch(() => setSummary(null));
+  }, [filter, is100MAdmin, session?.nostrHexId, actionLoading]);
 
   const publishNostrEvent = async (eventTemplate: { kind: number; tags: string[][]; content: string }) => {
     if (!session?.nostrPrivateKey) return;
@@ -185,7 +196,7 @@ const Projects = () => {
           </p>
           {!isLoading && (
             <p className="text-sm text-muted-foreground mt-1">
-              {total} project{total !== 1 ? 's' : ''} · Total raised: €{totalRaisedAll.toFixed(0)}
+              {total} project{total !== 1 ? 's' : ''}
             </p>
           )}
         </div>
@@ -197,6 +208,34 @@ const Projects = () => {
           Batch Funding
         </Button>
       </div>
+
+      {/* Aggregate Funding Bar */}
+      {summary && summary.totalProjects > 0 && (
+        <Card className="border-green-500/20 bg-green-500/5">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-baseline justify-between flex-wrap gap-2">
+              <div>
+                <span className="text-2xl font-bold text-green-600">
+                  €{summary.totalRaised.toFixed(0)}
+                </span>
+                <span className="text-sm text-muted-foreground ml-2">
+                  raised of €{summary.totalGoal.toFixed(0)} goal
+                </span>
+              </div>
+              <div className="text-sm font-semibold">
+                {summary.percentFunded.toFixed(1)}% funded
+              </div>
+            </div>
+            <Progress value={Math.min(summary.percentFunded, 100)} className="h-2" />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{summary.totalProjects} {FILTER_LABELS[filter].toLowerCase()} projects</span>
+              <span className="font-medium">
+                Still needs: <span className="text-foreground">€{summary.remaining.toFixed(0)}</span>
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filter Tabs */}
       <div className="flex flex-wrap gap-2">

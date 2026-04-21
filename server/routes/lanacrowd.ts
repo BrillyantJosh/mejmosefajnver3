@@ -468,26 +468,44 @@ router.get('/my-donations/:pubkey', (req, res) => {
 // ──────────────────────────────────────────────
 router.get('/summary', (req, res) => {
   const db = getDb();
+  const filter = (req.query.filter as string) || 'open';
+  const adminPubkey = req.query.adminPubkey as string | undefined;
+  const isAdmin = adminPubkey && getAdmins().includes(adminPubkey);
+
+  const conditions: string[] = ["status != 'draft'"];
+  if (!isAdmin) conditions.push('is_hidden = 0');
+  switch (filter) {
+    case 'open':      conditions.push('is_funded = 0', 'is_completed = 0'); break;
+    case 'funded':    conditions.push('is_funded = 1', 'is_completed = 0'); break;
+    case 'completed': conditions.push('is_completed = 1'); break;
+  }
+  const where = `WHERE ${conditions.join(' AND ')}`;
+
   try {
     const row = db.prepare(`
       SELECT
         COUNT(DISTINCT p.id) AS total_projects,
-        COALESCE(SUM(d.amount_fiat), 0) AS total_raised
+        COALESCE(SUM(p.fiat_goal), 0) AS total_goal,
+        COALESCE(SUM(d.total_raised), 0) AS total_raised
       FROM lanacrowd_projects p
-      LEFT JOIN lanacrowd_donations d ON d.project_id = p.id
-      WHERE p.is_hidden = 0 AND p.status != 'draft'
+      LEFT JOIN (
+        SELECT project_id, SUM(amount_fiat) AS total_raised
+        FROM lanacrowd_donations GROUP BY project_id
+      ) d ON d.project_id = p.id
+      ${where}
     `).get() as any;
 
-    const perProject = db.prepare(`
-      SELECT project_id, SUM(amount_fiat) AS total_raised
-      FROM lanacrowd_donations
-      GROUP BY project_id
-    `).all() as any[];
+    const totalGoal    = row?.total_goal ?? 0;
+    const totalRaised  = row?.total_raised ?? 0;
+    const remaining    = Math.max(totalGoal - totalRaised, 0);
+    const percentFunded = totalGoal > 0 ? (totalRaised / totalGoal) * 100 : 0;
 
     res.json({
       totalProjects: row?.total_projects ?? 0,
-      totalRaised: row?.total_raised ?? 0,
-      perProject: Object.fromEntries(perProject.map(r => [r.project_id, r.total_raised])),
+      totalGoal,
+      totalRaised,
+      remaining,
+      percentFunded,
     });
   } catch (err: any) {
     console.error('❌ GET /api/lanacrowd/summary error:', err);
