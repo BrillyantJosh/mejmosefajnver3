@@ -1128,7 +1128,7 @@ export async function indexLanacrowdFromRelays(db: any): Promise<void> {
           JSON.stringify(files),
           JSON.stringify(participants),
           existing ? existing.is_hidden : 0,
-          existing ? existing.is_approved : 1,
+          existing ? existing.is_approved : 0,
           existing ? existing.is_funded : 0,
           existing ? existing.is_completed : 0,
           existing ? existing.completion_comment : null,

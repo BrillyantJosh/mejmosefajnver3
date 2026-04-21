@@ -346,7 +346,7 @@ export function initializeSchema(db: Database.Database): void {
       files TEXT NOT NULL DEFAULT '[]',
       participants TEXT NOT NULL DEFAULT '[]',
       is_hidden INTEGER NOT NULL DEFAULT 0,
-      is_approved INTEGER NOT NULL DEFAULT 1,
+      is_approved INTEGER NOT NULL DEFAULT 0,
       is_funded INTEGER NOT NULL DEFAULT 0,
       is_completed INTEGER NOT NULL DEFAULT 0,
       completion_comment TEXT,

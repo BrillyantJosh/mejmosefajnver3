@@ -277,7 +277,7 @@ router.post('/projects/upsert', (req, res) => {
       JSON.stringify(p.files || []),
       JSON.stringify(p.participants || []),
       existing ? existing.is_hidden : 0,
-      existing ? existing.is_approved : 1,
+      existing ? existing.is_approved : 0,
       existing ? existing.is_funded : 0,
       existing ? existing.is_completed : 0,
       existing ? existing.completion_comment : null,
