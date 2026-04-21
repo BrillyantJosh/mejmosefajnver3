@@ -119,7 +119,7 @@ const ProjectDetail = () => {
           <h1 className="text-3xl font-bold mb-2">{project.title}</h1>
           <p className="text-muted-foreground">{project.shortDesc}</p>
           <p className="text-sm text-muted-foreground mt-2">
-            Updated {format(new Date(project.createdAt * 1000), 'dd/MM/yyyy')}
+            Published {project.nostrCreatedAt ? format(new Date(project.nostrCreatedAt * 1000), 'dd/MM/yyyy') : '—'}
           </p>
         </div>
 
@@ -301,7 +301,7 @@ const ProjectDetail = () => {
           ) : (
             <div className="space-y-4">
               {donations.map((donation) => (
-                <DonationItem key={donation.eventId} donation={donation} />
+                <DonationItem key={donation.id} donation={donation} />
               ))}
             </div>
           )}
@@ -340,7 +340,7 @@ const DonationItem = ({ donation }: { donation: any }) => {
                 {profile?.display_name || profile?.full_name || 'Anonymous'}
               </p>
               <p className="text-sm text-muted-foreground">
-                {format(new Date(donation.timestampPaid * 1000), 'dd MMM yyyy, HH:mm')}
+                {format(new Date(donation.nostrCreatedAt * 1000), 'dd MMM yyyy, HH:mm')}
               </p>
             </div>
             <div className="text-right">
@@ -353,7 +353,7 @@ const DonationItem = ({ donation }: { donation: any }) => {
             <p className="text-sm text-muted-foreground mb-2">{donation.message}</p>
           )}
           <a
-            href={`https://insight.lana.foundation/tx/${donation.txid}`}
+            href={`https://insight.lana.foundation/tx/${donation.txId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-primary hover:underline flex items-center gap-1"
