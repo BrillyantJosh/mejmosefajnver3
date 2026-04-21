@@ -1002,3 +1002,236 @@ export async function syncProjectFundedStatus(db: any): Promise<void> {
     console.error('❌ syncProjectFundedStatus error:', error);
   }
 }
+
+// ─────────────────────────────────────────────────────────────────
+// indexLanacrowdFromRelays
+// Indexes KIND 31234 projects + KIND 60200 donations into SQLite.
+// Preserves admin overrides. Acts as safety net — primary path is
+// the immediate upsert from the client after Nostr publish.
+// ─────────────────────────────────────────────────────────────────
+export async function indexLanacrowdFromRelays(db: any): Promise<void> {
+  const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+  let relays: string[] = [];
+  if (row?.relays) {
+    try {
+      const parsed = JSON.parse(row.relays);
+      if (Array.isArray(parsed) && parsed.length > 0) relays = parsed;
+    } catch {}
+  }
+  if (relays.length === 0) {
+    console.log('⚠️ indexLanacrowdFromRelays: No relays available, skipping');
+    return;
+  }
+
+  try {
+    // Fetch all projects + donations from relays in parallel
+    const [projectEvents, donationEvents] = await Promise.all([
+      queryEventsFromRelays(relays, { kinds: [31234], limit: 1000 }, 20000),
+      queryEventsFromRelays(relays, { kinds: [60200], limit: 5000 }, 20000),
+    ]);
+
+    console.log(`📦 indexLanacrowdFromRelays: ${projectEvents.length} KIND 31234, ${donationEvents.length} KIND 60200`);
+
+    // Deduplicate projects by (pubkey+d-tag), keep newest
+    const projectsByKey = new Map<string, any>();
+    for (const evt of projectEvents) {
+      const dTag = evt.tags?.find((t: string[]) => t[0] === 'd')?.[1];
+      if (!dTag) continue;
+      const key = `${evt.pubkey}:${dTag}`;
+      const existing = projectsByKey.get(key);
+      if (!existing || evt.created_at > existing.created_at) {
+        projectsByKey.set(key, { ...evt, dTag });
+      }
+    }
+
+    const upsertProject = db.prepare(`
+      INSERT INTO lanacrowd_projects (
+        id, event_id, pubkey, owner_pubkey,
+        title, short_desc, content,
+        fiat_goal, currency, wallet,
+        responsibility_statement, project_type, what_type, status,
+        cover_image, gallery_images, videos, files, participants,
+        is_hidden, is_approved, is_funded, is_completed, completion_comment,
+        nostr_created_at, updated_at
+      ) VALUES (
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, datetime('now')
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        event_id = excluded.event_id,
+        pubkey = excluded.pubkey,
+        owner_pubkey = excluded.owner_pubkey,
+        title = excluded.title,
+        short_desc = excluded.short_desc,
+        content = excluded.content,
+        fiat_goal = excluded.fiat_goal,
+        currency = excluded.currency,
+        wallet = excluded.wallet,
+        responsibility_statement = excluded.responsibility_statement,
+        project_type = excluded.project_type,
+        what_type = excluded.what_type,
+        status = excluded.status,
+        cover_image = excluded.cover_image,
+        gallery_images = excluded.gallery_images,
+        videos = excluded.videos,
+        files = excluded.files,
+        participants = excluded.participants,
+        nostr_created_at = CASE WHEN excluded.nostr_created_at > lanacrowd_projects.nostr_created_at
+                                THEN excluded.nostr_created_at ELSE lanacrowd_projects.nostr_created_at END,
+        updated_at = datetime('now')
+    `);
+
+    let projectsIndexed = 0;
+    for (const evt of projectsByKey.values()) {
+      try {
+        const getTag = (name: string) => evt.tags?.find((t: string[]) => t[0] === name)?.[1];
+        const getAllTags = (name: string) => evt.tags?.filter((t: string[]) => t[0] === name) || [];
+
+        const title = getTag('title');
+        if (!title) continue; // skip malformed events
+
+        const ownerTag = evt.tags?.find((t: string[]) => t[0] === 'p' && t[2] === 'owner');
+        const ownerPubkey = ownerTag?.[1] || evt.pubkey;
+        const imageTags = getAllTags('img');
+        const coverImage = imageTags.find((t: string[]) => t[2] === 'cover')?.[1] || null;
+        const galleryImages = imageTags.filter((t: string[]) => t[2] === 'gallery').map((t: string[]) => t[1]);
+        const videos = getAllTags('video').map((t: string[]) => t[1]);
+        const files = getAllTags('file').map((t: string[]) => t[1]);
+        const participants = getAllTags('p').filter((t: string[]) => t[2] === 'participant').map((t: string[]) => t[1]);
+
+        // Fetch existing admin overrides to preserve them
+        const existing = db.prepare('SELECT is_hidden, is_approved, is_funded, is_completed, completion_comment FROM lanacrowd_projects WHERE id = ?').get(evt.dTag) as any;
+
+        upsertProject.run(
+          evt.dTag,
+          evt.id,
+          evt.pubkey,
+          ownerPubkey,
+          title,
+          getTag('short_desc') || '',
+          evt.content || '',
+          parseFloat(getTag('fiat_goal') || '0') || 0,
+          getTag('currency') || 'EUR',
+          getTag('wallet') || '',
+          getTag('responsibility_statement') || '',
+          getTag('project_type') || 'Inspiration',
+          getTag('what_type') || null,
+          getTag('status') || 'active',
+          coverImage,
+          JSON.stringify(galleryImages),
+          JSON.stringify(videos),
+          JSON.stringify(files),
+          JSON.stringify(participants),
+          existing ? existing.is_hidden : 0,
+          existing ? existing.is_approved : 1,
+          existing ? existing.is_funded : 0,
+          existing ? existing.is_completed : 0,
+          existing ? existing.completion_comment : null,
+          evt.created_at,
+        );
+        projectsIndexed++;
+      } catch (err) {
+        console.error('❌ indexLanacrowdFromRelays: failed to upsert project', evt.dTag, err);
+      }
+    }
+
+    // Migrate admin overrides from legacy app_settings blob (one-time safe operation)
+    try {
+      const settingsRow = db.prepare("SELECT value FROM app_settings WHERE key = '100millionideas_project_overrides'").get() as any;
+      if (settingsRow?.value) {
+        const overrides = JSON.parse(settingsRow.value);
+        for (const [dTag, override] of Object.entries(overrides as Record<string, any>)) {
+          db.prepare(`
+            UPDATE lanacrowd_projects SET
+              is_hidden = CASE WHEN ? = 1 THEN 1 ELSE is_hidden END,
+              is_approved = CASE WHEN ? = 0 THEN 0 ELSE is_approved END,
+              is_funded = CASE WHEN ? = 1 THEN 1 ELSE is_funded END,
+              is_completed = CASE WHEN ? = 1 THEN 1 ELSE is_completed END,
+              completion_comment = COALESCE(?, completion_comment),
+              updated_at = datetime('now')
+            WHERE id = ?
+          `).run(
+            override.hidden ? 1 : 0,
+            override.approved === false ? 0 : 1,
+            override.funded ? 1 : 0,
+            override.completed ? 1 : 0,
+            override.completionComment || null,
+            dTag,
+          );
+        }
+        console.log('✅ indexLanacrowdFromRelays: migrated legacy app_settings overrides');
+      }
+    } catch (migrErr) {
+      console.warn('⚠️ indexLanacrowdFromRelays: legacy override migration failed (non-fatal)', migrErr);
+    }
+
+    // Upsert donations
+    const upsertDonation = db.prepare(`
+      INSERT OR IGNORE INTO lanacrowd_donations (
+        id, project_id, supporter_pubkey, project_owner_pubkey,
+        amount_lanoshis, amount_fiat, currency,
+        from_wallet, to_wallet, tx_id, nostr_created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    let donationsIndexed = 0;
+    for (const evt of donationEvents) {
+      try {
+        const getTag = (name: string) => evt.tags?.find((t: string[]) => t[0] === name)?.[1];
+        const projectId = getTag('project');
+        if (!projectId) continue;
+
+        const supporterTag = evt.tags?.find((t: string[]) => t[0] === 'p' && t[2] === 'supporter');
+        const ownerTag = evt.tags?.find((t: string[]) => t[0] === 'p' && t[2] === 'project_owner');
+
+        upsertDonation.run(
+          evt.id,
+          projectId,
+          supporterTag?.[1] || evt.pubkey,
+          ownerTag?.[1] || '',
+          parseInt(getTag('amount_lanoshis') || '0') || 0,
+          parseFloat(getTag('amount_fiat') || '0') || 0,
+          getTag('currency') || 'EUR',
+          getTag('from_wallet') || '',
+          getTag('to_wallet') || '',
+          getTag('tx') || null,
+          evt.created_at,
+        );
+        donationsIndexed++;
+      } catch (err) {
+        console.error('❌ indexLanacrowdFromRelays: failed to upsert donation', evt.id, err);
+      }
+    }
+
+    // Recompute funded status for all projects based on SQLite donations
+    const toCheck = db.prepare(`
+      SELECT p.id, p.fiat_goal, COALESCE(SUM(d.amount_fiat),0) AS total_raised
+      FROM lanacrowd_projects p
+      LEFT JOIN lanacrowd_donations d ON d.project_id = p.id
+      GROUP BY p.id
+    `).all() as any[];
+
+    let fundedChanges = 0;
+    for (const r of toCheck) {
+      if (r.fiat_goal <= 0) continue;
+      const isFunded = r.total_raised >= r.fiat_goal * 0.99 ? 1 : 0;
+      const result = db.prepare('UPDATE lanacrowd_projects SET is_funded = ? WHERE id = ? AND is_funded != ?').run(isFunded, r.id, isFunded);
+      if (result.changes > 0) fundedChanges++;
+    }
+
+    // Save last-indexed timestamp
+    db.prepare(`
+      INSERT INTO app_settings (key, value, updated_at) VALUES ('lanacrowd_last_indexed_at', ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+    `).run(String(Math.floor(Date.now() / 1000)));
+
+    console.log(`✅ indexLanacrowdFromRelays: ${projectsIndexed} projects, ${donationsIndexed} donations indexed, ${fundedChanges} funded status changes`);
+  } catch (error) {
+    console.error('❌ indexLanacrowdFromRelays error:', error);
+  }
+}

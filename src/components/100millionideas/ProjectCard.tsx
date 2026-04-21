@@ -16,12 +16,11 @@ import {
 } from "@/components/ui/dialog";
 import { Heart, Users, EyeOff, Eye, Trophy, Loader2, Clock, CheckCircle } from "lucide-react";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
-import { useNostrProjectDonations } from "@/hooks/useNostrProjectDonations";
-import { ProjectData } from "@/hooks/useNostrProjects";
+import { LanacrowdProject } from "@/hooks/useLanacrowdProjects";
 import { useNavigate } from "react-router-dom";
 
 interface ProjectCardProps {
-  project: ProjectData;
+  project: LanacrowdProject;
   isModuleAdmin?: boolean;
   isHidden?: boolean;
   isCompleted?: boolean;
@@ -56,7 +55,9 @@ const ProjectCard = ({
   actionLoading,
 }: ProjectCardProps) => {
   const { profile } = useNostrProfileCache(project.ownerPubkey);
-  const { donations, totalRaised, isLoading } = useNostrProjectDonations(project.id);
+  // Donation stats come directly from the SQLite-backed project (no extra relay query needed)
+  const totalRaised = project.totalRaised ?? 0;
+  const isLoading = false;
   const navigate = useNavigate();
 
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
@@ -64,8 +65,8 @@ const ProjectCard = ({
 
   // Calculate funding stats from KIND 60200 donations
   const currentFunding = totalRaised;
-  const goalAmount = parseFloat(project.fiatGoal) || 0;
-  const backers = donations.length;
+  const goalAmount = project.fiatGoal || 0;
+  const backers = project.donationCount ?? 0;
   const fundedPercentage = goalAmount > 0 ? Math.min(Math.round((currentFunding / goalAmount) * 100), 100) : 0;
   // Use DB-cached funded status (from heartbeat) instead of local calculation
   const isFullyFunded = isFunded;

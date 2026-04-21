@@ -3,12 +3,13 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb, closeDb } from './db/connection';
-import { fetchKind38888, refreshStaleProfiles, discoverNewProfiles, cleanupOrphanedProfiles, syncProjectFundedStatus } from './lib/nostr';
+import { fetchKind38888, refreshStaleProfiles, discoverNewProfiles, cleanupOrphanedProfiles, syncProjectFundedStatus, indexLanacrowdFromRelays } from './lib/nostr';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import dbRoutes from './routes/db';
 import storageRoutes from './routes/storage';
+import lanacrowdRoutes from './routes/lanacrowd';
 import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks } from './routes/sse';
 import functionsRoutes, { retryPendingNostrEvents } from './routes/functions';
 import voiceRoutes from './routes/voice';
@@ -140,6 +141,13 @@ async function syncKind38888ToDb(): Promise<boolean> {
   } catch (err) {
     console.error('❌ Startup project funded sync failed:', err);
   }
+  // Full LanaCrowd index from relays on startup (populates lanacrowd_projects / lanacrowd_donations)
+  try {
+    console.log('📦 Indexing LanaCrowd projects from relays...');
+    await indexLanacrowdFromRelays(db);
+  } catch (err) {
+    console.error('❌ Startup LanaCrowd index failed:', err);
+  }
 })();
 
 // =============================================
@@ -223,6 +231,12 @@ const heartbeatTimer = setInterval(async () => {
     } catch (err) {
       console.error('❌ Error syncing project funded status:', err);
     }
+    // Full LanaCrowd re-index every 30 minutes (safety net for missed relay events)
+    try {
+      await withTimeout(() => indexLanacrowdFromRelays(db), 'indexLanacrowdFromRelays', 120000);
+    } catch (err) {
+      console.error('❌ Error indexing LanaCrowd from relays:', err);
+    }
   }
 
   // Sync unregistered LANA (KIND 87003/87009) every 10 heartbeats (= every 10 minutes)
@@ -255,6 +269,9 @@ app.use('/api/functions', functionsRoutes);
 
 // Voice proxy routes (STT, TTS, Sožitje)
 app.use('/api/voice', voiceRoutes);
+
+// LanaCrowd (100millionideas) — server-authoritative REST API
+app.use('/api/lanacrowd', lanacrowdRoutes);
 
 // =============================================
 // Static Frontend (production)

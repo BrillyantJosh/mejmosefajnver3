@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { useNostrProjects } from "@/hooks/useNostrProjects";
+import { useLanacrowdProject } from "@/hooks/useLanacrowdProject";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
@@ -25,7 +25,7 @@ const DonateToProject = () => {
   const { session } = useAuth();
   const { toast } = useToast();
   const { parameters } = useSystemParameters();
-  const { projects, isLoading: projectsLoading } = useNostrProjects();
+  const { project, isLoading: projectsLoading } = useLanacrowdProject(projectId);
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
   
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
@@ -34,7 +34,7 @@ const DonateToProject = () => {
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [loadingBalances, setLoadingBalances] = useState(false);
 
-  const project = projects.find(p => p.id === projectId);
+  // project comes directly from useLanacrowdProject above
 
   useEffect(() => {
     if (wallets && wallets.length > 0) {

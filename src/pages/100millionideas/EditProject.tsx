@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Pencil, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import ProjectForm, { ProjectFormInitialData } from "@/components/100millionideas/ProjectForm";
 
 export default function EditProject() {
@@ -21,100 +20,40 @@ export default function EditProject() {
     const fetchProject = async () => {
       setIsLoading(true);
       try {
-        // Fetch project event
-        const { data: projectData, error: projectError } = await supabase.functions.invoke(
-          "query-nostr-events",
-          {
-            body: {
-              filter: {
-                kinds: [31234],
-                "#d": [projectId],
-              },
-              timeout: 15000,
-            },
-          }
-        );
+        // Fetch from server SQLite — fast, consistent, no relay dependency
+        const [projRes, donRes] = await Promise.all([
+          fetch(`/api/lanacrowd/projects/${encodeURIComponent(projectId)}`),
+          fetch(`/api/lanacrowd/donations/${encodeURIComponent(projectId)}`),
+        ]);
 
-        if (projectError) throw new Error(projectError.message);
+        if (!projRes.ok) throw new Error('Project not found');
+        const { project: p } = await projRes.json();
 
-        const events = projectData?.events || [];
-
-        // Find the latest event owned by the current user
-        // Check both event.pubkey and owner p-tag (projects from 100million.fun have different signer)
-        const userEvent = events
-          .filter((e: any) => {
-            if (e.pubkey === session.nostrHexId) return true;
-            const ownerTag = e.tags?.find((t: string[]) => t[0] === 'p' && t[2] === 'owner');
-            return ownerTag?.[1] === session.nostrHexId;
-          })
-          .sort((a: any, b: any) => b.created_at - a.created_at)[0];
-
-        if (!userEvent) {
+        // Permission check
+        if (p.pubkey !== session.nostrHexId && p.ownerPubkey !== session.nostrHexId) {
           setError("Project not found or you don't have permission to edit it.");
           return;
         }
 
-        // Parse tags
-        const getTag = (name: string): string | undefined => {
-          const tag = userEvent.tags.find((t: string[]) => t[0] === name);
-          return tag?.[1];
-        };
-
-        const getAllTags = (name: string): string[][] => {
-          return userEvent.tags.filter((t: string[]) => t[0] === name);
-        };
-
-        // Check for donations
-        const { data: donationData } = await supabase.functions.invoke(
-          "query-nostr-events",
-          {
-            body: {
-              filter: {
-                kinds: [60200],
-                "#p": [session.nostrHexId],
-                limit: 1,
-              },
-              timeout: 10000,
-            },
-          }
-        );
-
-        const donationEvents = donationData?.events || [];
-        const projectDonations = donationEvents.filter((e: any) => {
-          const pt = e.tags.find((t: string[]) => t[0] === "project")?.[1];
-          const ownerTag = e.tags.find(
-            (t: string[]) => t[0] === "p" && t[2] === "project_owner"
-          );
-          return pt === projectId && ownerTag?.[1] === session.nostrHexId;
-        });
-
-        const hasDonations = projectDonations.length > 0;
-
-        // Parse images
-        const imgTags = getAllTags("img");
-        const coverImage = imgTags.find((t) => t[2] === "cover")?.[1];
-        const galleryImages = imgTags.filter((t) => t[2] === "gallery").map((t) => t[1]);
-
-        // Parse videos and files
-        const videoTags = getAllTags("video");
-        const fileTags = getAllTags("file");
+        const donJson = donRes.ok ? await donRes.json() : { donations: [] };
+        const hasDonations = (donJson.donations?.length ?? 0) > 0;
 
         setInitialData({
-          dTag: projectId,
-          title: getTag("title") || "",
-          shortDesc: getTag("short_desc") || "",
-          content: userEvent.content || "",
-          fiatGoal: getTag("fiat_goal") || "",
-          currency: getTag("currency") || "EUR",
-          wallet: getTag("wallet") || "",
-          responsibilityStatement: getTag("responsibility_statement") || "",
-          projectType: getTag("project_type") || "Inspiration",
-          whatType: getTag("what_type") || "",
-          status: (getTag("status") as "draft" | "active") || "active",
-          coverImage,
-          galleryImages,
-          videoUrls: videoTags.map((t) => t[1]),
-          fileUrls: fileTags.map((t) => t[1]),
+          dTag: p.id,
+          title: p.title || "",
+          shortDesc: p.shortDesc || "",
+          content: p.content || "",
+          fiatGoal: String(p.fiatGoal || ""),
+          currency: p.currency || "EUR",
+          wallet: p.wallet || "",
+          responsibilityStatement: p.responsibilityStatement || "",
+          projectType: p.projectType || "Inspiration",
+          whatType: p.whatType || "",
+          status: (p.status as "draft" | "active") || "active",
+          coverImage: p.coverImage,
+          galleryImages: p.galleryImages || [],
+          videoUrls: p.videos || [],
+          fileUrls: p.files || [],
           hasDonations,
         });
       } catch (err) {

@@ -4,15 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlusCircle, Pencil, ImageOff } from "lucide-react";
-import { useNostrUserProjects, UserProjectData } from "@/hooks/useNostrUserProjects";
-import { useAdmin } from "@/contexts/AdminContext";
-import { ProjectOverrides } from "@/types/admin";
+import { useMyLanacrowdProjects } from "@/hooks/useMyLanacrowdProjects";
+import { LanacrowdProject } from "@/hooks/useLanacrowdProjects";
 
 const MyProjects = () => {
   const navigate = useNavigate();
-  const { projects, isLoading } = useNostrUserProjects();
-  const { appSettings } = useAdmin();
-  const overrides: ProjectOverrides = appSettings?.project_overrides || {};
+  const { projects, isLoading } = useMyLanacrowdProjects();
 
   if (isLoading) {
     return (
@@ -60,7 +57,7 @@ const MyProjects = () => {
       ) : (
         <div className="space-y-4">
           {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} isCompleted={!!overrides[project.id]?.completed} />
+            <ProjectCard key={project.id} project={project} isCompleted={project.isCompleted} />
           ))}
         </div>
       )}
@@ -68,11 +65,13 @@ const MyProjects = () => {
   );
 };
 
-const ProjectCard = ({ project, isCompleted }: { project: UserProjectData; isCompleted: boolean }) => {
+const ProjectCard = ({ project, isCompleted }: { project: LanacrowdProject; isCompleted: boolean }) => {
   const navigate = useNavigate();
 
-  const progressPercent = Math.min(project.percentFunded, 100);
-  const isFullyFunded = project.fiatGoal > 0 && project.totalRaised >= project.fiatGoal * 0.99;
+  const goal = project.fiatGoal || 0;
+  const raised = project.totalRaised || 0;
+  const progressPercent = goal > 0 ? Math.min((raised / goal) * 100, 100) : 0;
+  const isFullyFunded = goal > 0 && raised >= goal * 0.99;
 
   return (
     <Card className="overflow-hidden">
@@ -117,8 +116,8 @@ const ProjectCard = ({ project, isCompleted }: { project: UserProjectData; isCom
                 {isCompleted && (
                   <Badge variant="secondary">Completed</Badge>
                 )}
-                {project.isBlocked && (
-                  <Badge variant="destructive">Blocked</Badge>
+                {project.isHidden && (
+                  <Badge variant="destructive">Hidden</Badge>
                 )}
               </div>
               <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
@@ -130,7 +129,7 @@ const ProjectCard = ({ project, isCompleted }: { project: UserProjectData; isCom
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">
-                  {project.totalRaised.toFixed(2)} / {project.fiatGoal.toFixed(2)} {project.currency}
+                  {raised.toFixed(2)} / {goal.toFixed(2)} {project.currency}
                 </span>
                 <span className="font-medium">{progressPercent.toFixed(1)}%</span>
               </div>

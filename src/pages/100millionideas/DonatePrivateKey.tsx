@@ -1,6 +1,6 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { useNostrProjects } from "@/hooks/useNostrProjects";
+import { useLanacrowdProject } from "@/hooks/useLanacrowdProject";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ const DonatePrivateKey = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { projects, isLoading: projectsLoading } = useNostrProjects();
+  const { project, isLoading: projectsLoading } = useLanacrowdProject(projectId);
   const { parameters } = useSystemParameters();
   const { session } = useAuth();
   
@@ -31,7 +31,7 @@ const DonatePrivateKey = () => {
   // Store the compressed wallet address for server-side transaction
   const [compressedWalletId, setCompressedWalletId] = useState<string>("");
 
-  const project = projects.find(p => p.id === projectId);
+  // project comes directly from useLanacrowdProject above
   
   // Get data from previous page
   const { selectedWalletId, amount, lanaAmount, message } = location.state || {};
@@ -220,6 +220,33 @@ const DonatePrivateKey = () => {
         totalRelays,
         projectLanoshis
       });
+
+      // Record donation in server SQLite immediately — no waiting for relay propagation
+      try {
+        await fetch('/api/lanacrowd/donations/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            donation: {
+              id: signedProjectEvent.id,
+              projectId: projectId || '',
+              supporterPubkey: session.nostrHexId,
+              projectOwnerPubkey: project.ownerPubkey,
+              amountLanoshis: projectLanoshis,
+              amountFiat: hasMentorSplit ? parseFloat(amount) * 0.90 : parseFloat(amount),
+              currency: project.currency,
+              fromWallet: selectedWalletId,
+              toWallet: project.wallet,
+              txId: txHash,
+              nostrCreatedAt: nowTs,
+            }
+          }),
+        });
+        console.log('✅ Donation recorded in server SQLite');
+      } catch (recordErr) {
+        // Non-fatal: background indexer will pick it up
+        console.warn('⚠️ Donation record failed (will be indexed later):', recordErr);
+      }
 
       // Navigate to result page even if some relays failed
       const resultParams = new URLSearchParams({

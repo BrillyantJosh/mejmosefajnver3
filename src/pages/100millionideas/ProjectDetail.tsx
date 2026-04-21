@@ -1,6 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useNostrProjects } from "@/hooks/useNostrProjects";
-import { useNostrProjectDonations } from "@/hooks/useNostrProjectDonations";
+import { useLanacrowdProject } from "@/hooks/useLanacrowdProject";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { useAdmin } from "@/contexts/AdminContext";
 import { Button } from "@/components/ui/button";
@@ -37,14 +36,11 @@ const getYoutubeEmbedUrl = (url: string): string => {
 const ProjectDetail = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { projects, isLoading: projectsLoading } = useNostrProjects();
-  const { appSettings, is100MAdmin } = useAdmin();
-  const project = projects.find(p => p.id === projectId);
-  const projectOverrides = appSettings?.project_overrides || {};
-  const isCompleted = !!(projectId && projectOverrides[projectId]?.completed);
-  const isHidden = !!(projectId && projectOverrides[projectId]?.hidden);
-  const completionComment = projectId ? projectOverrides[projectId]?.completionComment : undefined;
-  const { donations, totalRaised } = useNostrProjectDonations(projectId || '');
+  const { project, donations, totalRaised, isLoading: projectsLoading } = useLanacrowdProject(projectId);
+  const { is100MAdmin } = useAdmin();
+  const isCompleted = !!project?.isCompleted;
+  const isHidden = !!project?.isHidden;
+  const completionComment = project?.completionComment;
   const { profile: ownerProfile } = useNostrProfileCache(project?.ownerPubkey || null);
 
   if (projectsLoading) {
@@ -72,7 +68,7 @@ const ProjectDetail = () => {
     );
   }
 
-  const fundingGoal = parseFloat(project.fiatGoal);
+  const fundingGoal = project.fiatGoal || 0;
   const percentageFunded = fundingGoal > 0 ? (totalRaised / fundingGoal) * 100 : 0;
   const isFullyFunded = fundingGoal > 0 && totalRaised >= fundingGoal * 0.99;
 

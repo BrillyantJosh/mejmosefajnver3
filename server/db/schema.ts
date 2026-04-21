@@ -322,6 +322,55 @@ export function initializeSchema(db: Database.Database): void {
     );
 
     -- =============================================
+    -- LANACROWD (100millionideas) — server-authoritative cache
+    -- =============================================
+
+    CREATE TABLE IF NOT EXISTS lanacrowd_projects (
+      id TEXT PRIMARY KEY,
+      event_id TEXT UNIQUE,
+      pubkey TEXT NOT NULL,
+      owner_pubkey TEXT NOT NULL,
+      title TEXT NOT NULL,
+      short_desc TEXT NOT NULL DEFAULT '',
+      content TEXT NOT NULL DEFAULT '',
+      fiat_goal REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      wallet TEXT NOT NULL DEFAULT '',
+      responsibility_statement TEXT NOT NULL DEFAULT '',
+      project_type TEXT NOT NULL DEFAULT 'Inspiration',
+      what_type TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      cover_image TEXT,
+      gallery_images TEXT NOT NULL DEFAULT '[]',
+      videos TEXT NOT NULL DEFAULT '[]',
+      files TEXT NOT NULL DEFAULT '[]',
+      participants TEXT NOT NULL DEFAULT '[]',
+      is_hidden INTEGER NOT NULL DEFAULT 0,
+      is_approved INTEGER NOT NULL DEFAULT 1,
+      is_funded INTEGER NOT NULL DEFAULT 0,
+      is_completed INTEGER NOT NULL DEFAULT 0,
+      completion_comment TEXT,
+      nostr_created_at INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS lanacrowd_donations (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      supporter_pubkey TEXT NOT NULL,
+      project_owner_pubkey TEXT NOT NULL DEFAULT '',
+      amount_lanoshis INTEGER NOT NULL DEFAULT 0,
+      amount_fiat REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      from_wallet TEXT NOT NULL DEFAULT '',
+      to_wallet TEXT NOT NULL DEFAULT '',
+      tx_id TEXT,
+      nostr_created_at INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- =============================================
     -- INDEXES
     -- =============================================
 
@@ -374,6 +423,11 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_unreg_lana_wallet ON unregistered_lana(wallet_id);
     CREATE INDEX IF NOT EXISTS idx_unreg_lana_resolved ON unregistered_lana(resolved);
     CREATE INDEX IF NOT EXISTS idx_unreg_lana_event ON unregistered_lana(event_id_87003);
+    CREATE INDEX IF NOT EXISTS idx_lanacrowd_projects_status ON lanacrowd_projects(status, is_hidden, is_completed);
+    CREATE INDEX IF NOT EXISTS idx_lanacrowd_projects_owner ON lanacrowd_projects(owner_pubkey);
+    CREATE INDEX IF NOT EXISTS idx_lanacrowd_projects_type ON lanacrowd_projects(project_type);
+    CREATE INDEX IF NOT EXISTS idx_lanacrowd_donations_project ON lanacrowd_donations(project_id);
+    CREATE INDEX IF NOT EXISTS idx_lanacrowd_donations_supporter ON lanacrowd_donations(supporter_pubkey);
   `);
 
   // Migrations for existing databases
