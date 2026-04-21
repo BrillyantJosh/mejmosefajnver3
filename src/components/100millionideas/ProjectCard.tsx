@@ -14,7 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Heart, Users, EyeOff, Eye, Trophy, Loader2, Clock, CheckCircle } from "lucide-react";
+import { Heart, Users, EyeOff, Eye, Trophy, Loader2, Clock, CheckCircle, Calendar } from "lucide-react";
+import { format } from "date-fns";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { LanacrowdProject } from "@/hooks/useLanacrowdProjects";
 import { useNavigate } from "react-router-dom";
@@ -198,13 +199,21 @@ const ProjectCard = ({
           {/* Progress Bar */}
           <Progress value={fundedPercentage} className="h-2" />
 
-          {/* Backers and Funding Percentage */}
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Users className="h-4 w-4" />
-              <span>{backers} {backers === 1 ? 'backer' : 'backers'}</span>
+          {/* Backers, Funding Percentage and Published Date */}
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1">
+                <Users className="h-4 w-4" />
+                <span>{backers} {backers === 1 ? 'backer' : 'backers'}</span>
+              </div>
+              <span>{fundedPercentage}% funded</span>
             </div>
-            <span>{fundedPercentage}% funded</span>
+            {project.nostrCreatedAt > 0 && (
+              <div className="flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5" />
+                <span className="text-xs">{format(new Date(project.nostrCreatedAt * 1000), 'dd MMM yyyy')}</span>
+              </div>
+            )}
           </div>
 
           {/* Support Button */}
