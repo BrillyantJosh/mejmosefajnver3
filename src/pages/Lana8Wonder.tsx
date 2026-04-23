@@ -510,14 +510,10 @@ const Lana8Wonder = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 md:space-y-4 p-4 md:p-6">
-          {(() => {
-            // Only Lana8Wonder-type wallets are eligible for enrollment in this module.
-            // Main Wallet / Knights / Lana.Discount etc. belong to other modules.
-            const l8wWallets = wallets.filter(w => w.walletType === 'Lana8Wonder');
-            if (l8wWallets.length === 0) {
-              return <p className="text-muted-foreground text-center py-8">{t('plan.noWallets')}</p>;
-            }
-            return l8wWallets.map(wallet => {
+          {wallets.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">{t('plan.noWallets')}</p>
+          ) : (
+            wallets.map(wallet => {
               // Use balance from Electrum server if available, otherwise fallback to amountUnregistered
               const balance = accountBalances[wallet.walletId] !== undefined
                 ? accountBalances[wallet.walletId]
@@ -582,8 +578,8 @@ const Lana8Wonder = () => {
                   </CardContent>
                 </Card>
               );
-            });
-          })()}
+            })
+          )}
         </CardContent>
       </Card>
 
