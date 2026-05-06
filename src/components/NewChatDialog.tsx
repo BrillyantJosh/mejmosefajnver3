@@ -5,8 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Search, Loader2, MessageSquarePlus } from "lucide-react";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
-const API_URL = import.meta.env.VITE_API_URL ?? '';
+import { useProfileSearch } from "@/hooks/useProfileSearch";
 
 interface Profile {
   pubkey: string;
@@ -33,44 +32,29 @@ export default function NewChatDialog({ onSelectUser }: NewChatDialogProps) {
     }
   }, [open]);
 
+  // Same source + filter logic as /transparency/profiles — load ALL Kind-0
+  // profiles once and filter client-side. Identical behaviour across the app.
+  const { results: rawSearchResults, isLoading: isSearchLoading } = useProfileSearch(searchQuery);
+
+  useEffect(() => {
+    setIsSearching(isSearchLoading);
+  }, [isSearchLoading]);
+
   useEffect(() => {
     if (searchQuery.length < 2) {
       setProfiles([]);
       return;
     }
-
-    const searchProfiles = async () => {
-      setIsSearching(true);
-      try {
-        const res = await fetch(`${API_URL}/api/functions/list-profiles`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ search: searchQuery }),
-        });
-        const data = await res.json();
-
-        if (data?.profiles) {
-          setProfiles(data.profiles.slice(0, 30).map((p: any) => ({
-            pubkey: p.pubkey,
-            name: p.name,
-            display_name: p.display_name,
-            picture: p.picture,
-            about: p.about,
-          })));
-        } else {
-          setProfiles([]);
-        }
-      } catch (error) {
-        console.error('Error searching profiles:', error);
-        setProfiles([]);
-      } finally {
-        setIsSearching(false);
-      }
-    };
-
-    const timeoutId = setTimeout(searchProfiles, 300);
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery]);
+    setProfiles(
+      rawSearchResults.slice(0, 30).map((p) => ({
+        pubkey: p.pubkey,
+        name: p.name,
+        display_name: p.display_name,
+        picture: p.picture,
+        about: p.about,
+      })),
+    );
+  }, [searchQuery, rawSearchResults]);
 
   const handleSelectUser = (pubkey: string) => {
     onSelectUser(pubkey);

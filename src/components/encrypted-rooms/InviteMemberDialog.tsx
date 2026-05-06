@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
-import { SimplePool, finalizeEvent, nip04 } from 'nostr-tools';
+import { finalizeEvent, nip04 } from 'nostr-tools';
 import {
   encryptInvitePayload,
   hexToBytes,
@@ -18,6 +18,7 @@ import {
 } from '@/lib/encrypted-room-crypto';
 import type { RoomInvitePayload, EncryptedRoom } from '@/types/encryptedRooms';
 import { toast } from 'sonner';
+import { useProfileSearch } from '@/hooks/useProfileSearch';
 
 interface Profile {
   pubkey: string;
@@ -63,108 +64,47 @@ export const InviteMemberDialog = ({
     }
   }, [open]);
 
-  // KIND 0 profile search with debounce
+  // Same source + filter logic as /transparency/profiles — load ALL Kind-0
+  // profiles once and filter client-side. Guarantees identical match behaviour
+  // across chat / rooms / transparency.
+  const { results: rawSearchResults, isLoading: isSearchLoading } = useProfileSearch(searchInput);
+
   useEffect(() => {
-    if (searchInput.length < 2 || relays.length === 0 || selectedPubkey) {
+    setIsSearching(isSearchLoading);
+  }, [isSearchLoading]);
+
+  useEffect(() => {
+    if (searchInput.length < 2 || selectedPubkey) {
       setSearchProfiles([]);
       return;
     }
 
-    // If input is a valid 64-char hex pubkey, look up profile by authors filter
-    if (/^[0-9a-fA-F]{64}$/.test(searchInput.trim())) {
-      const hexLookupFn = async () => {
-        setIsSearching(true);
-        const pool = new SimplePool();
-        try {
-          const hexPubkey = searchInput.trim();
-          if (hexPubkey === session?.nostrHexId) {
-            setSearchProfiles([]);
-            return;
-          }
-          const events = await Promise.race([
-            pool.querySync(relays, { kinds: [0], authors: [hexPubkey] }),
-            new Promise<any[]>((_, reject) =>
-              setTimeout(() => reject(new Error('Lookup timeout')), 8000)
-            ),
-          ]);
-          if (events.length > 0) {
-            const content = JSON.parse(events[0].content);
-            setSearchProfiles([{
-              pubkey: events[0].pubkey,
-              name: content.name,
-              display_name: content.display_name,
-              picture: content.picture,
-            }]);
-          } else {
-            // No profile found — show hex-only entry so user can still select
-            setSearchProfiles([{ pubkey: hexPubkey }]);
-          }
-        } catch (error) {
-          console.error('Error looking up hex profile:', error);
-          setSearchProfiles([{ pubkey: searchInput.trim() }]);
-        } finally {
-          setIsSearching(false);
-          pool.close(relays);
-        }
-      };
-      const timeoutId = setTimeout(hexLookupFn, 300);
-      return () => clearTimeout(timeoutId);
-    }
-
-    // Partial hex (20+ chars but not yet 64) — suppress search, show hint
-    if (/^[0-9a-fA-F]{20,}$/.test(searchInput.trim())) {
+    // Partial hex (20+ chars but not yet 64) — suppress, show hint upstream
+    if (/^[0-9a-fA-F]{20,63}$/.test(searchInput.trim())) {
       setSearchProfiles([]);
       return;
     }
 
-    const searchFn = async () => {
-      setIsSearching(true);
-      const pool = new SimplePool();
+    const trimmed = searchInput.trim();
+    const isFullHex = /^[0-9a-fA-F]{64}$/.test(trimmed);
 
-      try {
-        const events = await Promise.race([
-          pool.querySync(relays, { kinds: [0], limit: 1000 }),
-          new Promise<any[]>((_, reject) =>
-            setTimeout(() => reject(new Error('Search timeout')), 10000)
-          ),
-        ]);
+    const found: Profile[] = rawSearchResults
+      .filter((p) => p.pubkey && p.pubkey !== session?.nostrHexId)
+      .slice(0, 30)
+      .map((p) => ({
+        pubkey: p.pubkey,
+        name: p.name,
+        display_name: p.display_name,
+        picture: p.picture,
+      }));
 
-        const found: Profile[] = [];
-        const query = searchInput.toLowerCase();
-
-        events.forEach((event) => {
-          try {
-            if (event.pubkey === session?.nostrHexId) return;
-
-            const content = JSON.parse(event.content);
-            const nameStr = content.name?.toLowerCase() || '';
-            const displayName = content.display_name?.toLowerCase() || '';
-
-            if (nameStr.includes(query) || displayName.includes(query)) {
-              found.push({
-                pubkey: event.pubkey,
-                name: content.name,
-                display_name: content.display_name,
-                picture: content.picture,
-              });
-            }
-          } catch {
-            // Skip malformed events
-          }
-        });
-
-        setSearchProfiles(found.slice(0, 20));
-      } catch (error) {
-        console.error('Error searching profiles:', error);
-      } finally {
-        setIsSearching(false);
-        pool.close(relays);
-      }
-    };
-
-    const timeoutId = setTimeout(searchFn, 400);
-    return () => clearTimeout(timeoutId);
-  }, [searchInput, relays, selectedPubkey, session?.nostrHexId]);
+    if (isFullHex && found.length === 0) {
+      // Unknown hex pubkey — still let the user select it
+      setSearchProfiles([{ pubkey: trimmed }]);
+    } else {
+      setSearchProfiles(found);
+    }
+  }, [searchInput, selectedPubkey, session?.nostrHexId, rawSearchResults]);
 
   const selectProfile = (profile: Profile) => {
     setSelectedPubkey(profile.pubkey);
