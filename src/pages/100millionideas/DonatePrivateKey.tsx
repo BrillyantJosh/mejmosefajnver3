@@ -238,6 +238,7 @@ const DonatePrivateKey = () => {
               fromWallet: selectedWalletId,
               toWallet: project.wallet,
               txId: txHash,
+              message: message || '',
               nostrCreatedAt: nowTs,
             }
           }),

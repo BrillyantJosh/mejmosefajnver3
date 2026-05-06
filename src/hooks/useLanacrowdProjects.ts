@@ -46,6 +46,7 @@ export function useLanacrowdProjects(
   page: number = 1,
   search: string = '',
   adminPubkey?: string,
+  viewerPubkey?: string,
 ) {
   const [data, setData] = useState<ProjectsResponse>({
     projects: [], total: 0, page: 1, totalPages: 1
@@ -64,6 +65,7 @@ export function useLanacrowdProjects(
       });
       if (search) params.set('search', search);
       if (adminPubkey) params.set('adminPubkey', adminPubkey);
+      if (viewerPubkey) params.set('viewerPubkey', viewerPubkey);
 
       const res = await window.fetch(`/api/lanacrowd/projects?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -75,7 +77,7 @@ export function useLanacrowdProjects(
     } finally {
       setIsLoading(false);
     }
-  }, [filter, page, search, adminPubkey]);
+  }, [filter, page, search, adminPubkey, viewerPubkey]);
 
   useEffect(() => { fetch(); }, [fetch]);
 

@@ -12,6 +12,7 @@ export interface LanacrowdDonation {
   fromWallet: string;
   toWallet: string;
   txId?: string;
+  message?: string;
   nostrCreatedAt: number;
   createdAt: string;
 }

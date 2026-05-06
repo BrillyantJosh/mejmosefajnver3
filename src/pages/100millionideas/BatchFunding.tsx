@@ -148,8 +148,12 @@ const BatchFunding = () => {
   const { session } = useAuth();
   const { toast } = useToast();
   const { parameters } = useSystemParameters();
-  // Open filter already excludes hidden/completed/funded/draft at the server
-  const { projects, isLoading: projectsLoading } = useLanacrowdProjects('open', 1, '');
+  // Open filter already excludes hidden/completed/funded/draft at the server.
+  // Batch funding only shows approved projects to non-admins — but include the
+  // viewer's pubkey so creators always see their own (otherwise consistent with /projects).
+  const { projects, isLoading: projectsLoading } = useLanacrowdProjects(
+    'open', 1, '', undefined, session?.nostrHexId,
+  );
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
 
   const [step, setStep] = useState<BatchStep>('select');

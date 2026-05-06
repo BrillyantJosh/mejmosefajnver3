@@ -83,6 +83,7 @@ function donationRowToApi(row: any) {
     fromWallet: row.from_wallet,
     toWallet: row.to_wallet,
     txId: row.tx_id,
+    message: row.message || '',
     nostrCreatedAt: row.nostr_created_at,
     createdAt: row.created_at,
   };
@@ -98,6 +99,7 @@ router.get('/projects', (req, res) => {
   const filter = (req.query.filter as string) || 'open';
   const search = (req.query.search as string || '').trim();
   const adminPubkey = req.query.adminPubkey as string | undefined;
+  const viewerPubkey = (req.query.viewerPubkey as string | undefined) || adminPubkey;
   const isAdmin = adminPubkey && getAdmins().includes(adminPubkey);
   const offset = (page - 1) * limit;
 
@@ -111,6 +113,17 @@ router.get('/projects', (req, res) => {
   // Non-admins can't see hidden projects
   if (!isAdmin) {
     conditions.push('is_hidden = 0');
+  }
+
+  // Approval gate: non-admins only see approved projects, except for projects
+  // they own — owners may see their own pending submissions in the listing.
+  if (!isAdmin) {
+    if (viewerPubkey) {
+      conditions.push('(is_approved = 1 OR owner_pubkey = ? OR pubkey = ?)');
+      params.push(viewerPubkey, viewerPubkey);
+    } else {
+      conditions.push('is_approved = 1');
+    }
   }
 
   switch (filter) {
@@ -344,12 +357,14 @@ router.post('/donations/record', (req, res) => {
 
   try {
     db.prepare(`
-      INSERT OR IGNORE INTO lanacrowd_donations (
+      INSERT INTO lanacrowd_donations (
         id, project_id, supporter_pubkey, project_owner_pubkey,
         amount_lanoshis, amount_fiat, currency,
-        from_wallet, to_wallet, tx_id,
+        from_wallet, to_wallet, tx_id, message,
         nostr_created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        message = COALESCE(lanacrowd_donations.message, excluded.message)
     `).run(
       d.id,
       d.projectId,
@@ -361,6 +376,7 @@ router.post('/donations/record', (req, res) => {
       d.fromWallet || '',
       d.toWallet || '',
       d.txId || null,
+      d.message || null,
       d.nostrCreatedAt || Math.floor(Date.now() / 1000),
     );
 

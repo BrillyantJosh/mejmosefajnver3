@@ -353,7 +353,7 @@ const DonationItem = ({ donation }: { donation: any }) => {
             <p className="text-sm text-muted-foreground mb-2">{donation.message}</p>
           )}
           <a
-            href={`https://insight.lana.foundation/tx/${donation.txId}`}
+            href={`https://chainz.cryptoid.info/lana/tx.dws?${donation.txId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-primary hover:underline flex items-center gap-1"

@@ -1170,13 +1170,18 @@ export async function indexLanacrowdFromRelays(db: any): Promise<void> {
       console.warn('⚠️ indexLanacrowdFromRelays: legacy override migration failed (non-fatal)', migrErr);
     }
 
-    // Upsert donations
+    // Upsert donations.
+    // ON CONFLICT: backfill `message` for legacy rows that were inserted before
+    // the column existed (or before the comment was being captured). Only
+    // overwrite when the new value is non-null AND the existing row is missing it.
     const upsertDonation = db.prepare(`
-      INSERT OR IGNORE INTO lanacrowd_donations (
+      INSERT INTO lanacrowd_donations (
         id, project_id, supporter_pubkey, project_owner_pubkey,
         amount_lanoshis, amount_fiat, currency,
-        from_wallet, to_wallet, tx_id, nostr_created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        from_wallet, to_wallet, tx_id, message, nostr_created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        message = COALESCE(lanacrowd_donations.message, excluded.message)
     `);
 
     let donationsIndexed = 0;
@@ -1200,6 +1205,7 @@ export async function indexLanacrowdFromRelays(db: any): Promise<void> {
           getTag('from_wallet') || '',
           getTag('to_wallet') || '',
           getTag('tx') || null,
+          (evt.content && evt.content.trim()) ? evt.content : null,
           evt.created_at,
         );
         donationsIndexed++;

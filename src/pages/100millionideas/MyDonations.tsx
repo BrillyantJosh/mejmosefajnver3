@@ -1,7 +1,7 @@
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useNostrReceivedDonations } from "@/hooks/useNostrReceivedDonations";
-import { useNostrProjects } from "@/hooks/useNostrProjects";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExternalLink } from "lucide-react";
@@ -9,17 +9,42 @@ import { format } from "date-fns";
 
 const MyDonations = () => {
   const { donations, isLoading } = useNostrReceivedDonations();
-  const { projects } = useNostrProjects();
+
+  // Build project-id → title map from server SQLite (server-first architecture).
+  // Fetches all projects with high limit so titles can be looked up locally.
+  const [projectTitleMap, setProjectTitleMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/lanacrowd/projects?filter=all&limit=500');
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        const map: Record<string, string> = {};
+        for (const p of json.projects || []) {
+          if (p.id && p.title) map[p.id] = p.title;
+        }
+        setProjectTitleMap(map);
+      } catch (err) {
+        console.warn('Failed to load project title map:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Calculate summary stats
   const totalReceived = donations.reduce((sum, d) => sum + parseFloat(d.amountFiat || '0'), 0);
   const totalDonations = donations.length;
-  const supportedProjects = new Set(donations.map(d => d.projectDTag)).size;
+  const supportedProjects = useMemo(() => new Set(donations.map(d => d.projectDTag)).size, [donations]);
 
-  // Get project title for a donation
+  // Get project title for a donation (falls back to truncated d-tag if not found)
   const getProjectTitle = (projectDTag: string) => {
-    const project = projects.find(p => p.id === projectDTag);
-    return project?.title || 'Unknown Project';
+    if (projectTitleMap[projectDTag]) return projectTitleMap[projectDTag];
+    // Friendlier fallback than "Unknown Project"
+    return projectDTag.startsWith('project:')
+      ? `Project ${projectDTag.slice(8, 16)}…`
+      : projectDTag.slice(0, 24);
   };
 
   // Get currency for a donation (use first donation's currency as default)

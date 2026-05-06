@@ -35,12 +35,15 @@ const Projects = () => {
   const [page, setPage] = useState(1);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Server-side filtered + paginated — reads from SQLite cache
+  // Server-side filtered + paginated — reads from SQLite cache.
+  // viewerPubkey lets the API include the viewer's own pending submissions
+  // (so creators can see their own pre-approval projects in the listing).
   const { projects, total, totalPages, isLoading, refetch } = useLanacrowdProjects(
     filter,
     page,
     '',
     is100MAdmin ? session?.nostrHexId : undefined,
+    session?.nostrHexId,
   );
 
   // Totals across ALL projects in current filter (not just current page) — from /summary

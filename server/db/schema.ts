@@ -366,6 +366,7 @@ export function initializeSchema(db: Database.Database): void {
       from_wallet TEXT NOT NULL DEFAULT '',
       to_wallet TEXT NOT NULL DEFAULT '',
       tx_id TEXT,
+      message TEXT,
       nostr_created_at INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
@@ -434,6 +435,7 @@ export function initializeSchema(db: Database.Database): void {
   const migrations = [
     `ALTER TABLE loss_reports ADD COLUMN wallet_note TEXT DEFAULT ''`,
     `ALTER TABLE loss_reports ADD COLUMN balance REAL DEFAULT 0`,
+    `ALTER TABLE lanacrowd_donations ADD COLUMN message TEXT`,
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch (_) { /* column already exists */ }
