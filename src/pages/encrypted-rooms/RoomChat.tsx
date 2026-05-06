@@ -367,10 +367,10 @@ export default function RoomChat() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <Lock className="h-4 w-4 text-violet-500 flex-shrink-0" />
-          <div className="min-w-0">
-            <h2 className="font-semibold text-sm truncate max-w-[120px] sm:max-w-[200px]">{roomName}</h2>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-semibold text-sm truncate">{roomName}</h2>
             {room?.description && (
-              <p className="text-[10px] text-muted-foreground truncate max-w-[120px] sm:max-w-[200px]">{room.description}</p>
+              <p className="text-[10px] text-muted-foreground break-words whitespace-normal">{room.description}</p>
             )}
           </div>
         </div>
@@ -448,7 +448,7 @@ export default function RoomChat() {
       </div>
 
       {/* Messages area */}
-      <ScrollArea className="flex-1 px-3 py-2">
+      <ScrollArea className="flex-1 px-3 py-2 room-chat-scroll">
         {isLoading && (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
@@ -540,6 +540,7 @@ export default function RoomChat() {
         onSend={handleSendMessage}
         disabled={!groupKey}
         placeholder={groupKey ? 'Type a message...' : isLoading ? 'Loading room key...' : 'No access to this room'}
+        roomId={room?.roomId}
       />
 
       {/* Room settings dialog (owner only) */}

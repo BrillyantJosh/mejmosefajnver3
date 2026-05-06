@@ -117,4 +117,19 @@ All colors MUST be HSL.
   .h-dvh {
     height: 100dvh;
   }
+  /* Force AudioPlayer to shrink inside narrow message bubbles (mobile fit) */
+  .room-media-fit,
+  .room-media-fit * {
+    min-width: 0 !important;
+  }
+  .room-media-fit {
+    max-width: 100% !important;
+  }
+  /* Radix ScrollArea wraps content in <div style="display:table"> which breaks
+     percentage max-widths on children. Force block layout in chat scroll. */
+  .room-chat-scroll [data-radix-scroll-area-viewport] > div {
+    display: block !important;
+    min-width: 0 !important;
+    width: 100%;
+  }
 }
