@@ -9,8 +9,7 @@ import { Loader2, Send, Key, Scan, CheckCircle, XCircle, User, Wallet } from 'lu
 import { supabase } from '@/integrations/supabase/client';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { convertWifToIds } from '@/lib/crypto';
-import { Html5Qrcode } from 'html5-qrcode';
-import { DEFAULT_QR_CONFIG, QRCameraError, startQRScanner } from '@/lib/qr-camera';
+import { useJsQRScanner } from '@/lib/qr-camera';
 import { toast } from 'sonner';
 import { t } from '@/lib/aiAdvisorTranslations';
 
@@ -47,8 +46,21 @@ export function PaymentForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [selectedTab, setSelectedTab] = useState('manual');
-  const [isScanning, setIsScanning] = useState(false);
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const [scannerEnabled, setScannerEnabled] = useState(false);
+
+  // jsQR-based scanner (ported from mobile.lanapays.us)
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { isScanning, error: scanError } = useJsQRScanner({
+    enabled: scannerEnabled,
+    videoRef,
+    canvasRef,
+    onScan: (decoded) => {
+      setPrivateKey(decoded);
+      setScannerEnabled(false);
+      setSelectedTab('manual');
+    },
+  });
 
   useEffect(() => {
     const validatePrivateKey = async () => {
@@ -86,55 +98,7 @@ export function PaymentForm({
     return () => clearTimeout(timeoutId);
   }, [privateKey, senderWalletId, language]);
 
-  const startScanner = async () => {
-    setIsScanning(true);
-    setError('');
-
-    try {
-      // Wait one frame for the qr-reader-payment div to mount
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-      const html5QrCode = new Html5Qrcode('qr-reader-payment');
-      html5QrCodeRef.current = html5QrCode;
-
-      await startQRScanner(
-        html5QrCode,
-        DEFAULT_QR_CONFIG,
-        (decodedText) => {
-          setPrivateKey(decodedText);
-          stopScanner();
-          setSelectedTab('manual');
-        },
-      );
-    } catch (err: any) {
-      if (err instanceof QRCameraError) {
-        setError(err.message);
-      } else {
-        setError(t('cameraError', language, { error: err?.message || err?.name || '' }));
-      }
-      setIsScanning(false);
-    }
-  };
-
-  const stopScanner = async () => {
-    try {
-      if (html5QrCodeRef.current) {
-        await html5QrCodeRef.current.stop();
-        html5QrCodeRef.current = null;
-      }
-      setIsScanning(false);
-    } catch (err) {
-      setIsScanning(false);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (html5QrCodeRef.current) {
-        html5QrCodeRef.current.stop().catch(() => {});
-      }
-    };
-  }, []);
+  // (QR scanner lifecycle managed by useJsQRScanner above)
 
   const handleSubmit = async () => {
     if (!privateKey.trim() || !isPrivateKeyValid) {
@@ -281,15 +245,27 @@ export function PaymentForm({
               </TabsContent>
 
               <TabsContent value="scan" className="space-y-3">
-                {!isScanning ? (
-                  <Button onClick={startScanner} className="w-full">
+                {!scannerEnabled ? (
+                  <Button onClick={() => setScannerEnabled(true)} className="w-full">
                     <Scan className="h-4 w-4 mr-2" />
                     {t('startCamera', language)}
                   </Button>
                 ) : (
                   <>
-                    <div id="qr-reader-payment" className="w-full rounded-lg overflow-hidden" />
-                    <Button onClick={stopScanner} variant="destructive" className="w-full">
+                    <div className="relative aspect-square bg-background rounded-lg overflow-hidden border">
+                      <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+                      <canvas ref={canvasRef} className="hidden" />
+                      {isScanning && (
+                        <div className="absolute inset-0 pointer-events-none">
+                          <div className="absolute top-0 left-0 w-10 h-10 border-l-4 border-t-4 border-primary rounded-tl-lg" />
+                          <div className="absolute top-0 right-0 w-10 h-10 border-r-4 border-t-4 border-primary rounded-tr-lg" />
+                          <div className="absolute bottom-0 left-0 w-10 h-10 border-l-4 border-b-4 border-primary rounded-bl-lg" />
+                          <div className="absolute bottom-0 right-0 w-10 h-10 border-r-4 border-b-4 border-primary rounded-br-lg" />
+                        </div>
+                      )}
+                    </div>
+                    {scanError && <p className="text-sm text-destructive">{scanError}</p>}
+                    <Button onClick={() => setScannerEnabled(false)} variant="destructive" className="w-full">
                       {t('stopScanning', language)}
                     </Button>
                   </>

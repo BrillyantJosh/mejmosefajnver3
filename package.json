@@ -66,6 +66,7 @@
     "html5-qrcode": "^2.3.8",
     "idb": "^8.0.3",
     "input-otp": "^1.4.2",
+    "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.462.0",
     "multer": "^2.0.2",

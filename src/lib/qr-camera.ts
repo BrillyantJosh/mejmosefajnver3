@@ -1,27 +1,37 @@
 /**
- * Robust camera setup for html5-qrcode across iOS Safari and Android Chrome.
+ * Shared QR scanning primitives — adopted from mobile.lanapays.us where this
+ * approach has proven reliable across iOS Safari, Android Chrome, Samsung
+ * Internet, Brave, etc.
  *
- * Three failure modes we have to dance around:
- *  1. iOS Pro iPhones expose wide+ultrawide+telephoto trio. Telephoto can't
- *     focus on close QR codes, so we must avoid it.
- *  2. Camera labels are empty until permission is granted, so we can't pick
- *     the wide camera by name without first calling getUserMedia.
- *  3. Calling getUserMedia twice in a row (once for permission, once for
- *     html5-qrcode) sometimes fails the second call with NotReadableError
- *     ("Could not start video source") on Android Chrome / Samsung Internet
- *     because the OS hasn't released the camera between calls.
+ * Key design decisions:
+ *   • One getUserMedia call with `facingMode: 'environment'`. The OS picks
+ *     the back camera and we never enumerate, so there's no second-call
+ *     race that previously produced "Could not start video source".
+ *   • Pure jsQR decode on a hidden <canvas>. No html5-qrcode DOM injection
+ *     fighting React's lifecycle.
+ *   • Adaptive thresholding (17×17 local mean via integral image) decodes
+ *     QR codes printed on metal, dark plastic, screens, paper — anything.
  *
- * Strategy in `startQRScanner` (preferred entry point):
- *   1. First try html5-qrcode's `start({ facingMode: 'environment' })` —
- *      ONE getUserMedia call, no race. Works everywhere except iPhone Pro
- *      where the OS may pick telephoto.
- *   2. If that fails OR the picked stream is telephoto, fall back to
- *      `pickBackCameraId()` (label-based wide-camera selection) and retry
- *      with explicit deviceId.
- *   3. On NotReadableError at any step, retry once after 600 ms.
+ * The high-level <QRScanner> dialog component lives in `components/QRScanner.tsx`
+ * and uses these primitives directly. Inline scanners (Send / Pay / Sell flows
+ * that show the camera feed in the page rather than a dialog) build their own
+ * UI but share `useJsQRScanner` here.
  */
-import { Html5Qrcode } from 'html5-qrcode';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import jsQR from 'jsqr';
 
+// Process at half resolution — enough pixels for jsQR at any reasonable
+// distance, while keeping the adaptive threshold fast on mobile CPUs.
+export const SCAN_WIDTH = 640;
+export const SCAN_HEIGHT = 360;
+
+export const DEFAULT_QR_CONFIG = {
+  fps: 10,
+  qrbox: { width: 280, height: 280 },
+  aspectRatio: 1.0,
+} as const;
+
+// Kept for backwards compatibility with old call-sites that import these names.
 export class QRCameraError extends Error {
   constructor(message: string, public readonly code:
     | 'no-mediadevices'
@@ -35,204 +45,177 @@ export class QRCameraError extends Error {
   }
 }
 
-/** Default html5-qrcode config tuned for new iPhones. */
-export const DEFAULT_QR_CONFIG = {
-  fps: 10,
-  qrbox: { width: 280, height: 280 },
-  aspectRatio: 1.0,
-} as const;
-
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-/** Map low-level browser errors to user-facing messages + a stable error code. */
-function classifyError(err: any): QRCameraError {
-  const name = err?.name || '';
-  const msg = (err?.message || '').toLowerCase();
-
-  if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || msg.includes('permission')) {
-    return new QRCameraError(
-      'Camera permission denied. Open browser settings → Site permissions → Camera → Allow.',
-      'permission-denied',
-    );
-  }
-  if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || msg.includes('not found')) {
-    return new QRCameraError('No camera found on this device.', 'no-camera');
-  }
-  if (
-    name === 'NotReadableError' ||
-    msg.includes('could not start video source') ||
-    msg.includes('notreadableerror') ||
-    msg.includes('in use')
-  ) {
-    return new QRCameraError(
-      'Camera is busy. Close any other tab or app that may be using the camera, then try again.',
-      'camera-busy',
-    );
-  }
-  return new QRCameraError(
-    `Camera error: ${err?.message || err?.name || 'Please check permissions.'}`,
-    'unknown',
-  );
-}
-
 /**
- * Enumerate cameras and pick the standard wide back camera.
- * Caller has already obtained permission so labels are populated.
- */
-async function pickWideBackCameraId(): Promise<string | null> {
-  try {
-    const cameras = await Html5Qrcode.getCameras();
-    if (!cameras || cameras.length === 0) return null;
-    if (cameras.length === 1) return cameras[0].id;
-
-    const wideBack = cameras.find((c) => {
-      const l = (c.label || '').toLowerCase();
-      const isBack = l.includes('back') || l.includes('rear') || l.includes('environment');
-      const isWide = !l.includes('tele') && !l.includes('ultra') && !l.includes('depth');
-      return isBack && isWide;
-    });
-    if (wideBack) return wideBack.id;
-
-    const anyBack = cameras.find((c) => {
-      const l = (c.label || '').toLowerCase();
-      return l.includes('back') || l.includes('rear') || l.includes('environment');
-    });
-    return (anyBack || cameras[0]).id;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * High-level scanner starter. Returns when the scanner is running.
- * Throws QRCameraError on permanent failure.
+ * Adaptive 17×17 local-mean threshold. Mutates `imageData.data` in place.
  *
- * Strategy (in order):
- *  A. start with `{ facingMode: { ideal: 'environment' } }` — one getUserMedia,
- *     no race. Works on most Androids out of the box.
- *  B. If A fails OR returns telephoto on iPhone, stop & retry with explicit
- *     deviceId of the wide back camera.
- *  C. If B fails with NotReadableError, sleep 600 ms and retry once more.
+ * Operates against pre-allocated typed arrays (Uint8Array gray, Int32Array
+ * integral) supplied by the caller — keeps GC pressure to zero across the
+ * scan loop.
  */
-export async function startQRScanner(
-  scanner: Html5Qrcode,
-  config: any,
-  onSuccess: (decoded: string) => void,
-  onError?: (msg: string) => void,
-): Promise<void> {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    throw new QRCameraError('Camera not available in this browser.', 'no-mediadevices');
+export function adaptiveThreshold(
+  imageData: ImageData,
+  gray: Uint8Array,
+  integral: Int32Array,
+): void {
+  const { data, width, height } = imageData;
+  const S = 8;        // half-window → 17×17 neighbourhood
+  const T = 0.85;     // pixel is "dark" if < T × local mean
+  const w1 = width + 1;
+
+  // Step 1 — luminance-weighted grayscale
+  for (let i = 0, j = 0; j < data.length; i++, j += 4) {
+    gray[i] = (0.299 * data[j] + 0.587 * data[j + 1] + 0.114 * data[j + 2]) | 0;
   }
 
-  const _onError = onError ?? (() => { /* per-frame decode failures — ignore */ });
-
-  // ── Path A: simple facingMode constraint ──────────────────────────────
-  try {
-    await scanner.start(
-      { facingMode: { ideal: 'environment' } } as any,
-      config,
-      onSuccess,
-      _onError,
-    );
-
-    // If the actual track is telephoto (iPhone Pro), tear down and pick wide.
-    // Heuristic: read the active video track label.
-    const stream = (scanner as any).getRunningTrackCameraCapabilities?.()?.aspectRatio
-      ? null
-      : null; // capabilities API isn't reliable across browsers
-    const label = (scanner as any)._localMediaStream?.getVideoTracks?.()?.[0]?.label || '';
-    const looksTelephoto = /tele/i.test(label);
-    if (!looksTelephoto) return; // success on path A
-
-    // Telephoto picked → switch to wide back via path B
-    try { await scanner.stop(); } catch { /* ignore */ }
-    await sleep(300);
-  } catch (errA: any) {
-    const classified = classifyError(errA);
-    // Permission denied is final — never recoverable on path B
-    if (classified.code === 'permission-denied') throw classified;
-    // Otherwise fall through to path B
-    console.warn('[qr-camera] facingMode start failed, falling back to enumerated:', errA);
-  }
-
-  // ── Path B: label-based wide back camera ──────────────────────────────
-  const wideId = await pickWideBackCameraId();
-  if (!wideId) {
-    throw new QRCameraError('No camera found on this device.', 'no-camera');
-  }
-
-  try {
-    await scanner.start(wideId, config, onSuccess, _onError);
-    return;
-  } catch (errB: any) {
-    const classified = classifyError(errB);
-
-    // ── Path C: retry once on camera-busy ────────────────────────────────
-    if (classified.code === 'camera-busy') {
-      console.warn('[qr-camera] camera busy, retrying after 600 ms…');
-      await sleep(600);
-      try {
-        await scanner.start(wideId, config, onSuccess, _onError);
-        return;
-      } catch (errC: any) {
-        throw classifyError(errC);
-      }
+  // Step 2 — build summed-area table (integral image)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      integral[(y + 1) * w1 + (x + 1)] =
+        gray[y * width + x]
+        + integral[y * w1 + (x + 1)]
+        + integral[(y + 1) * w1 + x]
+        - integral[y * w1 + x];
     }
+  }
 
-    throw classified;
+  // Step 3 — threshold each pixel against its local mean
+  for (let y = 0; y < height; y++) {
+    const y1 = Math.max(0, y - S);
+    const y2 = Math.min(height - 1, y + S);
+    for (let x = 0; x < width; x++) {
+      const x1 = Math.max(0, x - S);
+      const x2 = Math.min(width - 1, x + S);
+      const cnt = (y2 - y1 + 1) * (x2 - x1 + 1);
+      const sum =
+          integral[(y2 + 1) * w1 + (x2 + 1)]
+        - integral[y1 * w1 + (x2 + 1)]
+        - integral[(y2 + 1) * w1 + x1]
+        + integral[y1 * w1 + x1];
+      const val = gray[y * width + x] < (sum / cnt) * T ? 0 : 255;
+      const j = (y * width + x) * 4;
+      data[j] = data[j + 1] = data[j + 2] = val;
+    }
   }
 }
 
-/**
- * @deprecated Prefer `startQRScanner` which handles all failure modes.
- * Kept for backwards compatibility with existing call-sites.
- */
-export async function pickBackCameraId(): Promise<string> {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    throw new QRCameraError('Camera not available in this browser.', 'no-mediadevices');
+/** Map low-level browser errors to user-facing messages. */
+export function describeCameraError(err: any): string {
+  const name = err?.name || '';
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+    return 'Camera permission denied. Allow camera access in browser settings.';
   }
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return 'No camera found on this device.';
+  }
+  if (name === 'NotReadableError') {
+    return 'Camera is in use by another app or tab.';
+  }
+  return `Camera error: ${err?.message || name || 'Failed to start camera'}`;
+}
 
-  let permissionStream: MediaStream | null = null;
-  try {
-    permissionStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } },
-      audio: false,
+/**
+ * React hook driving an inline QR scanner. Hand it the active <video> and
+ * <canvas> refs, plus an `enabled` flag; it manages camera lifecycle and
+ * calls `onScan` exactly once when a code is decoded.
+ */
+export function useJsQRScanner(opts: {
+  enabled: boolean;
+  videoRef: React.RefObject<HTMLVideoElement>;
+  canvasRef: React.RefObject<HTMLCanvasElement>;
+  onScan: (data: string) => void;
+}) {
+  const { enabled, videoRef, canvasRef, onScan } = opts;
+  const animRef = useRef<number | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const doneRef = useRef(false);
+  const grayRef = useRef(new Uint8Array(SCAN_WIDTH * SCAN_HEIGHT));
+  const integralRef = useRef(new Int32Array((SCAN_WIDTH + 1) * (SCAN_HEIGHT + 1)));
+
+  const [isScanning, setIsScanning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const cleanup = useCallback(() => {
+    if (animRef.current) {
+      cancelAnimationFrame(animRef.current);
+      animRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setIsScanning(false);
+  }, []);
+
+  const scanFrame = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < 2 || doneRef.current) {
+      animRef.current = requestAnimationFrame(scanFrame);
+      return;
+    }
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) {
+      animRef.current = requestAnimationFrame(scanFrame);
+      return;
+    }
+
+    canvas.width = SCAN_WIDTH;
+    canvas.height = SCAN_HEIGHT;
+    ctx.drawImage(video, 0, 0, SCAN_WIDTH, SCAN_HEIGHT);
+
+    const imageData = ctx.getImageData(0, 0, SCAN_WIDTH, SCAN_HEIGHT);
+    adaptiveThreshold(imageData, grayRef.current, integralRef.current);
+
+    const code = jsQR(imageData.data, SCAN_WIDTH, SCAN_HEIGHT, {
+      inversionAttempts: 'attemptBoth',
     });
-  } catch (err) {
-    throw classifyError(err);
-  }
 
-  try {
-    const id = await pickWideBackCameraId();
-    if (!id) throw new QRCameraError('No camera found on this device.', 'no-camera');
-    return id;
-  } finally {
-    permissionStream?.getTracks().forEach((t) => t.stop());
-    await sleep(250);
-  }
-}
-
-/**
- * @deprecated Prefer `startQRScanner` which handles facingMode + retry as a unit.
- */
-export async function startScannerWithRetry(
-  scanner: Html5Qrcode,
-  cameraId: string,
-  config: any,
-  onSuccess: (decoded: string) => void,
-  onError?: (msg: string) => void,
-): Promise<void> {
-  const _onError = onError ?? (() => {});
-  try {
-    await scanner.start(cameraId, config, onSuccess, _onError);
-  } catch (err: any) {
-    const classified = classifyError(err);
-    if (classified.code !== 'camera-busy') throw classified;
-    await sleep(600);
-    try {
-      await scanner.start(cameraId, config, onSuccess, _onError);
-    } catch (err2: any) {
-      throw classifyError(err2);
+    if (code && !doneRef.current) {
+      doneRef.current = true;
+      cleanup();
+      onScan(code.data);
+      return;
     }
-  }
+
+    animRef.current = requestAnimationFrame(scanFrame);
+  }, [videoRef, canvasRef, onScan, cleanup]);
+
+  const start = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setIsScanning(true);
+        setError(null);
+        animRef.current = requestAnimationFrame(scanFrame);
+      }
+    } catch (err: any) {
+      console.error('Camera error:', err);
+      setError(describeCameraError(err));
+    }
+  }, [videoRef, scanFrame]);
+
+  // Auto-start when enabled, auto-cleanup on disable / unmount.
+  useEffect(() => {
+    if (!enabled) return;
+    doneRef.current = false;
+    setError(null);
+    const timer = setTimeout(() => start(), 150);
+    return () => {
+      clearTimeout(timer);
+      cleanup();
+    };
+  }, [enabled, start, cleanup]);
+
+  return { isScanning, error, stop: cleanup };
 }

@@ -8,8 +8,7 @@ import { ArrowLeft, ArrowRight, Scan, Search, User, Wallet, Snowflake, ShieldAle
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Html5Qrcode } from "html5-qrcode";
-import { DEFAULT_QR_CONFIG, QRCameraError, startQRScanner } from "@/lib/qr-camera";
+import { useJsQRScanner } from "@/lib/qr-camera";
 import { validateLanaWalletIdWithMessage } from "@/lib/lanaWalletValidation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
@@ -49,11 +48,23 @@ export default function SendLanaRecipient() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
+  const [scannerEnabled, setScannerEnabled] = useState(false);
   const [error, setError] = useState("");
   const [selectedTab, setSelectedTab] = useState("manual");
 
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  // jsQR-based scanner (ported from mobile.lanapays.us)
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { isScanning, error: scanError } = useJsQRScanner({
+    enabled: scannerEnabled,
+    videoRef,
+    canvasRef,
+    onScan: (decoded) => {
+      setRecipientWalletId(decoded);
+      setScannerEnabled(false);
+      setSelectedTab("manual");
+    },
+  });
 
   // Real-time wallet registration check
   const [walletCheckStatus, setWalletCheckStatus] = useState<'idle' | 'checking' | 'registered' | 'unregistered' | 'error'>('idle');
@@ -128,59 +139,7 @@ export default function SendLanaRecipient() {
     w.walletId !== walletId
   );
 
-  // QR Code Scanner — uses shared iOS-friendly camera picker (avoids telephoto)
-  const startScanner = async () => {
-    setIsScanning(true);
-    setError("");
-
-    try {
-      // Wait one frame for the qr-reader div to mount
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-      const html5QrCode = new Html5Qrcode("qr-reader");
-      html5QrCodeRef.current = html5QrCode;
-
-      await startQRScanner(
-        html5QrCode,
-        DEFAULT_QR_CONFIG,
-        (decodedText) => {
-          setRecipientWalletId(decodedText);
-          stopScanner();
-          setSelectedTab("manual");
-        },
-      );
-    } catch (err: any) {
-      console.error("Scanner error:", err);
-      if (err instanceof QRCameraError) {
-        setError(err.message);
-      } else {
-        setError(`Camera error: ${err?.message || err?.name || "Please check permissions and try again."}`);
-      }
-      setIsScanning(false);
-    }
-  };
-
-  const stopScanner = async () => {
-    try {
-      if (html5QrCodeRef.current) {
-        await html5QrCodeRef.current.stop();
-        html5QrCodeRef.current = null;
-      }
-      setIsScanning(false);
-    } catch (err) {
-      console.error("Error stopping scanner:", err);
-      setIsScanning(false);
-    }
-  };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (html5QrCodeRef.current) {
-        html5QrCodeRef.current.stop().catch(console.error);
-      }
-    };
-  }, []);
+  // (QR scanner lifecycle is managed by the useJsQRScanner hook above)
 
   // Search by name
   const handleSearch = async () => {
@@ -463,18 +422,27 @@ export default function SendLanaRecipient() {
 
             <TabsContent value="scan" className="space-y-4">
               <div className="space-y-4">
-                {!isScanning ? (
-                  <Button onClick={startScanner} className="w-full">
+                {!scannerEnabled ? (
+                  <Button onClick={() => setScannerEnabled(true)} className="w-full">
                     <Scan className="h-4 w-4 mr-2" />
                     Start Camera
                   </Button>
                 ) : (
                   <>
-                    <div
-                      id="qr-reader"
-                      className="w-full rounded-lg overflow-hidden"
-                    />
-                    <Button onClick={stopScanner} variant="destructive" className="w-full">
+                    <div className="relative aspect-square bg-background rounded-lg overflow-hidden border">
+                      <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+                      <canvas ref={canvasRef} className="hidden" />
+                      {isScanning && (
+                        <div className="absolute inset-0 pointer-events-none">
+                          <div className="absolute top-0 left-0 w-10 h-10 border-l-4 border-t-4 border-primary rounded-tl-lg" />
+                          <div className="absolute top-0 right-0 w-10 h-10 border-r-4 border-t-4 border-primary rounded-tr-lg" />
+                          <div className="absolute bottom-0 left-0 w-10 h-10 border-l-4 border-b-4 border-primary rounded-bl-lg" />
+                          <div className="absolute bottom-0 right-0 w-10 h-10 border-r-4 border-b-4 border-primary rounded-br-lg" />
+                        </div>
+                      )}
+                    </div>
+                    {scanError && <p className="text-sm text-destructive">{scanError}</p>}
+                    <Button onClick={() => setScannerEnabled(false)} variant="destructive" className="w-full">
                       Stop Scanning
                     </Button>
                   </>

@@ -17,8 +17,7 @@ import {
   X,
   ExternalLink,
 } from "lucide-react";
-import { Html5Qrcode } from "html5-qrcode";
-import { DEFAULT_QR_CONFIG, QRCameraError, startQRScanner } from "@/lib/qr-camera";
+import { useJsQRScanner } from "@/lib/qr-camera";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAdmin } from "@/contexts/AdminContext";
@@ -110,12 +109,20 @@ export default function DiscountSell() {
   const [validatingKey, setValidatingKey] = useState(false);
   const [executing, setExecuting] = useState(false);
 
-  // QR Scanner
+  // QR Scanner — uses jsQR scanner ported from mobile.lanapays.us
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [isCameraReady, setIsCameraReady] = useState(false);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const hasScannedRef = useRef(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { isScanning: isCameraReady, error: scanError } = useJsQRScanner({
+    enabled: isScannerOpen,
+    videoRef,
+    canvasRef,
+    onScan: (decoded) => {
+      setPrivateKey(decoded.trim());
+      setIsScannerOpen(false);
+      toast.success("QR code scanned successfully");
+    },
+  });
 
   // Step 5: Result
   const [txResult, setTxResult] = useState<{
@@ -302,55 +309,7 @@ export default function DiscountSell() {
     return null;
   };
 
-  // QR Scanner — uses shared iOS-friendly camera picker (avoids telephoto)
-  const startScanner = useCallback(async () => {
-    setScanError(null);
-    try {
-      // Wait one frame for the qr-reader-discount div to mount
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-      const scanner = new Html5Qrcode("qr-reader-discount");
-      scannerRef.current = scanner;
-      await startQRScanner(
-        scanner,
-        DEFAULT_QR_CONFIG,
-        (decodedText) => {
-          if (hasScannedRef.current) return;
-          hasScannedRef.current = true;
-          setPrivateKey(decodedText.trim());
-          stopScanner();
-          setIsScannerOpen(false);
-          toast.success("QR code scanned successfully");
-        },
-      );
-      setIsCameraReady(true);
-    } catch (err: any) {
-      console.error("Failed to start scanner:", err);
-      if (err instanceof QRCameraError) {
-        setScanError(err.message);
-      } else {
-        setScanError(`Camera error: ${err?.message || err?.name || "Please check permissions."}`);
-      }
-    }
-  }, []);
-
-  const stopScanner = useCallback(async () => {
-    if (scannerRef.current) {
-      try { await scannerRef.current.stop(); } catch {}
-      scannerRef.current = null;
-      setIsCameraReady(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isScannerOpen) {
-      hasScannedRef.current = false;
-      const timer = setTimeout(startScanner, 300);
-      return () => clearTimeout(timer);
-    } else {
-      stopScanner();
-    }
-  }, [isScannerOpen, startScanner, stopScanner]);
+  // (QR scanner lifecycle managed by useJsQRScanner above)
 
   const executeSell = async () => {
     if (!session?.lanaPrivateKey || !session?.nostrHexId) {
@@ -1355,10 +1314,18 @@ export default function DiscountSell() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div
-              id="qr-reader-discount"
-              className="rounded-xl overflow-hidden bg-black min-h-[200px] sm:min-h-[280px]"
-            />
+            <div className="relative rounded-xl overflow-hidden bg-black min-h-[200px] sm:min-h-[280px] aspect-square">
+              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+              <canvas ref={canvasRef} className="hidden" />
+              {isCameraReady && (
+                <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute top-2 left-2 w-10 h-10 border-l-4 border-t-4 border-primary rounded-tl-lg" />
+                  <div className="absolute top-2 right-2 w-10 h-10 border-r-4 border-t-4 border-primary rounded-tr-lg" />
+                  <div className="absolute bottom-2 left-2 w-10 h-10 border-l-4 border-b-4 border-primary rounded-bl-lg" />
+                  <div className="absolute bottom-2 right-2 w-10 h-10 border-r-4 border-b-4 border-primary rounded-br-lg" />
+                </div>
+              )}
+            </div>
             {!isCameraReady && !scanError && (
               <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />

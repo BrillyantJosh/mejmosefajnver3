@@ -32,8 +32,7 @@ import {
   X,
   QrCode,
 } from "lucide-react";
-import { Html5Qrcode } from "html5-qrcode";
-import { DEFAULT_QR_CONFIG, QRCameraError, startQRScanner } from "@/lib/qr-camera";
+import { useJsQRScanner } from "@/lib/qr-camera";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
@@ -71,14 +70,21 @@ export default function ShopSell() {
   const [inputAmount, setInputAmount] = useState("");
   const [selectedWalletId, setSelectedWalletId] = useState("");
 
-  // Scanning step
+  // Scanning step — jsQR-based scanner ported from mobile.lanapays.us
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannedKey, setScannedKey] = useState("");
   const [buyerWallet, setBuyerWallet] = useState("");
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [isCameraReady, setIsCameraReady] = useState(false);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const hasScannedRef = useRef(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { isScanning: isCameraReady, error: scanError } = useJsQRScanner({
+    enabled: isScannerOpen,
+    videoRef,
+    canvasRef,
+    onScan: (decoded) => {
+      handleQRScan(decoded);
+      setIsScannerOpen(false);
+    },
+  });
 
   // Processing / result
   const [isProcessing, setIsProcessing] = useState(false);
@@ -144,70 +150,14 @@ export default function ShopSell() {
       return;
     }
     setStep("scanning");
-    setScanError(null);
     setScannedKey("");
     setBuyerWallet("");
     // Open scanner immediately
     setTimeout(() => setIsScannerOpen(true), 100);
   };
 
-  // Scanner lifecycle — uses shared iOS-friendly camera picker (avoids telephoto)
-  const startScanner = async () => {
-    try {
-      // Wait one frame for the qr-reader-shop-sell div to mount
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-      const scanner = new Html5Qrcode("qr-reader-shop-sell");
-      scannerRef.current = scanner;
-
-      await startQRScanner(
-        scanner,
-        DEFAULT_QR_CONFIG,
-        (decodedText) => {
-          if (hasScannedRef.current) return;
-          hasScannedRef.current = true;
-          handleQRScan(decodedText);
-          stopScanner();
-          setIsScannerOpen(false);
-        },
-      );
-      setIsCameraReady(true);
-    } catch (err: any) {
-      console.error("Failed to start scanner:", err);
-      if (err instanceof QRCameraError) {
-        setScanError(err.message);
-      } else {
-        setScanError(`Camera error: ${err?.message || err?.name || "Please check permissions."}`);
-      }
-    }
-  };
-
-  const stopScanner = async () => {
-    if (scannerRef.current) {
-      try {
-        await scannerRef.current.stop();
-      } catch {
-        // ignore
-      }
-      scannerRef.current = null;
-      setIsCameraReady(false);
-    }
-  };
-
-  // Start/stop scanner when dialog opens/closes
-  useEffect(() => {
-    if (isScannerOpen) {
-      hasScannedRef.current = false;
-      setIsCameraReady(false);
-      const timer = setTimeout(() => startScanner(), 150);
-      return () => clearTimeout(timer);
-    } else {
-      stopScanner();
-    }
-  }, [isScannerOpen]);
-
-  const handleCloseScanner = async () => {
-    await stopScanner();
+  // (QR scanner lifecycle managed by useJsQRScanner above)
+  const handleCloseScanner = () => {
     setIsScannerOpen(false);
   };
 
@@ -984,10 +934,18 @@ export default function ShopSell() {
 
           {/* Camera viewport */}
           <div className="space-y-3">
-            <div
-              id="qr-reader-shop-sell"
-              className="w-full rounded-lg overflow-hidden"
-            />
+            <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-black">
+              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+              <canvas ref={canvasRef} className="hidden" />
+              {isCameraReady && (
+                <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute top-2 left-2 w-10 h-10 border-l-4 border-t-4 border-primary rounded-tl-lg" />
+                  <div className="absolute top-2 right-2 w-10 h-10 border-r-4 border-t-4 border-primary rounded-tr-lg" />
+                  <div className="absolute bottom-2 left-2 w-10 h-10 border-l-4 border-b-4 border-primary rounded-bl-lg" />
+                  <div className="absolute bottom-2 right-2 w-10 h-10 border-r-4 border-b-4 border-primary rounded-br-lg" />
+                </div>
+              )}
+            </div>
 
             {!isCameraReady && !scanError && (
               <div className="flex items-center justify-center py-4 text-muted-foreground">
