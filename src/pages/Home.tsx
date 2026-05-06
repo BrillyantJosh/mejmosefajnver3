@@ -3,10 +3,9 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle, Video as VideoIcon, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt, Zap, Users, ExternalLink, Hourglass, Clock } from "lucide-react";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, Video as VideoIcon, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import LazyYouTube from "@/components/LazyYouTube";
-import { finalizeEvent } from "nostr-tools";
 import { formatDistanceToNow, format, endOfWeek } from "date-fns";
 import { useNostrEventsAll, LanaEvent } from "@/hooks/useNostrEvents";
 import { useRecentConversations } from "@/hooks/useRecentConversations";
@@ -16,28 +15,6 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
-const MEET_BASE_URL = "https://meet.lanaloves.us";
-
-function createMeetAuthToken(session: { nostrHexId: string; nostrPrivateKey: string; profileName?: string; profileDisplayName?: string; profileLang?: string }): string {
-  const privateKeyBytes = new Uint8Array(
-    session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
-  );
-  const content = JSON.stringify({
-    name: session.profileDisplayName || session.profileName || 'Anon',
-    lang: session.profileLang || 'sl',
-  });
-  const eventTemplate = {
-    kind: 22242,
-    created_at: Math.floor(Date.now() / 1000),
-    tags: [['relay', 'meet.lanaloves.us'], ['action', 'join']],
-    content,
-    pubkey: session.nostrHexId,
-  };
-  const signedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
-  const json = JSON.stringify(signedEvent);
-  return btoa(unescape(encodeURIComponent(json)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
 
 interface ActiveVotingProposal {
   id: string;
@@ -384,99 +361,7 @@ export default function Home() {
     gcTime: 10 * 60 * 1000,
   });
 
-  // --- Active Meet Rooms + Upcoming Scheduled Meetings ---
-  type LiveRoom = { roomId: string; participants: number; title?: string; createdByName?: string };
-  type UpcomingMeeting = { id: string; roomId: string; title: string; scheduledAt: string; createdByName: string };
-  const { data: meetData = { live: [] as LiveRoom[], upcoming: [] as UpcomingMeeting[] } } = useQuery<{
-    live: LiveRoom[];
-    upcoming: UpcomingMeeting[];
-  }>({
-    queryKey: ['meet-home', session?.nostrHexId],
-    queryFn: async () => {
-      const [roomsRes, meetingsRes] = await Promise.allSettled([
-        fetch(`${MEET_BASE_URL}/api/rooms`),
-        session ? fetch(`${MEET_BASE_URL}/api/meetings?auth=${createMeetAuthToken(session)}`) : Promise.reject('no session'),
-      ]);
-
-      const live: LiveRoom[] = [];
-      const upcoming: UpcomingMeeting[] = [];
-
-      if (roomsRes.status === 'fulfilled' && roomsRes.value.ok) {
-        const data = await roomsRes.value.json();
-        for (const r of data.rooms || []) {
-          if (r.participants > 0) {
-            live.push({ roomId: r.roomId, participants: r.participants });
-          }
-        }
-      }
-
-      if (meetingsRes.status === 'fulfilled' && meetingsRes.value.ok) {
-        const data = await meetingsRes.value.json();
-        const nowMs = Date.now();
-        for (const m of data.meetings || []) {
-          // Merge metadata into live rooms
-          const existing = live.find(r => r.roomId === m.roomId);
-          if (existing) {
-            existing.title = m.title;
-            existing.createdByName = m.createdByName;
-            continue;
-          }
-          // Upcoming = scheduled in the future and not currently live
-          if (!m.isLive && new Date(m.scheduledAt).getTime() > nowMs) {
-            upcoming.push({
-              id: m.id,
-              roomId: m.roomId,
-              title: m.title,
-              scheduledAt: m.scheduledAt,
-              createdByName: m.createdByName,
-            });
-          }
-        }
-        upcoming.sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
-      }
-
-      return { live, upcoming };
-    },
-    staleTime: 15 * 1000,
-    gcTime: 60 * 1000,
-    refetchInterval: 15 * 1000,
-  });
-  const activeMeetRooms = meetData.live;
-  const upcomingMeetings = meetData.upcoming;
-
-  // Live tick for countdown
-  const [meetNowMs, setMeetNowMs] = useState<number>(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setMeetNowMs(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const formatMeetCountdown = (iso: string): string => {
-    const diffSec = Math.round((new Date(iso).getTime() - meetNowMs) / 1000);
-    if (diffSec < 30) return 'začenja se zdaj';
-    const days = Math.floor(diffSec / 86400);
-    const hours = Math.floor((diffSec % 86400) / 3600);
-    const minutes = Math.floor((diffSec % 3600) / 60);
-    if (days > 0) return `čez ${days}d ${hours}h`;
-    if (hours > 0) return `čez ${hours}h ${minutes}min`;
-    if (minutes > 0) return `čez ${minutes}min`;
-    return `čez ${diffSec}s`;
-  };
-
-  const meetTzLabel = useMemo(() => {
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-      const offsetMin = -new Date().getTimezoneOffset();
-      const sign = offsetMin >= 0 ? '+' : '-';
-      const abs = Math.abs(offsetMin);
-      const h = Math.floor(abs / 60);
-      const m = abs % 60;
-      const off = m === 0 ? `GMT${sign}${h}` : `GMT${sign}${h}:${String(m).padStart(2, '0')}`;
-      return `${tz} (${off})`;
-    } catch {
-      return 'UTC';
-    }
-  }, []);
+  // (Lana Meet sidebar cards removed by request — module remains accessible via /meet)
 
   // Filter online events: this week only, upcoming/active
   const now = new Date();
@@ -679,129 +564,6 @@ export default function Home() {
 
           {/* Sidebar — right */}
           <div className="w-full lg:w-72 flex-shrink-0 space-y-4">
-            {/* Lana Meet — Active Rooms */}
-            {session && activeMeetRooms.length > 0 && (
-              <Card className="border-green-400/40 dark:border-green-600/40 bg-gradient-to-br from-green-500/5 to-emerald-500/5">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Zap className="h-5 w-5 text-green-500" />
-                    Lana Meet
-                    <Badge variant="default" className="ml-auto bg-green-500 text-[10px] px-1.5 animate-pulse">
-                      LIVE
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-1.5">
-                    {activeMeetRooms.slice(0, 4).map((room) => (
-                      <button
-                        key={room.roomId}
-                        onClick={() => {
-                          const token = createMeetAuthToken(session);
-                          window.open(`${MEET_BASE_URL}/${room.roomId}?lana_token=${token}`, '_blank');
-                        }}
-                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-green-500/10 transition-colors text-left group"
-                      >
-                        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm truncate block">{room.title || room.roomId}</span>
-                          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                            <span className="flex items-center gap-0.5">
-                              <Users className="h-2.5 w-2.5" />
-                              {room.participants}
-                            </span>
-                            {room.createdByName && <span>• {room.createdByName}</span>}
-                          </span>
-                        </div>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                  <Link
-                    to="/meet"
-                    className="flex items-center justify-center px-3 py-2 mt-2 rounded-lg text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-500/10 transition-colors"
-                  >
-                    Open Lana Meet →
-                  </Link>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Lana Meet — Upcoming Scheduled Meetings */}
-            {session && upcomingMeetings.length > 0 && (
-              <Card className="border-blue-400/40 dark:border-blue-600/40 bg-gradient-to-br from-blue-500/5 to-indigo-500/5">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-blue-500" />
-                    Načrtovani sestanki
-                    <Badge variant="outline" className="ml-auto text-[10px] px-1.5">
-                      {upcomingMeetings.length}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-1.5">
-                    {upcomingMeetings.slice(0, 4).map((m) => (
-                      <button
-                        key={m.id}
-                        onClick={() => {
-                          const token = createMeetAuthToken(session);
-                          window.open(`${MEET_BASE_URL}/${m.roomId}?lana_token=${token}`, '_blank');
-                        }}
-                        className="w-full flex items-start gap-2.5 px-2.5 py-2 rounded-lg hover:bg-blue-500/10 transition-colors text-left group"
-                      >
-                        <Hourglass className="h-3.5 w-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm truncate block">{m.title}</span>
-                          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground mt-0.5">
-                            <span className="font-medium text-blue-600 dark:text-blue-400">
-                              {formatMeetCountdown(m.scheduledAt)}
-                            </span>
-                            <span className="flex items-center gap-0.5">
-                              <Clock className="h-2.5 w-2.5" />
-                              {new Date(m.scheduledAt).toLocaleString(undefined, {
-                                day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                              })}
-                            </span>
-                            {m.createdByName && <span>• {m.createdByName}</span>}
-                          </span>
-                        </div>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5" />
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-2 px-2.5" title={meetTzLabel}>
-                    <Globe className="h-2.5 w-2.5" />
-                    {meetTzLabel}
-                  </p>
-                  <Link
-                    to="/meet/schedule"
-                    className="flex items-center justify-center px-3 py-2 mt-1 rounded-lg text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                  >
-                    Vsi sestanki →
-                  </Link>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Lana Meet — No active rooms AND no upcoming, show quick link */}
-            {session && activeMeetRooms.length === 0 && upcomingMeetings.length === 0 && (
-              <Link to="/meet" className="block">
-                <Card className="hover:shadow-md transition-shadow hover:border-green-400/40">
-                  <CardContent className="py-3 px-4 flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-full bg-green-500/10 flex items-center justify-center flex-shrink-0">
-                      <Zap className="h-4.5 w-4.5 text-green-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">Lana Meet</p>
-                      <p className="text-[10px] text-muted-foreground">Start an instant video call</p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  </CardContent>
-                </Card>
-              </Link>
-            )}
-
             {/* Pending Invoices Card */}
             {session && pendingInvoices.length > 0 && (
               <Link to="/shop/pay" className="block">
