@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, Plus, X, Calendar, MapPin, Globe, Link2, ImagePlus, ArrowLeft, Wallet, Map } from "lucide-react";
+import { Loader2, Plus, X, Calendar, MapPin, Globe, Link2, ImagePlus, ArrowLeft, Wallet, Map, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import LocationPicker from "@/components/LocationPicker";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
@@ -86,7 +86,7 @@ export default function EditEvent() {
   // Online fields
   const [onlineUrl, setOnlineUrl] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [youtubeRecordingUrl, setYoutubeRecordingUrl] = useState("");
+  const [youtubeRecordingUrls, setYoutubeRecordingUrls] = useState<string[]>([""]);
   
   // Physical fields
   const [location, setLocation] = useState("");
@@ -200,7 +200,8 @@ export default function EditEvent() {
 
       // YouTube URLs — loaded for both online and physical events
       setYoutubeUrl(getTagValue('youtube') || '');
-      setYoutubeRecordingUrl(getTagValue('youtube_recording') || '');
+      const recordings = getAllTagValues('youtube_recording').filter(Boolean);
+      setYoutubeRecordingUrls(recordings.length > 0 ? recordings : ['']);
 
       setCoverUrl(getTagValue('cover') || '');
       if (getTagValue('cover')) {
@@ -453,11 +454,13 @@ export default function EditEvent() {
       if (youtubeUrl.trim()) {
         tags.push(["youtube", youtubeUrl.trim()]);
       }
-      let recordingUrl = youtubeRecordingUrl.trim();
-      if (recordingUrl && !recordingUrl.startsWith('http://') && !recordingUrl.startsWith('https://')) {
-        recordingUrl = 'https://' + recordingUrl;
-      }
-      if (recordingUrl) {
+      // Multiple recording URLs — one tag per URL
+      for (const raw of youtubeRecordingUrls) {
+        let recordingUrl = (raw || '').trim();
+        if (!recordingUrl) continue;
+        if (!recordingUrl.startsWith('http://') && !recordingUrl.startsWith('https://')) {
+          recordingUrl = 'https://' + recordingUrl;
+        }
         tags.push(["youtube_recording", recordingUrl]);
       }
 
@@ -876,14 +879,46 @@ export default function EditEvent() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="youtubeRecordingUrl">{t('form.youtubeRecordingUrl')}</Label>
-              <Input
-                id="youtubeRecordingUrl"
-                type="url"
-                value={youtubeRecordingUrl}
-                onChange={(e) => setYoutubeRecordingUrl(e.target.value)}
-                placeholder="https://youtu.be/XYZ123"
-              />
+              <Label>{t('form.youtubeRecordingUrl')}</Label>
+              <div className="space-y-2">
+                {youtubeRecordingUrls.map((url, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <Input
+                      type="url"
+                      value={url}
+                      onChange={(e) => {
+                        const next = [...youtubeRecordingUrls];
+                        next[idx] = e.target.value;
+                        setYoutubeRecordingUrls(next);
+                      }}
+                      placeholder={idx === 0 ? "https://youtu.be/XYZ123" : `https://youtu.be/... (#${idx + 1})`}
+                    />
+                    {youtubeRecordingUrls.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setYoutubeRecordingUrls(youtubeRecordingUrls.filter((_, i) => i !== idx));
+                        }}
+                        title={t('form.recordingRemove')}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setYoutubeRecordingUrls([...youtubeRecordingUrls, ""])}
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('form.recordingAdd')}
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground">{t('form.youtubeRecordingHint')}</p>
             </div>
           </CardContent>

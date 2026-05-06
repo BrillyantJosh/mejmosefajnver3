@@ -135,8 +135,8 @@ export default function PastEvents() {
       </div>
       
       {filteredEvents.map((event) => {
-        const videoId = getYouTubeId(event.youtubeRecordingUrl);
-        
+        const urls = event.youtubeRecordingUrls?.length ? event.youtubeRecordingUrls : [event.youtubeRecordingUrl];
+
         return (
           <Card key={event.dTag} className="overflow-hidden">
             <CardHeader className="pb-2">
@@ -158,6 +158,12 @@ export default function PastEvents() {
                       <><MapPin className="h-3 w-3 mr-1" /> Live</>
                     )}
                   </Badge>
+                  {urls.length > 1 && (
+                    <Badge variant="secondary" className="gap-1">
+                      <Play className="h-3 w-3" />
+                      {urls.length}
+                    </Badge>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -165,37 +171,50 @@ export default function PastEvents() {
                 {format(event.start, "d. M. yyyy")}
               </div>
             </CardHeader>
-            
-            <CardContent className="pt-2">
+
+            <CardContent className="pt-2 space-y-3">
               {event.cover && (
-                <img 
-                  src={event.cover} 
+                <img
+                  src={event.cover}
                   alt={event.title}
-                  className="w-full h-32 object-cover rounded-md mb-4"
+                  className="w-full h-32 object-cover rounded-md"
                 />
               )}
-              
-              {videoId ? (
-                <div className="aspect-video w-full rounded-md overflow-hidden">
-                  <iframe
-                    src={`https://www.youtube.com/embed/${videoId}`}
-                    title={event.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="w-full h-full"
-                  />
-                </div>
-              ) : (
-                <a 
-                  href={event.youtubeRecordingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-primary hover:underline"
-                >
-                  <Play className="h-4 w-4" />
-                  {t('past.watchRecording')}
-                </a>
-              )}
+
+              {/* Video gallery — single URL spans full width, multiple are gridded */}
+              <div
+                className={
+                  urls.length === 1
+                    ? 'grid grid-cols-1 gap-3'
+                    : 'grid grid-cols-1 sm:grid-cols-2 gap-3'
+                }
+              >
+                {urls.map((url, idx) => {
+                  const videoId = getYouTubeId(url);
+                  return videoId ? (
+                    <div key={`${url}-${idx}`} className="aspect-video w-full rounded-md overflow-hidden bg-black/5">
+                      <iframe
+                        src={`https://www.youtube.com/embed/${videoId}`}
+                        title={`${event.title} — Part ${idx + 1}`}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full"
+                      />
+                    </div>
+                  ) : (
+                    <a
+                      key={`${url}-${idx}`}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-primary hover:underline"
+                    >
+                      <Play className="h-4 w-4" />
+                      {t('past.watchRecording')} {urls.length > 1 ? `#${idx + 1}` : ''}
+                    </a>
+                  );
+                })}
+              </div>
             </CardContent>
           </Card>
         );

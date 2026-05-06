@@ -157,6 +157,7 @@ export default function EventDetail() {
         onlineUrl,
         youtubeUrl: getTagValue('youtube'),
         youtubeRecordingUrl: getTagValue('youtube_recording'),
+        youtubeRecordingUrls: getAllTagValues('youtube_recording'),
         location: getTagValue('location'),
         lat,
         lon,
@@ -490,7 +491,7 @@ export default function EventDetail() {
           )}
 
           {/* YouTube Videos — shown for both online and physical events */}
-          {(event.youtubeUrl || event.youtubeRecordingUrl) && (() => {
+          {(event.youtubeUrl || (event.youtubeRecordingUrls && event.youtubeRecordingUrls.length > 0) || event.youtubeRecordingUrl) && (() => {
             const getYouTubeId = (url: string): string | null => {
               const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
               const match = url.match(regExp);
@@ -498,26 +499,35 @@ export default function EventDetail() {
             };
 
             const promoId = event.youtubeUrl ? getYouTubeId(event.youtubeUrl) : null;
-            const recordingId = event.youtubeRecordingUrl ? getYouTubeId(event.youtubeRecordingUrl) : null;
+            const recordingUrls = (event.youtubeRecordingUrls && event.youtubeRecordingUrls.length > 0)
+              ? event.youtubeRecordingUrls
+              : (event.youtubeRecordingUrl ? [event.youtubeRecordingUrl] : []);
+            const recordingIds = recordingUrls
+              .map((u: string) => ({ url: u, id: getYouTubeId(u) }))
+              .filter((r: { url: string; id: string | null }) => r.id);
 
-            if (!promoId && !recordingId) return null;
+            if (!promoId && recordingIds.length === 0) return null;
 
             return (
               <div className="space-y-3">
-                {recordingId && (
-                  <div className="space-y-1">
+                {recordingIds.length > 0 && (
+                  <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <Youtube className="h-4 w-4 text-red-500" />
-                      <span>{t('detail.eventRecording')}</span>
+                      <span>{t('detail.eventRecording')}{recordingIds.length > 1 ? ` (${recordingIds.length})` : ''}</span>
                     </div>
-                    <div className="aspect-video w-full rounded-lg overflow-hidden">
-                      <iframe
-                        src={`https://www.youtube.com/embed/${recordingId}`}
-                        title={t('detail.eventRecording')}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="w-full h-full"
-                      />
+                    <div className={recordingIds.length === 1 ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-1 sm:grid-cols-2 gap-2'}>
+                      {recordingIds.map((r: { url: string; id: string | null }, idx: number) => (
+                        <div key={`${r.id}-${idx}`} className="aspect-video w-full rounded-lg overflow-hidden">
+                          <iframe
+                            src={`https://www.youtube.com/embed/${r.id}`}
+                            title={`${t('detail.eventRecording')} #${idx + 1}`}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            className="w-full h-full"
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

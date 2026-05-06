@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarPlus, Copy, Check, Trash2, Clock, Users, Video, RefreshCw, Globe, Lock, Search, X, UserPlus, Radio, ExternalLink } from "lucide-react";
+import { CalendarPlus, Copy, Check, Trash2, Clock, Users, Video, RefreshCw, Globe, Lock, Search, X, UserPlus, Radio, ExternalLink, Hourglass } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
 import { toast } from "sonner";
@@ -66,6 +66,59 @@ function isInPast(iso: string): boolean {
   return new Date(iso) < new Date();
 }
 
+// User's IANA timezone + UTC offset, e.g. "Europe/Ljubljana (GMT+2)"
+function getUserTimeZoneLabel(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const offsetMin = -new Date().getTimezoneOffset();
+    const sign = offsetMin >= 0 ? '+' : '-';
+    const abs = Math.abs(offsetMin);
+    const hours = Math.floor(abs / 60);
+    const mins = abs % 60;
+    const offsetStr = mins === 0 ? `GMT${sign}${hours}` : `GMT${sign}${hours}:${String(mins).padStart(2, '0')}`;
+    return `${tz} (${offsetStr})`;
+  } catch {
+    return 'UTC';
+  }
+}
+
+// Format a countdown like "in 2d 4h", "in 35m", "starting now", "1h ago"
+function formatCountdown(iso: string, nowMs: number, lang: string): string {
+  const targetMs = new Date(iso).getTime();
+  const diffSec = Math.round((targetMs - nowMs) / 1000);
+  const absSec = Math.abs(diffSec);
+  const isPast = diffSec < 0;
+
+  // Localized labels
+  const L = {
+    sl: { now: 'začenja se zdaj', in: 'čez', ago: 'pred', d: 'd', h: 'h', m: 'min', s: 's' },
+    de: { now: 'beginnt jetzt', in: 'in', ago: 'vor', d: 'T', h: 'Std', m: 'Min', s: 'Sek' },
+    hu: { now: 'most kezdődik', in: '', ago: 'óta', d: 'n', h: 'ó', m: 'p', s: 'mp' },
+    it: { now: 'inizia ora', in: 'tra', ago: 'fa', d: 'g', h: 'h', m: 'min', s: 's' },
+    en: { now: 'starting now', in: 'in', ago: 'ago', d: 'd', h: 'h', m: 'min', s: 's' },
+  } as const;
+  const l = (L as any)[lang] || L.en;
+
+  if (absSec < 30) return l.now;
+
+  const days = Math.floor(absSec / 86400);
+  const hours = Math.floor((absSec % 86400) / 3600);
+  const minutes = Math.floor((absSec % 3600) / 60);
+  const seconds = absSec % 60;
+
+  let parts: string[];
+  if (days > 0) parts = [`${days}${l.d}`, `${hours}${l.h}`];
+  else if (hours > 0) parts = [`${hours}${l.h}`, `${minutes}${l.m}`];
+  else if (minutes > 0) parts = [`${minutes}${l.m}`];
+  else parts = [`${seconds}${l.s}`];
+
+  const body = parts.join(' ');
+  if (isPast) {
+    return lang === 'hu' ? `${body} ${l.ago}` : `${l.ago} ${body}`;
+  }
+  return l.in ? `${l.in} ${body}` : body;
+}
+
 export default function MeetSchedule() {
   const { session } = useAuth();
   const { t, lang } = useTranslation(meetTranslations);
@@ -84,6 +137,16 @@ export default function MeetSchedule() {
   const [joinRoomId, setJoinRoomId] = useState<string | null>(null);
   const [joinMeetingCreator, setJoinMeetingCreator] = useState<string | null>(null);
   const [joinStreamKey, setJoinStreamKey] = useState('');
+
+  // Live ticker — updates countdown every second
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // User's local time zone (e.g. "Europe/Ljubljana (GMT+2)")
+  const tzLabel = useMemo(() => getUserTimeZoneLabel(), []);
 
   // Date formatting based on current language
   const formatDateTime = useCallback((iso: string): string => {
@@ -292,6 +355,10 @@ export default function MeetSchedule() {
               <Input id="meet-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
             </div>
           </div>
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <Globe className="h-3 w-3" />
+            {tzLabel}
+          </p>
 
           {/* Visibility Toggle */}
           <div className="space-y-1.5">
@@ -445,7 +512,7 @@ export default function MeetSchedule() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
                           {formatDateTime(m.scheduledAt)}
@@ -456,6 +523,22 @@ export default function MeetSchedule() {
                             {m.participantCount}
                           </span>
                         )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs">
+                        {!m.isLive && (
+                          <span
+                            className={`flex items-center gap-1 font-medium ${
+                              past ? 'text-muted-foreground' : 'text-primary'
+                            }`}
+                          >
+                            <Hourglass className="h-3 w-3" />
+                            {formatCountdown(m.scheduledAt, nowMs, lang)}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1 text-muted-foreground" title={tzLabel}>
+                          <Globe className="h-3 w-3" />
+                          {tzLabel}
+                        </span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {m.createdByName}

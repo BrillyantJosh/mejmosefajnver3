@@ -1,13 +1,27 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { SimplePool } from "nostr-tools";
+import { SimplePool, finalizeEvent } from "nostr-tools";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Calendar, Globe, MapPin, Edit, Users, ChevronDown, ChevronUp, Plus, QrCode, Download, CheckCircle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Calendar, Globe, MapPin, Edit, Users, ChevronDown, ChevronUp, Plus, QrCode,
+  Download, CheckCircle, Trash2, Loader2, ChevronLeft, ChevronRight, Copy,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -60,13 +74,19 @@ interface EventCardWithRegistrationsProps {
   event: LanaEvent;
   registrations: EventRegistration[];
   onEdit: (eventId: string) => void;
+  onCopy: (event: LanaEvent) => void;
+  onDelete: (event: LanaEvent) => Promise<void>;
+  isDeleting: boolean;
 }
 
-function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardWithRegistrationsProps) {
+function EventCardWithRegistrations({ event, registrations, onEdit, onCopy, onDelete, isDeleting }: EventCardWithRegistrationsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const { t } = useTranslation(eventsTranslations);
   const status = getEventStatus(event);
+  // An event is "future" (and therefore deletable) only if its start time is still ahead of now.
+  const isFuture = event.start.getTime() > Date.now();
   const isPast = event.end ? event.end < new Date() : new Date(event.start.getTime() + 2 * 60 * 60 * 1000) < new Date();
 
   const goingCount = registrations.filter(r => r.status === 'going').length;
@@ -137,17 +157,70 @@ function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardW
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <h3 className="font-semibold truncate">{event.title}</h3>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  className="h-8 w-8 flex-shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit(event.id);
-                  }}
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(event.id);
+                    }}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    title={t('my.copy')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCopy(event);
+                    }}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                  {isFuture && (
+                    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={(e) => e.stopPropagation()}
+                          disabled={isDeleting}
+                          title={t('my.delete')}
+                        >
+                          {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>{t('my.deleteConfirmTitle')}</AlertDialogTitle>
+                          <AlertDialogDescription>{t('my.deleteConfirmDesc')}</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel disabled={isDeleting}>
+                            {t('my.deleteConfirmCancel')}
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            disabled={isDeleting}
+                            onClick={async (e) => {
+                              e.preventDefault();
+                              await onDelete(event);
+                              setConfirmOpen(false);
+                            }}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            {isDeleting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                            {t('my.deleteConfirmConfirm')}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                </div>
               </div>
               
               <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
@@ -229,6 +302,8 @@ function EventCardWithRegistrations({ event, registrations, onEdit }: EventCardW
   );
 }
 
+const PAGE_SIZE = 10;
+
 export default function MyEvents() {
   const navigate = useNavigate();
   const { session } = useAuth();
@@ -236,6 +311,8 @@ export default function MyEvents() {
   const { parameters: systemParameters } = useSystemParameters();
   const [events, setEvents] = useState<LanaEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const relays = systemParameters?.relays || [];
 
@@ -367,9 +444,11 @@ export default function MyEvents() {
         }
       }
 
-      // Sort by start date ascending
-      parsedEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
+      // Sort by start date descending — most recently scheduled / future events on top.
+      // Past events (oldest by start) end up at the bottom.
+      parsedEvents.sort((a, b) => b.start.getTime() - a.start.getTime());
       setEvents(parsedEvents);
+      setPage(1);
 
     } catch (err) {
       console.error('Error fetching my events:', err);
@@ -381,6 +460,152 @@ export default function MyEvents() {
   useEffect(() => {
     fetchMyEvents();
   }, [fetchMyEvents]);
+
+  // ── Delete event (NIP-09 KIND 5 deletion request) ───────────────────────
+  const handleDeleteEvent = useCallback(async (event: LanaEvent) => {
+    if (!session?.nostrPrivateKey) return;
+
+    // Refuse to delete events that have already started — server / relay
+    // operators may also enforce this, but we guard client-side first.
+    if (event.start.getTime() <= Date.now()) {
+      toast({
+        title: t('my.deleteErrorTitle'),
+        description: t('my.deleteErrorPast'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (relays.length === 0) {
+      toast({
+        title: t('my.deleteErrorTitle'),
+        description: t('my.deleteErrorRelays'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setDeletingEventId(event.id);
+    const pool = new SimplePool();
+    try {
+      const privateKeyBytes = new Uint8Array(
+        session.nostrPrivateKey.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)),
+      );
+
+      // KIND 5 deletion request (NIP-09).
+      // Use both `e` (event id) and `a` (parameterized replaceable address)
+      // so relays that index 36677 by d-tag also drop the event.
+      const aTag = `36677:${event.pubkey}:${event.dTag}`;
+      const deletionEvent = finalizeEvent(
+        {
+          kind: 5,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            ['e', event.id],
+            ['a', aTag],
+            ['k', '36677'],
+          ],
+          content: 'Event cancelled and deleted by organizer',
+        },
+        privateKeyBytes,
+      );
+
+      const results = await Promise.allSettled(pool.publish(relays, deletionEvent));
+      const successCount = results.filter((r) => r.status === 'fulfilled').length;
+
+      if (successCount === 0) {
+        toast({
+          title: t('my.deleteErrorTitle'),
+          description: t('my.deleteErrorRelays'),
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Optimistic local removal
+      setEvents((prev) => prev.filter((e) => e.id !== event.id));
+      toast({
+        title: t('my.deleteToastTitle'),
+        description: t('my.deleteToastDesc', { count: String(successCount) }),
+      });
+    } catch (err) {
+      console.error('Delete event failed:', err);
+      toast({
+        title: t('my.deleteErrorTitle'),
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingEventId(null);
+      pool.close(relays);
+    }
+  }, [session?.nostrPrivateKey, relays, t]);
+
+  // ── Copy event (prefill AddEvent form with values from an existing one) ─
+  const handleCopyEvent = useCallback((event: LanaEvent) => {
+    // Pre-fill schedule entries from the event. Multi-day events use schedule[],
+    // simple events have just start/end.
+    const formatLocalDate = (d: Date): string => {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+    const formatLocalTime = (d: Date): string => {
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    };
+
+    let schedule: Array<{ date: string; startTime: string; endTime: string }>;
+    if (event.schedule && event.schedule.length > 0) {
+      schedule = event.schedule.map((s) => ({
+        date: formatLocalDate(s.start),
+        startTime: formatLocalTime(s.start),
+        endTime: s.end ? formatLocalTime(s.end) : '',
+      }));
+    } else {
+      schedule = [{
+        date: formatLocalDate(event.start),
+        startTime: formatLocalTime(event.start),
+        endTime: event.end ? formatLocalTime(event.end) : '',
+      }];
+    }
+
+    const prefill = {
+      title: event.title,
+      content: event.content || '',
+      eventType: event.eventType || 'awareness',
+      language: event.language || 'sl',
+      timezone: event.timezone,
+      isOnline: event.isOnline,
+      onlineUrl: event.onlineUrl || '',
+      youtubeUrl: event.youtubeUrl || '',
+      youtubeRecordingUrls: event.youtubeRecordingUrls && event.youtubeRecordingUrls.length > 0
+        ? event.youtubeRecordingUrls
+        : (event.youtubeRecordingUrl ? [event.youtubeRecordingUrl] : ['']),
+      location: event.location || '',
+      lat: event.lat !== undefined ? String(event.lat) : '',
+      lon: event.lon !== undefined ? String(event.lon) : '',
+      capacity: event.capacity !== undefined ? String(event.capacity) : '',
+      coverUrl: event.cover || '',
+      donationWallet: event.donationWallet || '',
+      donationWalletUnreg: event.donationWalletUnreg || '',
+      fiatValue: event.fiatValue !== undefined ? String(event.fiatValue) : '',
+      attachments: event.attachments && event.attachments.length > 0 ? event.attachments : [''],
+      schedule,
+    };
+
+    navigate('/events/add', { state: { prefill } });
+  }, [navigate]);
+
+  // ── Pagination ──────────────────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(events.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedEvents = useMemo(
+    () => events.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [events, safePage],
+  );
 
   if (loading) {
     return (
@@ -428,16 +653,47 @@ export default function MyEvents() {
           <p className="text-muted-foreground">{t('my.noEvents')}</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {events.map(event => (
-            <EventCardWithRegistrations
-              key={event.id}
-              event={event}
-              registrations={registrationsByEvent[event.dTag] || []}
-              onEdit={(id) => navigate(`/events/edit/${id}`)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="space-y-4">
+            {pagedEvents.map(event => (
+              <EventCardWithRegistrations
+                key={event.id}
+                event={event}
+                registrations={registrationsByEvent[event.dTag] || []}
+                onEdit={(id) => navigate(`/events/edit/${id}`)}
+                onCopy={handleCopyEvent}
+                onDelete={handleDeleteEvent}
+                isDeleting={deletingEventId === event.id}
+              />
+            ))}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-3 pt-6">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                {t('my.prev')}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {t('my.pageLabel', { page: String(safePage), total: String(totalPages) })}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage >= totalPages}
+              >
+                {t('my.next')}
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

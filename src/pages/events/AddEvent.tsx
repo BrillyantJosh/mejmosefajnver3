@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Plus, X, Calendar, MapPin, Globe, Link2, ImagePlus, Wallet, Map } from "lucide-react";
+import { Loader2, Plus, X, Calendar, MapPin, Globe, Link2, ImagePlus, Wallet, Map, Video, Check, Copy, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import LocationPicker from "@/components/LocationPicker";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
@@ -38,7 +39,66 @@ const LANGUAGES = [
   { value: 'sr', label: 'Srpski' }
 ];
 
+const LANA_MEET_BASE_URL = "https://meet.lanaloves.us";
+
+// Build NIP-22242 auth token (same shape as MeetSchedule.tsx)
+function createMeetAuthToken(session: { nostrHexId: string; nostrPrivateKey: string; profileName?: string; profileDisplayName?: string; profileLang?: string }): string {
+  const privateKeyBytes = new Uint8Array(
+    session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
+  );
+  const content = JSON.stringify({
+    name: session.profileDisplayName || session.profileName || 'Anon',
+    lang: session.profileLang || 'sl',
+  });
+  const eventTemplate = {
+    kind: 22242,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [['relay', 'meet.lanaloves.us'], ['action', 'join']],
+    content,
+    pubkey: session.nostrHexId,
+  };
+  const signedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
+  const json = JSON.stringify(signedEvent);
+  return btoa(unescape(encodeURIComponent(json)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function meetSlug(title: string): string {
+  return title.trim().toLowerCase()
+    .replace(/[čć]/g, 'c').replace(/[šś]/g, 's').replace(/[žź]/g, 'z')
+    .replace(/đ/g, 'd')
+    .replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+    .slice(0, 40) || 'event';
+}
+
+interface AddEventPrefill {
+  title?: string;
+  content?: string;
+  eventType?: string;
+  language?: string;
+  timezone?: string;
+  isOnline?: boolean;
+  onlineUrl?: string;
+  youtubeUrl?: string;
+  youtubeRecordingUrls?: string[];
+  location?: string;
+  lat?: string;
+  lon?: string;
+  capacity?: string;
+  coverUrl?: string;
+  donationWallet?: string;
+  donationWalletUnreg?: string;
+  fiatValue?: string;
+  attachments?: string[];
+  schedule?: Array<{ date: string; startTime: string; endTime: string }>;
+}
+
 export default function AddEvent() {
+  const routerLocation = useLocation();
+  const navigate = useNavigate();
+  // `prefill` is populated when this page is opened from "Copy event" on /events/my.
+  const prefill = (routerLocation.state as { prefill?: AddEventPrefill } | null)?.prefill;
+
   const { session } = useAuth();
   const { parameters: systemParameters } = useSystemParameters();
   const { t } = useTranslation(eventsTranslations);
@@ -61,43 +121,66 @@ export default function AddEvent() {
     .filter(l => l.ownerPubkey === session?.nostrHexId)
     .flatMap(l => l.wallets);
   
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(prefill?.isOnline ?? true);
   const [publishing, setPublishing] = useState(false);
   const [uploading, setUploading] = useState(false);
-  
-  // Form state
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [eventType, setEventType] = useState("awareness");
-  const [language, setLanguage] = useState("sl");
-  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
+
+  // Form state — initial values fall back to prefill (when cloning an event)
+  const [title, setTitle] = useState(prefill?.title ?? "");
+  const [content, setContent] = useState(prefill?.content ?? "");
+  const [eventType, setEventType] = useState(prefill?.eventType ?? "awareness");
+  const [language, setLanguage] = useState(prefill?.language ?? "sl");
+  const [timezone, setTimezone] = useState(prefill?.timezone ?? DEFAULT_TIMEZONE);
   // Schedule: array of {date, startTime, endTime} for multi-day support
-  const [schedule, setSchedule] = useState<Array<{date: string; startTime: string; endTime: string}>>([
-    { date: '', startTime: '', endTime: '' }
-  ]);
-  
+  const [schedule, setSchedule] = useState<Array<{date: string; startTime: string; endTime: string}>>(
+    prefill?.schedule && prefill.schedule.length > 0
+      ? prefill.schedule
+      : [{ date: '', startTime: '', endTime: '' }],
+  );
+
   // Online fields
-  const [onlineUrl, setOnlineUrl] = useState("");
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [youtubeRecordingUrl, setYoutubeRecordingUrl] = useState("");
-  
+  const [onlineUrl, setOnlineUrl] = useState(prefill?.onlineUrl ?? "");
+  const [creatingLanaMeet, setCreatingLanaMeet] = useState(false);
+  const [lanaMeetCreated, setLanaMeetCreated] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState(prefill?.youtubeUrl ?? "");
+  const [youtubeRecordingUrls, setYoutubeRecordingUrls] = useState<string[]>(
+    prefill?.youtubeRecordingUrls && prefill.youtubeRecordingUrls.length > 0
+      ? prefill.youtubeRecordingUrls
+      : [""],
+  );
+
   // Physical fields
-  const [location, setLocation] = useState("");
-  const [lat, setLat] = useState("");
-  const [lon, setLon] = useState("");
-  const [capacity, setCapacity] = useState("");
+  const [location, setLocation] = useState(prefill?.location ?? "");
+  const [lat, setLat] = useState(prefill?.lat ?? "");
+  const [lon, setLon] = useState(prefill?.lon ?? "");
+  const [capacity, setCapacity] = useState(prefill?.capacity ?? "");
   const [showMapPicker, setShowMapPicker] = useState(false);
-  
+
   // Optional fields
-  const [coverUrl, setCoverUrl] = useState("");
+  const [coverUrl, setCoverUrl] = useState(prefill?.coverUrl ?? "");
   const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [coverPreview, setCoverPreview] = useState("");
-  const [donationWallet, setDonationWallet] = useState("");
-  const [donationWalletUnreg, setDonationWalletUnreg] = useState("");
-  const [fiatValue, setFiatValue] = useState("");
-  const [attachments, setAttachments] = useState<string[]>([""]);
+  const [coverPreview, setCoverPreview] = useState(prefill?.coverUrl ?? "");
+  const [donationWallet, setDonationWallet] = useState(prefill?.donationWallet ?? "");
+  const [donationWalletUnreg, setDonationWalletUnreg] = useState(prefill?.donationWalletUnreg ?? "");
+  const [fiatValue, setFiatValue] = useState(prefill?.fiatValue ?? "");
+  const [attachments, setAttachments] = useState<string[]>(
+    prefill?.attachments && prefill.attachments.length > 0 ? prefill.attachments : [""],
+  );
   
   const relays = systemParameters?.relays || [];
+
+  // After consuming prefill on first render, clear router state so the user
+  // can refresh / navigate back without re-applying the clone.
+  useEffect(() => {
+    if (prefill) {
+      navigate(routerLocation.pathname, { replace: true, state: null });
+      toast({
+        title: t('my.copyToastTitle'),
+        description: t('my.copyToastDesc'),
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCoverSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -206,9 +289,62 @@ export default function AddEvent() {
     setAttachments(newAttachments);
   };
 
+  const handleCreateLanaMeet = async () => {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId) {
+      toast({ title: t('reg.error'), description: t('toast.loginToCreate'), variant: "destructive" });
+      return;
+    }
+    if (!title.trim()) {
+      toast({ title: t('reg.error'), description: t('toast.titleRequired'), variant: "destructive" });
+      return;
+    }
+    const firstEntry = schedule.find(s => s.date && s.startTime);
+    if (!firstEntry) {
+      toast({ title: t('reg.error'), description: t('toast.dateRequired'), variant: "destructive" });
+      return;
+    }
+
+    setCreatingLanaMeet(true);
+    try {
+      const tzOffset = getTimezoneOffset(timezone, new Date(`${firstEntry.date}T${firstEntry.startTime}`));
+      const scheduledAt = new Date(`${firstEntry.date}T${firstEntry.startTime}:00${tzOffset}`).toISOString();
+      const roomId = meetSlug(title) + '-' + Math.floor(Math.random() * 100);
+      const token = createMeetAuthToken(session);
+
+      const res = await fetch(`${LANA_MEET_BASE_URL}/api/meetings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title.trim(),
+          roomId,
+          scheduledAt,
+          authToken: token,
+          visibility: 'public',
+          invitees: [],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to create Lana Meet');
+      }
+
+      const meeting = await res.json();
+      const link = `${LANA_MEET_BASE_URL}/${meeting.roomId}`;
+      setOnlineUrl(link);
+      setLanaMeetCreated(true);
+      try { await navigator.clipboard.writeText(link); } catch { /* clipboard unavailable */ }
+      toast({ title: 'Lana Meet ustvarjen', description: 'Povezava je shranjena in skopirana' });
+    } catch (err: any) {
+      toast({ title: t('reg.error'), description: err?.message || 'Napaka pri ustvarjanju Lana Meet', variant: 'destructive' });
+    } finally {
+      setCreatingLanaMeet(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
       toast({
         title: t('reg.error'),
@@ -315,11 +451,13 @@ export default function AddEvent() {
       if (youtubeUrl.trim()) {
         tags.push(["youtube", youtubeUrl.trim()]);
       }
-      let recordingUrl = youtubeRecordingUrl.trim();
-      if (recordingUrl && !recordingUrl.startsWith('http://') && !recordingUrl.startsWith('https://')) {
-        recordingUrl = 'https://' + recordingUrl;
-      }
-      if (recordingUrl) {
+      // Multiple recording URLs — one tag per URL
+      for (const raw of youtubeRecordingUrls) {
+        let recordingUrl = (raw || '').trim();
+        if (!recordingUrl) continue;
+        if (!recordingUrl.startsWith('http://') && !recordingUrl.startsWith('https://')) {
+          recordingUrl = 'https://' + recordingUrl;
+        }
         tags.push(["youtube_recording", recordingUrl]);
       }
 
@@ -351,41 +489,70 @@ export default function AddEvent() {
         content: content.trim(),
       }, privKeyBytes);
 
-      console.log('Publishing event to relays:', relays);
-      console.log('Event:', event);
+      console.log('📤 Publishing event to relays:', relays);
+      console.log('📤 Event:', event);
 
-      const publishPromises = pool.publish(relays, event);
-      const publishArray = Array.from(publishPromises);
-      let successCount = 0;
-      let errorCount = 0;
+      // ─── Step 1: try direct browser → relay WebSocket publish ────────────
+      const publishArray = Array.from(pool.publish(relays, event));
+      const perRelay: Array<{ relay: string; ok: boolean; error?: string }> = relays.map((r) => ({
+        relay: r,
+        ok: false,
+      }));
 
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
+      // Wait up to 10s for ALL relays to respond (settle), so we know exactly
+      // which ones failed and why — no early-exit on first success.
+      await Promise.allSettled(
+        publishArray.map((p, idx) =>
+          Promise.race([
+            p.then(
+              () => { perRelay[idx].ok = true; },
+              (err) => { perRelay[idx].error = err?.message || String(err) || 'rejected'; },
+            ),
+            new Promise<void>((resolve) => setTimeout(() => {
+              if (!perRelay[idx].ok && !perRelay[idx].error) {
+                perRelay[idx].error = 'timeout';
+              }
+              resolve();
+            }, 10000)),
+          ]),
+        ),
+      );
+
+      let successCount = perRelay.filter((r) => r.ok).length;
+      const failedRelays = perRelay.filter((r) => !r.ok);
+
+      console.log('📤 Direct publish results:', perRelay);
+      if (failedRelays.length > 0) {
+        console.warn('⚠️ Failed relays:', failedRelays);
+      }
+
+      // ─── Step 2: if 0 succeeded, fall back to server-side publish ───────
+      if (successCount === 0) {
+        console.log('🔁 Direct publish failed for all relays — trying server fallback');
+        try {
+          const { data, error } = await supabase.functions.invoke('publish-dm-event', {
+            body: { event },
+          });
+          if (error) throw error;
+          successCount = data?.publishedTo || 0;
+          console.log(`✅ Server fallback published to ${successCount}/${data?.totalRelays} relays`);
           if (successCount === 0) {
-            reject(new Error('Publish timeout - no relays responded'));
-          } else {
-            resolve();
+            const reasons = failedRelays
+              .slice(0, 3)
+              .map((r) => `${r.relay.replace('wss://', '')}: ${r.error}`)
+              .join(' · ');
+            throw new Error(`All relays failed (direct + server). ${reasons}`);
           }
-        }, 10000);
-
-        publishArray.forEach((promise) => {
-          promise
-            .then(() => {
-              successCount++;
-              if (successCount === 1) {
-                clearTimeout(timeout);
-                resolve();
-              }
-            })
-            .catch(() => {
-              errorCount++;
-              if (errorCount === publishArray.length) {
-                clearTimeout(timeout);
-                reject(new Error('All relays failed to publish'));
-              }
-            });
-        });
-      });
+        } catch (fallbackErr) {
+          const reasons = failedRelays
+            .slice(0, 3)
+            .map((r) => `${r.relay.replace('wss://', '')}: ${r.error}`)
+            .join(' · ');
+          throw new Error(
+            `Could not publish to any relay. ${reasons}${failedRelays.length > 3 ? ` (+${failedRelays.length - 3} more)` : ''}`,
+          );
+        }
+      }
 
       toast({
         title: t('toast.eventPublished'),
@@ -398,7 +565,7 @@ export default function AddEvent() {
       setSchedule([{ date: '', startTime: '', endTime: '' }]);
       setOnlineUrl("");
       setYoutubeUrl("");
-      setYoutubeRecordingUrl("");
+      setYoutubeRecordingUrls([""]);
       setLocation("");
       setLat("");
       setLon("");
@@ -611,16 +778,76 @@ export default function AddEvent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Lana Meet quick-create */}
+              <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  <Video className="h-4 w-4 text-violet-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{t('form.lanaMeetCardTitle')}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('form.lanaMeetCardDesc')}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={lanaMeetCreated ? "outline" : "default"}
+                  onClick={handleCreateLanaMeet}
+                  disabled={creatingLanaMeet}
+                  className="w-full"
+                >
+                  {creatingLanaMeet ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : lanaMeetCreated ? (
+                    <Check className="h-4 w-4 mr-1.5 text-green-500" />
+                  ) : (
+                    <Video className="h-4 w-4 mr-1.5" />
+                  )}
+                  {lanaMeetCreated ? t('form.lanaMeetCreated') : t('form.lanaMeetButton')}
+                </Button>
+              </div>
+
+              {/* Lana Meet URL — auto-filled by Create button, but creators can also
+                  paste an existing Lana Meet link they made earlier (e.g. via /meet/schedule). */}
               <div className="space-y-2">
-                <Label htmlFor="onlineUrl">{t('form.eventUrl')}</Label>
-                <Input
-                  id="onlineUrl"
-                  type="url"
-                  value={onlineUrl}
-                  onChange={(e) => setOnlineUrl(e.target.value)}
-                  placeholder="https://meet.google.com/xxx-xxxx-xxx"
-                  required={isOnline}
-                />
+                <Label htmlFor="onlineUrl">{t('form.lanaMeetUrlLabel')} <span className="text-destructive">*</span></Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="onlineUrl"
+                    type="url"
+                    value={onlineUrl}
+                    onChange={(e) => {
+                      setOnlineUrl(e.target.value);
+                      // Manual edits invalidate the "freshly-created via button" state
+                      setLanaMeetCreated(false);
+                    }}
+                    placeholder="https://meet.lanaloves.us/..."
+                    className="font-mono text-xs"
+                  />
+                  {onlineUrl && (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(onlineUrl);
+                          toast({ title: t('form.lanaMeetCopied') });
+                        } catch { /* clipboard unavailable */ }
+                      }}
+                      title={t('form.lanaMeetCopy')}
+                      className="flex-shrink-0"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {!onlineUrl && (
+                  <p className="text-xs text-muted-foreground">
+                    {t('form.lanaMeetUrlPlaceholder')}
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -728,14 +955,46 @@ export default function AddEvent() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="youtubeRecordingUrl">{t('form.youtubeRecordingUrl')}</Label>
-              <Input
-                id="youtubeRecordingUrl"
-                type="url"
-                value={youtubeRecordingUrl}
-                onChange={(e) => setYoutubeRecordingUrl(e.target.value)}
-                placeholder="https://youtu.be/XYZ123"
-              />
+              <Label>{t('form.youtubeRecordingUrl')}</Label>
+              <div className="space-y-2">
+                {youtubeRecordingUrls.map((url, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <Input
+                      type="url"
+                      value={url}
+                      onChange={(e) => {
+                        const next = [...youtubeRecordingUrls];
+                        next[idx] = e.target.value;
+                        setYoutubeRecordingUrls(next);
+                      }}
+                      placeholder={idx === 0 ? "https://youtu.be/XYZ123" : `https://youtu.be/... (#${idx + 1})`}
+                    />
+                    {youtubeRecordingUrls.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setYoutubeRecordingUrls(youtubeRecordingUrls.filter((_, i) => i !== idx));
+                        }}
+                        title={t('form.recordingRemove')}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setYoutubeRecordingUrls([...youtubeRecordingUrls, ""])}
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t('form.recordingAdd')}
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground">{t('form.youtubeRecordingHint')}</p>
             </div>
           </CardContent>

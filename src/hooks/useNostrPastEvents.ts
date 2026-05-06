@@ -13,7 +13,10 @@ export interface PastEvent {
   end?: Date;
   isOnline: boolean;
   cover?: string;
+  /** First recording URL (legacy single-video field, kept for backwards compatibility) */
   youtubeRecordingUrl: string;
+  /** All recording URLs — multiple `youtube_recording` tags */
+  youtubeRecordingUrls: string[];
   dTag: string;
   language: string;
 }
@@ -34,14 +37,18 @@ export function useNostrPastEvents() {
         const tag = tags.find((t: string[]) => t[0] === name);
         return tag ? tag[1] : undefined;
       };
+      const getAllTagValues = (name: string): string[] => {
+        return tags.filter((t: string[]) => t[0] === name).map((t: string[]) => t[1]).filter(Boolean);
+      };
 
       const title = getTagValue('title');
       const startStr = getTagValue('start');
       const dTag = getTagValue('d');
-      const youtubeRecordingUrl = getTagValue('youtube_recording');
+      const youtubeRecordingUrls = getAllTagValues('youtube_recording');
+      const youtubeRecordingUrl = youtubeRecordingUrls[0];
       const language = getTagValue('language') || 'unknown';
 
-      // Only include events with youtube_recording
+      // Only include events with at least one youtube_recording
       if (!title || !startStr || !dTag || !youtubeRecordingUrl) {
         return null;
       }
@@ -66,6 +73,7 @@ export function useNostrPastEvents() {
         isOnline,
         cover: getTagValue('cover'),
         youtubeRecordingUrl,
+        youtubeRecordingUrls,
         dTag,
         language,
       };

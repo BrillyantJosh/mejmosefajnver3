@@ -25,6 +25,7 @@ export interface LanaEvent {
   onlineUrl?: string;
   youtubeUrl?: string;
   youtubeRecordingUrl?: string;
+  youtubeRecordingUrls?: string[];
   // Physical event fields
   location?: string;
   lat?: number;

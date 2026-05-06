@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle, Video as VideoIcon, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt, Zap, Users, ExternalLink } from "lucide-react";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, Video as VideoIcon, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt, Zap, Users, ExternalLink, Hourglass, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import LazyYouTube from "@/components/LazyYouTube";
 import { finalizeEvent } from "nostr-tools";
@@ -193,6 +193,56 @@ function VotingCard({ proposal, votingEligibility, extractYouTubeId }: {
   );
 }
 
+// URL regex used by NewsBody
+const URL_RE = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+
+// Render text body with clickable URLs. Optional collapse-to-N-lines on mobile with Show more.
+function NewsBody({ text, mobileClamp }: { text: string; mobileClamp?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > 180;
+  const clamped = mobileClamp && !expanded;
+
+  const parts = text.split(URL_RE);
+  const rendered = parts.map((part, i) => {
+    if (!part) return null;
+    if (URL_RE.test(part)) {
+      URL_RE.lastIndex = 0;
+      const href = part.toLowerCase().startsWith('www.') ? `http://${part}` : part;
+      return (
+        <a
+          key={i}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-primary hover:underline break-all"
+        >
+          {part}
+        </a>
+      );
+    }
+    URL_RE.lastIndex = 0;
+    return <span key={i}>{part}</span>;
+  });
+
+  return (
+    <>
+      <p className={`whitespace-pre-wrap break-words ${clamped ? 'line-clamp-3' : ''}`}>
+        {rendered}
+      </p>
+      {mobileClamp && isLong && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+          className="text-[11px] font-medium text-primary hover:underline mt-1"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </>
+  );
+}
+
 export default function Home() {
   const [page, setPage] = useState(0);
   const { session } = useAuth();
@@ -334,44 +384,99 @@ export default function Home() {
     gcTime: 10 * 60 * 1000,
   });
 
-  // --- Active Meet Rooms (React Query — cached, merges rooms + meetings for metadata) ---
-  const { data: activeMeetRooms = [] } = useQuery<Array<{ roomId: string; participants: number; title?: string; createdByName?: string }>>({
-    queryKey: ['active-meet-rooms', session?.nostrHexId],
+  // --- Active Meet Rooms + Upcoming Scheduled Meetings ---
+  type LiveRoom = { roomId: string; participants: number; title?: string; createdByName?: string };
+  type UpcomingMeeting = { id: string; roomId: string; title: string; scheduledAt: string; createdByName: string };
+  const { data: meetData = { live: [] as LiveRoom[], upcoming: [] as UpcomingMeeting[] } } = useQuery<{
+    live: LiveRoom[];
+    upcoming: UpcomingMeeting[];
+  }>({
+    queryKey: ['meet-home', session?.nostrHexId],
     queryFn: async () => {
       const [roomsRes, meetingsRes] = await Promise.allSettled([
         fetch(`${MEET_BASE_URL}/api/rooms`),
         session ? fetch(`${MEET_BASE_URL}/api/meetings?auth=${createMeetAuthToken(session)}`) : Promise.reject('no session'),
       ]);
 
-      const rooms: Array<{ roomId: string; participants: number; title?: string; createdByName?: string }> = [];
+      const live: LiveRoom[] = [];
+      const upcoming: UpcomingMeeting[] = [];
 
       if (roomsRes.status === 'fulfilled' && roomsRes.value.ok) {
         const data = await roomsRes.value.json();
         for (const r of data.rooms || []) {
           if (r.participants > 0) {
-            rooms.push({ roomId: r.roomId, participants: r.participants });
+            live.push({ roomId: r.roomId, participants: r.participants });
           }
         }
       }
 
-      // Merge meeting metadata (title, creator)
       if (meetingsRes.status === 'fulfilled' && meetingsRes.value.ok) {
         const data = await meetingsRes.value.json();
+        const nowMs = Date.now();
         for (const m of data.meetings || []) {
-          const existing = rooms.find(r => r.roomId === m.roomId);
+          // Merge metadata into live rooms
+          const existing = live.find(r => r.roomId === m.roomId);
           if (existing) {
             existing.title = m.title;
             existing.createdByName = m.createdByName;
+            continue;
+          }
+          // Upcoming = scheduled in the future and not currently live
+          if (!m.isLive && new Date(m.scheduledAt).getTime() > nowMs) {
+            upcoming.push({
+              id: m.id,
+              roomId: m.roomId,
+              title: m.title,
+              scheduledAt: m.scheduledAt,
+              createdByName: m.createdByName,
+            });
           }
         }
+        upcoming.sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
       }
 
-      return rooms;
+      return { live, upcoming };
     },
     staleTime: 15 * 1000,
     gcTime: 60 * 1000,
     refetchInterval: 15 * 1000,
   });
+  const activeMeetRooms = meetData.live;
+  const upcomingMeetings = meetData.upcoming;
+
+  // Live tick for countdown
+  const [meetNowMs, setMeetNowMs] = useState<number>(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setMeetNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const formatMeetCountdown = (iso: string): string => {
+    const diffSec = Math.round((new Date(iso).getTime() - meetNowMs) / 1000);
+    if (diffSec < 30) return 'začenja se zdaj';
+    const days = Math.floor(diffSec / 86400);
+    const hours = Math.floor((diffSec % 86400) / 3600);
+    const minutes = Math.floor((diffSec % 3600) / 60);
+    if (days > 0) return `čez ${days}d ${hours}h`;
+    if (hours > 0) return `čez ${hours}h ${minutes}min`;
+    if (minutes > 0) return `čez ${minutes}min`;
+    return `čez ${diffSec}s`;
+  };
+
+  const meetTzLabel = useMemo(() => {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      const offsetMin = -new Date().getTimezoneOffset();
+      const sign = offsetMin >= 0 ? '+' : '-';
+      const abs = Math.abs(offsetMin);
+      const h = Math.floor(abs / 60);
+      const m = abs % 60;
+      const off = m === 0 ? `GMT${sign}${h}` : `GMT${sign}${h}:${String(m).padStart(2, '0')}`;
+      return `${tz} (${off})`;
+    } catch {
+      return 'UTC';
+    }
+  }, []);
 
   // Filter online events: this week only, upcoming/active
   const now = new Date();
@@ -473,9 +578,9 @@ export default function Home() {
                             <CardContent className={`${ytId ? 'pt-3' : 'pt-4'} pb-3`}>
                               <h2 className="text-base font-bold line-clamp-2">{item.title}</h2>
                               {item.body && (
-                                <p className="text-xs text-muted-foreground mt-1.5 whitespace-pre-wrap line-clamp-3">
-                                  {item.body}
-                                </p>
+                                <div className="text-xs text-muted-foreground mt-1.5">
+                                  <NewsBody text={item.body} mobileClamp />
+                                </div>
                               )}
                               <div className="flex items-center justify-between mt-2">
                                 <p className="text-[10px] text-muted-foreground">
@@ -516,9 +621,9 @@ export default function Home() {
                         <CardContent className={ytId ? "pt-4" : "pt-6"}>
                           <h2 className="text-xl font-bold">{item.title}</h2>
                           {item.body && (
-                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">
-                              {item.body}
-                            </p>
+                            <div className="text-sm text-muted-foreground mt-2">
+                              <NewsBody text={item.body} />
+                            </div>
                           )}
                           <div className="flex items-center justify-between mt-3">
                             <p className="text-xs text-muted-foreground">
@@ -622,8 +727,65 @@ export default function Home() {
               </Card>
             )}
 
-            {/* Lana Meet — No active rooms, show quick link */}
-            {session && activeMeetRooms.length === 0 && (
+            {/* Lana Meet — Upcoming Scheduled Meetings */}
+            {session && upcomingMeetings.length > 0 && (
+              <Card className="border-blue-400/40 dark:border-blue-600/40 bg-gradient-to-br from-blue-500/5 to-indigo-500/5">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-blue-500" />
+                    Načrtovani sestanki
+                    <Badge variant="outline" className="ml-auto text-[10px] px-1.5">
+                      {upcomingMeetings.length}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-1.5">
+                    {upcomingMeetings.slice(0, 4).map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => {
+                          const token = createMeetAuthToken(session);
+                          window.open(`${MEET_BASE_URL}/${m.roomId}?lana_token=${token}`, '_blank');
+                        }}
+                        className="w-full flex items-start gap-2.5 px-2.5 py-2 rounded-lg hover:bg-blue-500/10 transition-colors text-left group"
+                      >
+                        <Hourglass className="h-3.5 w-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm truncate block">{m.title}</span>
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground mt-0.5">
+                            <span className="font-medium text-blue-600 dark:text-blue-400">
+                              {formatMeetCountdown(m.scheduledAt)}
+                            </span>
+                            <span className="flex items-center gap-0.5">
+                              <Clock className="h-2.5 w-2.5" />
+                              {new Date(m.scheduledAt).toLocaleString(undefined, {
+                                day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                              })}
+                            </span>
+                            {m.createdByName && <span>• {m.createdByName}</span>}
+                          </span>
+                        </div>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5" />
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-2 px-2.5" title={meetTzLabel}>
+                    <Globe className="h-2.5 w-2.5" />
+                    {meetTzLabel}
+                  </p>
+                  <Link
+                    to="/meet/schedule"
+                    className="flex items-center justify-center px-3 py-2 mt-1 rounded-lg text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                  >
+                    Vsi sestanki →
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Lana Meet — No active rooms AND no upcoming, show quick link */}
+            {session && activeMeetRooms.length === 0 && upcomingMeetings.length === 0 && (
               <Link to="/meet" className="block">
                 <Card className="hover:shadow-md transition-shadow hover:border-green-400/40">
                   <CardContent className="py-3 px-4 flex items-center gap-3">
