@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, Store, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -8,7 +8,6 @@ import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 import sellLanaImage from '@/assets/selllana-module.png';
 import buyLanaImage from '@/assets/buylana-module.png';
-import marketplaceImage from '@/assets/marketplace-hero.png';
 import lana8wonderImage from '@/assets/lana8wonder-icon.png';
 import lanapaysImage from '@/assets/lanapays-module.png';
 import chatImage from '@/assets/chat-module.png';
@@ -130,18 +129,6 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     image: buyLanaImage,
     enabled: true,
     order: 6
-  },
-  {
-    id: 'marketplace',
-    title: 'Marketplace',
-    description: 'Buy and sell goods and services with LanaCoins',
-    icon: Store,
-    path: '/marketplace',
-    gradient: 'from-indigo-500 to-violet-500',
-    image: marketplaceImage,
-    imagePosition: 'object-[70%_20%]',
-    enabled: false,
-    order: 7
   },
   {
     id: 'lanapaper',
@@ -439,7 +426,6 @@ const mapToNostrId = (id: ModuleType): string => {
     'unconditionalpayment': 'Unconditional Payment',
     'selllana': 'SellLana',
     'buylana': 'BuyLana',
-    'marketplace': 'Marketplace',
     'lanapaper': 'LanaPaper',
     'offlinelana': 'OfflineLana',
     'relays': 'Relays',
@@ -480,7 +466,6 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Unconditional Payment': 'unconditionalpayment',
     'SellLana': 'selllana',
     'BuyLana': 'buylana',
-    'Marketplace': 'marketplace',
     'LanaPaper': 'lanapaper',
     'OfflineLana': 'offlinelana',
     'Relays': 'relays',

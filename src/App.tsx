@@ -36,11 +36,6 @@ import RelaysLayout from "./pages/relays/RelaysLayout";
 import RelaysList from "./pages/relays/RelaysList";
 import MyEvents from "./pages/relays/MyEvents";
 import Kinds from "./pages/relays/Kinds";
-import MarketplaceLayout from "./pages/marketplace/MarketplaceLayout";
-import MarketplaceLocal from "./pages/marketplace/Local";
-import MarketplaceGlobal from "./pages/marketplace/Global";
-import MarketplaceMyOffers from "./pages/marketplace/MyOffers";
-import OfferDetail from "./pages/marketplace/OfferDetail";
 import LanaPaysLayout from "./pages/lanapays/LanaPaysLayout";
 import LanaPaysDiscover from "./pages/lanapays/LanaPaysDiscover";
 import LanaPaysRedirect from "./pages/lanapays/LanaPaysRedirect";
@@ -227,12 +222,6 @@ const App = () => (
                     <Route path="my-events" element={<MyEvents />} />
                     <Route path="kinds" element={<Kinds />} />
                   </Route>
-                  <Route path="/marketplace" element={<MarketplaceLayout />}>
-                    <Route index element={<MarketplaceLocal />} />
-                    <Route path="global" element={<MarketplaceGlobal />} />
-                    <Route path="my-offers" element={<MarketplaceMyOffers />} />
-                  </Route>
-                  <Route path="/marketplace/offer/:offerId" element={<OfferDetail />} />
                   <Route path="/lanapays" element={<LanaPaysLayout />}>
                     <Route index element={<LanaPaysDiscover />} />
                     <Route path="pay" element={<LanaPaysRedirect />} />
