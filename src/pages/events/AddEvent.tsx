@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, Plus, X, Calendar, MapPin, Globe, Link2, ImagePlus, Wallet, Map, Video, Check, Copy, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import LocationPicker from "@/components/LocationPicker";
+import { AddressSearch } from "@/components/AddressSearch";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { SimplePool, finalizeEvent } from "nostr-tools";
 import { toast } from "@/hooks/use-toast";
@@ -870,6 +871,28 @@ export default function AddEvent() {
                 />
               </div>
 
+              {/* Address search via OpenStreetMap Nominatim — port from shop.lanapays.us */}
+              <AddressSearch
+                onLocationChange={(newLat, newLon, displayName) => {
+                  setLat(newLat);
+                  setLon(newLon);
+                  // Only auto-fill the location-name field if it's still empty —
+                  // don't trample the user's hand-typed venue name.
+                  if (displayName && !location.trim()) {
+                    setLocation(displayName);
+                  }
+                }}
+                labels={{
+                  autoDetect: t('form.addressSearchAutoDetect'),
+                  placeholder: t('form.addressSearchPlaceholder'),
+                  noResults: t('form.addressSearchNoResults'),
+                  selectLocation: t('form.addressSearchSelect'),
+                  searchFailed: t('form.addressSearchFailed'),
+                  permissionDenied: t('form.addressSearchPermissionDenied'),
+                  geoUnavailable: t('form.addressSearchGeoUnavailable'),
+                }}
+              />
+
               <Button
                 type="button"
                 variant="outline"
@@ -902,6 +925,28 @@ export default function AddEvent() {
                   />
                 </div>
               </div>
+
+              {/* Map preview when both coordinates are set */}
+              {lat.trim() && lon.trim() && !isNaN(parseFloat(lat)) && !isNaN(parseFloat(lon)) && (
+                <div className="rounded-lg overflow-hidden border">
+                  <iframe
+                    title="Map preview"
+                    width="100%"
+                    height="200"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${parseFloat(lon) - 0.01},${parseFloat(lat) - 0.007},${parseFloat(lon) + 0.01},${parseFloat(lat) + 0.007}&layer=mapnik&marker=${lat},${lon}`}
+                  />
+                  <a
+                    href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-xs text-primary text-center py-1.5 hover:underline border-t"
+                  >
+                    {t('form.openInOSM')}
+                  </a>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="capacity">{t('form.capacity')}</Label>
