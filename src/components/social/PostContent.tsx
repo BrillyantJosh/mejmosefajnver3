@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { LinkPreview } from './LinkPreview';
 import { Button } from '@/components/ui/button';
-import { Languages, Loader2 } from 'lucide-react';
+import { Languages, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+// Mobile-friendly collapse threshold (chars)
+const COLLAPSE_THRESHOLD = 240;
 
 interface PostContentProps {
   content: string;
@@ -165,6 +168,9 @@ export function PostContent({ content, tags, nostrHexId }: PostContentProps) {
   const [translatedContent, setTranslatedContent] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState<'sl' | 'en'>('sl');
+  const [expanded, setExpanded] = useState(false);
+
+  const isLong = useMemo(() => (translatedContent || content).length > COLLAPSE_THRESHOLD, [translatedContent, content]);
 
   const handleTranslate = async (language: 'sl' | 'en') => {
     setIsTranslating(true);
@@ -304,19 +310,59 @@ export function PostContent({ content, tags, nostrHexId }: PostContentProps) {
           )}
         </div>
 
-        {/* Render text content with formatting */}
-        <div className="mb-4 break-words">
+        {/* Render text content with formatting + clickable inline URLs */}
+        <div
+          className={`mb-2 break-words relative ${
+            isLong && !expanded
+              ? 'max-h-[7.5rem] overflow-hidden md:max-h-none md:overflow-visible'
+              : ''
+          }`}
+        >
           {parts.map((part, index) => {
+            if (!part) return null;
             // Check if this part is a URL (either with http:// or www.)
             const normalizedPart = part.toLowerCase().startsWith('www.') ? `http://${part}` : part;
             if (urls.includes(normalizedPart) || urls.includes(part)) {
-              // Don't render the URL text, we'll show preview below
-              return null;
+              // Render URL as clickable link inline
+              return (
+                <a
+                  key={`url-${index}`}
+                  href={normalizedPart}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline break-all"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {part}
+                </a>
+              );
             }
             // Parse bold text and bullet points
             return <FormattedText key={`text-${index}`} text={part} />;
           })}
+          {isLong && !expanded && (
+            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background to-transparent pointer-events-none md:hidden" />
+          )}
         </div>
+
+        {/* Show more / less toggle (mobile only by default; also useful on desktop for very long posts) */}
+        {isLong && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="md:hidden mb-3 text-sm font-medium text-primary hover:underline inline-flex items-center gap-1"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="h-4 w-4" /> Show less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-4 w-4" /> Show more
+              </>
+            )}
+          </button>
+        )}
         
         {/* Render images from imurl tags */}
         {imageUrls.length > 0 && (
