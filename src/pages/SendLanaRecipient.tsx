@@ -9,6 +9,7 @@ import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Html5Qrcode } from "html5-qrcode";
+import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError } from "@/lib/qr-camera";
 import { validateLanaWalletIdWithMessage } from "@/lib/lanaWalletValidation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
@@ -127,46 +128,37 @@ export default function SendLanaRecipient() {
     w.walletId !== walletId
   );
 
-  // QR Code Scanner
+  // QR Code Scanner — uses shared iOS-friendly camera picker (avoids telephoto)
   const startScanner = async () => {
+    setIsScanning(true);
+    setError("");
+
     try {
-      setIsScanning(true);
-      setError("");
+      const cameraId = await pickBackCameraId();
 
-      // Get available cameras first
-      const cameras = await Html5Qrcode.getCameras();
-      
-      if (!cameras || cameras.length === 0) {
-        setError("No cameras found on this device.");
-        setIsScanning(false);
-        return;
-      }
+      // Wait one frame for the qr-reader div to mount
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-      // Use the back camera if available, otherwise use the first camera
-      const cameraId = cameras.length > 1 ? cameras[cameras.length - 1].id : cameras[0].id;
-      
-      // Create scanner instance
       const html5QrCode = new Html5Qrcode("qr-reader");
       html5QrCodeRef.current = html5QrCode;
-      
+
       await html5QrCode.start(
         cameraId,
-        { 
-          fps: 10, 
-          qrbox: { width: 250, height: 250 } 
-        },
+        DEFAULT_QR_CONFIG,
         (decodedText) => {
           setRecipientWalletId(decodedText);
           stopScanner();
           setSelectedTab("manual");
         },
-        () => {
-          // Error callback for scan failures - ignore
-        }
+        () => { /* per-frame decode failures — ignore */ },
       );
     } catch (err: any) {
       console.error("Scanner error:", err);
-      setError(`Camera error: ${err.message || "Please check permissions and try again."}`);
+      if (err instanceof QRCameraError) {
+        setError(err.message);
+      } else {
+        setError(`Camera error: ${err?.message || err?.name || "Please check permissions and try again."}`);
+      }
       setIsScanning(false);
     }
   };

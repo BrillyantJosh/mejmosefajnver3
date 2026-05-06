@@ -11,10 +11,24 @@ import { ArrowLeft, Loader2, QrCode, CheckCircle2, XCircle, AlertCircle } from "
 import { toast } from "sonner";
 import { useWalletTypes } from "@/hooks/useWalletTypes";
 import { validateLanaWalletIdWithMessage } from "@/lib/lanaWalletValidation";
+import { convertWifToIds } from "@/lib/crypto";
 import { supabase } from "@/integrations/supabase/client";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { QRScanner } from "@/components/QRScanner";
 import { useAuth } from "@/contexts/AuthContext";
+
+/**
+ * Heuristic: a Lana WIF private key starts with 'T' (compressed / Staking) or '6'
+ * (uncompressed / Dominate) and is roughly 51–52 base58 chars. A wallet address
+ * starts with 'L' and is ~34 chars. We use this to decide whether to attempt a
+ * private-key derivation when the user pastes / scans an input.
+ */
+function looksLikeWifPrivateKey(input: string): boolean {
+  const s = input.trim();
+  if (!s) return false;
+  if (s.length < 50 || s.length > 53) return false;
+  return s.startsWith('T') || s.startsWith('6');
+}
 
 export default function RegisterWallet() {
   const navigate = useNavigate();
@@ -32,10 +46,39 @@ export default function RegisterWallet() {
   const [validationStatus, setValidationStatus] = useState<'idle' | 'validating-format' | 'validating-balance' | 'valid' | 'invalid-format' | 'invalid-balance'>('idle');
   const [validationMessage, setValidationMessage] = useState('');
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  // Tracks whether the current `walletId` was derived from a scanned/pasted private key.
+  // Shown as an info banner so the user understands what happened.
+  const [derivedFromPrivateKey, setDerivedFromPrivateKey] = useState(false);
+
+  /**
+   * Process raw scanner / paste input: if it looks like a Lana WIF private key,
+   * derive the wallet ID first; otherwise treat it as a raw wallet address.
+   */
+  const ingestRawInput = async (raw: string) => {
+    const cleaned = raw.trim();
+    if (!cleaned) return;
+
+    if (looksLikeWifPrivateKey(cleaned)) {
+      try {
+        const derived = await convertWifToIds(cleaned);
+        setWalletId(derived.walletId);
+        setDerivedFromPrivateKey(true);
+        toast.success(
+          `Private key detected — derived ${derived.isCompressed ? 'Staking' : 'Dominate'} wallet ID`
+        );
+        return;
+      } catch (err) {
+        console.warn('Private key derivation failed, treating input as wallet ID:', err);
+        toast.error('Private key looked valid but derivation failed — pasting as raw text');
+      }
+    }
+
+    setWalletId(cleaned);
+    setDerivedFromPrivateKey(false);
+  };
 
   const handleQRScan = (data: string) => {
-    setWalletId(data);
-    toast.success("Wallet ID scanned successfully");
+    void ingestRawInput(data);
   };
 
   const validateWalletRealtime = async () => {
@@ -224,9 +267,20 @@ export default function RegisterWallet() {
               <div className="flex gap-2">
                 <Input
                   id="walletId"
-                  placeholder="Enter Lana wallet address (e.g., LiJoPczEsgouQSN2HcZaj1jQk...)"
+                  placeholder="Enter Lana wallet address or private key"
                   value={walletId}
-                  onChange={(e) => setWalletId(e.target.value)}
+                  onChange={(e) => {
+                    setWalletId(e.target.value);
+                    setDerivedFromPrivateKey(false);
+                  }}
+                  onPaste={(e) => {
+                    const pasted = e.clipboardData.getData('text');
+                    if (looksLikeWifPrivateKey(pasted)) {
+                      // Take over the paste so we derive instead of inserting raw text.
+                      e.preventDefault();
+                      void ingestRawInput(pasted);
+                    }
+                  }}
                   required
                   disabled={isValidating}
                   className="flex-1"
@@ -242,7 +296,7 @@ export default function RegisterWallet() {
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground">
-                The wallet address must be a valid Lana wallet ID.{' '}
+                Paste/scan a Lana wallet address, or a private key — the wallet ID will be derived automatically.{' '}
                 <a
                   href="https://lanapaper.online"
                   target="_blank"
@@ -252,6 +306,17 @@ export default function RegisterWallet() {
                   Don't have one? Create a new wallet →
                 </a>
               </p>
+
+              {derivedFromPrivateKey && (
+                <Alert className="py-2 border-blue-600 bg-blue-50 dark:bg-blue-950">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
+                      Wallet ID derived from your private key. The private key itself is never sent to the server.
+                    </AlertDescription>
+                  </div>
+                </Alert>
+              )}
 
               {/* Validation Status Indicators */}
               {validationStatus !== 'idle' && (

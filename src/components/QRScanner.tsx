@@ -3,6 +3,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { Button } from '@/components/ui/button';
 import { X, QrCode } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError } from '@/lib/qr-camera';
 
 interface QRScannerProps {
   isOpen: boolean;
@@ -37,55 +38,39 @@ export function QRScanner({ isOpen, onClose, onScan }: QRScannerProps) {
   }, [isOpen]);
 
   const startScanner = async () => {
-    try {
-      // Enumerate cameras
-      const cameras = await Html5Qrcode.getCameras();
-      
-      if (!cameras || cameras.length === 0) {
-        setError('No camera found on this device.');
-        return;
-      }
+    setError(null);
 
-      // Prefer back camera if multiple cameras available
-      let selectedCamera = cameras[0];
-      if (cameras.length > 1) {
-        const backCamera = cameras.find(camera => 
-          camera.label.toLowerCase().includes('back') || 
-          camera.label.toLowerCase().includes('rear')
-        );
-        if (backCamera) {
-          selectedCamera = backCamera;
-        }
-      }
+    try {
+      const cameraId = await pickBackCameraId();
+
+      // Wait one frame for the qr-reader-login div to mount
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
       const scanner = new Html5Qrcode('qr-reader-login');
       scannerRef.current = scanner;
 
       await scanner.start(
-        selectedCamera.id,
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 }
-        },
+        cameraId,
+        DEFAULT_QR_CONFIG,
         (decodedText) => {
-          // Only process first successful scan
           if (hasScannedRef.current) return;
           hasScannedRef.current = true;
-          
           onScan(decodedText);
           stopScanner();
           onClose();
         },
-        (errorMessage) => {
-          // Ignore error messages during scanning
-        }
+        () => { /* per-frame decode failures — ignore */ },
       );
 
       setIsScanning(true);
       setError(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to start scanner:', err);
-      setError('Failed to access camera. Please check permissions.');
+      if (err instanceof QRCameraError) {
+        setError(err.message);
+      } else {
+        setError(`Camera error: ${err?.message || err?.name || 'Please check permissions.'}`);
+      }
     }
   };
 

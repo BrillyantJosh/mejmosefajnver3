@@ -18,6 +18,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { Html5Qrcode } from "html5-qrcode";
+import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError } from "@/lib/qr-camera";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAdmin } from "@/contexts/AdminContext";
@@ -301,28 +302,20 @@ export default function DiscountSell() {
     return null;
   };
 
-  // Execute sell
-  // QR Scanner
+  // QR Scanner — uses shared iOS-friendly camera picker (avoids telephoto)
   const startScanner = useCallback(async () => {
     setScanError(null);
     try {
-      const cameras = await Html5Qrcode.getCameras();
-      if (!cameras || cameras.length === 0) {
-        setScanError("No camera found on this device.");
-        return;
-      }
-      let selectedCamera = cameras[0];
-      if (cameras.length > 1) {
-        const backCamera = cameras.find(c =>
-          c.label.toLowerCase().includes("back") || c.label.toLowerCase().includes("rear")
-        );
-        if (backCamera) selectedCamera = backCamera;
-      }
+      const cameraId = await pickBackCameraId();
+
+      // Wait one frame for the qr-reader-discount div to mount
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
       const scanner = new Html5Qrcode("qr-reader-discount");
       scannerRef.current = scanner;
       await scanner.start(
-        selectedCamera.id,
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        cameraId,
+        DEFAULT_QR_CONFIG,
         (decodedText) => {
           if (hasScannedRef.current) return;
           hasScannedRef.current = true;
@@ -331,12 +324,16 @@ export default function DiscountSell() {
           setIsScannerOpen(false);
           toast.success("QR code scanned successfully");
         },
-        () => {}
+        () => {},
       );
       setIsCameraReady(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to start scanner:", err);
-      setScanError("Failed to access camera. Please check permissions.");
+      if (err instanceof QRCameraError) {
+        setScanError(err.message);
+      } else {
+        setScanError(`Camera error: ${err?.message || err?.name || "Please check permissions."}`);
+      }
     }
   }, []);
 

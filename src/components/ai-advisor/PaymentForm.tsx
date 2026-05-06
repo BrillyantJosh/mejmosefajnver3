@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { convertWifToIds } from '@/lib/crypto';
 import { Html5Qrcode } from 'html5-qrcode';
+import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError } from '@/lib/qr-camera';
 import { toast } from 'sonner';
 import { t } from '@/lib/aiAdvisorTranslations';
 
@@ -86,33 +87,34 @@ export function PaymentForm({
   }, [privateKey, senderWalletId, language]);
 
   const startScanner = async () => {
+    setIsScanning(true);
+    setError('');
+
     try {
-      setIsScanning(true);
-      setError('');
+      const cameraId = await pickBackCameraId();
 
-      const cameras = await Html5Qrcode.getCameras();
-      if (!cameras || cameras.length === 0) {
-        setError(t('noCamerasFound', language));
-        setIsScanning(false);
-        return;
-      }
+      // Wait one frame for the qr-reader-payment div to mount
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-      const cameraId = cameras.length > 1 ? cameras[cameras.length - 1].id : cameras[0].id;
       const html5QrCode = new Html5Qrcode('qr-reader-payment');
       html5QrCodeRef.current = html5QrCode;
 
       await html5QrCode.start(
         cameraId,
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        DEFAULT_QR_CONFIG,
         (decodedText) => {
           setPrivateKey(decodedText);
           stopScanner();
           setSelectedTab('manual');
         },
-        () => {}
+        () => {},
       );
     } catch (err: any) {
-      setError(t('cameraError', language, { error: err.message || '' }));
+      if (err instanceof QRCameraError) {
+        setError(err.message);
+      } else {
+        setError(t('cameraError', language, { error: err?.message || err?.name || '' }));
+      }
       setIsScanning(false);
     }
   };
