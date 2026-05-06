@@ -33,7 +33,7 @@ import {
   QrCode,
 } from "lucide-react";
 import { Html5Qrcode } from "html5-qrcode";
-import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError, startScannerWithRetry } from "@/lib/qr-camera";
+import { DEFAULT_QR_CONFIG, QRCameraError, startQRScanner } from "@/lib/qr-camera";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
@@ -154,17 +154,14 @@ export default function ShopSell() {
   // Scanner lifecycle — uses shared iOS-friendly camera picker (avoids telephoto)
   const startScanner = async () => {
     try {
-      const cameraId = await pickBackCameraId();
-
       // Wait one frame for the qr-reader-shop-sell div to mount
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
       const scanner = new Html5Qrcode("qr-reader-shop-sell");
       scannerRef.current = scanner;
 
-      await startScannerWithRetry(
+      await startQRScanner(
         scanner,
-        cameraId,
         DEFAULT_QR_CONFIG,
         (decodedText) => {
           if (hasScannedRef.current) return;

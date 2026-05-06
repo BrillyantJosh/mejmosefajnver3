@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { convertWifToIds } from '@/lib/crypto';
 import { Html5Qrcode } from 'html5-qrcode';
-import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError, startScannerWithRetry } from '@/lib/qr-camera';
+import { DEFAULT_QR_CONFIG, QRCameraError, startQRScanner } from '@/lib/qr-camera';
 import { toast } from 'sonner';
 import { t } from '@/lib/aiAdvisorTranslations';
 
@@ -91,17 +91,14 @@ export function PaymentForm({
     setError('');
 
     try {
-      const cameraId = await pickBackCameraId();
-
       // Wait one frame for the qr-reader-payment div to mount
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
       const html5QrCode = new Html5Qrcode('qr-reader-payment');
       html5QrCodeRef.current = html5QrCode;
 
-      await startScannerWithRetry(
+      await startQRScanner(
         html5QrCode,
-        cameraId,
         DEFAULT_QR_CONFIG,
         (decodedText) => {
           setPrivateKey(decodedText);

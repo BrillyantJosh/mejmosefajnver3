@@ -8,7 +8,7 @@ import { ArrowLeft, ArrowRight, Scan, Key, Copy, ShieldAlert } from "lucide-reac
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Html5Qrcode } from "html5-qrcode";
-import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError, startScannerWithRetry } from "@/lib/qr-camera";
+import { DEFAULT_QR_CONFIG, QRCameraError, startQRScanner } from "@/lib/qr-camera";
 import { convertWifToIds } from "@/lib/crypto";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -49,17 +49,14 @@ export default function SendLanaPrivateKey() {
     setIsScanning(true);
 
     try {
-      const cameraId = await pickBackCameraId();
-
       // Wait one frame so the qr-reader-private-key div is mounted
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
       const html5QrCode = new Html5Qrcode("qr-reader-private-key");
       html5QrCodeRef.current = html5QrCode;
 
-      await startScannerWithRetry(
+      await startQRScanner(
         html5QrCode,
-        cameraId,
         DEFAULT_QR_CONFIG,
         (decodedText) => {
           setPrivateKey(decodedText);

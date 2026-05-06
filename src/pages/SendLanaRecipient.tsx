@@ -9,7 +9,7 @@ import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Html5Qrcode } from "html5-qrcode";
-import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError, startScannerWithRetry } from "@/lib/qr-camera";
+import { DEFAULT_QR_CONFIG, QRCameraError, startQRScanner } from "@/lib/qr-camera";
 import { validateLanaWalletIdWithMessage } from "@/lib/lanaWalletValidation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
@@ -134,17 +134,14 @@ export default function SendLanaRecipient() {
     setError("");
 
     try {
-      const cameraId = await pickBackCameraId();
-
       // Wait one frame for the qr-reader div to mount
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
       const html5QrCode = new Html5Qrcode("qr-reader");
       html5QrCodeRef.current = html5QrCode;
 
-      await startScannerWithRetry(
+      await startQRScanner(
         html5QrCode,
-        cameraId,
         DEFAULT_QR_CONFIG,
         (decodedText) => {
           setRecipientWalletId(decodedText);
