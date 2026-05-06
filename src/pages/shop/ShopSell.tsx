@@ -33,7 +33,7 @@ import {
   QrCode,
 } from "lucide-react";
 import { Html5Qrcode } from "html5-qrcode";
-import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError } from "@/lib/qr-camera";
+import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError, startScannerWithRetry } from "@/lib/qr-camera";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
@@ -162,7 +162,8 @@ export default function ShopSell() {
       const scanner = new Html5Qrcode("qr-reader-shop-sell");
       scannerRef.current = scanner;
 
-      await scanner.start(
+      await startScannerWithRetry(
+        scanner,
         cameraId,
         DEFAULT_QR_CONFIG,
         (decodedText) => {
@@ -172,7 +173,6 @@ export default function ShopSell() {
           stopScanner();
           setIsScannerOpen(false);
         },
-        () => {},
       );
       setIsCameraReady(true);
     } catch (err: any) {

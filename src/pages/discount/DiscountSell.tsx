@@ -18,7 +18,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { Html5Qrcode } from "html5-qrcode";
-import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError } from "@/lib/qr-camera";
+import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError, startScannerWithRetry } from "@/lib/qr-camera";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAdmin } from "@/contexts/AdminContext";
@@ -313,7 +313,8 @@ export default function DiscountSell() {
 
       const scanner = new Html5Qrcode("qr-reader-discount");
       scannerRef.current = scanner;
-      await scanner.start(
+      await startScannerWithRetry(
+        scanner,
         cameraId,
         DEFAULT_QR_CONFIG,
         (decodedText) => {
@@ -324,7 +325,6 @@ export default function DiscountSell() {
           setIsScannerOpen(false);
           toast.success("QR code scanned successfully");
         },
-        () => {},
       );
       setIsCameraReady(true);
     } catch (err: any) {

@@ -9,7 +9,7 @@ import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Html5Qrcode } from "html5-qrcode";
-import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError } from "@/lib/qr-camera";
+import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError, startScannerWithRetry } from "@/lib/qr-camera";
 import { validateLanaWalletIdWithMessage } from "@/lib/lanaWalletValidation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
@@ -142,7 +142,8 @@ export default function SendLanaRecipient() {
       const html5QrCode = new Html5Qrcode("qr-reader");
       html5QrCodeRef.current = html5QrCode;
 
-      await html5QrCode.start(
+      await startScannerWithRetry(
+        html5QrCode,
         cameraId,
         DEFAULT_QR_CONFIG,
         (decodedText) => {
@@ -150,7 +151,6 @@ export default function SendLanaRecipient() {
           stopScanner();
           setSelectedTab("manual");
         },
-        () => { /* per-frame decode failures — ignore */ },
       );
     } catch (err: any) {
       console.error("Scanner error:", err);

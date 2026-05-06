@@ -8,7 +8,7 @@ import { ArrowLeft, ArrowRight, Scan, Key, Copy, ShieldAlert } from "lucide-reac
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Html5Qrcode } from "html5-qrcode";
-import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError } from "@/lib/qr-camera";
+import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError, startScannerWithRetry } from "@/lib/qr-camera";
 import { convertWifToIds } from "@/lib/crypto";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -57,7 +57,8 @@ export default function SendLanaPrivateKey() {
       const html5QrCode = new Html5Qrcode("qr-reader-private-key");
       html5QrCodeRef.current = html5QrCode;
 
-      await html5QrCode.start(
+      await startScannerWithRetry(
+        html5QrCode,
         cameraId,
         DEFAULT_QR_CONFIG,
         (decodedText) => {
@@ -65,7 +66,6 @@ export default function SendLanaPrivateKey() {
           stopScanner();
           setSelectedTab("manual");
         },
-        () => { /* per-frame decode failures — ignore */ },
       );
     } catch (err: any) {
       console.error("Scanner error:", err);

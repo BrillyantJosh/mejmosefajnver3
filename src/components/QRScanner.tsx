@@ -3,7 +3,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { Button } from '@/components/ui/button';
 import { X, QrCode } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError } from '@/lib/qr-camera';
+import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError, startScannerWithRetry } from '@/lib/qr-camera';
 
 interface QRScannerProps {
   isOpen: boolean;
@@ -49,7 +49,8 @@ export function QRScanner({ isOpen, onClose, onScan }: QRScannerProps) {
       const scanner = new Html5Qrcode('qr-reader-login');
       scannerRef.current = scanner;
 
-      await scanner.start(
+      await startScannerWithRetry(
+        scanner,
         cameraId,
         DEFAULT_QR_CONFIG,
         (decodedText) => {
@@ -59,7 +60,6 @@ export function QRScanner({ isOpen, onClose, onScan }: QRScannerProps) {
           stopScanner();
           onClose();
         },
-        () => { /* per-frame decode failures — ignore */ },
       );
 
       setIsScanning(true);

@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { convertWifToIds } from '@/lib/crypto';
 import { Html5Qrcode } from 'html5-qrcode';
-import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError } from '@/lib/qr-camera';
+import { pickBackCameraId, DEFAULT_QR_CONFIG, QRCameraError, startScannerWithRetry } from '@/lib/qr-camera';
 import { toast } from 'sonner';
 import { t } from '@/lib/aiAdvisorTranslations';
 
@@ -99,7 +99,8 @@ export function PaymentForm({
       const html5QrCode = new Html5Qrcode('qr-reader-payment');
       html5QrCodeRef.current = html5QrCode;
 
-      await html5QrCode.start(
+      await startScannerWithRetry(
+        html5QrCode,
         cameraId,
         DEFAULT_QR_CONFIG,
         (decodedText) => {
@@ -107,7 +108,6 @@ export function PaymentForm({
           stopScanner();
           setSelectedTab('manual');
         },
-        () => {},
       );
     } catch (err: any) {
       if (err instanceof QRCameraError) {

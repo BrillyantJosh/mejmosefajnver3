@@ -65,6 +65,7 @@ export async function pickBackCameraId(): Promise<string> {
     );
   }
 
+  let chosenId: string;
   try {
     // 2. Enumerate, prefer wide back, avoid telephoto/ultrawide/depth
     const cameras = await Html5Qrcode.getCameras();
@@ -72,22 +73,63 @@ export async function pickBackCameraId(): Promise<string> {
       throw new QRCameraError('No camera found on this device.', 'no-camera');
     }
 
-    if (cameras.length === 1) return cameras[0].id;
-
-    const wideBack = cameras.find((c) => {
-      const l = (c.label || '').toLowerCase();
-      const isBack = l.includes('back') || l.includes('rear') || l.includes('environment');
-      const isWide = !l.includes('tele') && !l.includes('ultra') && !l.includes('depth');
-      return isBack && isWide;
-    });
-    const anyBack = cameras.find((c) => {
-      const l = (c.label || '').toLowerCase();
-      return l.includes('back') || l.includes('rear') || l.includes('environment');
-    });
-    return (wideBack || anyBack || cameras[0]).id;
+    if (cameras.length === 1) {
+      chosenId = cameras[0].id;
+    } else {
+      const wideBack = cameras.find((c) => {
+        const l = (c.label || '').toLowerCase();
+        const isBack = l.includes('back') || l.includes('rear') || l.includes('environment');
+        const isWide = !l.includes('tele') && !l.includes('ultra') && !l.includes('depth');
+        return isBack && isWide;
+      });
+      const anyBack = cameras.find((c) => {
+        const l = (c.label || '').toLowerCase();
+        return l.includes('back') || l.includes('rear') || l.includes('environment');
+      });
+      chosenId = (wideBack || anyBack || cameras[0]).id;
+    }
   } finally {
     // 3. Free the temporary stream
     permissionStream?.getTracks().forEach((t) => t.stop());
+  }
+
+  // 4. Give the OS a moment to actually release the camera. On Android Chrome
+  //    and Samsung Internet, calling getUserMedia again immediately after a
+  //    track.stop() can fail with NotReadableError ("Could not start video
+  //    source"). 250 ms is enough on every device we've tested.
+  await new Promise<void>((resolve) => setTimeout(resolve, 250));
+
+  return chosenId;
+}
+
+/**
+ * Start an Html5Qrcode scanner with automatic retry on NotReadableError.
+ * Some browsers (Android Chrome, Samsung Internet, occasionally iOS Safari
+ * after a permission grant) fail the first start() call with "Could not
+ * start video source" because the camera isn't yet released. One retry
+ * after 600 ms reliably succeeds.
+ */
+export async function startScannerWithRetry(
+  scanner: Html5Qrcode,
+  cameraId: string,
+  config: any,
+  onSuccess: (decoded: string) => void,
+  onError?: (msg: string) => void,
+): Promise<void> {
+  const _onError = onError ?? (() => { /* per-frame decode failures — ignore */ });
+  try {
+    await scanner.start(cameraId, config, onSuccess, _onError);
+  } catch (err: any) {
+    const msg = (err?.message || err?.name || '').toLowerCase();
+    const isReadable =
+      msg.includes('could not start video source') ||
+      msg.includes('notreadableerror') ||
+      err?.name === 'NotReadableError';
+    if (!isReadable) throw err;
+
+    // Retry once after a longer delay
+    await new Promise<void>((resolve) => setTimeout(resolve, 600));
+    await scanner.start(cameraId, config, onSuccess, _onError);
   }
 }
 
