@@ -1,15 +1,112 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PlusCircle, Pencil, ImageOff } from "lucide-react";
+import { PlusCircle, Pencil, ImageOff, Trash2, Loader2 } from "lucide-react";
 import { useMyLanacrowdProjects } from "@/hooks/useMyLanacrowdProjects";
 import { LanacrowdProject } from "@/hooks/useLanacrowdProjects";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { SimplePool, finalizeEvent } from "nostr-tools";
+import { toast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const MyProjects = () => {
   const navigate = useNavigate();
-  const { projects, isLoading } = useMyLanacrowdProjects();
+  const { projects, isLoading, refetch } = useMyLanacrowdProjects();
+  const { session } = useAuth();
+  const { parameters: systemParameters } = useSystemParameters();
+  const relays = systemParameters?.relays || [];
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<LanacrowdProject | null>(null);
+
+  // ── Delete a project that has received zero donations ───────────────────
+  // Server enforces ownership + zero-donations; we still publish a NIP-09
+  // KIND 5 deletion request to relays so the original KIND 31234 event is
+  // taken down everywhere it was indexed.
+  const handleDelete = async (project: LanacrowdProject) => {
+    if (!session?.nostrPrivateKey || !session.nostrHexId) return;
+
+    if ((project.donationCount || 0) > 0 || (project.totalRaised || 0) > 0) {
+      toast({
+        title: "Cannot delete",
+        description: "This project has donations and cannot be deleted.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setDeletingId(project.id);
+    try {
+      // 1. Server-side delete (authoritative — blocks if any donation exists)
+      const res = await fetch(`/api/lanacrowd/projects/${encodeURIComponent(project.id)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requesterPubkey: session.nostrHexId }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+
+      // 2. Publish NIP-09 KIND 5 deletion request to relays so the original
+      //    KIND 31234 is dropped from relay indexes (best-effort, non-fatal).
+      if (relays.length > 0) {
+        try {
+          const privKeyBytes = new Uint8Array(
+            session.nostrPrivateKey.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)),
+          );
+          // d-tag projects use the parameterized address `kind:pubkey:d`
+          const aTag = `31234:${project.pubkey || session.nostrHexId}:${project.id}`;
+          const deletionEvent = finalizeEvent(
+            {
+              kind: 5,
+              created_at: Math.floor(Date.now() / 1000),
+              tags: [
+                ["a", aTag],
+                ["k", "31234"],
+              ],
+              content: "Project deleted by owner",
+            },
+            privKeyBytes,
+          );
+          const pool = new SimplePool();
+          await Promise.allSettled(pool.publish(relays, deletionEvent));
+        } catch (relayErr) {
+          console.warn("KIND 5 publish failed (server delete already succeeded):", relayErr);
+        }
+      }
+
+      toast({
+        title: "Project deleted",
+        description: "The project has been removed.",
+      });
+      await refetch();
+    } catch (err: any) {
+      console.error("Delete project failed:", err);
+      toast({
+        title: "Delete failed",
+        description: err.message || "Could not delete project.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingId(null);
+      setConfirmDelete(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -57,21 +154,85 @@ const MyProjects = () => {
       ) : (
         <div className="space-y-4">
           {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} isCompleted={project.isCompleted} />
+            <ProjectCard
+              key={project.id}
+              project={project}
+              isCompleted={project.isCompleted}
+              isDeleting={deletingId === project.id}
+              onRequestDelete={() => setConfirmDelete(project)}
+            />
           ))}
         </div>
       )}
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete && (
+                <>
+                  <span className="font-medium">"{confirmDelete.title}"</span> will be permanently
+                  removed from LanaCrowd and a deletion request will be sent to Nostr relays.
+                  This cannot be undone.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!deletingId}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (confirmDelete) handleDelete(confirmDelete);
+              }}
+              disabled={!!deletingId}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingId ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
 
-const ProjectCard = ({ project, isCompleted }: { project: LanacrowdProject; isCompleted: boolean }) => {
+interface ProjectCardProps {
+  project: LanacrowdProject;
+  isCompleted: boolean;
+  isDeleting: boolean;
+  onRequestDelete: () => void;
+}
+
+const ProjectCard = ({ project, isCompleted, isDeleting, onRequestDelete }: ProjectCardProps) => {
   const navigate = useNavigate();
 
   const goal = project.fiatGoal || 0;
   const raised = project.totalRaised || 0;
   const progressPercent = goal > 0 ? Math.min((raised / goal) * 100, 100) : 0;
   const isFullyFunded = goal > 0 && raised >= goal * 0.99;
+
+  // Deletion is only allowed when zero donations have arrived. Once any
+  // contributor has paid in, the project is permanent — we never want to
+  // erase a record that someone has financially backed.
+  const hasNoDonations =
+    (project.donationCount || 0) === 0 && (project.totalRaised || 0) === 0;
+  const canDelete = hasNoDonations && !isCompleted;
 
   return (
     <Card className="overflow-hidden">
@@ -139,19 +300,38 @@ const ProjectCard = ({ project, isCompleted }: { project: LanacrowdProject; isCo
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center gap-2">
                 <span className="text-xs text-muted-foreground">
                   {project.donationCount} donation{project.donationCount !== 1 ? "s" : ""}
                 </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/100millionideas/edit-project/${project.id}`)}
-                  className="gap-1"
-                >
-                  <Pencil className="h-3 w-3" />
-                  Edit
-                </Button>
+                <div className="flex items-center gap-2">
+                  {canDelete && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={onRequestDelete}
+                      disabled={isDeleting}
+                      className="gap-1 text-destructive hover:text-destructive border-destructive/30 hover:border-destructive/60 hover:bg-destructive/5"
+                      title="Delete project (no donations yet)"
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" />
+                      )}
+                      Delete
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/100millionideas/edit-project/${project.id}`)}
+                    className="gap-1"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Edit
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

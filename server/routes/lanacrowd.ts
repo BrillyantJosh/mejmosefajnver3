@@ -345,6 +345,65 @@ router.patch('/projects/:id/admin', (req, res) => {
 });
 
 // ──────────────────────────────────────────────
+// DELETE /api/lanacrowd/projects/:id
+// Owner or 100M admin can delete a project that has received NO donations.
+// Body: { requesterPubkey: string }
+//
+// The Nostr KIND 5 deletion event must be published from the client (we can't
+// sign it here without the private key). This endpoint only:
+//   1. Verifies the requester owns the project (or is a 100M admin)
+//   2. Refuses if any donation has been recorded for this project
+//   3. Removes the project row from SQLite so it disappears immediately
+// ──────────────────────────────────────────────
+router.delete('/projects/:id', (req, res) => {
+  const db = getDb();
+  const dTag = req.params.id;
+  const requesterPubkey = (req.body?.requesterPubkey || '').trim();
+
+  if (!requesterPubkey) {
+    return res.status(400).json({ error: 'requesterPubkey required' });
+  }
+
+  try {
+    const project = db.prepare(
+      'SELECT owner_pubkey, pubkey FROM lanacrowd_projects WHERE id = ?',
+    ).get(dTag) as any;
+
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const isOwner =
+      project.owner_pubkey === requesterPubkey || project.pubkey === requesterPubkey;
+    const isAdmin = getAdmins().includes(requesterPubkey);
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'Not authorized to delete this project' });
+    }
+
+    // Block deletion if any donation has ever been recorded.
+    const donationCheck = db.prepare(
+      'SELECT COUNT(*) as cnt, COALESCE(SUM(amount_fiat), 0) as raised FROM lanacrowd_donations WHERE project_id = ?',
+    ).get(dTag) as any;
+
+    if (donationCheck && (donationCheck.cnt > 0 || donationCheck.raised > 0)) {
+      return res.status(409).json({
+        error: 'Project has donations and cannot be deleted',
+        donationCount: donationCheck.cnt,
+        totalRaised: donationCheck.raised,
+      });
+    }
+
+    const result = db.prepare('DELETE FROM lanacrowd_projects WHERE id = ?').run(dTag);
+    if (result.changes === 0) return res.status(404).json({ error: 'Project not found' });
+
+    console.log(`🗑️ Deleted lanacrowd project ${dTag} by ${requesterPubkey.slice(0, 16)}…`);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('❌ DELETE /api/lanacrowd/projects/:id error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
 // POST /api/lanacrowd/donations/record
 // Called after successful KIND 60200 Nostr publish
 // ──────────────────────────────────────────────
