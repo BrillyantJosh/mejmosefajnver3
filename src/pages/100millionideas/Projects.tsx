@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLanacrowdProjects, ProjectFilter } from "@/hooks/useLanacrowdProjects";
 import ProjectCard from "@/components/100millionideas/ProjectCard";
-import { Loader2, Layers, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Layers, ChevronLeft, ChevronRight, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,6 +45,98 @@ const Projects = () => {
     is100MAdmin ? session?.nostrHexId : undefined,
     session?.nostrHexId,
   );
+
+  // ── Translation (Gemini Flash Lite via /api/functions/translate-post) ──
+  // Cache: { [`${projectId}:${lang}`]: { title, shortDesc } }
+  type TranslationLang = 'sl' | 'en' | null;
+  const [translateLang, setTranslateLang] = useState<TranslationLang>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translations, setTranslations] = useState<Record<string, { title?: string; shortDesc?: string }>>({});
+
+  const handleTranslate = async (lang: 'sl' | 'en') => {
+    if (lang === translateLang || projects.length === 0) {
+      setTranslateLang(lang);
+      return;
+    }
+    setIsTranslating(true);
+    setTranslateLang(lang);
+
+    // Translate title + shortDesc for each project in parallel.
+    // Skip projects we've already translated to this language (cached).
+    const toTranslate = projects.filter(p => !translations[`${p.id}:${lang}`]);
+
+    try {
+      const results = await Promise.allSettled(
+        toTranslate.flatMap(p => {
+          const titlePromise = p.title?.trim()
+            ? fetch('/api/functions/translate-post', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  content: p.title,
+                  targetLanguage: lang,
+                  nostrHexId: session?.nostrHexId,
+                }),
+              }).then(r => r.json()).then(d => ({ id: p.id, field: 'title' as const, text: d.translatedText as string | undefined }))
+            : Promise.resolve({ id: p.id, field: 'title' as const, text: undefined });
+
+          const descPromise = p.shortDesc?.trim()
+            ? fetch('/api/functions/translate-post', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  content: p.shortDesc,
+                  targetLanguage: lang,
+                  nostrHexId: session?.nostrHexId,
+                }),
+              }).then(r => r.json()).then(d => ({ id: p.id, field: 'shortDesc' as const, text: d.translatedText as string | undefined }))
+            : Promise.resolve({ id: p.id, field: 'shortDesc' as const, text: undefined });
+
+          return [titlePromise, descPromise];
+        }),
+      );
+
+      const next: typeof translations = { ...translations };
+      for (const r of results) {
+        if (r.status !== 'fulfilled' || !r.value.text) continue;
+        const key = `${r.value.id}:${lang}`;
+        next[key] = { ...(next[key] || {}), [r.value.field]: r.value.text };
+      }
+      setTranslations(next);
+    } catch (err) {
+      console.error('Translation error:', err);
+      toast({
+        title: 'Translation failed',
+        description: 'Could not translate projects. Try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  // When the list of projects changes (filter / page / refetch) and a
+  // translation language is active, translate any new projects on demand.
+  useEffect(() => {
+    if (!translateLang || projects.length === 0) return;
+    const missing = projects.some(p => !translations[`${p.id}:${translateLang}`]);
+    if (missing) {
+      handleTranslate(translateLang);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, translateLang]);
+
+  // Helper: get the project view (with title/shortDesc replaced if translated)
+  const getDisplayProject = (p: typeof projects[number]) => {
+    if (!translateLang) return p;
+    const t = translations[`${p.id}:${translateLang}`];
+    if (!t) return p;
+    return {
+      ...p,
+      title: t.title ?? p.title,
+      shortDesc: t.shortDesc ?? p.shortDesc,
+    };
+  };
 
   // Totals across ALL projects in current filter (not just current page) — from /summary
   const [summary, setSummary] = useState<{
@@ -239,21 +331,66 @@ const Projects = () => {
         </Card>
       )}
 
-      {/* Filter Tabs */}
-      <div className="flex flex-wrap gap-2">
-        {(Object.keys(FILTER_LABELS) as ProjectFilter[]).map(f => (
+      {/* Filter Tabs + Translation toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(FILTER_LABELS) as ProjectFilter[]).map(f => (
+            <button
+              key={f}
+              onClick={() => { setFilter(f); setPage(1); }}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                filter === f
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}
+            >
+              {FILTER_LABELS[f]}
+            </button>
+          ))}
+        </div>
+
+        {/* Auto-translate (Gemini Flash Lite). Translates all visible cards' title + short description. */}
+        <div className="flex items-center gap-1 bg-muted rounded-full p-1">
+          <Languages className="h-3.5 w-3.5 ml-2 mr-1 text-muted-foreground" />
           <button
-            key={f}
-            onClick={() => { setFilter(f); setPage(1); }}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              filter === f
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+            type="button"
+            onClick={() => setTranslateLang(null)}
+            disabled={isTranslating}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+              translateLang === null
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            {FILTER_LABELS[f]}
+            Original
           </button>
-        ))}
+          <button
+            type="button"
+            onClick={() => handleTranslate('sl')}
+            disabled={isTranslating}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1 ${
+              translateLang === 'sl'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {isTranslating && translateLang === 'sl' && <Loader2 className="h-3 w-3 animate-spin" />}
+            SL
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTranslate('en')}
+            disabled={isTranslating}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1 ${
+              translateLang === 'en'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {isTranslating && translateLang === 'en' && <Loader2 className="h-3 w-3 animate-spin" />}
+            EN
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -272,7 +409,7 @@ const Projects = () => {
             {projects.map((project) => (
               <ProjectCard
                 key={project.id}
-                project={project}
+                project={getDisplayProject(project)}
                 isModuleAdmin={is100MAdmin}
                 isHidden={project.isHidden}
                 isCompleted={project.isCompleted}
