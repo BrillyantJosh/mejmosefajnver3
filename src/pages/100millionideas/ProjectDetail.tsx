@@ -73,6 +73,9 @@ const ProjectDetail = () => {
         body: JSON.stringify({
           content: text,
           targetLanguage: lang,
+          // Project page shows plain text (no markdown rendering), so ask the
+          // translator to skip emphasis markers entirely.
+          format: 'plain',
           nostrHexId: session?.nostrHexId,
         }),
       });

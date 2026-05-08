@@ -541,6 +541,9 @@ router.post('/translate-post', async (req: Request, res: Response) => {
     const content = req.body.content || req.body.text;
     const targetLanguage = req.body.targetLanguage || req.body.targetLang;
     const nostrHexId = req.body.nostrHexId || null;
+    // 'plain' = strip out markdown (recommended for UI fields rendered as text);
+    // 'markdown' (default) = preserve **bold**, _italic_, bullets, etc.
+    const format: 'plain' | 'markdown' = req.body.format === 'plain' ? 'plain' : 'markdown';
 
     if (!content || !targetLanguage) {
       return res.status(400).json({ error: 'content and targetLanguage required' });
@@ -553,7 +556,9 @@ router.post('/translate-post', async (req: Request, res: Response) => {
 
     const langName = targetLanguage === 'sl' ? 'Slovenian' : targetLanguage === 'en' ? 'English' : targetLanguage;
 
-    const systemPrompt = `You are a professional translator. Translate the following text to ${langName}. Preserve the original meaning, tone, and formatting (including markdown bold, italic, bullet points). Return ONLY the translated text, nothing else. Do not add any explanation or notes.`;
+    const systemPrompt = format === 'plain'
+      ? `You are a professional translator. Translate the following text to ${langName}. Return plain text only — DO NOT add any markdown syntax (no **bold**, no _italic_, no asterisks, no underscores around words, no bullet points). Preserve the original meaning and tone. Return ONLY the translated text, nothing else. Do not add any explanation or notes.`
+      : `You are a professional translator. Translate the following text to ${langName}. Preserve the original meaning, tone, and formatting (including markdown bold, italic, bullet points). Return ONLY the translated text, nothing else. Do not add any explanation or notes.`;
 
     const result = await callGemini(GEMINI_API_KEY, 'gemini-2.0-flash-lite', systemPrompt, content);
 
@@ -573,9 +578,26 @@ router.post('/translate-post', async (req: Request, res: Response) => {
       }
     }
 
-    return res.json({
-      translatedText: result.content.trim(),
-    });
+    let translated = result.content.trim();
+    if (format === 'plain') {
+      // Belt-and-braces: even when we ask Gemini for plain text it sometimes
+      // hallucinates markdown emphasis. Strip the common markers so the UI
+      // never shows raw `**word**` or `_word_` to the user.
+      translated = translated
+        // **bold** / __bold__
+        .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+        .replace(/__([^_\n]+)__/g, '$1')
+        // *italic* / _italic_  (single markers; require non-space inside)
+        .replace(/(^|[^*])\*([^*\s][^*\n]*?)\*(?!\*)/g, '$1$2')
+        .replace(/(^|[^_])_([^_\s][^_\n]*?)_(?!_)/g, '$1$2')
+        // Bullet markers at line start
+        .replace(/^[\s]*[*\-•]\s+/gm, '')
+        // Stray leading/trailing single asterisks/underscores
+        .replace(/(^|\s)\*+(\s|$)/g, '$1$2')
+        .replace(/(^|\s)_+(\s|$)/g, '$1$2');
+    }
+
+    return res.json({ translatedText: translated });
   } catch (error: any) {
     console.error('Translation error:', error.message);
     return res.status(500).json({ error: error.message });

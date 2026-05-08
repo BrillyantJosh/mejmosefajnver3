@@ -75,6 +75,9 @@ const Projects = () => {
                 body: JSON.stringify({
                   content: p.title,
                   targetLanguage: lang,
+                  // Project cards show plain text, not rendered markdown — ask
+                  // the translator to omit asterisks / underscores entirely.
+                  format: 'plain',
                   nostrHexId: session?.nostrHexId,
                 }),
               }).then(r => r.json()).then(d => ({ id: p.id, field: 'title' as const, text: d.translatedText as string | undefined }))
@@ -87,6 +90,7 @@ const Projects = () => {
                 body: JSON.stringify({
                   content: p.shortDesc,
                   targetLanguage: lang,
+                  format: 'plain',
                   nostrHexId: session?.nostrHexId,
                 }),
               }).then(r => r.json()).then(d => ({ id: p.id, field: 'shortDesc' as const, text: d.translatedText as string | undefined }))
