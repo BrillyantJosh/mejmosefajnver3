@@ -1,14 +1,17 @@
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useLanacrowdProject } from "@/hooks/useLanacrowdProject";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { useAdmin } from "@/contexts/AdminContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Users, Target, Wallet, ExternalLink, Trophy } from "lucide-react";
+import { ArrowLeft, Users, Target, Wallet, ExternalLink, Trophy, Languages } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "@/hooks/use-toast";
 
 const getYoutubeEmbedUrl = (url: string): string => {
   try {
@@ -33,15 +36,92 @@ const getYoutubeEmbedUrl = (url: string): string => {
   }
 };
 
+type TranslateLang = 'sl' | 'en' | null;
+type TranslatedFields = Partial<Pick<NonNullable<ReturnType<typeof useLanacrowdProject>['project']>,
+  'title' | 'shortDesc' | 'content' | 'responsibilityStatement' | 'completionComment'>>;
+
 const ProjectDetail = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { project, donations, totalRaised, isLoading: projectsLoading } = useLanacrowdProject(projectId);
   const { is100MAdmin } = useAdmin();
+  const { session } = useAuth();
   const isCompleted = !!project?.isCompleted;
   const isHidden = !!project?.isHidden;
   const completionComment = project?.completionComment;
   const { profile: ownerProfile } = useNostrProfileCache(project?.ownerPubkey || null);
+
+  // ── Gemini Flash Lite translation ─────────────────────────────────────
+  // We translate the user-visible long-form fields in parallel and cache
+  // by language, so toggling Original ↔ SL ↔ EN is instant after first run.
+  const [translateLang, setTranslateLang] = useState<TranslateLang>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translations, setTranslations] = useState<Record<'sl' | 'en', TranslatedFields | undefined>>({
+    sl: undefined,
+    en: undefined,
+  });
+
+  const translateField = async (
+    text: string | undefined | null,
+    lang: 'sl' | 'en',
+  ): Promise<string | undefined> => {
+    if (!text || !text.trim()) return undefined;
+    try {
+      const res = await fetch('/api/functions/translate-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: text,
+          targetLanguage: lang,
+          nostrHexId: session?.nostrHexId,
+        }),
+      });
+      if (!res.ok) return undefined;
+      const data = await res.json();
+      return typeof data.translatedText === 'string' ? data.translatedText : undefined;
+    } catch (err) {
+      console.error('translateField error:', err);
+      return undefined;
+    }
+  };
+
+  const handleTranslate = async (lang: 'sl' | 'en') => {
+    setTranslateLang(lang);
+    if (translations[lang] || !project) return; // already cached
+    setIsTranslating(true);
+    try {
+      const [title, shortDesc, content, responsibilityStatement, completion] = await Promise.all([
+        translateField(project.title, lang),
+        translateField(project.shortDesc, lang),
+        translateField(project.content, lang),
+        translateField(project.responsibilityStatement, lang),
+        translateField(project.completionComment, lang),
+      ]);
+      setTranslations((prev) => ({
+        ...prev,
+        [lang]: { title, shortDesc, content, responsibilityStatement, completionComment: completion },
+      }));
+    } catch (err) {
+      console.error('Translation error:', err);
+      toast({
+        title: 'Translation failed',
+        description: 'Could not translate this project. Try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  // Resolve a field through the active translation (falling back to original).
+  const tr = (
+    field: keyof TranslatedFields,
+    fallback: string | undefined | null,
+  ): string => {
+    if (!translateLang) return fallback ?? '';
+    const cached = translations[translateLang]?.[field];
+    return cached ?? fallback ?? '';
+  };
 
   if (projectsLoading) {
     return (
@@ -114,10 +194,57 @@ const ProjectDetail = () => {
 
       {/* Content */}
       <div className="container mx-auto p-6 max-w-4xl space-y-8">
+        {/* Translation toggle (Gemini 2.0 Flash Lite). Translates every text
+            block on this page — title, short description, full content,
+            statement of responsibility, completion comment. */}
+        <div className="flex items-center justify-end">
+          <div className="flex items-center gap-1 bg-muted rounded-full p-1">
+            <Languages className="h-3.5 w-3.5 ml-2 mr-1 text-muted-foreground" />
+            <button
+              type="button"
+              onClick={() => setTranslateLang(null)}
+              disabled={isTranslating}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                translateLang === null
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Original
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTranslate('sl')}
+              disabled={isTranslating}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1 ${
+                translateLang === 'sl'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {isTranslating && translateLang === 'sl' && <Loader2 className="h-3 w-3 animate-spin" />}
+              SL
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTranslate('en')}
+              disabled={isTranslating}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1 ${
+                translateLang === 'en'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {isTranslating && translateLang === 'en' && <Loader2 className="h-3 w-3 animate-spin" />}
+              EN
+            </button>
+          </div>
+        </div>
+
         {/* Title & Description */}
         <div>
-          <h1 className="text-3xl font-bold mb-2">{project.title}</h1>
-          <p className="text-muted-foreground">{project.shortDesc}</p>
+          <h1 className="text-3xl font-bold mb-2">{tr('title', project.title)}</h1>
+          <p className="text-muted-foreground whitespace-pre-wrap">{tr('shortDesc', project.shortDesc)}</p>
           <p className="text-sm text-muted-foreground mt-2">
             Published {project.nostrCreatedAt ? format(new Date(project.nostrCreatedAt * 1000), 'dd/MM/yyyy') : '—'}
           </p>
@@ -133,8 +260,8 @@ const ProjectDetail = () => {
                   Project Completed
                 </h2>
                 {completionComment && (
-                  <p className="text-muted-foreground italic">
-                    "{completionComment}"
+                  <p className="text-muted-foreground italic whitespace-pre-wrap">
+                    "{tr('completionComment', completionComment)}"
                   </p>
                 )}
               </div>
@@ -171,8 +298,8 @@ const ProjectDetail = () => {
               <h2 className="text-xl font-semibold text-green-500 mb-2">
                 Statement of Responsibility
               </h2>
-              <p className="text-muted-foreground italic">
-                "{project.responsibilityStatement}"
+              <p className="text-muted-foreground italic whitespace-pre-wrap">
+                "{tr('responsibilityStatement', project.responsibilityStatement)}"
               </p>
             </div>
           </div>
@@ -182,7 +309,7 @@ const ProjectDetail = () => {
         <div>
           <h2 className="text-2xl font-bold mb-4">Project Description</h2>
           <div className="prose prose-sm max-w-none">
-            <p className="whitespace-pre-wrap text-muted-foreground">{project.content}</p>
+            <p className="whitespace-pre-wrap text-muted-foreground">{tr('content', project.content)}</p>
           </div>
         </div>
 
