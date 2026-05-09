@@ -32,7 +32,7 @@ import {
   X,
   QrCode,
 } from "lucide-react";
-import { useJsQRScanner } from "@/lib/qr-camera";
+import { QRScanner } from "@/components/QRScanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
@@ -70,21 +70,10 @@ export default function ShopSell() {
   const [inputAmount, setInputAmount] = useState("");
   const [selectedWalletId, setSelectedWalletId] = useState("");
 
-  // Scanning step — jsQR-based scanner ported from mobile.lanapays.us
+  // Scanning step — uses shared <QRScanner> dialog (same as mobile.lanapays.us)
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannedKey, setScannedKey] = useState("");
   const [buyerWallet, setBuyerWallet] = useState("");
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { isScanning: isCameraReady, error: scanError } = useJsQRScanner({
-    enabled: isScannerOpen,
-    videoRef,
-    canvasRef,
-    onScan: (decoded) => {
-      handleQRScan(decoded);
-      setIsScannerOpen(false);
-    },
-  });
 
   // Processing / result
   const [isProcessing, setIsProcessing] = useState(false);
@@ -908,70 +897,29 @@ export default function ShopSell() {
         </>
       )}
 
-      {/* Custom QR Scanner Dialog with amount display */}
-      <Dialog open={isScannerOpen} onOpenChange={handleCloseScanner}>
-        <DialogContent className="max-w-[95vw] sm:max-w-md mx-auto">
-          {/* Amount Header — big and clear */}
-          <div className="text-center space-y-2 pt-2">
-            <div className="flex items-center justify-center gap-2 text-muted-foreground">
-              <QrCode className="h-5 w-5" />
-              <span className="text-sm font-medium">Charge Customer</span>
-            </div>
-            <div className="p-4 bg-green-50 dark:bg-green-950/30 rounded-xl border border-green-200 dark:border-green-800">
-              <p className="text-4xl font-bold text-green-600">
-                {formatLana(calculatedLana)}
-              </p>
-              {selectedCurrency !== "LANA" && (
-                <p className="text-lg text-green-600/70 mt-1">
-                  {formatCurrency(parseFloat(inputAmount || "0"), selectedCurrency)}
-                </p>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Scan customer's private key QR code to charge
+      {/* QR Scanner — shared dialog with amount header injected via children */}
+      <QRScanner
+        isOpen={isScannerOpen}
+        onClose={handleCloseScanner}
+        onScan={(decoded) => {
+          handleQRScan(decoded);
+          setIsScannerOpen(false);
+        }}
+        title="Charge Customer"
+        description="Scan customer's private key QR code to charge"
+      >
+        {/* Amount Header — shown above the camera viewport */}
+        <div className="p-4 bg-green-50 dark:bg-green-950/30 rounded-xl border border-green-200 dark:border-green-800 text-center">
+          <p className="text-4xl font-bold text-green-600">
+            {formatLana(calculatedLana)}
+          </p>
+          {selectedCurrency !== "LANA" && (
+            <p className="text-lg text-green-600/70 mt-1">
+              {formatCurrency(parseFloat(inputAmount || "0"), selectedCurrency)}
             </p>
-          </div>
-
-          {/* Camera viewport */}
-          <div className="space-y-3">
-            <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-black">
-              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-              <canvas ref={canvasRef} className="hidden" />
-              {isCameraReady && (
-                <div className="absolute inset-0 pointer-events-none">
-                  <div className="absolute top-2 left-2 w-10 h-10 border-l-4 border-t-4 border-primary rounded-tl-lg" />
-                  <div className="absolute top-2 right-2 w-10 h-10 border-r-4 border-t-4 border-primary rounded-tr-lg" />
-                  <div className="absolute bottom-2 left-2 w-10 h-10 border-l-4 border-b-4 border-primary rounded-bl-lg" />
-                  <div className="absolute bottom-2 right-2 w-10 h-10 border-r-4 border-b-4 border-primary rounded-br-lg" />
-                </div>
-              )}
-            </div>
-
-            {!isCameraReady && !scanError && (
-              <div className="flex items-center justify-center py-4 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                Starting camera...
-              </div>
-            )}
-
-            {scanError && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{scanError}</AlertDescription>
-              </Alert>
-            )}
-
-            <Button
-              onClick={handleCloseScanner}
-              variant="outline"
-              className="w-full"
-            >
-              <X className="w-4 h-4 mr-2" />
-              Cancel
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          )}
+        </div>
+      </QRScanner>
     </div>
   );
 }

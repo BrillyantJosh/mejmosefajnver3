@@ -9,7 +9,7 @@ import { Loader2, Send, Key, Scan, CheckCircle, XCircle, User, Wallet } from 'lu
 import { supabase } from '@/integrations/supabase/client';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { convertWifToIds } from '@/lib/crypto';
-import { useJsQRScanner } from '@/lib/qr-camera';
+import { QRScanner } from '@/components/QRScanner';
 import { toast } from 'sonner';
 import { t } from '@/lib/aiAdvisorTranslations';
 
@@ -46,21 +46,7 @@ export function PaymentForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [selectedTab, setSelectedTab] = useState('manual');
-  const [scannerEnabled, setScannerEnabled] = useState(false);
-
-  // jsQR-based scanner (ported from mobile.lanapays.us)
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { isScanning, error: scanError } = useJsQRScanner({
-    enabled: scannerEnabled,
-    videoRef,
-    canvasRef,
-    onScan: (decoded) => {
-      setPrivateKey(decoded);
-      setScannerEnabled(false);
-      setSelectedTab('manual');
-    },
-  });
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   useEffect(() => {
     const validatePrivateKey = async () => {
@@ -245,31 +231,18 @@ export function PaymentForm({
               </TabsContent>
 
               <TabsContent value="scan" className="space-y-3">
-                {!scannerEnabled ? (
-                  <Button onClick={() => setScannerEnabled(true)} className="w-full">
-                    <Scan className="h-4 w-4 mr-2" />
-                    {t('startCamera', language)}
-                  </Button>
-                ) : (
-                  <>
-                    <div className="relative aspect-square bg-background rounded-lg overflow-hidden border">
-                      <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-                      <canvas ref={canvasRef} className="hidden" />
-                      {isScanning && (
-                        <div className="absolute inset-0 pointer-events-none">
-                          <div className="absolute top-0 left-0 w-10 h-10 border-l-4 border-t-4 border-primary rounded-tl-lg" />
-                          <div className="absolute top-0 right-0 w-10 h-10 border-r-4 border-t-4 border-primary rounded-tr-lg" />
-                          <div className="absolute bottom-0 left-0 w-10 h-10 border-l-4 border-b-4 border-primary rounded-bl-lg" />
-                          <div className="absolute bottom-0 right-0 w-10 h-10 border-r-4 border-b-4 border-primary rounded-br-lg" />
-                        </div>
-                      )}
-                    </div>
-                    {scanError && <p className="text-sm text-destructive">{scanError}</p>}
-                    <Button onClick={() => setScannerEnabled(false)} variant="destructive" className="w-full">
-                      {t('stopScanning', language)}
-                    </Button>
-                  </>
-                )}
+                <Button onClick={() => setScannerOpen(true)} className="w-full">
+                  <Scan className="h-4 w-4 mr-2" />
+                  {t('startCamera', language)}
+                </Button>
+                <QRScanner
+                  isOpen={scannerOpen}
+                  onClose={() => setScannerOpen(false)}
+                  onScan={(decoded) => {
+                    setPrivateKey(decoded);
+                    setSelectedTab('manual');
+                  }}
+                />
                 {privateKey && (
                   <div className="p-3 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">{t('scannedKey', language)}</p>

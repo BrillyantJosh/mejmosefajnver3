@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, ArrowRight, Scan, Key, Copy, ShieldAlert } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useJsQRScanner } from "@/lib/qr-camera";
+import { QRScanner } from "@/components/QRScanner";
 import { convertWifToIds } from "@/lib/crypto";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,26 +32,12 @@ export default function SendLanaPrivateKey() {
   const isFrozen = !!(senderWallet?.freezeStatus);
 
   const [privateKey, setPrivateKey] = useState("");
-  const [scannerEnabled, setScannerEnabled] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [error, setError] = useState("");
   const [selectedTab, setSelectedTab] = useState("manual");
   const [isValidating, setIsValidating] = useState(false);
   const [isPrivateKeyValid, setIsPrivateKeyValid] = useState(false);
   const [validationError, setValidationError] = useState("");
-
-  // jsQR-based scanner (ported from mobile.lanapays.us)
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { isScanning, error: scanError } = useJsQRScanner({
-    enabled: scannerEnabled,
-    videoRef,
-    canvasRef,
-    onScan: (decoded) => {
-      setPrivateKey(decoded);
-      setScannerEnabled(false);
-      setSelectedTab("manual");
-    },
-  });
 
   // Real-time private key validation
   useEffect(() => {
@@ -277,36 +263,20 @@ export default function SendLanaPrivateKey() {
 
             <TabsContent value="scan" className="space-y-4">
               <div className="space-y-4">
-                {!scannerEnabled ? (
-                  <Button onClick={() => setScannerEnabled(true)} className="w-full">
-                    <Scan className="h-4 w-4 mr-2" />
-                    Start Camera
-                  </Button>
-                ) : (
-                  <>
-                    <div className="relative aspect-square bg-background rounded-lg overflow-hidden border">
-                      <video
-                        ref={videoRef}
-                        className="w-full h-full object-cover"
-                        playsInline
-                        muted
-                      />
-                      <canvas ref={canvasRef} className="hidden" />
-                      {isScanning && (
-                        <div className="absolute inset-0 pointer-events-none">
-                          <div className="absolute top-0 left-0 w-10 h-10 border-l-4 border-t-4 border-primary rounded-tl-lg" />
-                          <div className="absolute top-0 right-0 w-10 h-10 border-r-4 border-t-4 border-primary rounded-tr-lg" />
-                          <div className="absolute bottom-0 left-0 w-10 h-10 border-l-4 border-b-4 border-primary rounded-bl-lg" />
-                          <div className="absolute bottom-0 right-0 w-10 h-10 border-r-4 border-b-4 border-primary rounded-br-lg" />
-                        </div>
-                      )}
-                    </div>
-                    {scanError && <p className="text-sm text-destructive">{scanError}</p>}
-                    <Button onClick={() => setScannerEnabled(false)} variant="destructive" className="w-full">
-                      Stop Scanning
-                    </Button>
-                  </>
-                )}
+                <Button onClick={() => setScannerOpen(true)} className="w-full">
+                  <Scan className="h-4 w-4 mr-2" />
+                  Start Camera
+                </Button>
+                <QRScanner
+                  isOpen={scannerOpen}
+                  onClose={() => setScannerOpen(false)}
+                  onScan={(decoded) => {
+                    setPrivateKey(decoded);
+                    setSelectedTab("manual");
+                  }}
+                  title="Scan Private Key"
+                  description="Position the QR code with your private key inside the frame."
+                />
                 {privateKey && (
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Scanned private key:</p>

@@ -17,7 +17,7 @@ import {
   X,
   ExternalLink,
 } from "lucide-react";
-import { useJsQRScanner } from "@/lib/qr-camera";
+import { QRScanner } from "@/components/QRScanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAdmin } from "@/contexts/AdminContext";
@@ -109,20 +109,8 @@ export default function DiscountSell() {
   const [validatingKey, setValidatingKey] = useState(false);
   const [executing, setExecuting] = useState(false);
 
-  // QR Scanner — uses jsQR scanner ported from mobile.lanapays.us
+  // QR Scanner — uses shared <QRScanner> dialog (same as mobile.lanapays.us)
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { isScanning: isCameraReady, error: scanError } = useJsQRScanner({
-    enabled: isScannerOpen,
-    videoRef,
-    canvasRef,
-    onScan: (decoded) => {
-      setPrivateKey(decoded.trim());
-      setIsScannerOpen(false);
-      toast.success("QR code scanned successfully");
-    },
-  });
 
   // Step 5: Result
   const [txResult, setTxResult] = useState<{
@@ -1301,48 +1289,17 @@ export default function DiscountSell() {
         )}
         </>
       )}
-      {/* QR Scanner Modal */}
-      {isScannerOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="bg-card border-2 border-border rounded-2xl p-4 sm:p-6 max-w-md w-full mx-4 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">Scan WIF Private Key</h3>
-              <button
-                onClick={() => setIsScannerOpen(false)}
-                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="relative rounded-xl overflow-hidden bg-black min-h-[200px] sm:min-h-[280px] aspect-square">
-              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-              <canvas ref={canvasRef} className="hidden" />
-              {isCameraReady && (
-                <div className="absolute inset-0 pointer-events-none">
-                  <div className="absolute top-2 left-2 w-10 h-10 border-l-4 border-t-4 border-primary rounded-tl-lg" />
-                  <div className="absolute top-2 right-2 w-10 h-10 border-r-4 border-t-4 border-primary rounded-tr-lg" />
-                  <div className="absolute bottom-2 left-2 w-10 h-10 border-l-4 border-b-4 border-primary rounded-bl-lg" />
-                  <div className="absolute bottom-2 right-2 w-10 h-10 border-r-4 border-b-4 border-primary rounded-br-lg" />
-                </div>
-              )}
-            </div>
-            {!isCameraReady && !scanError && (
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Starting camera...
-              </div>
-            )}
-            {scanError && (
-              <div className="rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-3 text-sm text-red-600">
-                {scanError}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground text-center">
-              Point your camera at the QR code containing your WIF private key.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* QR Scanner — shared dialog (same component used on mobile.lanapays.us) */}
+      <QRScanner
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScan={(decoded) => {
+          setPrivateKey(decoded.trim());
+          toast.success("QR code scanned successfully");
+        }}
+        title="Scan WIF Private Key"
+        description="Point your camera at the QR code containing your WIF private key."
+      />
     </div>
   );
 }

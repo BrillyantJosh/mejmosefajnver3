@@ -8,7 +8,7 @@ import { ArrowLeft, ArrowRight, Scan, Search, User, Wallet, Snowflake, ShieldAle
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useJsQRScanner } from "@/lib/qr-camera";
+import { QRScanner } from "@/components/QRScanner";
 import { validateLanaWalletIdWithMessage } from "@/lib/lanaWalletValidation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
@@ -48,23 +48,9 @@ export default function SendLanaRecipient() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [scannerEnabled, setScannerEnabled] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [error, setError] = useState("");
   const [selectedTab, setSelectedTab] = useState("manual");
-
-  // jsQR-based scanner (ported from mobile.lanapays.us)
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { isScanning, error: scanError } = useJsQRScanner({
-    enabled: scannerEnabled,
-    videoRef,
-    canvasRef,
-    onScan: (decoded) => {
-      setRecipientWalletId(decoded);
-      setScannerEnabled(false);
-      setSelectedTab("manual");
-    },
-  });
 
   // Real-time wallet registration check
   const [walletCheckStatus, setWalletCheckStatus] = useState<'idle' | 'checking' | 'registered' | 'unregistered' | 'error'>('idle');
@@ -422,31 +408,20 @@ export default function SendLanaRecipient() {
 
             <TabsContent value="scan" className="space-y-4">
               <div className="space-y-4">
-                {!scannerEnabled ? (
-                  <Button onClick={() => setScannerEnabled(true)} className="w-full">
-                    <Scan className="h-4 w-4 mr-2" />
-                    Start Camera
-                  </Button>
-                ) : (
-                  <>
-                    <div className="relative aspect-square bg-background rounded-lg overflow-hidden border">
-                      <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-                      <canvas ref={canvasRef} className="hidden" />
-                      {isScanning && (
-                        <div className="absolute inset-0 pointer-events-none">
-                          <div className="absolute top-0 left-0 w-10 h-10 border-l-4 border-t-4 border-primary rounded-tl-lg" />
-                          <div className="absolute top-0 right-0 w-10 h-10 border-r-4 border-t-4 border-primary rounded-tr-lg" />
-                          <div className="absolute bottom-0 left-0 w-10 h-10 border-l-4 border-b-4 border-primary rounded-bl-lg" />
-                          <div className="absolute bottom-0 right-0 w-10 h-10 border-r-4 border-b-4 border-primary rounded-br-lg" />
-                        </div>
-                      )}
-                    </div>
-                    {scanError && <p className="text-sm text-destructive">{scanError}</p>}
-                    <Button onClick={() => setScannerEnabled(false)} variant="destructive" className="w-full">
-                      Stop Scanning
-                    </Button>
-                  </>
-                )}
+                <Button onClick={() => setScannerOpen(true)} className="w-full">
+                  <Scan className="h-4 w-4 mr-2" />
+                  Start Camera
+                </Button>
+                <QRScanner
+                  isOpen={scannerOpen}
+                  onClose={() => setScannerOpen(false)}
+                  onScan={(decoded) => {
+                    setRecipientWalletId(decoded);
+                    setSelectedTab("manual");
+                  }}
+                  title="Scan Wallet ID"
+                  description="Position the wallet QR code inside the frame."
+                />
                 {recipientWalletId && (
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Scanned wallet:</p>
