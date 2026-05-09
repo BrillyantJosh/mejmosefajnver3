@@ -227,19 +227,19 @@ export default function Home() {
   const { session } = useAuth();
 
   // Move to a different news page AND reset scroll position.
-  //   • Desktop: scroll the page vertically so the top of the feed is visible
-  //   • Mobile: also reset the horizontal scroller to the LEFT (first card),
-  //     otherwise the user stays at the right edge they swiped to on the
-  //     previous page and would see the last item of the new batch first.
+  //   • Desktop (lg+): scroll the page vertically so the top of the feed is visible
+  //   • Mobile: only reset the horizontal scroller to the LEFT (first card).
+  //     Don't move the page vertically — that's distracting since the cards
+  //     are already in view; the user just wanted to see the first card again.
   const goToPage = (newPage: number) => {
     setPage(newPage);
+    const isDesktop = typeof window !== 'undefined'
+      && window.matchMedia('(min-width: 1024px)').matches;
     requestAnimationFrame(() => {
-      // Vertical scroll to feed top (mainly for desktop, harmless on mobile).
-      newsFeedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      // Horizontal reset for the mobile snap scroller.
-      const scroller = mobileScrollerRef.current;
-      if (scroller) {
-        scroller.scrollTo({ left: 0, behavior: 'smooth' });
+      if (isDesktop) {
+        newsFeedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        mobileScrollerRef.current?.scrollTo({ left: 0, behavior: 'smooth' });
       }
     });
   };
