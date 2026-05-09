@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -222,7 +222,18 @@ function NewsBody({ text, mobileClamp }: { text: string; mobileClamp?: boolean }
 
 export default function Home() {
   const [page, setPage] = useState(0);
+  const newsFeedRef = useRef<HTMLDivElement>(null);
   const { session } = useAuth();
+
+  // Move to a different news page AND scroll back to the top of the feed.
+  // Without the scroll, the previous-page Next button stays in view and the
+  // user lands on the bottom item of the new page instead of the top.
+  const goToPage = (newPage: number) => {
+    setPage(newPage);
+    requestAnimationFrame(() => {
+      newsFeedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
 
   // --- News & FAQ (React Query — cached, instant on re-visit) ---
   const { data: items = [], isLoading: loading } = useQuery<WhatsUpItem[]>({
@@ -442,7 +453,7 @@ export default function Home() {
       {!loading && (
         <div className="flex flex-col lg:flex-row gap-8">
           {/* News feed — left */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0" ref={newsFeedRef}>
             {items.length === 0 ? (
               <div className="text-center py-16">
                 <p className="text-muted-foreground text-lg">No news yet. Stay tuned!</p>
@@ -536,7 +547,7 @@ export default function Home() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setPage(p => Math.max(0, p - 1))}
+                      onClick={() => goToPage(Math.max(0, page - 1))}
                       disabled={page === 0}
                       className="gap-1"
                     >
@@ -549,7 +560,7 @@ export default function Home() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                      onClick={() => goToPage(Math.min(totalPages - 1, page + 1))}
                       disabled={page >= totalPages - 1}
                       className="gap-1"
                     >
