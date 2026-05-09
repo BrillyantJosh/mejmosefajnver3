@@ -223,15 +223,24 @@ function NewsBody({ text, mobileClamp }: { text: string; mobileClamp?: boolean }
 export default function Home() {
   const [page, setPage] = useState(0);
   const newsFeedRef = useRef<HTMLDivElement>(null);
+  const mobileScrollerRef = useRef<HTMLDivElement>(null);
   const { session } = useAuth();
 
-  // Move to a different news page AND scroll back to the top of the feed.
-  // Without the scroll, the previous-page Next button stays in view and the
-  // user lands on the bottom item of the new page instead of the top.
+  // Move to a different news page AND reset scroll position.
+  //   • Desktop: scroll the page vertically so the top of the feed is visible
+  //   • Mobile: also reset the horizontal scroller to the LEFT (first card),
+  //     otherwise the user stays at the right edge they swiped to on the
+  //     previous page and would see the last item of the new batch first.
   const goToPage = (newPage: number) => {
     setPage(newPage);
     requestAnimationFrame(() => {
+      // Vertical scroll to feed top (mainly for desktop, harmless on mobile).
       newsFeedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Horizontal reset for the mobile snap scroller.
+      const scroller = mobileScrollerRef.current;
+      if (scroller) {
+        scroller.scrollTo({ left: 0, behavior: 'smooth' });
+      }
     });
   };
 
@@ -462,7 +471,11 @@ export default function Home() {
               <>
                 {/* Mobile: horizontal card scroller — video + title + body + share all together */}
                 <div className="block lg:hidden">
-                  <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-3 -mx-4 px-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+                  <div
+                    ref={mobileScrollerRef}
+                    className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-3 -mx-4 px-4"
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
+                  >
                     {paginatedItems.map((item) => {
                       const ytId = item.youtube_url ? extractYouTubeId(item.youtube_url) : null;
                       return (
