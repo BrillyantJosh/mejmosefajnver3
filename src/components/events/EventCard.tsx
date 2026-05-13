@@ -270,16 +270,26 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
                   ({t('card.days', { count: event.schedule.length })})
                 </span>
               </div>
-              {event.schedule.map((entry, idx) => (
-                <div key={idx} className="flex items-center gap-2 ml-6">
-                  <span className="text-muted-foreground">{format(entry.start, 'dd.MM.')}</span>
-                  <Clock className="h-3 w-3 shrink-0" />
-                  <span>
-                    {formatTimeInTimezone(entry.start, event.timezone || 'Europe/Ljubljana')}
-                    {entry.end && ` - ${formatTimeInTimezone(entry.end, event.timezone || 'Europe/Ljubljana')}`}
-                  </span>
-                </div>
-              ))}
+              {event.schedule.map((entry, idx) => {
+                // Strike-through individual schedule entries that have already
+                // finished — for recurring events you can see at a glance
+                // which sessions have happened vs. which are still ahead.
+                const entryEnd = entry.end || new Date(entry.start.getTime() + 2 * 60 * 60 * 1000);
+                const isEntryPast = entryEnd <= new Date();
+                return (
+                  <div
+                    key={idx}
+                    className={`flex items-center gap-2 ml-6 ${isEntryPast ? 'line-through opacity-60' : ''}`}
+                  >
+                    <span className="text-muted-foreground">{format(entry.start, 'dd.MM.')}</span>
+                    <Clock className="h-3 w-3 shrink-0" />
+                    <span>
+                      {formatTimeInTimezone(entry.start, event.timezone || 'Europe/Ljubljana')}
+                      {entry.end && ` - ${formatTimeInTimezone(entry.end, event.timezone || 'Europe/Ljubljana')}`}
+                    </span>
+                  </div>
+                );
+              })}
               <div className="ml-6 text-muted-foreground">
                 ({getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')})
               </div>

@@ -228,8 +228,12 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
         }
       });
 
-      // Sort by start date ascending
-      filteredEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
+      // Sort by NEXT UPCOMING OCCURRENCE, not by the original first start —
+      // otherwise a recurring event whose first day was months ago always
+      // floats to the top even though its next session is far in the future.
+      filteredEvents.sort(
+        (a, b) => getEventNextOccurrence(a).getTime() - getEventNextOccurrence(b).getTime(),
+      );
 
       setEvents(filteredEvents);
       console.log(`Filtered ${filter} events:`, filteredEvents.length);
@@ -419,9 +423,12 @@ export function useNostrEventsAll(options?: UseNostrEventsOptions) {
 
       const upcoming = parsedEvents.filter(isUpcoming);
 
-      // Split into online and live, sort by start
-      const online = upcoming.filter(e => e.isOnline).sort((a, b) => a.start.getTime() - b.start.getTime());
-      const live = upcoming.filter(e => !e.isOnline).sort((a, b) => a.start.getTime() - b.start.getTime());
+      // Split into online and live, sort by next upcoming occurrence
+      // (see getEventNextOccurrence — handles recurring events correctly).
+      const byNext = (a: LanaEvent, b: LanaEvent) =>
+        getEventNextOccurrence(a).getTime() - getEventNextOccurrence(b).getTime();
+      const online = upcoming.filter(e => e.isOnline).sort(byNext);
+      const live = upcoming.filter(e => !e.isOnline).sort(byNext);
 
       setOnlineEvents(online);
       setLiveEvents(live);
@@ -441,6 +448,42 @@ export function useNostrEventsAll(options?: UseNostrEventsOptions) {
   }, [enabled, fetchEvents, session]);
 
   return { onlineEvents, liveEvents, loading: enabled ? loading : false, refetch: fetchEvents };
+}
+
+/**
+ * Returns the next upcoming occurrence of an event.
+ *
+ * For multi-day / recurring events this is the schedule entry whose start
+ * is in the future (or whose end hasn't elapsed yet). For single-session
+ * events it's just `event.start`.
+ *
+ * Falls back to the LAST schedule entry if every occurrence has already
+ * passed — callers should treat that case as "the event is fully in the
+ * past" and sort it after upcoming events.
+ */
+export function getEventNextOccurrence(event: LanaEvent): Date {
+  const now = new Date();
+  if (event.schedule.length > 0) {
+    // Pick the first schedule entry whose end is still ahead of now.
+    for (const entry of event.schedule) {
+      const entryEnd = entry.end || new Date(entry.start.getTime() + 2 * 60 * 60 * 1000);
+      if (entryEnd > now) return entry.start;
+    }
+    return event.schedule[event.schedule.length - 1].start; // all past
+  }
+  return event.start;
+}
+
+/** True when every schedule entry of the event has already ended. */
+export function isEventPast(event: LanaEvent): boolean {
+  const now = new Date();
+  if (event.schedule.length > 0) {
+    const lastEntry = event.schedule[event.schedule.length - 1];
+    const lastEnd = lastEntry.end || new Date(lastEntry.start.getTime() + 2 * 60 * 60 * 1000);
+    return lastEnd <= now;
+  }
+  const eventEnd = event.end || new Date(event.start.getTime() + 2 * 60 * 60 * 1000);
+  return eventEnd <= now && event.start <= now;
 }
 
 export function getEventStatus(event: LanaEvent): 'happening-now' | 'today' | 'upcoming' {
