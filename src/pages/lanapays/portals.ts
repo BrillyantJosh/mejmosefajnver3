@@ -24,4 +24,5 @@ export const PORTALS: ReadonlyArray<{
   { id: 'pet',          url: 'https://lana.pet',         prefix: 'portal.pet' },
   { id: 'vacations',    url: 'https://lana.vacations',   prefix: 'portal.vacations' },
   { id: 'marketplace',  url: 'https://lanamarket.place',             prefix: 'portal.marketplace' },
+  { id: 'events',       url: 'https://lana.events',                  prefix: 'portal.events' },
 ] as const;

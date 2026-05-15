@@ -39,6 +39,8 @@ const lanapays = {
   'portal.vacations.desc': 'Accommodation & Experiences',
   'portal.marketplace.name': 'Lana Second-hand Marketplace',
   'portal.marketplace.desc': 'A little of everything for everyone',
+  'portal.events.name': 'Lana Events',
+  'portal.events.desc': 'Events & Experiences',
 
   // ── My Offers page ──
   'myOffers.title': 'My Offers',
@@ -103,6 +105,8 @@ const translations: TranslationDict<LanaPaysKey> = {
     'portal.vacations.desc': 'Nastanitve & Doživetja',
     'portal.marketplace.name': 'Lana Tržnica rabljenih izdelkov',
     'portal.marketplace.desc': 'Vsega po malo za vse',
+    'portal.events.name': 'Lana Events',
+    'portal.events.desc': 'Dogodki & Doživetja',
 
     // ── My Offers page ──
     'myOffers.title': 'Moje ponudbe',
