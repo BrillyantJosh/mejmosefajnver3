@@ -105,8 +105,8 @@ const translations: TranslationDict<LanaPaysKey> = {
     'portal.vacations.desc': 'Nastanitve & Doživetja',
     'portal.marketplace.name': 'Lana Tržnica rabljenih izdelkov',
     'portal.marketplace.desc': 'Vsega po malo za vse',
-    'portal.events.name': 'Lana Events',
-    'portal.events.desc': 'Dogodki & Doživetja',
+    'portal.events.name': 'Lana Dogodki & Delavnice',
+    'portal.events.desc': 'Dogodki & Delavnice',
 
     // ── My Offers page ──
     'myOffers.title': 'Moje ponudbe',
