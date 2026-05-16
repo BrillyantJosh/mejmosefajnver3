@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Sparkles, HelpCircle, PlayCircle, Video as VideoIcon, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import LazyYouTube from "@/components/LazyYouTube";
-import { formatDistanceToNow, format, endOfWeek } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { useNostrEventsAll, LanaEvent, getEventNextOccurrence } from "@/hooks/useNostrEvents";
 import { useRecentConversations } from "@/hooks/useRecentConversations";
 import { useAuth } from "@/contexts/AuthContext";
@@ -383,11 +383,11 @@ export default function Home() {
 
   // (Lana Meet sidebar cards removed by request — module remains accessible via /meet)
 
-  // Filter online events: this week only, upcoming/active
+  // Filter online events: next 7 days, upcoming/active
   const now = new Date();
-  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+  const next7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   const onlineThisWeek = onlineEvents
-    .filter(e => { const next = getEventNextOccurrence(e); return e.status === 'active' && next <= weekEnd && next >= new Date(now.getTime() - 2 * 60 * 60 * 1000); })
+    .filter(e => { const next = getEventNextOccurrence(e); return e.status === 'active' && next <= next7days && next >= new Date(now.getTime() - 2 * 60 * 60 * 1000); })
     .sort((a, b) => getEventNextOccurrence(a).getTime() - getEventNextOccurrence(b).getTime());
 
   // Filter live events: upcoming/active only
