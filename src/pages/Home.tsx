@@ -7,7 +7,7 @@ import { Loader2, Sparkles, HelpCircle, PlayCircle, Video as VideoIcon, Calendar
 import { Badge } from "@/components/ui/badge";
 import LazyYouTube from "@/components/LazyYouTube";
 import { formatDistanceToNow, format, endOfWeek } from "date-fns";
-import { useNostrEventsAll, LanaEvent } from "@/hooks/useNostrEvents";
+import { useNostrEventsAll, LanaEvent, getEventNextOccurrence } from "@/hooks/useNostrEvents";
 import { useRecentConversations } from "@/hooks/useRecentConversations";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserAcknowledgement } from "@/hooks/useNostrUserAcknowledgement";
@@ -387,13 +387,13 @@ export default function Home() {
   const now = new Date();
   const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
   const onlineThisWeek = onlineEvents
-    .filter(e => e.status === 'active' && e.start <= weekEnd && (e.end ? e.end >= now : e.start >= new Date(now.getTime() - 2 * 60 * 60 * 1000)))
-    .sort((a, b) => a.start.getTime() - b.start.getTime());
+    .filter(e => { const next = getEventNextOccurrence(e); return e.status === 'active' && next <= weekEnd && next >= new Date(now.getTime() - 2 * 60 * 60 * 1000); })
+    .sort((a, b) => getEventNextOccurrence(a).getTime() - getEventNextOccurrence(b).getTime());
 
   // Filter live events: upcoming/active only
   const liveUpcoming = liveEvents
-    .filter(e => e.status === 'active' && (e.end ? e.end >= now : e.start >= new Date(now.getTime() - 2 * 60 * 60 * 1000)))
-    .sort((a, b) => a.start.getTime() - b.start.getTime());
+    .filter(e => { const next = getEventNextOccurrence(e); return e.status === 'active' && next >= new Date(now.getTime() - 2 * 60 * 60 * 1000); })
+    .sort((a, b) => getEventNextOccurrence(a).getTime() - getEventNextOccurrence(b).getTime());
 
   // Pagination
   const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
@@ -654,7 +654,7 @@ export default function Home() {
                             to={`/events/detail/${encodeURIComponent(ev.dTag)}`}
                             className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:bg-secondary/50 transition-colors"
                           >
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(ev.start, 'EEE HH:mm')}</span>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(getEventNextOccurrence(ev), 'EEE HH:mm')}</span>
                             <span className="truncate">{ev.title}</span>
                           </Link>
                         ))}
@@ -676,7 +676,7 @@ export default function Home() {
                             to={`/events/detail/${encodeURIComponent(ev.dTag)}`}
                             className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:bg-secondary/50 transition-colors"
                           >
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(ev.start, 'dd.MM.')}</span>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">{format(getEventNextOccurrence(ev), 'dd.MM.')}</span>
                             <span className="truncate">{ev.title}</span>
                           </Link>
                         ))}
