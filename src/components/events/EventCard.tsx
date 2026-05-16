@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, MapPin, Globe, Users, UserPlus, Check, Loader2, Share2, Wallet, AlertTriangle, Timer } from "lucide-react";
 import { format } from "date-fns";
-import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
+import { LanaEvent, getEventStatus, getEventNextOccurrence } from "@/hooks/useNostrEvents";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
@@ -34,7 +34,8 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
   const relays = systemParameters?.relays || [];
 
   const status = getEventStatus(event);
-  const countdown = useEventCountdown(event.start);
+  const nextOccurrence = getEventNextOccurrence(event);
+  const countdown = useEventCountdown(nextOccurrence);
   const handleClick = () => {
     navigate(`/events/detail/${encodeURIComponent(event.dTag)}`);
   };
@@ -264,7 +265,7 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
               <div className="flex items-center gap-2">
                 <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                 <span className="font-medium text-foreground">
-                  {format(event.schedule[0].start, 'dd.MM.')} – {format(event.schedule[event.schedule.length - 1].start, 'dd.MM.yyyy')}
+                  {format(nextOccurrence, 'dd.MM.yyyy')}
                 </span>
                 <span className="text-muted-foreground">
                   ({t('card.days', { count: event.schedule.length })})
