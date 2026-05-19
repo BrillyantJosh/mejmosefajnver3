@@ -122,9 +122,10 @@ export default function Wallet() {
     "Main Wallet": 1,
     "Wallet": 2,
     "LanaPays.Us": 3,
-    "Knights": 4,
-    "Lana8Wonder": 5,
-    "Lana.Discount": 6,
+    "Retail": 4,
+    "Knights": 5,
+    "Lana8Wonder": 6,
+    "Lana.Discount": 7,
   };
 
   const sortedWallets = [...walletsWithBalances].sort((a, b) => {
@@ -448,7 +449,7 @@ export default function Wallet() {
                   </a>
                 </Button>
 
-                {wallet.walletType !== "Lana8Wonder" && wallet.walletType !== "Knights" && !wallet.freezeStatus && (
+                {wallet.walletType !== "Lana8Wonder" && wallet.walletType !== "Knights" && wallet.walletType !== "Retail" && !wallet.freezeStatus && (
                   <Button
                     size="sm"
                     className="w-full"
@@ -458,7 +459,7 @@ export default function Wallet() {
                   </Button>
                 )}
 
-                {wallet.freezeStatus && wallet.walletType !== "Lana8Wonder" && wallet.walletType !== "Knights" && (
+                {wallet.freezeStatus && wallet.walletType !== "Lana8Wonder" && wallet.walletType !== "Knights" && wallet.walletType !== "Retail" && (
                   <Button
                     size="sm"
                     className="w-full"

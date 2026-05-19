@@ -39,6 +39,17 @@ export function seedData(db: Database.Database): void {
     console.log('Added Lana.Discount wallet type');
   }
 
+  // Ensure Retail wallet type exists (for existing databases)
+  const retailExists = db.prepare(
+    "SELECT COUNT(*) as count FROM wallet_types WHERE name = 'Retail'"
+  ).get() as any;
+  if (retailExists.count === 0) {
+    db.prepare(
+      "INSERT INTO wallet_types (id, name, description, is_active, display_order) VALUES (lower(hex(randomblob(16))), 'Retail', 'Retail wallet — receive only, no sending', 1, 12)"
+    ).run();
+    console.log('Added Retail wallet type');
+  }
+
   // Seed default app_settings if empty
   const settingsCount = db.prepare('SELECT COUNT(*) as count FROM app_settings').get() as any;
   if (settingsCount.count === 0) {
