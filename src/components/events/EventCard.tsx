@@ -218,11 +218,11 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
       onClick={handleClick}
     >
       {event.cover && (
-        <div className="relative h-32 sm:h-40 w-full overflow-hidden rounded-t-lg">
-          <img 
-            src={event.cover} 
+        <div className="relative w-full overflow-hidden rounded-t-lg bg-black/5 dark:bg-white/5">
+          <img
+            src={event.cover}
             alt={event.title}
-            className="h-full w-full object-cover"
+            className="w-full h-auto max-h-72 object-contain"
           />
           {status !== 'upcoming' && (
             <Badge 
