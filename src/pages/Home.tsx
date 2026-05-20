@@ -93,7 +93,7 @@ function VotingCard({ proposal, votingEligibility, extractYouTubeId }: {
     >
       <Card className="overflow-hidden border-2 border-violet-500/30 bg-gradient-to-r from-violet-500/5 via-indigo-500/5 to-blue-500/5 hover:border-violet-500/50 hover:shadow-lg transition-all">
         {coverImg && (
-          <div className="relative w-full h-36 sm:h-44 overflow-hidden">
+          <div className="relative aspect-video w-full overflow-hidden">
             <img
               src={coverImg}
               alt={proposal.title}
