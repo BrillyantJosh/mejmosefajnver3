@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video, Sprout } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -387,6 +387,17 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     gradient: 'from-sky-500 to-indigo-500',
     enabled: true,
     order: 2.5
+  },
+  {
+    id: 'theLanaLife',
+    title: 'TheLana.Life',
+    description: 'A world of living, growing, and thriving with Lana',
+    icon: Sprout,
+    path: '/thelanalife',
+    gradient: 'from-green-400 to-lime-500',
+    externalUrl: 'https://www.TheLana.life',
+    enabled: true,
+    order: 30
   }
 ];
 
@@ -450,7 +461,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'reportloss': 'Report Loss',
     'shop': 'Shop',
     'lanadiscount': 'Lana Discount',
-    'meet': 'Lana Meet'
+    'meet': 'Lana Meet',
+    'theLanaLife': 'TheLana.Life'
   };
   return mapping[id] || id;
 };
@@ -490,7 +502,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Report Loss': 'reportloss',
     'Shop': 'shop',
     'Lana Discount': 'lanadiscount',
-    'Lana Meet': 'meet'
+    'Lana Meet': 'meet',
+    'TheLana.Life': 'theLanaLife'
   };
   return mapping[id] || null;
 };

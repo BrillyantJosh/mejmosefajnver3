@@ -9,7 +9,7 @@ import type { ModuleType } from "@/types/modules";
 const UNREGISTERED_MODULE_IDS: Set<ModuleType> = new Set([
   'lanaknights', 'unregisteredwallets', 'lanamusic', 'tax',
   'lanapay', 'offlinelana', 'lanaevents', 'encryptedrooms',
-  'chat', 'social', 'lanaexchange', 'being'
+  'chat', 'social', 'lanaexchange', 'being', 'theLanaLife'
 ]);
 
 const UNR_MODULE_IDS: Set<ModuleType> = new Set(['lanaknights', 'unregisteredwallets', 'lanaexchange']);

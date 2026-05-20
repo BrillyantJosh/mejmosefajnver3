@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle, Video as VideoIcon, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt, Users } from "lucide-react";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, Video as VideoIcon, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt, Users, Sprout } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import LazyYouTube from "@/components/LazyYouTube";
 import { formatDistanceToNow, format } from "date-fns";
@@ -588,6 +588,19 @@ export default function Home() {
 
           {/* Sidebar — right */}
           <div className="w-full lg:w-72 flex-shrink-0 space-y-4">
+
+            {/* TheLana.Life link */}
+            <a href="https://www.TheLana.life" target="_blank" rel="noopener noreferrer" className="block group">
+              <Card className="hover:shadow-md transition-all hover:border-green-400/50">
+                <CardContent className="p-4 flex flex-col items-center gap-2">
+                  <div className="h-14 w-14 rounded-full bg-gradient-to-br from-green-400 to-lime-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Sprout className="h-8 w-8 text-white" />
+                  </div>
+                  <span className="text-sm font-semibold text-green-600 dark:text-green-400">TheLana.life</span>
+                </CardContent>
+              </Card>
+            </a>
+
             {/* Pending Invoices Card */}
             {session && pendingInvoices.length > 0 && (
               <Link to="/shop/pay" className="block">
