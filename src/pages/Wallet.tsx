@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import QRCode from "react-qr-code";
 import lana8wonderBg from "@/assets/lana8wonder-bg.png";
 import knightsBg from "@/assets/knights-bg.png";
+import retailBg from "@/assets/retail-wallet-bg.png";
 import { UnregisteredLanaAlert } from "@/components/wallet/UnregisteredLanaAlert";
 import { useUnregisteredLana } from "@/hooks/useUnregisteredLana";
 import { useWarningBeforeSplit } from "@/hooks/useWarningBeforeSplit";
@@ -307,9 +308,13 @@ export default function Wallet() {
                 backgroundImage: `url(${knightsBg})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
+              } : !wallet.freezeStatus && wallet.walletType === "Retail" ? {
+                backgroundImage: `url(${retailBg})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
               } : undefined}
             >
-              {!wallet.freezeStatus && (wallet.walletType === "Lana8Wonder" || wallet.walletType === "Knights") && (
+              {!wallet.freezeStatus && (wallet.walletType === "Lana8Wonder" || wallet.walletType === "Knights" || wallet.walletType === "Retail") && (
                 <div className="absolute inset-0 bg-background/85" />
               )}
 
