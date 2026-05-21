@@ -374,6 +374,10 @@ export default function AddEvent() {
       toast({ title: t('reg.error'), description: t('toast.coordsRequired'), variant: "destructive" });
       return;
     }
+    if (!coverFile && !coverUrl.trim()) {
+      toast({ title: t('reg.error'), description: 'Cover fotografija je obvezna.', variant: "destructive" });
+      return;
+    }
 
     try {
       setPublishing(true);
@@ -1050,6 +1054,7 @@ export default function AddEvent() {
             <CardTitle className="text-lg flex items-center gap-2">
               <ImagePlus className="h-5 w-5" />
               {t('form.coverImage')}
+              <span className="text-red-500 text-sm">*</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
