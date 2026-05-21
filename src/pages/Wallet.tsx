@@ -227,8 +227,8 @@ export default function Wallet() {
                 <Skeleton className="h-12 w-48" />
               ) : (
                 (() => {
-                  // Exclude Lana.Discount wallets from total balance
-                  const countedWallets = walletsWithBalances.filter(w => w.walletType !== 'Lana.Discount');
+                  // Exclude Lana.Discount and Retail wallets from total balance
+                  const countedWallets = walletsWithBalances.filter(w => w.walletType !== 'Lana.Discount' && w.walletType !== 'Retail');
                   return (
                     <>
                       <p className="text-4xl font-bold text-green-600">
