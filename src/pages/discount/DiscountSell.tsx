@@ -28,7 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { convertWifToIds } from "@/lib/crypto";
 import { toast } from "sonner";
 
-const MIN_RATING = 9;
+const MIN_RATING = 10;
 
 // Fallback defaults — overridden by admin settings
 const DEFAULT_BUYBACK_WALLET = "Lg7iw2aQp8qazNsZVZFhf4rP7bikSrLRxB";
@@ -123,11 +123,11 @@ export default function DiscountSell() {
     currency?: string;
   } | null>(null);
 
-  // Filter wallets — exclude Lana8Wonder, Knights
+  // Filter wallets — exclude Lana8Wonder, Knights, Retail
   const availableWallets = useMemo(
     () =>
       wallets.filter(
-        (w) => w.walletType !== "Lana8Wonder" && w.walletType !== "Knights"
+        (w) => w.walletType !== "Lana8Wonder" && w.walletType !== "Knights" && w.walletType !== "Retail"
       ),
     [wallets]
   );
@@ -490,7 +490,7 @@ export default function DiscountSell() {
                 </div>
                 <h2 className="text-xl font-bold text-red-700 dark:text-red-400">Selling Not Available</h2>
                 <p className="text-sm text-red-600 dark:text-red-400 max-w-md mx-auto leading-relaxed">
-                  Selling registered LanaCoins is only available to users who have fully paid their subscriptions and achieved a rating of 9 or above. Please settle any outstanding payments to unlock this feature.
+                  Selling registered LanaCoins is only available to users who have no open obligations. Please settle any outstanding payments to unlock this feature.
                 </p>
                 {userRating !== null ? (
                   <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-100 dark:bg-red-900/40">

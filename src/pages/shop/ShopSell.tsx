@@ -95,13 +95,14 @@ export default function ShopSell() {
   const [isSearching, setIsSearching] = useState(false);
   const [isPublishingInvoice, setIsPublishingInvoice] = useState(false);
 
-  // Filter wallets — exclude Lana8Wonder, Knights, frozen
+  // Filter wallets — exclude Lana8Wonder, Knights, Retail, frozen
   const availableWallets = useMemo(
     () =>
       wallets.filter(
         (w) =>
           w.walletType !== "Lana8Wonder" &&
           w.walletType !== "Knights" &&
+          w.walletType !== "Retail" &&
           !w.freezeStatus
       ),
     [wallets]

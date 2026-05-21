@@ -121,7 +121,7 @@ export default function SendLanaRecipient() {
   
   // Filter wallets - only eligible types, exclude the source wallet
   const eligibleWallets = userWallets.filter(w =>
-    (w.walletType === "Main Wallet" || w.walletType === "Wallet" || w.walletType === "Lana.Discount") &&
+    (w.walletType === "Main Wallet" || w.walletType === "Wallet" || w.walletType === "Lana.Discount" || w.walletType === "Retail") &&
     w.walletId !== walletId
   );
 
