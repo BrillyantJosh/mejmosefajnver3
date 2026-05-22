@@ -184,14 +184,28 @@ export default function MainLayout() {
   // Lock body scroll when mobile menu is open + measure header position
   useEffect(() => {
     if (mobileMenuOpen) {
-      document.body.style.overflow = 'hidden';
+      // iOS-compatible scroll lock: use position:fixed instead of overflow:hidden
+      const scrollY = window.scrollY;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
       if (headerRef.current) {
         setMenuTop(headerRef.current.getBoundingClientRect().bottom);
       }
     } else {
-      document.body.style.overflow = '';
+      const scrollY = document.body.style.top;
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      if (scrollY) {
+        window.scrollTo(0, -parseInt(scrollY, 10));
+      }
     }
-    return () => { document.body.style.overflow = ''; };
+    return () => {
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+    };
   }, [mobileMenuOpen]);
 
   // Auto-send lashes in background when NOT on /lash/pay page
@@ -508,8 +522,8 @@ export default function MainLayout() {
 
       {/* Mobile Menu — fixed overlay below header, OUTSIDE <header> to avoid sticky stacking context issues in PWA */}
       {mobileMenuOpen && (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background overflow-y-auto overscroll-contain md:hidden" style={{ top: menuTop }}>
-          <nav className="container px-4 py-4 space-y-2">
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background overflow-y-auto overscroll-contain md:hidden touch-pan-y" style={{ top: menuTop, WebkitOverflowScrolling: 'touch' }}>
+          <nav className="container px-4 py-4 space-y-2 pb-[env(safe-area-inset-bottom,16px)]">
               {/* Fixed Menu Items */}
               {fixedMenuItems.map((item) => (
                 <Link
