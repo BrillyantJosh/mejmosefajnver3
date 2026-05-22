@@ -27,6 +27,54 @@ interface SearchResult {
   }[];
 }
 
+const ALLOWED_RECIPIENT_TYPES = new Set(['Main Wallet', 'Wallet', 'Lana.Discount', 'Retail']);
+
+function SearchResultCard({ result, onSelect }: {
+  result: SearchResult;
+  onSelect: (walletId: string) => void;
+}) {
+  const { wallets: nostrWallets, isLoading } = useNostrUserWallets(result.pubkey);
+
+  // Use Nostr wallets if available (includes Retail etc.), otherwise fall back to search result wallets
+  const displayWallets = nostrWallets.length > 0
+    ? nostrWallets.filter(w => ALLOWED_RECIPIENT_TYPES.has(w.walletType))
+    : result.wallets;
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-start gap-3 mb-3">
+        <UserAvatar pubkey={result.pubkey} picture={result.picture} name={result.display_name || result.name} className="h-10 w-10" />
+        <div>
+          <p className="font-semibold">{result.display_name}</p>
+          <p className="text-sm text-muted-foreground">@{result.name}</p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
+            <Loader2 className="h-3 w-3 animate-spin" /> Loading wallets...
+          </div>
+        ) : displayWallets.map((wallet, idx) => (
+          <Button
+            key={idx}
+            variant="outline"
+            className="w-full justify-start"
+            onClick={() => onSelect(wallet.walletId)}
+          >
+            <div className="text-left">
+              <p className="font-mono text-xs">{wallet.walletId}</p>
+              <p className="text-xs text-muted-foreground">
+                {wallet.walletType}
+                {wallet.note && ` - ${wallet.note}`}
+              </p>
+            </div>
+          </Button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export default function SendLanaRecipient() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -448,36 +496,14 @@ export default function SendLanaRecipient() {
                 {searchResults.length > 0 && (
                   <div className="space-y-2">
                     {searchResults.map((result) => (
-                      <Card key={result.pubkey} className="p-4">
-                        <div className="flex items-start gap-3 mb-3">
-                          <UserAvatar pubkey={result.pubkey} picture={result.picture} name={result.display_name || result.name} className="h-10 w-10" />
-                          <div>
-                            <p className="font-semibold">{result.display_name}</p>
-                            <p className="text-sm text-muted-foreground">@{result.name}</p>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          {result.wallets.map((wallet, idx) => (
-                            <Button
-                              key={idx}
-                              variant="outline"
-                              className="w-full justify-start"
-                              onClick={() => {
-                                setRecipientWalletId(wallet.walletId);
-                                setSelectedTab("manual");
-                              }}
-                            >
-                              <div className="text-left">
-                                <p className="font-mono text-xs">{wallet.walletId}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {wallet.walletType}
-                                  {wallet.note && ` - ${wallet.note}`}
-                                </p>
-                              </div>
-                            </Button>
-                          ))}
-                        </div>
-                      </Card>
+                      <SearchResultCard
+                        key={result.pubkey}
+                        result={result}
+                        onSelect={(walletId) => {
+                          setRecipientWalletId(walletId);
+                          setSelectedTab("manual");
+                        }}
+                      />
                     ))}
                   </div>
                 )}
