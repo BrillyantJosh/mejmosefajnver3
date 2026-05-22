@@ -428,12 +428,10 @@ export default function Wallet() {
                 </div>
 
                 {wallet.note && (
-                  <div className="flex items-start gap-2 text-sm">
-                    <FileText className="h-4 w-4 text-muted-foreground mt-0.5" />
-                    <div className="flex-1">
-                      <span className="text-muted-foreground">Note:</span>
-                      <p className="text-foreground mt-1">{wallet.note}</p>
-                    </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">Note:</span>
+                    <span className="font-medium">{wallet.note}</span>
                   </div>
                 )}
 
