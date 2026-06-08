@@ -124,6 +124,10 @@ import MeetJoin from "./pages/meet/MeetJoin";
 import MeetSchedule from "./pages/meet/MeetSchedule";
 import MeetSessions from "./pages/meet/MeetSessions";
 import MeetRecordings from "./pages/meet/MeetRecordings";
+import FoodCornerLayout from "./pages/food-corner/FoodCornerLayout";
+import FoodCornerOrder from "./pages/food-corner/FoodCornerOrder";
+import FoodCornerEcoPoint from "./pages/food-corner/FoodCornerEcoPoint";
+import FoodCornerSupplier from "./pages/food-corner/FoodCornerSupplier";
 
 import Chat from "./pages/Chat";
 import Wallet from "./pages/Wallet";
@@ -359,6 +363,11 @@ const App = () => (
                     <Route path="schedule" element={<MeetSchedule />} />
                     <Route path="sessions" element={<MeetSessions />} />
                     <Route path="recordings" element={<MeetRecordings />} />
+                  </Route>
+                  <Route path="/food-corner" element={<FoodCornerLayout />}>
+                    <Route index element={<FoodCornerOrder />} />
+                    <Route path="eco-point" element={<FoodCornerEcoPoint />} />
+                    <Route path="supplier" element={<FoodCornerSupplier />} />
                   </Route>
                   <Route
                     path="/admin"

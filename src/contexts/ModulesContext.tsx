@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video, Sprout } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video, Sprout, Utensils } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
@@ -44,6 +44,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     image: lanapaysImage,
     enabled: true,
     order: 1
+  },
+  {
+    id: 'foodcorner',
+    title: 'Food Corner',
+    description: 'Order food through Eco Points and manage supplier fulfillment',
+    icon: Utensils,
+    path: '/food-corner',
+    gradient: 'from-lime-500 to-amber-500',
+    enabled: true,
+    order: 1.5
   },
   {
     id: 'social',
@@ -442,6 +452,7 @@ const mapToNostrId = (id: ModuleType): string => {
     'relays': 'Relays',
     'lana8wonder': 'Lana8Wonder',
     'lanapays': 'LanaPays',
+    'foodcorner': 'Food Corner',
     'lanapay': 'Lana Pay',
     'lash': 'LASH',
     'lanamusic': 'Lana Music',
@@ -483,6 +494,7 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Relays': 'relays',
     'Lana8Wonder': 'lana8wonder',
     'LanaPays': 'lanapays',
+    'Food Corner': 'foodcorner',
     'Lana Pay': 'lanapay',
     'LASH': 'lash',
     'Lana Music': 'lanamusic',
