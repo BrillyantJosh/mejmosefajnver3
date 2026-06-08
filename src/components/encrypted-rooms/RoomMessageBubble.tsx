@@ -124,8 +124,27 @@ const RichMessageContent = ({ text, isOwn }: { text: string; isOwn: boolean }) =
         }
         const isUrl = /^(https?:\/\/|\/api\/storage\/)/.test(part);
         if (isUrl && isImageUrl(part)) {
+          const openImage = async (e: React.MouseEvent) => {
+            e.preventDefault();
+            try {
+              // Fetch as blob to bypass service worker navigation interception
+              const resp = await fetch(part);
+              const blob = await resp.blob();
+              const blobUrl = URL.createObjectURL(blob);
+              const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+              // Revoke blob URL after tab opens
+              setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+              if (!win) {
+                // Popup blocked fallback
+                URL.revokeObjectURL(blobUrl);
+                window.open(part, '_blank', 'noopener,noreferrer');
+              }
+            } catch {
+              window.open(part, '_blank', 'noopener,noreferrer');
+            }
+          };
           return (
-            <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="block">
+            <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="block" onClick={openImage}>
               <img
                 src={part}
                 alt="attachment"

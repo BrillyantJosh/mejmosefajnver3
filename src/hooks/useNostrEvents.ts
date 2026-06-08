@@ -23,6 +23,8 @@ export interface LanaEvent {
   // Online event fields
   isOnline: boolean;
   onlineUrl?: string;
+  // Optional Lana Meet URL for physical events (allows online viewing/joining)
+  lanaMeetUrl?: string;
   youtubeUrl?: string;
   youtubeRecordingUrl?: string;
   youtubeRecordingUrls?: string[];
@@ -95,6 +97,8 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
 
       const onlineUrl = getTagValue('online');
       const isOnline = !!onlineUrl;
+      // Optional Lana Meet URL for physical events (additional online streaming)
+      const lanaMeetUrl = getTagValue('lana_meet');
 
       const latStr = getTagValue('lat');
       const lonStr = getTagValue('lon');
@@ -131,6 +135,7 @@ export function useNostrEvents(filter: EventFilter, options?: UseNostrEventsOpti
         organizerPubkey,
         isOnline,
         onlineUrl,
+        lanaMeetUrl,
         youtubeUrl: getTagValue('youtube'),
         youtubeRecordingUrl: getTagValue('youtube_recording'),
         location: getTagValue('location'),
@@ -311,6 +316,8 @@ export function useNostrEventsAll(options?: UseNostrEventsOptions) {
 
       const onlineUrl = getTagValue('online');
       const isOnline = !!onlineUrl;
+      // Optional Lana Meet URL for physical events (additional online streaming)
+      const lanaMeetUrl = getTagValue('lana_meet');
 
       const latStr = getTagValue('lat');
       const lonStr = getTagValue('lon');
@@ -346,6 +353,7 @@ export function useNostrEventsAll(options?: UseNostrEventsOptions) {
         organizerPubkey,
         isOnline,
         onlineUrl,
+        lanaMeetUrl,
         youtubeUrl: getTagValue('youtube'),
         youtubeRecordingUrl: getTagValue('youtube_recording'),
         location: getTagValue('location'),

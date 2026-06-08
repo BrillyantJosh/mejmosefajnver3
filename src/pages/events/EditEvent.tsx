@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, Plus, X, Calendar, MapPin, Globe, Link2, ImagePlus, ArrowLeft, Wallet, Map, Trash2 } from "lucide-react";
+import { Loader2, Plus, X, Calendar, MapPin, Globe, Link2, ImagePlus, ArrowLeft, Wallet, Map, Trash2, Video, Copy, Check } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import LocationPicker from "@/components/LocationPicker";
 import { AddressSearch } from "@/components/AddressSearch";
@@ -41,6 +41,38 @@ const LANGUAGES = [
   { value: 'hr', label: 'Hrvatski' },
   { value: 'sr', label: 'Srpski' }
 ];
+
+const LANA_MEET_BASE_URL = "https://meet.lanaloves.us";
+
+// Build NIP-22242 auth token (same shape as AddEvent.tsx)
+function createMeetAuthToken(session: { nostrHexId: string; nostrPrivateKey: string; profileName?: string; profileDisplayName?: string; profileLang?: string }): string {
+  const privateKeyBytes = new Uint8Array(
+    session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
+  );
+  const content = JSON.stringify({
+    name: session.profileDisplayName || session.profileName || 'Anon',
+    lang: session.profileLang || 'sl',
+  });
+  const eventTemplate = {
+    kind: 22242,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [['relay', 'meet.lanaloves.us'], ['action', 'join']],
+    content,
+    pubkey: session.nostrHexId,
+  };
+  const signedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
+  const json = JSON.stringify(signedEvent);
+  return btoa(unescape(encodeURIComponent(json)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function meetSlug(title: string): string {
+  return title.trim().toLowerCase()
+    .replace(/[čć]/g, 'c').replace(/[šś]/g, 's').replace(/[žź]/g, 'z')
+    .replace(/đ/g, 'd')
+    .replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+    .slice(0, 40) || 'event';
+}
 
 export default function EditEvent() {
   const { eventId } = useParams();
@@ -86,6 +118,9 @@ export default function EditEvent() {
   
   // Online fields
   const [onlineUrl, setOnlineUrl] = useState("");
+  // Lana Meet quick-create for online events (auto-fills the online URL)
+  const [creatingLanaMeet, setCreatingLanaMeet] = useState(false);
+  const [lanaMeetCreated, setLanaMeetCreated] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeRecordingUrls, setYoutubeRecordingUrls] = useState<string[]>([""]);
   
@@ -95,6 +130,10 @@ export default function EditEvent() {
   const [lon, setLon] = useState("");
   const [capacity, setCapacity] = useState("");
   const [showMapPicker, setShowMapPicker] = useState(false);
+  // Optional Lana Meet for physical events (so people can also join online)
+  const [lanaMeetUrl, setLanaMeetUrl] = useState("");
+  const [creatingPhysicalLanaMeet, setCreatingPhysicalLanaMeet] = useState(false);
+  const [physicalLanaMeetCreated, setPhysicalLanaMeetCreated] = useState(false);
 
   // Optional fields
   const [coverUrl, setCoverUrl] = useState("");
@@ -197,6 +236,8 @@ export default function EditEvent() {
         setLon(getTagValue('lon') || '');
         setLocation(getTagValue('location') || '');
         setCapacity(getTagValue('capacity') || '');
+        // Load optional Lana Meet URL for physical events
+        setLanaMeetUrl(getTagValue('lana_meet') || '');
       }
 
       // YouTube URLs — loaded for both online and physical events
@@ -347,6 +388,114 @@ export default function EditEvent() {
     setAttachments(newAttachments);
   };
 
+  // Lana Meet creation for online events — auto-fills the online URL field
+  const handleCreateLanaMeet = async () => {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId) {
+      toast({ title: t('reg.error'), description: t('toast.loginToCreate'), variant: "destructive" });
+      return;
+    }
+    if (!title.trim()) {
+      toast({ title: t('reg.error'), description: t('toast.titleRequired'), variant: "destructive" });
+      return;
+    }
+    const firstEntry = schedule.find(s => s.date && s.startTime);
+    if (!firstEntry) {
+      toast({ title: t('reg.error'), description: t('toast.dateRequired'), variant: "destructive" });
+      return;
+    }
+
+    setCreatingLanaMeet(true);
+    try {
+      const tzOffset = getTimezoneOffset(timezone, new Date(`${firstEntry.date}T${firstEntry.startTime}`));
+      const scheduledAt = new Date(`${firstEntry.date}T${firstEntry.startTime}:00${tzOffset}`).toISOString();
+      const roomId = meetSlug(title) + '-' + Math.floor(Math.random() * 100);
+      const token = createMeetAuthToken(session);
+
+      const res = await fetch(`${LANA_MEET_BASE_URL}/api/meetings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title.trim(),
+          roomId,
+          scheduledAt,
+          authToken: token,
+          visibility: 'public',
+          invitees: [],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to create Lana Meet');
+      }
+
+      const meeting = await res.json();
+      const link = `${LANA_MEET_BASE_URL}/${meeting.roomId}`;
+      setOnlineUrl(link);
+      setLanaMeetCreated(true);
+      try { await navigator.clipboard.writeText(link); } catch { /* clipboard unavailable */ }
+      toast({ title: 'Lana Meet ustvarjen', description: 'Povezava je shranjena in skopirana' });
+    } catch (err: any) {
+      toast({ title: t('reg.error'), description: err?.message || 'Napaka pri ustvarjanju Lana Meet', variant: 'destructive' });
+    } finally {
+      setCreatingLanaMeet(false);
+    }
+  };
+
+  // Optional Lana Meet creation for physical events — lets attendees also join online
+  const handleCreatePhysicalLanaMeet = async () => {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId) {
+      toast({ title: t('reg.error'), description: t('toast.loginToCreate'), variant: "destructive" });
+      return;
+    }
+    if (!title.trim()) {
+      toast({ title: t('reg.error'), description: t('toast.titleRequired'), variant: "destructive" });
+      return;
+    }
+    const firstEntry = schedule.find(s => s.date && s.startTime);
+    if (!firstEntry) {
+      toast({ title: t('reg.error'), description: t('toast.dateRequired'), variant: "destructive" });
+      return;
+    }
+
+    setCreatingPhysicalLanaMeet(true);
+    try {
+      const tzOffset = getTimezoneOffset(timezone, new Date(`${firstEntry.date}T${firstEntry.startTime}`));
+      const scheduledAt = new Date(`${firstEntry.date}T${firstEntry.startTime}:00${tzOffset}`).toISOString();
+      const roomId = meetSlug(title) + '-' + Math.floor(Math.random() * 100);
+      const token = createMeetAuthToken(session);
+
+      const res = await fetch(`${LANA_MEET_BASE_URL}/api/meetings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title.trim(),
+          roomId,
+          scheduledAt,
+          authToken: token,
+          visibility: 'public',
+          invitees: [],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to create Lana Meet');
+      }
+
+      const meeting = await res.json();
+      const link = `${LANA_MEET_BASE_URL}/${meeting.roomId}`;
+      setLanaMeetUrl(link);
+      setPhysicalLanaMeetCreated(true);
+      try { await navigator.clipboard.writeText(link); } catch { /* clipboard unavailable */ }
+      toast({ title: 'Lana Meet ustvarjen', description: 'Povezava je shranjena in skopirana' });
+    } catch (err: any) {
+      toast({ title: t('reg.error'), description: err?.message || 'Napaka pri ustvarjanju Lana Meet', variant: 'destructive' });
+    } finally {
+      setCreatingPhysicalLanaMeet(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -448,6 +597,10 @@ export default function EditEvent() {
         }
         if (capacity.trim()) {
           tags.push(["capacity", capacity.trim()]);
+        }
+        // Optional Lana Meet URL for physical events — preserve on edit
+        if (lanaMeetUrl.trim()) {
+          tags.push(["lana_meet", lanaMeetUrl.trim()]);
         }
       }
 
@@ -763,16 +916,68 @@ export default function EditEvent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Lana Meet quick-create — generate a new meeting link for this online event */}
+              <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  <Video className="h-4 w-4 text-violet-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{t('form.lanaMeetCardTitle')}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('form.lanaMeetCardDesc')}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={lanaMeetCreated ? "outline" : "default"}
+                  onClick={handleCreateLanaMeet}
+                  disabled={creatingLanaMeet}
+                  className="w-full"
+                >
+                  {creatingLanaMeet ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : lanaMeetCreated ? (
+                    <Check className="h-4 w-4 mr-1.5 text-green-500" />
+                  ) : (
+                    <Video className="h-4 w-4 mr-1.5" />
+                  )}
+                  {lanaMeetCreated ? t('form.lanaMeetCreated') : t('form.lanaMeetButton')}
+                </Button>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="onlineUrl">{t('form.eventUrlEdit')}</Label>
-                <Input
-                  id="onlineUrl"
-                  type="url"
-                  value={onlineUrl}
-                  onChange={(e) => setOnlineUrl(e.target.value)}
-                  placeholder="https://mejmosefajn.org/room/events"
-                  required={isOnline}
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="onlineUrl"
+                    type="url"
+                    value={onlineUrl}
+                    onChange={(e) => {
+                      setOnlineUrl(e.target.value);
+                      setLanaMeetCreated(false);
+                    }}
+                    placeholder="https://mejmosefajn.org/room/events"
+                    required={isOnline}
+                  />
+                  {onlineUrl && (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(onlineUrl);
+                          toast({ title: t('form.lanaMeetCopied') });
+                        } catch { /* clipboard unavailable */ }
+                      }}
+                      title={t('form.lanaMeetCopy')}
+                      className="flex-shrink-0"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -879,6 +1084,70 @@ export default function EditEvent() {
                   onChange={(e) => setCapacity(e.target.value)}
                   placeholder="150"
                 />
+              </div>
+
+              {/* Optional Lana Meet for physical events — allows people to also join online */}
+              <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  <Video className="h-4 w-4 text-violet-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">Lana Meet (online spremljanje) — opcijsko</p>
+                    <p className="text-xs text-muted-foreground">
+                      Ustvari povezavo, da se lahko ljudje pridružijo tudi online preko Lana Meet.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={physicalLanaMeetCreated ? "outline" : "default"}
+                  onClick={handleCreatePhysicalLanaMeet}
+                  disabled={creatingPhysicalLanaMeet}
+                  className="w-full"
+                >
+                  {creatingPhysicalLanaMeet ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : physicalLanaMeetCreated ? (
+                    <Check className="h-4 w-4 mr-1.5 text-green-500" />
+                  ) : (
+                    <Video className="h-4 w-4 mr-1.5" />
+                  )}
+                  {physicalLanaMeetCreated ? t('form.lanaMeetCreated') : t('form.lanaMeetButton')}
+                </Button>
+
+                <div className="space-y-2">
+                  <Label htmlFor="lanaMeetUrl" className="text-xs">{t('form.lanaMeetUrlLabel')}</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="lanaMeetUrl"
+                      type="url"
+                      value={lanaMeetUrl}
+                      onChange={(e) => {
+                        setLanaMeetUrl(e.target.value);
+                        setPhysicalLanaMeetCreated(false);
+                      }}
+                      placeholder="https://meet.lanaloves.us/..."
+                      className="font-mono text-xs"
+                    />
+                    {lanaMeetUrl && (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(lanaMeetUrl);
+                            toast({ title: t('form.lanaMeetCopied') });
+                          } catch { /* clipboard unavailable */ }
+                        }}
+                        title={t('form.lanaMeetCopy')}
+                        className="flex-shrink-0"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

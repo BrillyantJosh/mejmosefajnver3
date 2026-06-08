@@ -19,6 +19,11 @@ import { finalizeEvent } from "nostr-tools";
 
 type BatchStep = 'select' | 'confirm' | 'processing' | 'result';
 
+// Mentor provizija rate: 10% of the gross donation goes to the mentor wallet,
+// 90% reaches the project. Kept as a single constant so the MAX gross-up and the
+// fee summary stay in sync with the split applied in handleSubmit.
+const MENTOR_FEE_RATE = 0.10;
+
 interface BatchEntry {
   project: LanacrowdProject;
   lanaAmount: string;
@@ -53,6 +58,11 @@ const ProjectRow = ({ entry, index, exchangeRate, onAmountChange }: ProjectRowPr
   const remainingFiat = Math.max(goalFiat - totalRaised, 0);
   const currency = entry.project.currency || 'EUR';
   const maxLana = exchangeRate > 0 ? remainingFiat / exchangeRate : 0;
+  // The entered amount is the GROSS donation: 10% goes to the mentor provizija and
+  // only 90% reaches the project. So to fully fund the project (deliver `maxLana` net)
+  // the gross must be grossed up by the fee — the provizija is added ON TOP, not taken
+  // out of the project's funding. This is the value MAX fills and the cap we clamp to.
+  const grossMax = maxLana > 0 ? maxLana / (1 - MENTOR_FEE_RATE) : 0;
   const isFullyFunded = remainingFiat <= 0 && goalFiat > 0;
 
   const lana = parseFloat(entry.lanaAmount) || 0;
@@ -60,9 +70,9 @@ const ProjectRow = ({ entry, index, exchangeRate, onAmountChange }: ProjectRowPr
 
   const handleChange = (value: string) => {
     const num = parseFloat(value) || 0;
-    // Auto-clamp to max if user enters too much
-    if (num > maxLana && maxLana > 0) {
-      onAmountChange(index, maxLana.toFixed(2));
+    // Auto-clamp to the grossed-up max (project goal + provizija on top)
+    if (num > grossMax && grossMax > 0) {
+      onAmountChange(index, grossMax.toFixed(2));
     } else {
       onAmountChange(index, value);
     }
@@ -95,7 +105,7 @@ const ProjectRow = ({ entry, index, exchangeRate, onAmountChange }: ProjectRowPr
           <p className="text-xs font-semibold text-green-600">✓ Fully Funded</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Remaining: {remainingFiat.toFixed(2)} {currency} (max {maxLana.toFixed(2)} LANA)
+            Remaining: {remainingFiat.toFixed(2)} {currency} (max {grossMax.toFixed(2)} LANA incl. 10% fee)
           </p>
         )}
       </div>
@@ -116,16 +126,16 @@ const ProjectRow = ({ entry, index, exchangeRate, onAmountChange }: ProjectRowPr
                 placeholder="0.00"
                 step="0.01"
                 min="0"
-                max={maxLana > 0 ? maxLana.toFixed(2) : undefined}
+                max={grossMax > 0 ? grossMax.toFixed(2) : undefined}
                 className="text-right flex-1"
               />
-              {maxLana > 0 && (
+              {grossMax > 0 && (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   className="px-2 h-9 text-xs font-bold shrink-0"
-                  onClick={() => onAmountChange(index, maxLana.toFixed(2))}
+                  onClick={() => onAmountChange(index, grossMax.toFixed(2))}
                 >
                   MAX
                 </Button>
@@ -305,19 +315,10 @@ const BatchFunding = () => {
       ]);
 
       const serviceName = appNameData?.value || 'LanaCrowd';
-      const mentorHexId = (mentorSettingData?.value as string) || '';
-      let mentorWallet = '';
-
-      if (mentorHexId) {
-        const { data: mentorProfile } = await supabase
-          .from('nostr_profiles')
-          .select('lana_wallet_id')
-          .eq('nostr_hex_id', mentorHexId)
-          .maybeSingle();
-        if (mentorProfile?.lana_wallet_id) {
-          mentorWallet = mentorProfile.lana_wallet_id;
-        }
-      }
+      // mentor_100million_ideas stores the wallet address directly (same as single-donation flow)
+      const mentorWallet = (mentorSettingData?.value as string) || '';
+      // Mentor's Nostr hex id — used only for the ["p", ..., "mentor"] tag on the mentor-fee event
+      const mentorHexId = "16a970069d63ca1f739c4e3b9a5f34bca6a93ead182dbf1e438a801aa03f4ef3";
 
       const hasMentorSplit = !!mentorWallet;
 

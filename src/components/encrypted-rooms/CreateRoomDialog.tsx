@@ -174,8 +174,11 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
       const groupKey = generateGroupKey();
       console.log('🔑 Generated group key:', groupKey.slice(0, 16) + '...');
 
-      // 2. Invite targets (owner doesn't need invite — key is cached at creation)
-      const inviteTargets = memberPubkeys;
+      // 2. Invite targets — include the OWNER too. The key is cached locally at
+      // creation, but a self-invite (encrypted to the owner) makes the key
+      // recoverable on ANY device the owner logs into (e.g. their phone),
+      // not just the device that created the room.
+      const inviteTargets = [ownerPubkey, ...memberPubkeys];
 
       // 3. Create KIND 30100 room event (parameterized replaceable)
       const roomTags: string[][] = [
@@ -221,6 +224,7 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
       // KIND 1102 (regular, non-replaceable) — NOT 10102 which is replaceable!
       for (let i = 0; i < inviteTargets.length; i++) {
         const memberPubkey = inviteTargets[i];
+        const isOwnerInvite = memberPubkey === ownerPubkey;
 
         const invitePayload: RoomInvitePayload = {
           roomId: roomDTag,
@@ -228,8 +232,10 @@ export const CreateRoomDialog = ({ onRoomCreated }: CreateRoomDialogProps) => {
           roomName: name.trim(),
           groupKey,
           keyVersion: 1,
-          role: 'member',
-          message: `You've been invited to "${name.trim()}"`,
+          role: isOwnerInvite ? 'owner' : 'member',
+          message: isOwnerInvite
+            ? `Owner key for "${name.trim()}"`
+            : `You've been invited to "${name.trim()}"`,
         };
 
         const encryptedContent = encryptInvitePayload(

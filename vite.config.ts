@@ -4,8 +4,8 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
-// VERSION: 2.2 - Fixed PWA caching - aggressive service worker updates
-const APP_VERSION = '2.2.0';
+// VERSION: 2.3 - Fix service worker navigation fallback for /api/ paths
+const APP_VERSION = '2.3.0';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -44,6 +44,9 @@ export default defineConfig(({ mode }) => ({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
+        // Don't intercept navigation requests to /api/ paths (images, storage, etc.)
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/api\//],
         // Only precache essential files, not large module images
         globPatterns: ["**/*.{js,css,html,ico,svg,woff2}"],
         // Exclude large images from precaching

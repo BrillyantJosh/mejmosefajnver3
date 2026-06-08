@@ -119,6 +119,7 @@ export default function EventDetail() {
 
       const onlineUrl = getTagValue('online');
       const isOnline = !!onlineUrl;
+      const lanaMeetUrl = getTagValue('lana_meet');
 
       const latStr = getTagValue('lat');
       const lonStr = getTagValue('lon');
@@ -155,6 +156,7 @@ export default function EventDetail() {
         organizerPubkey,
         isOnline,
         onlineUrl,
+        lanaMeetUrl,
         youtubeUrl: getTagValue('youtube'),
         youtubeRecordingUrl: getTagValue('youtube_recording'),
         youtubeRecordingUrls: getAllTagValues('youtube_recording'),
@@ -486,6 +488,17 @@ export default function EventDetail() {
                   <Users className="h-5 w-5" />
                   <span>{t('detail.capacity', { count: String(event.capacity) })}</span>
                 </div>
+              )}
+              {/* Optional Lana Meet for physical events — lets people join online too */}
+              {event.lanaMeetUrl && (
+                <Button
+                  variant="outline"
+                  className="w-full border-violet-500/30 text-violet-500 hover:bg-violet-500/10 hover:text-violet-500"
+                  onClick={() => window.open(event.lanaMeetUrl, '_blank')}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Pridruži se online (Lana Meet)
+                </Button>
               )}
             </div>
           )}

@@ -80,6 +80,7 @@ interface AddEventPrefill {
   timezone?: string;
   isOnline?: boolean;
   onlineUrl?: string;
+  lanaMeetUrl?: string;
   youtubeUrl?: string;
   youtubeRecordingUrls?: string[];
   location?: string;
@@ -143,6 +144,10 @@ export default function AddEvent() {
   const [onlineUrl, setOnlineUrl] = useState(prefill?.onlineUrl ?? "");
   const [creatingLanaMeet, setCreatingLanaMeet] = useState(false);
   const [lanaMeetCreated, setLanaMeetCreated] = useState(false);
+  // Optional Lana Meet URL for physical events (so people can also join online)
+  const [lanaMeetUrl, setLanaMeetUrl] = useState(prefill?.lanaMeetUrl ?? "");
+  const [creatingPhysicalLanaMeet, setCreatingPhysicalLanaMeet] = useState(false);
+  const [physicalLanaMeetCreated, setPhysicalLanaMeetCreated] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState(prefill?.youtubeUrl ?? "");
   const [youtubeRecordingUrls, setYoutubeRecordingUrls] = useState<string[]>(
     prefill?.youtubeRecordingUrls && prefill.youtubeRecordingUrls.length > 0
@@ -343,6 +348,60 @@ export default function AddEvent() {
     }
   };
 
+  // Optional Lana Meet creation for physical events — lets attendees also join online
+  const handleCreatePhysicalLanaMeet = async () => {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId) {
+      toast({ title: t('reg.error'), description: t('toast.loginToCreate'), variant: "destructive" });
+      return;
+    }
+    if (!title.trim()) {
+      toast({ title: t('reg.error'), description: t('toast.titleRequired'), variant: "destructive" });
+      return;
+    }
+    const firstEntry = schedule.find(s => s.date && s.startTime);
+    if (!firstEntry) {
+      toast({ title: t('reg.error'), description: t('toast.dateRequired'), variant: "destructive" });
+      return;
+    }
+
+    setCreatingPhysicalLanaMeet(true);
+    try {
+      const tzOffset = getTimezoneOffset(timezone, new Date(`${firstEntry.date}T${firstEntry.startTime}`));
+      const scheduledAt = new Date(`${firstEntry.date}T${firstEntry.startTime}:00${tzOffset}`).toISOString();
+      const roomId = meetSlug(title) + '-' + Math.floor(Math.random() * 100);
+      const token = createMeetAuthToken(session);
+
+      const res = await fetch(`${LANA_MEET_BASE_URL}/api/meetings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title.trim(),
+          roomId,
+          scheduledAt,
+          authToken: token,
+          visibility: 'public',
+          invitees: [],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to create Lana Meet');
+      }
+
+      const meeting = await res.json();
+      const link = `${LANA_MEET_BASE_URL}/${meeting.roomId}`;
+      setLanaMeetUrl(link);
+      setPhysicalLanaMeetCreated(true);
+      try { await navigator.clipboard.writeText(link); } catch { /* clipboard unavailable */ }
+      toast({ title: 'Lana Meet ustvarjen', description: 'Povezava je shranjena in skopirana' });
+    } catch (err: any) {
+      toast({ title: t('reg.error'), description: err?.message || 'Napaka pri ustvarjanju Lana Meet', variant: 'destructive' });
+    } finally {
+      setCreatingPhysicalLanaMeet(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -449,6 +508,10 @@ export default function AddEvent() {
         }
         if (capacity.trim()) {
           tags.push(["capacity", capacity.trim()]);
+        }
+        // Optional Lana Meet URL for physical events — lets people also join online
+        if (lanaMeetUrl.trim()) {
+          tags.push(["lana_meet", lanaMeetUrl.trim()]);
         }
       }
 
@@ -961,6 +1024,70 @@ export default function AddEvent() {
                   onChange={(e) => setCapacity(e.target.value)}
                   placeholder="150"
                 />
+              </div>
+
+              {/* Optional Lana Meet for physical events — allows people to also join online */}
+              <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  <Video className="h-4 w-4 text-violet-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">Lana Meet (online spremljanje) — opcijsko</p>
+                    <p className="text-xs text-muted-foreground">
+                      Ustvari povezavo, da se lahko ljudje pridružijo tudi online preko Lana Meet.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={physicalLanaMeetCreated ? "outline" : "default"}
+                  onClick={handleCreatePhysicalLanaMeet}
+                  disabled={creatingPhysicalLanaMeet}
+                  className="w-full"
+                >
+                  {creatingPhysicalLanaMeet ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : physicalLanaMeetCreated ? (
+                    <Check className="h-4 w-4 mr-1.5 text-green-500" />
+                  ) : (
+                    <Video className="h-4 w-4 mr-1.5" />
+                  )}
+                  {physicalLanaMeetCreated ? t('form.lanaMeetCreated') : t('form.lanaMeetButton')}
+                </Button>
+
+                <div className="space-y-2">
+                  <Label htmlFor="lanaMeetUrl" className="text-xs">{t('form.lanaMeetUrlLabel')}</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="lanaMeetUrl"
+                      type="url"
+                      value={lanaMeetUrl}
+                      onChange={(e) => {
+                        setLanaMeetUrl(e.target.value);
+                        setPhysicalLanaMeetCreated(false);
+                      }}
+                      placeholder="https://meet.lanaloves.us/..."
+                      className="font-mono text-xs"
+                    />
+                    {lanaMeetUrl && (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(lanaMeetUrl);
+                            toast({ title: t('form.lanaMeetCopied') });
+                          } catch { /* clipboard unavailable */ }
+                        }}
+                        title={t('form.lanaMeetCopy')}
+                        className="flex-shrink-0"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

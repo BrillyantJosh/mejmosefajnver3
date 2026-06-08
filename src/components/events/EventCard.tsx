@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Globe, Users, UserPlus, Check, Loader2, Share2, Wallet, AlertTriangle, Timer } from "lucide-react";
+import { Calendar, Clock, MapPin, Globe, Users, UserPlus, Check, Loader2, Share2, Wallet, AlertTriangle, Timer, Video } from "lucide-react";
 import { format } from "date-fns";
 import { LanaEvent, getEventStatus, getEventNextOccurrence } from "@/hooks/useNostrEvents";
 import { useNavigate } from "react-router-dom";
@@ -337,6 +337,20 @@ export function EventCard({ event, showRegistrationCount = false }: EventCardPro
                 <span className="line-clamp-1">{event.location}</span>
               </div>
             )
+          )}
+
+          {/* Optional Lana Meet for physical events — lets people join online too */}
+          {!event.isOnline && event.lanaMeetUrl && (
+            <a
+              href={event.lanaMeetUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-2 text-violet-500 hover:underline"
+            >
+              <Video className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+              <span className="line-clamp-1">Pridruži se online (Lana Meet)</span>
+            </a>
           )}
 
           {/* YouTube video embed — shown for both online and physical events */}

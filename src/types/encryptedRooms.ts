@@ -93,7 +93,7 @@ export interface RoomInvitePayload {
   roomName: string;
   groupKey: string;
   keyVersion: number;
-  role: 'member' | 'admin' | 'readonly';
+  role: 'owner' | 'member' | 'admin' | 'readonly';
   message?: string;
 }
 

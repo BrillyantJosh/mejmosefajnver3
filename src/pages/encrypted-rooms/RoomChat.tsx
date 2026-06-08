@@ -14,9 +14,9 @@ import { RoomChatInput } from '@/components/encrypted-rooms/RoomChatInput';
 import { RoomMembersList } from '@/components/encrypted-rooms/RoomMembersList';
 import { InviteMemberDialog } from '@/components/encrypted-rooms/InviteMemberDialog';
 import { RoomSettingsDialog } from '@/components/encrypted-rooms/RoomSettingsDialog';
-import { encryptRoomMessage, hexToBytes, getRoomKeyFromCache, setRoomKeyToCache } from '@/lib/encrypted-room-crypto';
+import { encryptRoomMessage, hexToBytes, getRoomKeyFromCache, setRoomKeyToCache, encryptInvitePayload } from '@/lib/encrypted-room-crypto';
 import { finalizeEvent } from 'nostr-tools';
-import type { RoomMessage, RoomMessageContent } from '@/types/encryptedRooms';
+import type { RoomMessage, RoomMessageContent, RoomInvitePayload } from '@/types/encryptedRooms';
 import { useNostrLash } from '@/hooks/useNostrLash';
 import { useNostrDMLashes } from '@/hooks/useNostrDMLashes';
 import { toast } from 'sonner';
@@ -57,6 +57,66 @@ export default function RoomChat() {
   const { members, refetch: refetchMembers } = useEncryptedRoomMembers(roomEventId || null);
 
   const isOwner = room?.ownerPubkey === userPubkey;
+
+  // Auto-heal: ensure the owner has a recoverable KIND 1102 self-invite on relays.
+  // At room creation the group key is cached only in the creating device's
+  // localStorage and NO invite is made for the owner — so the owner is locked out
+  // on any OTHER device (e.g. their phone) and wrongly sees "ask the room owner".
+  // When the owner is on a device that HAS the key, publish a self-invite (once per
+  // device) so every device they log into can fetch and decrypt the key.
+  const selfInviteAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (selfInviteAttemptedRef.current) return;
+    if (!isOwner || !groupKey || !room || !roomEventId || !userPubkey || !userPrivKey) return;
+
+    const keyVersion = room.keyVersion || 1;
+    const flagKey = `er_self_invite:${room.roomId}:v${keyVersion}`;
+    if (localStorage.getItem(flagKey)) return; // already ensured on this device
+
+    selfInviteAttemptedRef.current = true;
+    (async () => {
+      try {
+        const payload: RoomInvitePayload = {
+          roomId: room.roomId,
+          roomEventId,
+          roomName: room.name,
+          groupKey,
+          keyVersion,
+          role: 'owner',
+          message: `Owner key for "${room.name}"`,
+        };
+        const encryptedContent = encryptInvitePayload(payload, userPrivKey, userPubkey);
+        const inviteEvent = finalizeEvent(
+          {
+            kind: 1102,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [
+              ['e', roomEventId],
+              ['p', userPubkey, 'receiver'],
+              ['p', userPubkey, 'sender'],
+            ],
+            content: encryptedContent,
+          },
+          hexToBytes(userPrivKey)
+        );
+        const res = await fetch('/api/functions/publish-dm-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: inviteEvent }),
+        });
+        const data = await res.json();
+        if (data?.success) {
+          localStorage.setItem(flagKey, '1');
+          console.log(`🔑 Published owner self-invite for room ${room.roomId} (${data.publishedTo} relays)`);
+        } else {
+          selfInviteAttemptedRef.current = false; // allow a later retry
+        }
+      } catch (e) {
+        console.warn('Failed to publish owner self-invite', e);
+        selfInviteAttemptedRef.current = false;
+      }
+    })();
+  }, [isOwner, groupKey, room, roomEventId, userPubkey, userPrivKey]);
 
   // LASH system
   const { giveLash, isSending: isSendingLash } = useNostrLash();

@@ -63,6 +63,9 @@ const ProjectCard = ({
 
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
   const [comment, setComment] = useState("");
+  // Graceful fallback when a cover image fails to load (e.g. legacy relative
+  // /api/storage paths whose files no longer exist on this server).
+  const [coverError, setCoverError] = useState(false);
 
   // Calculate funding stats from KIND 60200 donations
   const currentFunding = totalRaised;
@@ -106,11 +109,20 @@ const ProjectCard = ({
         {/* Cover Image */}
         {project.coverImage && (
           <div className="aspect-video w-full overflow-hidden relative">
-            <img
-              src={project.coverImage}
-              alt={project.title}
-              className="w-full h-full object-cover"
-            />
+            {coverError ? (
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-green-500/15 to-emerald-500/10">
+                <span className="text-6xl font-bold text-green-600/50 select-none">
+                  {project.title?.trim()?.charAt(0)?.toUpperCase() || "?"}
+                </span>
+              </div>
+            ) : (
+              <img
+                src={project.coverImage}
+                alt={project.title}
+                className="w-full h-full object-cover"
+                onError={() => setCoverError(true)}
+              />
+            )}
             {isCompleted && (
               <div className="absolute inset-0 bg-green-600/20 flex items-center justify-center">
                 <Badge className="bg-green-600 text-white text-lg px-4 py-1.5 gap-2">

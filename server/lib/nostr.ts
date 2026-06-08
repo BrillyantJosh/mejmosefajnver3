@@ -1191,6 +1191,11 @@ export async function indexLanacrowdFromRelays(db: any): Promise<void> {
         const projectId = getTag('project');
         if (!projectId) continue;
 
+        // Skip mentor-fee events: batch funding publishes a separate KIND 60200
+        // with type="mentor_fee" (the commission paid to the mentor wallet). It is
+        // NOT a donation to the project, so it must not be stored/shown/summed as one.
+        if (getTag('type') === 'mentor_fee') continue;
+
         const supporterTag = evt.tags?.find((t: string[]) => t[0] === 'p' && t[2] === 'supporter');
         const ownerTag = evt.tags?.find((t: string[]) => t[0] === 'p' && t[2] === 'project_owner');
 

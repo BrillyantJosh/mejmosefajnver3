@@ -469,7 +469,15 @@ const Lana8Wonder = () => {
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">{t('plan.cashOut')}</span>
-                                  <p className="font-semibold">{level.cash_out.toFixed(2)} {annuityPlan.currency}</p>
+                                  {/* Cash Out value uses the LIVE price (coins_to_give × current price),
+                                      and is shown ONLY for levels that are triggered but not yet paid out.
+                                      - Future (not-yet-triggered) levels: no number (price not reached).
+                                      - Already paid-out levels: no number (actual payout price unknown). */}
+                                  <p className="font-semibold">
+                                    {isLevelTriggered && !isLevelPaidOut && currentPrice
+                                      ? `${(level.coins_to_give * currentPrice).toFixed(2)} ${annuityPlan.currency}`
+                                      : '—'}
+                                  </p>
                                 </div>
                                 <div className="col-span-2 md:col-span-4">
                                   <span className="text-muted-foreground">{t('plan.remainingLanas')}</span>

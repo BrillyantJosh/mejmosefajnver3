@@ -351,6 +351,7 @@ export default function MyEvents() {
 
       const onlineUrl = getTagValue('online');
       const isOnline = !!onlineUrl;
+      const lanaMeetUrl = getTagValue('lana_meet');
 
       const latStr = getTagValue('lat');
       const lonStr = getTagValue('lon');
@@ -387,6 +388,7 @@ export default function MyEvents() {
         organizerPubkey,
         isOnline,
         onlineUrl,
+        lanaMeetUrl,
         youtubeUrl: getTagValue('youtube'),
         location: getTagValue('location'),
         lat,
@@ -580,6 +582,7 @@ export default function MyEvents() {
       timezone: event.timezone,
       isOnline: event.isOnline,
       onlineUrl: event.onlineUrl || '',
+      lanaMeetUrl: event.lanaMeetUrl || '',
       youtubeUrl: event.youtubeUrl || '',
       youtubeRecordingUrls: event.youtubeRecordingUrls && event.youtubeRecordingUrls.length > 0
         ? event.youtubeRecordingUrls
