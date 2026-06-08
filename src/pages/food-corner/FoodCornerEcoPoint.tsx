@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CheckCircle2, ImagePlus, Loader2, MapPin, Plus, RefreshCw, Save, Sparkles, Store, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, ImagePlus, Loader2, MapPin, Plus, RefreshCw, Save, Sparkles, Store, X } from "lucide-react";
 import { toast } from "sonner";
 import { AddressSearch } from "@/components/AddressSearch";
 import LocationPicker from "@/components/LocationPicker";
@@ -18,9 +18,10 @@ import { useFoodCornerPublisher } from "@/hooks/useFoodCornerPublisher";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { useTranslation } from "@/i18n/I18nContext";
 import foodCornerTranslations, { FoodCornerKey } from "@/i18n/modules/foodCorner";
-import { FOOD_CORNER_NODE_KIND, FoodCornerNodeStatus } from "@/types/foodCorner";
+import { FOOD_CORNER_NODE_KIND, FoodCornerNodeStatus, FoodCornerOrderWithFulfillment } from "@/types/foodCorner";
 import {
   describeFoodCornerPause,
+  foodCornerWeekRange,
   formatFoodMoney,
   generateFoodCornerId,
   groupOrdersByNode,
@@ -39,7 +40,7 @@ function splitAreas(value: string): string[] {
 
 export default function FoodCornerEcoPoint() {
   const { session } = useAuth();
-  const { t } = useTranslation(foodCornerTranslations);
+  const { t, lang } = useTranslation(foodCornerTranslations);
   const { status: lana8WonderStatus, isLoading: lana8WonderLoading } = useNostrLana8Wonder();
   const { nodes, producers, orders, isLoading, refetch } = useFoodCornerData();
   const { publishEvent, isPublishing } = useFoodCornerPublisher();
@@ -258,6 +259,41 @@ export default function FoodCornerEcoPoint() {
   const myNodeRefs = new Set(myNodes.map((node) => node.ref));
   const myNodeOrders = orders.filter((order) => myNodeRefs.has(order.distributionPoint));
   const groupedOrders = groupOrdersByNode(myNodeOrders);
+
+  // Orders view: group by buyer or supplier, paginated by week (latest week first).
+  const [ordersGroupBy, setOrdersGroupBy] = useState<"buyer" | "seller">("buyer");
+  const [ordersWeekOffset, setOrdersWeekOffset] = useState(0);
+  const ordersWeek = useMemo(() => foodCornerWeekRange(ordersWeekOffset), [ordersWeekOffset]);
+  const weekOrders = useMemo(
+    () =>
+      myNodeOrders.filter((order) => {
+        const ms = order.createdAt * 1000;
+        return ms >= ordersWeek.start.getTime() && ms < ordersWeek.end.getTime();
+      }),
+    [myNodeOrders, ordersWeek],
+  );
+  const orderGroups = useMemo(() => {
+    const map = new Map<
+      string,
+      { key: string; label: string; orders: FoodCornerOrderWithFulfillment[]; total: number; currency: string }
+    >();
+    for (const order of weekOrders) {
+      const key = ordersGroupBy === "buyer" ? order.buyerPubkey : order.sellerRef;
+      const label =
+        ordersGroupBy === "buyer"
+          ? `${order.buyerPubkey.slice(0, 12)}…`
+          : producers.find((p) => p.unitRef === order.sellerRef)?.name || `${order.sellerPubkey.slice(0, 12)}…`;
+      const existing = map.get(key) || { key, label, orders: [], total: 0, currency: order.currency };
+      existing.orders.push(order);
+      existing.total += order.total;
+      map.set(key, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [weekOrders, ordersGroupBy, producers]);
+  const ordersLocale = lang === "sl" ? "sl-SI" : undefined;
+  const weekLabel = `${ordersWeek.start.toLocaleDateString(ordersLocale, { day: "numeric", month: "short" })} – ${new Date(
+    ordersWeek.end.getTime() - 1,
+  ).toLocaleDateString(ordersLocale, { day: "numeric", month: "short", year: "numeric" })}`;
   const pickupLatNumber = Number.parseFloat(pickupLat);
   const pickupLonNumber = Number.parseFloat(pickupLon);
   const hasPickupCoordinates = Number.isFinite(pickupLatNumber) && Number.isFinite(pickupLonNumber);
@@ -660,30 +696,105 @@ export default function FoodCornerEcoPoint() {
                 );
               })}
             </div>
-            <div className="space-y-3">
-              {myNodeOrders.slice(0, 20).map((order) => (
-                <Card key={order.ref}>
-                  <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant={order.fulfillmentStatus ? "default" : "secondary"}>
-                          {order.fulfillmentStatus || order.status}
-                        </Badge>
-                        <span className="font-semibold">{formatFoodMoney(order.total, order.currency)}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {order.items.map((item) => `${item.qty} ${item.unit} ${item.listing?.title || item.listingRef.slice(-8)}`).join(" · ")}
-                      </p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground hidden md:block" />
-                    <div className="text-xs text-muted-foreground md:text-right">
-                      <p>{new Date(order.createdAt * 1000).toLocaleString()}</p>
-                      <p>{order.buyerPubkey.slice(0, 12)}...</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+            {/* Group-by toggle + week paginator (latest week first, page back week by week) */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="inline-flex rounded-lg border p-0.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={ordersGroupBy === "buyer" ? "default" : "ghost"}
+                  onClick={() => setOrdersGroupBy("buyer")}
+                >
+                  {t("ecoPoint.orders.groupBuyer")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={ordersGroupBy === "seller" ? "default" : "ghost"}
+                  onClick={() => setOrdersGroupBy("seller")}
+                >
+                  {t("ecoPoint.orders.groupSeller")}
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="gap-1"
+                  onClick={() => setOrdersWeekOffset((o) => o + 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  {t("ecoPoint.orders.prevWeek")}
+                </Button>
+                <span className="text-sm font-medium min-w-[9rem] text-center">
+                  {ordersWeekOffset === 0 ? t("ecoPoint.orders.thisWeek") : weekLabel}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="gap-1"
+                  disabled={ordersWeekOffset === 0}
+                  onClick={() => setOrdersWeekOffset((o) => Math.max(0, o - 1))}
+                >
+                  {t("ecoPoint.orders.nextWeek")}
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
+
+            {orderGroups.length === 0 ? (
+              <Card>
+                <CardContent className="p-5 text-sm text-muted-foreground">{t("ecoPoint.orders.weekEmpty")}</CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {orderGroups.map((group) => (
+                  <Card key={group.key}>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                            {ordersGroupBy === "buyer" ? t("ecoPoint.orders.buyer") : t("ecoPoint.orders.supplier")}
+                          </p>
+                          <p className="font-semibold truncate">{group.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {t("ecoPoint.orders.count", { count: group.orders.length })}
+                          </p>
+                        </div>
+                        <span className="text-lg font-bold shrink-0">{formatFoodMoney(group.total, group.currency)}</span>
+                      </div>
+                      <div className="space-y-2 border-t pt-2">
+                        {group.orders.map((order) => (
+                          <div
+                            key={order.ref}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-sm"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Badge variant={order.fulfillmentStatus ? "default" : "secondary"} className="shrink-0">
+                                {order.fulfillmentStatus || order.status}
+                              </Badge>
+                              <span className="truncate text-muted-foreground">
+                                {order.items
+                                  .map((item) => `${item.qty} ${item.unit} ${item.listing?.title || item.listingRef.slice(-8)}`)
+                                  .join(" · ")}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className="font-medium">{formatFoodMoney(order.total, order.currency)}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(order.createdAt * 1000).toLocaleString(ordersLocale)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>

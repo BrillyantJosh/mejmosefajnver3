@@ -403,6 +403,18 @@ export function foodCornerOrderingWindow(node: FoodCornerNode, from: Date = new 
   return { cutoff, pickup: pickupDate, pickupWindow: pickup?.window || "" };
 }
 
+/** Monday-start week range for a given offset (0 = current week, 1 = previous week, …). */
+export function foodCornerWeekRange(offset: number, from: Date = new Date()): { start: Date; end: Date } {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const mondayDelta = day === 0 ? -6 : 1 - day;
+  const start = new Date(d);
+  start.setDate(d.getDate() + mondayDelta - offset * 7);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+  return { start, end };
+}
+
 export function describeFoodCornerPause(node: FoodCornerNode): string {
   const parts: string[] = [];
   if (node.pause.from) parts.push(`od ${node.pause.from}`);
