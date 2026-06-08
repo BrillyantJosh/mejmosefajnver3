@@ -157,6 +157,7 @@ export function parseFoodCornerListing(event: FoodCornerRawEvent): FoodCornerLis
     pubkey: event.pubkey,
     createdAt: event.created_at,
     listingId: dTag,
+    dTag,
     ref: makeARef(FOOD_CORNER_LISTING_KIND, event.pubkey, dTag),
     unitRef,
     title,

@@ -34,6 +34,7 @@ interface FoodCornerData {
   fulfillments: FoodCornerFulfillment[];
   producers: FoodCornerProducer[];
   isLoading: boolean;
+  businessUnitsLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
   getNodeCatalog: (nodeRef?: string) => FoodCornerListing[];
@@ -147,9 +148,14 @@ export function useFoodCornerData(): FoodCornerData {
     [nodes],
   );
 
+  // The orderable catalog resolves against ALL active listings — NOT eligibleListings.
+  // eligibleListings depends on a separate, heavy useNostrBusinessUnits fetch (KIND
+  // 30901/30902/30903); when that is slow/empty/times out, every offer would vanish
+  // ("0 ponudb"). The eco point already curates its sellers/listings, so that curation
+  // is the authoritative filter — we don't also gate on the business-units fetch.
   const getNodeCatalog = useCallback(
-    (nodeRef?: string) => resolveNodeCatalog(getNodeByRef(nodeRef), eligibleListings),
-    [getNodeByRef, eligibleListings],
+    (nodeRef?: string) => resolveNodeCatalog(getNodeByRef(nodeRef), allListings),
+    [getNodeByRef, allListings],
   );
 
   return {
@@ -158,7 +164,11 @@ export function useFoodCornerData(): FoodCornerData {
     orders,
     fulfillments,
     producers,
-    isLoading: isLoading || businessUnitsLoading,
+    // Don't block the whole module on the heavy business-units fetch — the orderable
+    // catalog no longer needs it. Producer enrichment (names) fills in progressively
+    // once businessUnits arrives. Only expose businessUnitsLoading separately.
+    isLoading,
+    businessUnitsLoading,
     error,
     refetch,
     getNodeCatalog,

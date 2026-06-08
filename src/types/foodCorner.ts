@@ -91,6 +91,7 @@ export interface FoodCornerListing {
   pubkey: string;
   createdAt: number;
   listingId: string;
+  dTag: string; // addressable d-tag — required for correct replaceable-event dedup
   ref: string;
   unitRef: string;
   title: string;

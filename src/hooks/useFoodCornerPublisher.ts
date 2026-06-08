@@ -1,7 +1,5 @@
 import { useCallback, useState } from "react";
-import { SimplePool } from "nostr-tools";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { signNostrEvent } from "@/lib/nostrSigning";
 
 interface PublishResult {
@@ -12,7 +10,6 @@ interface PublishResult {
 
 export function useFoodCornerPublisher() {
   const { session } = useAuth();
-  const { parameters } = useSystemParameters();
   const [isPublishing, setIsPublishing] = useState(false);
 
   const publishEvent = useCallback(
@@ -21,44 +18,35 @@ export function useFoodCornerPublisher() {
         throw new Error("Not authenticated");
       }
 
-      const relays = parameters?.relays || [];
-      if (relays.length === 0) {
-        throw new Error("No relays configured");
-      }
-
       setIsPublishing(true);
-      const pool = new SimplePool();
-
       try {
         const signedEvent = signNostrEvent(session.nostrPrivateKey, kind, content, tags);
-        const publishPromises = Array.from(pool.publish(relays, signedEvent));
 
-        const results = await Promise.race([
-          Promise.allSettled(publishPromises),
-          new Promise<PromiseSettledResult<string>[]>((resolve) =>
-            setTimeout(
-              () => resolve(publishPromises.map(() => ({ status: "rejected", reason: new Error("Publish timeout") }))),
-              12000,
-            ),
-          ),
-        ]);
+        // Publish server-side (same path the rest of the app uses). The server
+        // holds stable relay connections with a 60s timeout — far more reliable
+        // than publishing directly from the browser to relays, which frequently
+        // failed with "Publish failed on all relays".
+        const res = await fetch("/api/functions/publish-dm-event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event: signedEvent }),
+        });
 
-        const successCount = results.filter((result) => result.status === "fulfilled").length;
-        if (successCount === 0) {
-          throw new Error("Publish failed on all relays");
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || "Publish failed on all relays");
         }
 
         return {
-          successCount,
-          totalRelays: relays.length,
+          successCount: data.publishedTo || 0,
+          totalRelays: data.totalRelays || 0,
           eventId: signedEvent.id,
         };
       } finally {
         setIsPublishing(false);
-        pool.close(relays);
       }
     },
-    [session?.nostrPrivateKey, session?.nostrHexId, parameters?.relays],
+    [session?.nostrPrivateKey, session?.nostrHexId],
   );
 
   return {
