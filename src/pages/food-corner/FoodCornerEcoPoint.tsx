@@ -16,6 +16,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useFoodCornerData } from "@/hooks/useFoodCornerData";
 import { useFoodCornerPublisher } from "@/hooks/useFoodCornerPublisher";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
+import { useTranslation } from "@/i18n/I18nContext";
+import foodCornerTranslations, { FoodCornerKey } from "@/i18n/modules/foodCorner";
 import { FOOD_CORNER_NODE_KIND, FoodCornerNodeStatus } from "@/types/foodCorner";
 import {
   describeFoodCornerPause,
@@ -36,9 +38,15 @@ function splitAreas(value: string): string[] {
 
 export default function FoodCornerEcoPoint() {
   const { session } = useAuth();
+  const { t } = useTranslation(foodCornerTranslations);
   const { status: lana8WonderStatus, isLoading: lana8WonderLoading } = useNostrLana8Wonder();
   const { nodes, producers, orders, isLoading, refetch } = useFoodCornerData();
   const { publishEvent, isPublishing } = useFoodCornerPublisher();
+
+  const dayLabel = (day?: string) => (day ? t(`days.${day.trim().toLowerCase()}` as FoodCornerKey) : "");
+  const cycleLabel = (cycle?: string) => (cycle ? t(`cycle.${cycle}` as FoodCornerKey) : "");
+  const statusLabel = (status?: string) =>
+    status ? t(`ecoPoint.status.${status === "archived" ? "archived" : status}` as FoodCornerKey) : "";
 
   const myNodes = useMemo(
     () => nodes.filter((node) => node.pubkey === session?.nostrHexId),
@@ -162,31 +170,31 @@ export default function FoodCornerEcoPoint() {
 
   const saveNode = async () => {
     if (!lana8WonderStatus.exists) {
-      toast.error("Za ustvarjanje Eko točke potrebuješ Lana8Wonder zapis");
+      toast.error(t("ecoPoint.toast.needLana8Wonder"));
       return;
     }
     if (!name.trim()) {
-      toast.error("Vnesi ime Eko točke");
+      toast.error(t("ecoPoint.toast.enterName"));
       return;
     }
     if (!pickupLabel.trim()) {
-      toast.error("Vnesi lokacijo prevzema");
+      toast.error(t("ecoPoint.toast.enterPickup"));
       return;
     }
     if (!pickupLat.trim() || !pickupLon.trim()) {
-      toast.error("Izberi lokacijo na zemljevidu ali z iskanjem naslova");
+      toast.error(t("ecoPoint.toast.pickLocation"));
       return;
     }
     if (!Number.isFinite(Number.parseFloat(pickupLat)) || !Number.isFinite(Number.parseFloat(pickupLon))) {
-      toast.error("Koordinate lokacije niso veljavne");
+      toast.error(t("ecoPoint.toast.invalidCoords"));
       return;
     }
     if (pauseFrom && pauseUntil && pauseFrom > pauseUntil) {
-      toast.error("Začetek pavze ne sme biti po koncu pavze");
+      toast.error(t("ecoPoint.toast.pauseOrder"));
       return;
     }
     if (selectedSellers.length + selectedListings.length === 0) {
-      toast.error("Izberi vsaj enega dobavitelja ali eno ponudbo");
+      toast.error(t("ecoPoint.toast.pickSupplier"));
       return;
     }
 
@@ -216,11 +224,11 @@ export default function FoodCornerEcoPoint() {
 
     try {
       await publishEvent(FOOD_CORNER_NODE_KIND, tags, description.trim());
-      toast.success("Eko točka je objavljena na relayje");
+      toast.success(t("ecoPoint.toast.published"));
       setShowForm(false);
       await refetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Objava Eko točke ni uspela");
+      toast.error(err instanceof Error ? err.message : t("ecoPoint.toast.failed"));
     }
   };
 
@@ -243,10 +251,8 @@ export default function FoodCornerEcoPoint() {
     <div className="px-4 sm:px-0 space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Upravljanje Eko točke</h2>
-          <p className="text-sm text-muted-foreground">
-            Eko točka objavi KIND 30905 in kurira dobavitelje ter njihove KIND 36500 ponudbe.
-          </p>
+          <h2 className="text-lg font-semibold">{t("ecoPoint.heading.manage")}</h2>
+          <p className="text-sm text-muted-foreground">{t("ecoPoint.subtitle.manage")}</p>
         </div>
         <Button variant="ghost" size="icon" onClick={refetch}>
           <RefreshCw className="h-4 w-4" />
@@ -256,9 +262,7 @@ export default function FoodCornerEcoPoint() {
       {!lana8WonderStatus.exists && (
         <Alert>
           <Sparkles className="h-4 w-4" />
-          <AlertDescription>
-            Ustvarjanje Eko točke je omogočeno samo uporabnikom z Lana8Wonder zapisom KIND 88888.
-          </AlertDescription>
+          <AlertDescription>{t("ecoPoint.alert.lana8WonderOnly")}</AlertDescription>
         </Alert>
       )}
 
@@ -276,16 +280,16 @@ export default function FoodCornerEcoPoint() {
                     <h3 className="font-semibold">{node.name}</h3>
                     <p className="text-xs text-muted-foreground line-clamp-2">{node.content}</p>
                   </div>
-                  <Badge>{node.status}</Badge>
+                  <Badge>{statusLabel(node.status)}</Badge>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  <Badge variant="secondary">{node.sellers.length} dobaviteljev</Badge>
-                  <Badge variant="secondary">{node.listings.length} ponudb</Badge>
-                  <Badge variant="outline">{node.cycle || "cycle"}</Badge>
+                  <Badge variant="secondary">{t("ecoPoint.badge.suppliers", { count: node.sellers.length })}</Badge>
+                  <Badge variant="secondary">{t("ecoPoint.badge.offers", { count: node.listings.length })}</Badge>
+                  <Badge variant="outline">{cycleLabel(node.cycle) || node.cycle || "cycle"}</Badge>
                 </div>
                 {(node.status === "paused" || describeFoodCornerPause(node)) && (
                   <p className="text-xs text-amber-700 dark:text-amber-300">
-                    Pavza{describeFoodCornerPause(node) ? ` · ${describeFoodCornerPause(node)}` : ""}
+                    {t("ecoPoint.label.pause")}{describeFoodCornerPause(node) ? ` · ${describeFoodCornerPause(node)}` : ""}
                   </p>
                 )}
                 <Button
@@ -298,7 +302,7 @@ export default function FoodCornerEcoPoint() {
                     setShowForm(true);
                   }}
                 >
-                  Uredi
+                  {t("ecoPoint.button.edit")}
                 </Button>
               </CardContent>
             </Card>
@@ -309,12 +313,12 @@ export default function FoodCornerEcoPoint() {
       <div className="flex flex-col sm:flex-row gap-2">
         <Button onClick={startNew} disabled={!lana8WonderStatus.exists} className="gap-2">
           <Plus className="h-4 w-4" />
-          Ustvari svojo Eko točko
+          {t("ecoPoint.button.create")}
         </Button>
         {editingNode && (
           <Button variant="outline" onClick={() => setShowForm(true)} className="gap-2">
             <Store className="h-4 w-4" />
-            Uredi izbrano
+            {t("ecoPoint.button.editSelected")}
           </Button>
         )}
       </div>
@@ -322,65 +326,63 @@ export default function FoodCornerEcoPoint() {
       {showForm && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{editingNode ? "Uredi Eko točko" : "Nova Eko točka"}</CardTitle>
+            <CardTitle className="text-base">{editingNode ? t("ecoPoint.form.titleEdit") : t("ecoPoint.form.titleNew")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Ime</Label>
-                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Eko točka Center" />
+                <Label>{t("ecoPoint.form.name")}</Label>
+                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("ecoPoint.form.namePlaceholder")} />
               </div>
               <div className="space-y-2">
-                <Label>Plačilni naslov</Label>
+                <Label>{t("ecoPoint.form.paymentAddress")}</Label>
                 <Input value={lud16} onChange={(event) => setLud16(event.target.value)} placeholder="center@lanapays.us" />
-                <p className="text-xs text-muted-foreground">
-                  Neobvezni Lightning/LNURL naslov za plačila ali poravnave, npr. center@lanapays.us.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("ecoPoint.form.paymentHint")}</p>
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label>Opis</Label>
+                <Label>{t("ecoPoint.form.description")}</Label>
                 <Textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />
               </div>
             </div>
 
             <div className="grid md:grid-cols-5 gap-4">
               <div className="space-y-2">
-                <Label>Status</Label>
+                <Label>{t("ecoPoint.form.status")}</Label>
                 <Select value={nodeStatus} onValueChange={(value) => setNodeStatus(value as FoodCornerNodeStatus)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="active">Aktivna</SelectItem>
-                    <SelectItem value="paused">Na pavzi</SelectItem>
-                    <SelectItem value="archived">Deaktivirana</SelectItem>
+                    <SelectItem value="active">{t("ecoPoint.status.active")}</SelectItem>
+                    <SelectItem value="paused">{t("ecoPoint.status.paused")}</SelectItem>
+                    <SelectItem value="archived">{t("ecoPoint.status.archived")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Cikel</Label>
+                <Label>{t("ecoPoint.form.cycle")}</Label>
                 <Select value={cycle} onValueChange={setCycle}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="weekly">weekly</SelectItem>
-                    <SelectItem value="biweekly">biweekly</SelectItem>
-                    <SelectItem value="monthly">monthly</SelectItem>
+                    <SelectItem value="weekly">{t("cycle.weekly")}</SelectItem>
+                    <SelectItem value="biweekly">{t("cycle.biweekly")}</SelectItem>
+                    <SelectItem value="monthly">{t("cycle.monthly")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Rok naročila</Label>
+                <Label>{t("ecoPoint.form.cutoffDay")}</Label>
                 <Select value={cutoffDay} onValueChange={setCutoffDay}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {DAYS.map((day) => <SelectItem key={day} value={day}>{day}</SelectItem>)}
+                    {DAYS.map((day) => <SelectItem key={day} value={day}>{dayLabel(day)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Ura roka</Label>
+                <Label>{t("ecoPoint.form.cutoffTime")}</Label>
                 <Input value={cutoffTime} onChange={(event) => setCutoffTime(event.target.value)} placeholder="18:00" />
               </div>
               <div className="space-y-2">
-                <Label>Območja</Label>
+                <Label>{t("ecoPoint.form.areas")}</Label>
                 <Input value={areas} onChange={(event) => setAreas(event.target.value)} placeholder="1000 Ljubljana, 1295 ..." />
               </div>
             </div>
@@ -388,24 +390,24 @@ export default function FoodCornerEcoPoint() {
             {(nodeStatus === "paused" || pauseFrom || pauseUntil || pauseNote) && (
               <div className="grid md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label>Pavza od</Label>
+                  <Label>{t("ecoPoint.form.pauseFrom")}</Label>
                   <Input type="date" value={pauseFrom} onChange={(event) => setPauseFrom(event.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Pavza do</Label>
+                  <Label>{t("ecoPoint.form.pauseUntil")}</Label>
                   <Input type="date" value={pauseUntil} onChange={(event) => setPauseUntil(event.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Razlog pavze</Label>
-                  <Input value={pauseNote} onChange={(event) => setPauseNote(event.target.value)} placeholder="Počitnice, zaprtje, selitev ..." />
+                  <Label>{t("ecoPoint.form.pauseReason")}</Label>
+                  <Input value={pauseNote} onChange={(event) => setPauseNote(event.target.value)} placeholder={t("ecoPoint.form.pauseReasonPlaceholder")} />
                 </div>
               </div>
             )}
 
             <div className="space-y-3 rounded-lg border p-4">
               <div className="space-y-2">
-                <Label>Prevzemna lokacija</Label>
-                <Input value={pickupLabel} onChange={(event) => setPickupLabel(event.target.value)} placeholder="Naslov ali opis lokacije" />
+                <Label>{t("ecoPoint.form.pickupLocation")}</Label>
+                <Input value={pickupLabel} onChange={(event) => setPickupLabel(event.target.value)} placeholder={t("ecoPoint.form.pickupLocationPlaceholder")} />
               </div>
               <AddressSearch
                 onLocationChange={(lat, lng, displayName) => {
@@ -414,19 +416,19 @@ export default function FoodCornerEcoPoint() {
                   if (displayName) setPickupLabel(displayName);
                 }}
                 labels={{
-                  autoDetect: "Zaznaj mojo lokacijo",
-                  placeholder: "Poišči naslov, npr. Tržnica Ljubljana",
-                  noResults: "Ni zadetkov",
-                  selectLocation: "Izberi lokacijo:",
-                  searchFailed: "Iskanje ni uspelo. Poskusi znova.",
-                  permissionDenied: "Dovoljenje za lokacijo je zavrnjeno.",
-                  geoUnavailable: "Lokacija trenutno ni na voljo.",
+                  autoDetect: t("ecoPoint.addr.autoDetect"),
+                  placeholder: t("ecoPoint.addr.placeholder"),
+                  noResults: t("ecoPoint.addr.noResults"),
+                  selectLocation: t("ecoPoint.addr.selectLocation"),
+                  searchFailed: t("ecoPoint.addr.searchFailed"),
+                  permissionDenied: t("ecoPoint.addr.permissionDenied"),
+                  geoUnavailable: t("ecoPoint.addr.geoUnavailable"),
                 }}
               />
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <Button type="button" variant="outline" onClick={() => setShowLocationPicker(true)} className="gap-2">
                   <MapPin className="h-4 w-4" />
-                  Izberi na zemljevidu
+                  {t("ecoPoint.form.pickOnMap")}
                 </Button>
                 {hasPickupCoordinates && (
                   <span className="text-xs text-muted-foreground font-mono">
@@ -437,7 +439,7 @@ export default function FoodCornerEcoPoint() {
               {hasPickupCoordinates && (
                 <div className="overflow-hidden rounded-lg border">
                   <iframe
-                    title="Predogled lokacije Eko točke"
+                    title={t("ecoPoint.iframe.title")}
                     width="100%"
                     height="220"
                     className="block"
@@ -450,7 +452,7 @@ export default function FoodCornerEcoPoint() {
                     rel="noopener noreferrer"
                     className="block py-2 text-center text-xs text-primary hover:underline"
                   >
-                    Odpri v OpenStreetMap
+                    {t("ecoPoint.form.openInOSM")}
                   </a>
                 </div>
               )}
@@ -458,15 +460,15 @@ export default function FoodCornerEcoPoint() {
 
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Okno prevzema</Label>
+                <Label>{t("ecoPoint.form.pickupWindow")}</Label>
                 <Input value={pickupWindow} onChange={(event) => setPickupWindow(event.target.value)} placeholder="16:00-19:00" />
               </div>
               <div className="space-y-2">
-                <Label>Dan prevzema</Label>
+                <Label>{t("ecoPoint.form.pickupDay")}</Label>
                 <Select value={pickupDay} onValueChange={setPickupDay}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {DAYS.map((day) => <SelectItem key={day} value={day}>{day}</SelectItem>)}
+                    {DAYS.map((day) => <SelectItem key={day} value={day}>{dayLabel(day)}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -475,7 +477,7 @@ export default function FoodCornerEcoPoint() {
             <div className="grid md:grid-cols-4 gap-4 items-end">
               <label className="flex items-center gap-2 pb-2 text-sm">
                 <Checkbox checked={deliveryEnabled} onCheckedChange={(checked) => setDeliveryEnabled(checked === true)} />
-                Omogoči dostavo
+                {t("ecoPoint.form.enableDelivery")}
               </label>
               {deliveryEnabled && (
                 <>
@@ -487,15 +489,13 @@ export default function FoodCornerEcoPoint() {
 
             <div className="space-y-3">
               <div>
-                <h3 className="font-semibold">Dobavitelji in ponudbe</h3>
-                <p className="text-sm text-muted-foreground">
-                  Označi dobavitelja za vse njegove aktivne ponudbe ali izberi posamezne ponudbe.
-                </p>
+                <h3 className="font-semibold">{t("ecoPoint.suppliers.title")}</h3>
+                <p className="text-sm text-muted-foreground">{t("ecoPoint.suppliers.subtitle")}</p>
               </div>
               {producers.length === 0 ? (
                 <Card>
                   <CardContent className="p-5 text-sm text-muted-foreground">
-                    Na relayjih trenutno ni aktivnih KIND 36500 ponudb.
+                    {t("ecoPoint.suppliers.empty")}
                   </CardContent>
                 </Card>
               ) : (
@@ -514,7 +514,10 @@ export default function FoodCornerEcoPoint() {
                             <span className="flex-1">
                               <span className="font-medium block">{producer.name}</span>
                               <span className="text-xs text-muted-foreground">
-                                {producer.city || producer.country || producer.pubkey.slice(0, 10)} · {producer.listings.length} ponudb
+                                {t("ecoPoint.suppliers.producerLine", {
+                                  place: producer.city || producer.country || producer.pubkey.slice(0, 10),
+                                  count: producer.listings.length,
+                                })}
                               </span>
                             </span>
                           </label>
@@ -549,9 +552,9 @@ export default function FoodCornerEcoPoint() {
             <div className="flex flex-col sm:flex-row gap-2">
               <Button onClick={saveNode} disabled={isPublishing} className="gap-2">
                 {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Objavi Eko točko
+                {t("ecoPoint.button.publish")}
               </Button>
-              <Button variant="outline" onClick={() => setShowForm(false)}>Zapri</Button>
+              <Button variant="outline" onClick={() => setShowForm(false)}>{t("ecoPoint.button.close")}</Button>
             </div>
           </CardContent>
         </Card>
@@ -567,23 +570,23 @@ export default function FoodCornerEcoPoint() {
           }}
           onClose={() => setShowLocationPicker(false)}
           labels={{
-            title: "Izberi lokacijo Eko točke",
-            hint: "Klikni na zemljevid ali premakni marker na prevzemno lokacijo.",
-            selected: "Izbrano",
-            cancel: "Prekliči",
-            confirm: "Potrdi lokacijo",
-            myLocation: "Moja lokacija",
-            locating: "Zaznavam ...",
+            title: t("ecoPoint.picker.title"),
+            hint: t("ecoPoint.picker.hint"),
+            selected: t("ecoPoint.picker.selected"),
+            cancel: t("ecoPoint.picker.cancel"),
+            confirm: t("ecoPoint.picker.confirm"),
+            myLocation: t("ecoPoint.picker.myLocation"),
+            locating: t("ecoPoint.picker.locating"),
           }}
         />
       )}
 
       <div className="space-y-3 pt-3">
-        <h2 className="text-lg font-semibold">Naročila prek mojih Eko točk</h2>
+        <h2 className="text-lg font-semibold">{t("ecoPoint.orders.title")}</h2>
         {myNodeOrders.length === 0 ? (
           <Card>
             <CardContent className="p-5 text-sm text-muted-foreground">
-              Ko kupci naročijo prek tvoje Eko točke, se naročila prikažejo tukaj.
+              {t("ecoPoint.orders.empty")}
             </CardContent>
           </Card>
         ) : (
@@ -594,7 +597,7 @@ export default function FoodCornerEcoPoint() {
                 return (
                   <Card key={group.nodeRef}>
                     <CardContent className="p-4">
-                      <p className="text-sm text-muted-foreground">{node?.name || "Direktno"}</p>
+                      <p className="text-sm text-muted-foreground">{node?.name || t("ecoPoint.orders.direct")}</p>
                       <p className="text-2xl font-bold">{group.orders.length}</p>
                       <p className="text-sm font-medium">{formatFoodMoney(group.total, group.currency)}</p>
                     </CardContent>
@@ -633,9 +636,7 @@ export default function FoodCornerEcoPoint() {
       {myNodes.length > 0 && (
         <Alert>
           <CheckCircle2 className="h-4 w-4" />
-          <AlertDescription>
-            Aktivna Eko točka ostane zamenljiva po istem <code>d</code> tagu. Ob urejanju objavimo novejši KIND 30905 zapis.
-          </AlertDescription>
+          <AlertDescription>{t("ecoPoint.footer")}</AlertDescription>
         </Alert>
       )}
     </div>

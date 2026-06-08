@@ -334,6 +334,36 @@ export function isFoodCornerNodePaused(node: FoodCornerNode, now = new Date()): 
   return startsBeforeOrToday && endsAfterOrToday;
 }
 
+// Lowercase English weekday names, indexed by Date.getDay() (0 = Sunday).
+const WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+/**
+ * Estimated pickup date for an Eco point: the pickup weekday in NEXT week
+ * (the week starting the upcoming Monday). Returns an ISO yyyy-mm-dd string,
+ * or "" if the weekday is unknown.
+ */
+export function nextWeekPickupDate(dayName: string, from: Date = new Date()): string {
+  const target = WEEKDAY_NAMES.indexOf((dayName || "").trim().toLowerCase());
+  if (target < 0) return "";
+
+  const base = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  // Jump to next week's Monday (always at least 1 day, up to 7 — never this week's Monday).
+  const daysUntilNextMonday = ((8 - base.getDay()) % 7) || 7;
+  const nextMonday = new Date(base);
+  nextMonday.setDate(base.getDate() + daysUntilNextMonday);
+
+  // Offset from Monday (getDay 1) to the target weekday; Sunday wraps to +6.
+  let offset = target - 1;
+  if (offset < 0) offset += 7;
+  const result = new Date(nextMonday);
+  result.setDate(nextMonday.getDate() + offset);
+
+  const y = result.getFullYear();
+  const m = String(result.getMonth() + 1).padStart(2, "0");
+  const d = String(result.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export function describeFoodCornerPause(node: FoodCornerNode): string {
   const parts: string[] = [];
   if (node.pause.from) parts.push(`od ${node.pause.from}`);

@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFoodCornerData } from "@/hooks/useFoodCornerData";
 import { useFoodCornerPublisher } from "@/hooks/useFoodCornerPublisher";
+import { useTranslation } from "@/i18n/I18nContext";
+import foodCornerTranslations, { FoodCornerKey } from "@/i18n/modules/foodCorner";
 import {
   FOOD_CORNER_FULFILLMENT_KIND,
   FoodCornerFulfillmentStatus,
@@ -17,12 +19,12 @@ import {
 } from "@/types/foodCorner";
 import { formatFoodMoney, groupOrdersByNode } from "@/lib/foodCorner";
 
-const STATUS_ACTIONS: Array<{ status: FoodCornerFulfillmentStatus; label: string; icon: LucideIcon; variant?: "default" | "outline" | "destructive" }> = [
-  { status: "confirmed", label: "Potrdi", icon: CheckCircle2, variant: "default" },
-  { status: "rejected", label: "Zavrni", icon: XCircle, variant: "destructive" },
-  { status: "packed", label: "Zapakirano", icon: PackageCheck, variant: "outline" },
-  { status: "delivered", label: "Dostavljeno", icon: Truck, variant: "outline" },
-  { status: "completed", label: "Zaključi", icon: CheckCircle2, variant: "outline" },
+const STATUS_ACTIONS: Array<{ status: FoodCornerFulfillmentStatus; labelKey: FoodCornerKey; icon: LucideIcon; variant?: "default" | "outline" | "destructive" }> = [
+  { status: "confirmed", labelKey: "supplier.action.confirm", icon: CheckCircle2, variant: "default" },
+  { status: "rejected", labelKey: "supplier.action.reject", icon: XCircle, variant: "destructive" },
+  { status: "packed", labelKey: "supplier.action.packed", icon: PackageCheck, variant: "outline" },
+  { status: "delivered", labelKey: "supplier.action.delivered", icon: Truck, variant: "outline" },
+  { status: "completed", labelKey: "supplier.action.completed", icon: CheckCircle2, variant: "outline" },
 ];
 
 function OrderCard({
@@ -32,6 +34,7 @@ function OrderCard({
   onNoteChange,
   onStatus,
   isPublishing,
+  t,
 }: {
   order: FoodCornerOrderWithFulfillment;
   nodeName: string;
@@ -39,6 +42,7 @@ function OrderCard({
   onNoteChange: (value: string) => void;
   onStatus: (status: FoodCornerFulfillmentStatus) => void;
   isPublishing: boolean;
+  t: (key: FoodCornerKey, vars?: Record<string, string | number>) => string;
 }) {
   return (
     <Card>
@@ -53,13 +57,13 @@ function OrderCard({
               <span className="text-xs text-muted-foreground">{nodeName}</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Kupec: {order.buyerPubkey.slice(0, 12)}... · {new Date(order.createdAt * 1000).toLocaleString()}
+              {t("supplier.buyer")}: {order.buyerPubkey.slice(0, 12)}... · {new Date(order.createdAt * 1000).toLocaleString()}
             </p>
           </div>
           <div className="text-xs text-muted-foreground md:text-right">
-            {order.requestedDate && <p>Datum: {order.requestedDate}</p>}
-            {order.requestedWindow && <p>Okno: {order.requestedWindow}</p>}
-            {order.pickupPoint && <p>Pickup: {order.pickupPoint}</p>}
+            {order.requestedDate && <p>{t("supplier.date")}: {order.requestedDate}</p>}
+            {order.requestedWindow && <p>{t("supplier.window")}: {order.requestedWindow}</p>}
+            {order.pickupPoint && <p>{t("supplier.pickup")}: {order.pickupPoint}</p>}
           </div>
         </div>
 
@@ -86,7 +90,7 @@ function OrderCard({
         <Textarea
           value={note}
           onChange={(event) => onNoteChange(event.target.value)}
-          placeholder="Opomba za kupca: zamenjave, zamuda, dodatne informacije ..."
+          placeholder={t("supplier.notePlaceholder")}
           rows={2}
         />
 
@@ -103,7 +107,7 @@ function OrderCard({
                 className="gap-2"
               >
                 <Icon className="h-4 w-4" />
-                {action.label}
+                {t(action.labelKey)}
               </Button>
             );
           })}
@@ -115,6 +119,7 @@ function OrderCard({
 
 export default function FoodCornerSupplier() {
   const { session } = useAuth();
+  const { t } = useTranslation(foodCornerTranslations);
   const { nodes, listings, orders, isLoading, refetch } = useFoodCornerData();
   const { publishEvent, isPublishing } = useFoodCornerPublisher();
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -144,11 +149,11 @@ export default function FoodCornerSupplier() {
         ],
         note.trim(),
       );
-      toast.success("Status naročila je objavljen");
+      toast.success(t("supplier.toast.published"));
       setNotes((current) => ({ ...current, [order.ref]: "" }));
       await refetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Objava statusa ni uspela");
+      toast.error(err instanceof Error ? err.message : t("supplier.toast.failed"));
     }
   };
 
@@ -165,13 +170,11 @@ export default function FoodCornerSupplier() {
       <div className="px-4 sm:px-0 space-y-4">
         <Alert>
           <Truck className="h-4 w-4" />
-          <AlertDescription>
-            Dobaviteljski pogled se prikaže, ko ima tvoj Nostr ključ objavljene aktivne KIND 36500 eko ponudbe.
-          </AlertDescription>
+          <AlertDescription>{t("supplier.empty.alert")}</AlertDescription>
         </Alert>
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground">
-            Za ta račun trenutno nisem našel dobaviteljskih ponudb.
+            {t("supplier.empty.none")}
           </CardContent>
         </Card>
       </div>
@@ -182,10 +185,8 @@ export default function FoodCornerSupplier() {
     <div className="px-4 sm:px-0 space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Dobavitelj</h2>
-          <p className="text-sm text-muted-foreground">
-            Vidiš naročila KIND 36601, ki so naslovljena na tvoje KIND 30901 poslovne enote.
-          </p>
+          <h2 className="text-lg font-semibold">{t("supplier.title")}</h2>
+          <p className="text-sm text-muted-foreground">{t("supplier.subtitle")}</p>
         </div>
         <Button variant="ghost" size="icon" onClick={refetch}>
           <RefreshCw className="h-4 w-4" />
@@ -195,19 +196,19 @@ export default function FoodCornerSupplier() {
       <div className="grid md:grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Aktivne ponudbe</p>
+            <p className="text-sm text-muted-foreground">{t("supplier.stat.activeOffers")}</p>
             <p className="text-2xl font-bold">{supplierListings.length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Naročila</p>
+            <p className="text-sm text-muted-foreground">{t("supplier.stat.orders")}</p>
             <p className="text-2xl font-bold">{supplierOrders.length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Nepotrjena</p>
+            <p className="text-sm text-muted-foreground">{t("supplier.stat.unconfirmed")}</p>
             <p className="text-2xl font-bold">
               {supplierOrders.filter((order) => !order.fulfillmentStatus).length}
             </p>
@@ -220,8 +221,8 @@ export default function FoodCornerSupplier() {
           {grouped.map((group) => (
             <Card key={group.nodeRef}>
               <CardContent className="p-4">
-                <p className="text-sm text-muted-foreground">{nodeNames.get(group.nodeRef) || "Direktno / brez točke"}</p>
-                <p className="text-xl font-bold">{group.orders.length} naročil</p>
+                <p className="text-sm text-muted-foreground">{nodeNames.get(group.nodeRef) || t("supplier.directNode")}</p>
+                <p className="text-xl font-bold">{t("supplier.ordersCount", { count: group.orders.length })}</p>
                 <p className="text-sm font-medium">{formatFoodMoney(group.total, group.currency)}</p>
               </CardContent>
             </Card>
@@ -232,7 +233,7 @@ export default function FoodCornerSupplier() {
       {supplierOrders.length === 0 ? (
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground">
-            Trenutno še ni naročil za tvoje ponudbe.
+            {t("supplier.empty.noOrders")}
           </CardContent>
         </Card>
       ) : (
@@ -241,11 +242,12 @@ export default function FoodCornerSupplier() {
             <OrderCard
               key={order.ref}
               order={order}
-              nodeName={nodeNames.get(order.distributionPoint) || "Direktno / brez točke"}
+              nodeName={nodeNames.get(order.distributionPoint) || t("supplier.directNode")}
               note={notes[order.ref] || ""}
               onNoteChange={(value) => setNotes((current) => ({ ...current, [order.ref]: value }))}
               onStatus={(status) => publishStatus(order, status)}
               isPublishing={isPublishing}
+              t={t}
             />
           ))}
         </div>
@@ -253,9 +255,7 @@ export default function FoodCornerSupplier() {
 
       <Alert>
         <Clock className="h-4 w-4" />
-        <AlertDescription>
-          Vsaka sprememba statusa objavi novejši KIND 36602 z istim <code>d</code> kot naročilo, zato relayi in kupci vidijo zadnji potrjeni status.
-        </AlertDescription>
+        <AlertDescription>{t("supplier.footer")}</AlertDescription>
       </Alert>
     </div>
   );

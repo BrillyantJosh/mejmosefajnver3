@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFoodCornerData } from "@/hooks/useFoodCornerData";
 import { useFoodCornerPublisher } from "@/hooks/useFoodCornerPublisher";
+import { useTranslation } from "@/i18n/I18nContext";
+import foodCornerTranslations, { FoodCornerKey } from "@/i18n/modules/foodCorner";
 import {
   FOOD_CORNER_ORDER_KIND,
   FoodCornerListing,
@@ -20,6 +22,7 @@ import {
   formatFoodMoney,
   generateFoodCornerId,
   isFoodCornerNodePaused,
+  nextWeekPickupDate,
 } from "@/lib/foodCorner";
 
 function firstImage(listing: FoodCornerListing): string | undefined {
@@ -28,6 +31,7 @@ function firstImage(listing: FoodCornerListing): string | undefined {
 
 export default function FoodCornerOrder() {
   const { session } = useAuth();
+  const { t, lang } = useTranslation(foodCornerTranslations);
   const { nodes, orders, isLoading, error, refetch, getNodeCatalog, getNodeByRef } = useFoodCornerData();
   const { publishEvent, isPublishing } = useFoodCornerPublisher();
   const storageKey = session?.nostrHexId ? `food_corner_selected_node_${session.nostrHexId}` : "food_corner_selected_node";
@@ -35,7 +39,9 @@ export default function FoodCornerOrder() {
   const [selectedNodeRef, setSelectedNodeRef] = useState(() => localStorage.getItem(storageKey) || "");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
-  const [requestedDate, setRequestedDate] = useState("");
+
+  const dayLabel = (day?: string) => (day ? t(`days.${day.trim().toLowerCase()}` as FoodCornerKey) : "");
+  const cycleLabel = (cycle?: string) => (cycle ? t(`cycle.${cycle}` as FoodCornerKey) : "");
 
   const visibleNodes = useMemo(
     () => nodes.filter((node) => node.status !== "archived"),
@@ -48,6 +54,18 @@ export default function FoodCornerOrder() {
     () => (canOrderFromSelectedNode ? getNodeCatalog(selectedNodeRef) : []),
     [canOrderFromSelectedNode, getNodeCatalog, selectedNodeRef],
   );
+
+  // Estimated pickup date = the Eco point's pickup weekday, NEXT week. Read-only.
+  const pickupDay = selectedNode?.pickups[0]?.day || selectedNode?.deliveries[0]?.day || "";
+  const requestedDate = useMemo(() => nextWeekPickupDate(pickupDay), [pickupDay]);
+  const requestedDateDisplay = requestedDate
+    ? new Date(`${requestedDate}T00:00:00`).toLocaleDateString(lang === "sl" ? "sl-SI" : undefined, {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "";
 
   useEffect(() => {
     if (!selectedNodeRef) return;
@@ -88,15 +106,15 @@ export default function FoodCornerOrder() {
   const placeOrder = async () => {
     if (!session?.nostrHexId) return;
     if (!selectedNode) {
-      toast.error("Najprej izberi Eko točko");
+      toast.error(t("order.toast.selectFirst"));
       return;
     }
     if (!canOrderFromSelectedNode) {
-      toast.error("Ta Eko točka trenutno ne sprejema novih naročil");
+      toast.error(t("order.toast.notAccepting"));
       return;
     }
     if (selectedItems.length === 0) {
-      toast.error("Dodaj vsaj en izdelek v naročilo");
+      toast.error(t("order.toast.addItem"));
       return;
     }
 
@@ -144,12 +162,12 @@ export default function FoodCornerOrder() {
         );
       }
 
-      toast.success("Naročilo je objavljeno na relayje");
+      toast.success(t("order.toast.published"));
       setQuantities({});
       setNote("");
       await refetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Objava naročila ni uspela");
+      toast.error(err instanceof Error ? err.message : t("order.toast.failed"));
     }
   };
 
@@ -172,10 +190,8 @@ export default function FoodCornerOrder() {
 
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Izberi eno Eko točko</h2>
-          <p className="text-sm text-muted-foreground">
-            Izbrana točka določa, katere ponudbe so trenutno na voljo za naročanje.
-          </p>
+          <h2 className="text-lg font-semibold">{t("order.heading.select")}</h2>
+          <p className="text-sm text-muted-foreground">{t("order.subtitle.select")}</p>
         </div>
         <Button variant="ghost" size="icon" onClick={refetch}>
           <RefreshCw className="h-4 w-4" />
@@ -185,7 +201,7 @@ export default function FoodCornerOrder() {
       {visibleNodes.length === 0 ? (
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground">
-            Trenutno še ni objavljenih Eko točk za naročanje.
+            {t("order.empty.noNodes")}
           </CardContent>
         </Card>
       ) : (
@@ -203,31 +219,35 @@ export default function FoodCornerOrder() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="font-semibold">{node.name}</h3>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{node.content || "Brez dodatnega opisa"}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2">{node.content || t("order.noDescription")}</p>
                     </div>
                     {isSelected && <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />}
                   </div>
                   <div className="flex flex-wrap gap-1.5 text-xs">
-                    {nodePaused && <Badge variant="secondary">Na pavzi</Badge>}
+                    {nodePaused && <Badge variant="secondary">{t("order.badge.paused")}</Badge>}
                     {node.geoLabel && (
                       <Badge variant="outline" className="gap-1">
                         <MapPin className="h-3 w-3" />
                         {node.geoLabel}
                       </Badge>
                     )}
-                    {node.cycle && <Badge variant="secondary">{node.cycle}</Badge>}
+                    {node.cycle && <Badge variant="secondary">{cycleLabel(node.cycle)}</Badge>}
                     {node.fulfillment.map((item) => (
                       <Badge key={item} variant="secondary">{item}</Badge>
                     ))}
                   </div>
                   {node.pickups[0] && (
                     <p className="text-xs text-muted-foreground">
-                      Prevzem: {node.pickups[0].label} · {node.pickups[0].day} {node.pickups[0].window}
+                      {t("order.pickupLine", {
+                        label: node.pickups[0].label,
+                        day: dayLabel(node.pickups[0].day),
+                        window: node.pickups[0].window,
+                      })}
                     </p>
                   )}
                   {nodePaused && (
                     <p className="text-xs text-amber-700 dark:text-amber-300">
-                      Trenutno ne sprejema naročil{describeFoodCornerPause(node) ? ` · ${describeFoodCornerPause(node)}` : ""}.
+                      {t("order.notAcceptingShort")}{describeFoodCornerPause(node) ? ` · ${describeFoodCornerPause(node)}` : ""}.
                     </p>
                   )}
                 </CardContent>
@@ -241,9 +261,10 @@ export default function FoodCornerOrder() {
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {selectedNode.name} trenutno ne sprejema novih naročil
-            {describeFoodCornerPause(selectedNode) ? ` (${describeFoodCornerPause(selectedNode)})` : ""}.
-            Izberi drugo aktivno Eko točko, če želiš oddati naročilo.
+            {t("order.notAcceptingFull", {
+              name: selectedNode.name,
+              pause: describeFoodCornerPause(selectedNode) ? ` (${describeFoodCornerPause(selectedNode)})` : "",
+            })}
           </AlertDescription>
         </Alert>
       )}
@@ -252,18 +273,16 @@ export default function FoodCornerOrder() {
         <>
           <div className="flex items-center justify-between gap-3 pt-2">
             <div>
-              <h2 className="text-lg font-semibold">Ponudbe za {selectedNode.name}</h2>
-              <p className="text-sm text-muted-foreground">
-                Cene prihajajo neposredno iz dobaviteljevih objav KIND 36500.
-              </p>
+              <h2 className="text-lg font-semibold">{t("order.heading.offers", { name: selectedNode.name })}</h2>
+              <p className="text-sm text-muted-foreground">{t("order.subtitle.offers")}</p>
             </div>
-            <Badge variant="outline">{catalog.length} ponudb</Badge>
+            <Badge variant="outline">{t("order.badge.offers", { count: catalog.length })}</Badge>
           </div>
 
           {catalog.length === 0 ? (
             <Card>
               <CardContent className="p-6 text-center text-muted-foreground">
-                Ta Eko točka še nima aktivnih ponudb.
+                {t("order.empty.noOffers")}
               </CardContent>
             </Card>
           ) : (
@@ -316,12 +335,12 @@ export default function FoodCornerOrder() {
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <ShoppingBasket className="h-4 w-4" />
-                    Košarica
+                    {t("order.cart.title")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {selectedItems.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Vnesi količine pri ponudbah.</p>
+                    <p className="text-sm text-muted-foreground">{t("order.cart.empty")}</p>
                   ) : (
                     <div className="space-y-2">
                       {selectedItems.map(({ listing, qty }) => (
@@ -331,36 +350,34 @@ export default function FoodCornerOrder() {
                         </div>
                       ))}
                       <div className="border-t pt-2 flex justify-between font-bold">
-                        <span>Skupaj</span>
+                        <span>{t("order.cart.total")}</span>
                         <span>{formatFoodMoney(total, currency)}</span>
                       </div>
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="requested-date">Želeni datum prevzema</Label>
-                    <Input
-                      id="requested-date"
-                      type="date"
-                      value={requestedDate}
-                      onChange={(event) => setRequestedDate(event.target.value)}
-                    />
+                  <div className="space-y-1.5">
+                    <Label>{t("order.cart.estimatedDate")}</Label>
+                    <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
+                      {requestedDateDisplay || "—"}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{t("order.cart.estimatedHint")}</p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="order-note">Opomba</Label>
+                    <Label htmlFor="order-note">{t("order.cart.note")}</Label>
                     <Textarea
                       id="order-note"
                       value={note}
                       onChange={(event) => setNote(event.target.value)}
-                      placeholder="Npr. prevzamem po 17:00 ..."
+                      placeholder={t("order.cart.notePlaceholder")}
                       rows={3}
                     />
                   </div>
 
                   <Button className="w-full gap-2" onClick={placeOrder} disabled={isPublishing || selectedItems.length === 0}>
                     {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    Oddaj naročilo
+                    {t("order.cart.submit")}
                   </Button>
                 </CardContent>
               </Card>
@@ -372,12 +389,12 @@ export default function FoodCornerOrder() {
       <div className="pt-4">
         <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
           <Store className="h-5 w-5 text-primary" />
-          Moja naročila
+          {t("order.myOrders.title")}
         </h2>
         {myOrders.length === 0 ? (
           <Card>
             <CardContent className="p-5 text-sm text-muted-foreground">
-              Ko oddaš naročilo, bo tukaj prikazan njegov status iz KIND 36602.
+              {t("order.myOrders.empty")}
             </CardContent>
           </Card>
         ) : (
