@@ -15,7 +15,12 @@ import {
   FOOD_CORNER_ORDER_KIND,
   FoodCornerListing,
 } from "@/types/foodCorner";
-import { formatFoodMoney, generateFoodCornerId } from "@/lib/foodCorner";
+import {
+  describeFoodCornerPause,
+  formatFoodMoney,
+  generateFoodCornerId,
+  isFoodCornerNodePaused,
+} from "@/lib/foodCorner";
 
 function firstImage(listing: FoodCornerListing): string | undefined {
   return listing.images[0] || listing.thumbs[0];
@@ -32,23 +37,25 @@ export default function FoodCornerOrder() {
   const [note, setNote] = useState("");
   const [requestedDate, setRequestedDate] = useState("");
 
-  const activeNodes = useMemo(
-    () => nodes.filter((node) => node.status === "active"),
+  const visibleNodes = useMemo(
+    () => nodes.filter((node) => node.status !== "archived"),
     [nodes],
   );
   const selectedNode = getNodeByRef(selectedNodeRef);
+  const selectedNodePaused = selectedNode ? isFoodCornerNodePaused(selectedNode) : false;
+  const canOrderFromSelectedNode = !!selectedNode && selectedNode.status === "active" && !selectedNodePaused;
   const catalog = useMemo(
-    () => getNodeCatalog(selectedNodeRef),
-    [getNodeCatalog, selectedNodeRef],
+    () => (canOrderFromSelectedNode ? getNodeCatalog(selectedNodeRef) : []),
+    [canOrderFromSelectedNode, getNodeCatalog, selectedNodeRef],
   );
 
   useEffect(() => {
     if (!selectedNodeRef) return;
-    if (!activeNodes.some((node) => node.ref === selectedNodeRef)) {
+    if (!visibleNodes.some((node) => node.ref === selectedNodeRef)) {
       setSelectedNodeRef("");
       localStorage.removeItem(storageKey);
     }
-  }, [activeNodes, selectedNodeRef, storageKey]);
+  }, [visibleNodes, selectedNodeRef, storageKey]);
 
   const selectedItems = useMemo(
     () =>
@@ -82,6 +89,10 @@ export default function FoodCornerOrder() {
     if (!session?.nostrHexId) return;
     if (!selectedNode) {
       toast.error("Najprej izberi Eko točko");
+      return;
+    }
+    if (!canOrderFromSelectedNode) {
+      toast.error("Ta Eko točka trenutno ne sprejema novih naročil");
       return;
     }
     if (selectedItems.length === 0) {
@@ -171,20 +182,21 @@ export default function FoodCornerOrder() {
         </Button>
       </div>
 
-      {activeNodes.length === 0 ? (
+      {visibleNodes.length === 0 ? (
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground">
-            Trenutno še ni objavljenih aktivnih Eko točk.
+            Trenutno še ni objavljenih Eko točk za naročanje.
           </CardContent>
         </Card>
       ) : (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {activeNodes.map((node) => {
+          {visibleNodes.map((node) => {
             const isSelected = node.ref === selectedNodeRef;
+            const nodePaused = isFoodCornerNodePaused(node);
             return (
               <Card
                 key={node.ref}
-                className={`cursor-pointer transition-colors ${isSelected ? "border-primary ring-1 ring-primary/30" : "hover:border-primary/40"}`}
+                className={`cursor-pointer transition-colors ${isSelected ? "border-primary ring-1 ring-primary/30" : "hover:border-primary/40"} ${nodePaused ? "bg-muted/40" : ""}`}
                 onClick={() => chooseNode(node.ref)}
               >
                 <CardContent className="p-4 space-y-3">
@@ -196,6 +208,7 @@ export default function FoodCornerOrder() {
                     {isSelected && <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />}
                   </div>
                   <div className="flex flex-wrap gap-1.5 text-xs">
+                    {nodePaused && <Badge variant="secondary">Na pavzi</Badge>}
                     {node.geoLabel && (
                       <Badge variant="outline" className="gap-1">
                         <MapPin className="h-3 w-3" />
@@ -212,6 +225,11 @@ export default function FoodCornerOrder() {
                       Prevzem: {node.pickups[0].label} · {node.pickups[0].day} {node.pickups[0].window}
                     </p>
                   )}
+                  {nodePaused && (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      Trenutno ne sprejema naročil{describeFoodCornerPause(node) ? ` · ${describeFoodCornerPause(node)}` : ""}.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             );
@@ -219,7 +237,18 @@ export default function FoodCornerOrder() {
         </div>
       )}
 
-      {selectedNode && (
+      {selectedNode && !canOrderFromSelectedNode && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {selectedNode.name} trenutno ne sprejema novih naročil
+            {describeFoodCornerPause(selectedNode) ? ` (${describeFoodCornerPause(selectedNode)})` : ""}.
+            Izberi drugo aktivno Eko točko, če želiš oddati naročilo.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {selectedNode && canOrderFromSelectedNode && (
         <>
           <div className="flex items-center justify-between gap-3 pt-2">
             <div>

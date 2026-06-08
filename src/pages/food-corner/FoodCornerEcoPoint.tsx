@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CheckCircle2, Loader2, Plus, RefreshCw, Save, Sparkles, Store } from "lucide-react";
+import { ArrowRight, CheckCircle2, Loader2, MapPin, Plus, RefreshCw, Save, Sparkles, Store } from "lucide-react";
 import { toast } from "sonner";
+import { AddressSearch } from "@/components/AddressSearch";
+import LocationPicker from "@/components/LocationPicker";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,8 +16,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useFoodCornerData } from "@/hooks/useFoodCornerData";
 import { useFoodCornerPublisher } from "@/hooks/useFoodCornerPublisher";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
-import { FOOD_CORNER_NODE_KIND, FoodCornerNode } from "@/types/foodCorner";
-import { formatFoodMoney, generateFoodCornerId, groupOrdersByNode, slugifyFoodCorner } from "@/lib/foodCorner";
+import { FOOD_CORNER_NODE_KIND, FoodCornerNodeStatus } from "@/types/foodCorner";
+import {
+  describeFoodCornerPause,
+  formatFoodMoney,
+  generateFoodCornerId,
+  groupOrdersByNode,
+  slugifyFoodCorner,
+} from "@/lib/foodCorner";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
@@ -40,8 +48,10 @@ export default function FoodCornerEcoPoint() {
   const editingNode = myNodes.find((node) => node.ref === editingNodeRef);
 
   const [showForm, setShowForm] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [nodeStatus, setNodeStatus] = useState<FoodCornerNodeStatus>("active");
   const [cycle, setCycle] = useState("weekly");
   const [cutoffDay, setCutoffDay] = useState("tuesday");
   const [cutoffTime, setCutoffTime] = useState("18:00");
@@ -56,6 +66,9 @@ export default function FoodCornerEcoPoint() {
   const [deliveryRadius, setDeliveryRadius] = useState("20");
   const [areas, setAreas] = useState("");
   const [lud16, setLud16] = useState("");
+  const [pauseFrom, setPauseFrom] = useState("");
+  const [pauseUntil, setPauseUntil] = useState("");
+  const [pauseNote, setPauseNote] = useState("");
   const [selectedSellers, setSelectedSellers] = useState<string[]>([]);
   const [selectedListings, setSelectedListings] = useState<string[]>([]);
   const [excludedListings, setExcludedListings] = useState<string[]>([]);
@@ -70,6 +83,7 @@ export default function FoodCornerEcoPoint() {
     if (!editingNode || !showForm) return;
     setName(editingNode.name);
     setDescription(editingNode.content);
+    setNodeStatus(editingNode.status);
     setCycle(editingNode.cycle || "weekly");
     setCutoffDay(editingNode.orderCutoffDay || "tuesday");
     setCutoffTime(editingNode.orderCutoffTime || "18:00");
@@ -84,6 +98,9 @@ export default function FoodCornerEcoPoint() {
     setDeliveryRadius(editingNode.deliveries[0]?.radiusKm || "20");
     setAreas(editingNode.areas.join(", "));
     setLud16(editingNode.lud16);
+    setPauseFrom(editingNode.pause.from);
+    setPauseUntil(editingNode.pause.until);
+    setPauseNote(editingNode.pause.note);
     setSelectedSellers(editingNode.sellers);
     setSelectedListings(editingNode.listings);
     setExcludedListings(editingNode.excludes);
@@ -94,6 +111,7 @@ export default function FoodCornerEcoPoint() {
     setShowForm(true);
     setName("");
     setDescription("");
+    setNodeStatus("active");
     setCycle("weekly");
     setCutoffDay("tuesday");
     setCutoffTime("18:00");
@@ -108,6 +126,9 @@ export default function FoodCornerEcoPoint() {
     setDeliveryRadius("20");
     setAreas("");
     setLud16("");
+    setPauseFrom("");
+    setPauseUntil("");
+    setPauseNote("");
     setSelectedSellers([]);
     setSelectedListings([]);
     setExcludedListings([]);
@@ -152,6 +173,18 @@ export default function FoodCornerEcoPoint() {
       toast.error("Vnesi lokacijo prevzema");
       return;
     }
+    if (!pickupLat.trim() || !pickupLon.trim()) {
+      toast.error("Izberi lokacijo na zemljevidu ali z iskanjem naslova");
+      return;
+    }
+    if (!Number.isFinite(Number.parseFloat(pickupLat)) || !Number.isFinite(Number.parseFloat(pickupLon))) {
+      toast.error("Koordinate lokacije niso veljavne");
+      return;
+    }
+    if (pauseFrom && pauseUntil && pauseFrom > pauseUntil) {
+      toast.error("Začetek pavze ne sme biti po koncu pavze");
+      return;
+    }
     if (selectedSellers.length + selectedListings.length === 0) {
       toast.error("Izberi vsaj enega dobavitelja ali eno ponudbo");
       return;
@@ -162,7 +195,7 @@ export default function FoodCornerEcoPoint() {
     const tags: string[][] = [
       ["d", dTag],
       ["name", name.trim()],
-      ["status", "active"],
+      ["status", nodeStatus],
       ["fulfillment", "pickup"],
       ...(deliveryEnabled ? [["fulfillment", "delivery"]] : []),
       ...selectedSellers.map((sellerRef) => ["seller", sellerRef]),
@@ -175,6 +208,9 @@ export default function FoodCornerEcoPoint() {
       ...(pickupLat.trim() && pickupLon.trim() ? [["geo", pickupLat.trim(), pickupLon.trim(), pickupLabel.trim()]] : []),
       ...areaTags.map((area) => ["area", area]),
       ...(lud16.trim() ? [["lud16", lud16.trim()]] : []),
+      ...(nodeStatus === "paused" || pauseFrom.trim() || pauseUntil.trim() || pauseNote.trim()
+        ? [["pause", pauseFrom.trim(), pauseUntil.trim(), pauseNote.trim()]]
+        : []),
       ["t", "eco_point"],
     ];
 
@@ -191,6 +227,9 @@ export default function FoodCornerEcoPoint() {
   const myNodeRefs = new Set(myNodes.map((node) => node.ref));
   const myNodeOrders = orders.filter((order) => myNodeRefs.has(order.distributionPoint));
   const groupedOrders = groupOrdersByNode(myNodeOrders);
+  const pickupLatNumber = Number.parseFloat(pickupLat);
+  const pickupLonNumber = Number.parseFloat(pickupLon);
+  const hasPickupCoordinates = Number.isFinite(pickupLatNumber) && Number.isFinite(pickupLonNumber);
 
   if (isLoading || lana8WonderLoading) {
     return (
@@ -228,7 +267,7 @@ export default function FoodCornerEcoPoint() {
           {myNodes.map((node) => (
             <Card
               key={node.ref}
-              className={`cursor-pointer ${editingNodeRef === node.ref ? "border-primary ring-1 ring-primary/30" : "hover:border-primary/40"}`}
+              className={`cursor-pointer ${editingNodeRef === node.ref ? "border-primary ring-1 ring-primary/30" : "hover:border-primary/40"} ${node.status === "archived" ? "opacity-70" : ""}`}
               onClick={() => setEditingNodeRef(node.ref)}
             >
               <CardContent className="p-4 space-y-2">
@@ -244,6 +283,11 @@ export default function FoodCornerEcoPoint() {
                   <Badge variant="secondary">{node.listings.length} ponudb</Badge>
                   <Badge variant="outline">{node.cycle || "cycle"}</Badge>
                 </div>
+                {(node.status === "paused" || describeFoodCornerPause(node)) && (
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    Pavza{describeFoodCornerPause(node) ? ` · ${describeFoodCornerPause(node)}` : ""}
+                  </p>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -287,8 +331,11 @@ export default function FoodCornerEcoPoint() {
                 <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Eko točka Center" />
               </div>
               <div className="space-y-2">
-                <Label>LanaPays / lud16 naslov</Label>
-                <Input value={lud16} onChange={(event) => setLud16(event.target.value)} placeholder="center@lanaeco.farm" />
+                <Label>Plačilni naslov</Label>
+                <Input value={lud16} onChange={(event) => setLud16(event.target.value)} placeholder="center@lanapays.us" />
+                <p className="text-xs text-muted-foreground">
+                  Neobvezni Lightning/LNURL naslov za plačila ali poravnave, npr. center@lanapays.us.
+                </p>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label>Opis</Label>
@@ -296,7 +343,18 @@ export default function FoodCornerEcoPoint() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-4 gap-4">
+            <div className="grid md:grid-cols-5 gap-4">
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={nodeStatus} onValueChange={(value) => setNodeStatus(value as FoodCornerNodeStatus)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Aktivna</SelectItem>
+                    <SelectItem value="paused">Na pavzi</SelectItem>
+                    <SelectItem value="archived">Deaktivirana</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label>Cikel</Label>
                 <Select value={cycle} onValueChange={setCycle}>
@@ -327,26 +385,82 @@ export default function FoodCornerEcoPoint() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-5 gap-4">
-              <div className="space-y-2 md:col-span-2">
+            {(nodeStatus === "paused" || pauseFrom || pauseUntil || pauseNote) && (
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Pavza od</Label>
+                  <Input type="date" value={pauseFrom} onChange={(event) => setPauseFrom(event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Pavza do</Label>
+                  <Input type="date" value={pauseUntil} onChange={(event) => setPauseUntil(event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Razlog pavze</Label>
+                  <Input value={pauseNote} onChange={(event) => setPauseNote(event.target.value)} placeholder="Počitnice, zaprtje, selitev ..." />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3 rounded-lg border p-4">
+              <div className="space-y-2">
                 <Label>Prevzemna lokacija</Label>
                 <Input value={pickupLabel} onChange={(event) => setPickupLabel(event.target.value)} placeholder="Naslov ali opis lokacije" />
               </div>
-              <div className="space-y-2">
-                <Label>Lat</Label>
-                <Input value={pickupLat} onChange={(event) => setPickupLat(event.target.value)} placeholder="46.0569" />
+              <AddressSearch
+                onLocationChange={(lat, lng, displayName) => {
+                  setPickupLat(lat);
+                  setPickupLon(lng);
+                  if (displayName) setPickupLabel(displayName);
+                }}
+                labels={{
+                  autoDetect: "Zaznaj mojo lokacijo",
+                  placeholder: "Poišči naslov, npr. Tržnica Ljubljana",
+                  noResults: "Ni zadetkov",
+                  selectLocation: "Izberi lokacijo:",
+                  searchFailed: "Iskanje ni uspelo. Poskusi znova.",
+                  permissionDenied: "Dovoljenje za lokacijo je zavrnjeno.",
+                  geoUnavailable: "Lokacija trenutno ni na voljo.",
+                }}
+              />
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <Button type="button" variant="outline" onClick={() => setShowLocationPicker(true)} className="gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Izberi na zemljevidu
+                </Button>
+                {hasPickupCoordinates && (
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {pickupLatNumber.toFixed(6)}, {pickupLonNumber.toFixed(6)}
+                  </span>
+                )}
               </div>
-              <div className="space-y-2">
-                <Label>Lon</Label>
-                <Input value={pickupLon} onChange={(event) => setPickupLon(event.target.value)} placeholder="14.5058" />
-              </div>
-              <div className="space-y-2">
-                <Label>Okno</Label>
-                <Input value={pickupWindow} onChange={(event) => setPickupWindow(event.target.value)} placeholder="16:00-19:00" />
-              </div>
+              {hasPickupCoordinates && (
+                <div className="overflow-hidden rounded-lg border">
+                  <iframe
+                    title="Predogled lokacije Eko točke"
+                    width="100%"
+                    height="220"
+                    className="block"
+                    loading="lazy"
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${pickupLonNumber - 0.01},${pickupLatNumber - 0.007},${pickupLonNumber + 0.01},${pickupLatNumber + 0.007}&layer=mapnik&marker=${pickupLat},${pickupLon}`}
+                  />
+                  <a
+                    href={`https://www.openstreetmap.org/?mlat=${pickupLat}&mlon=${pickupLon}#map=16/${pickupLat}/${pickupLon}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block py-2 text-center text-xs text-primary hover:underline"
+                  >
+                    Odpri v OpenStreetMap
+                  </a>
+                </div>
+              )}
             </div>
 
-            <div className="grid md:grid-cols-4 gap-4 items-end">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Okno prevzema</Label>
+                <Input value={pickupWindow} onChange={(event) => setPickupWindow(event.target.value)} placeholder="16:00-19:00" />
+              </div>
               <div className="space-y-2">
                 <Label>Dan prevzema</Label>
                 <Select value={pickupDay} onValueChange={setPickupDay}>
@@ -356,6 +470,9 @@ export default function FoodCornerEcoPoint() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="grid md:grid-cols-4 gap-4 items-end">
               <label className="flex items-center gap-2 pb-2 text-sm">
                 <Checkbox checked={deliveryEnabled} onCheckedChange={(checked) => setDeliveryEnabled(checked === true)} />
                 Omogoči dostavo
@@ -438,6 +555,27 @@ export default function FoodCornerEcoPoint() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {showLocationPicker && (
+        <LocationPicker
+          initialLat={hasPickupCoordinates ? pickupLatNumber : undefined}
+          initialLng={hasPickupCoordinates ? pickupLonNumber : undefined}
+          onLocationSelect={(lat, lng) => {
+            setPickupLat(lat.toFixed(6));
+            setPickupLon(lng.toFixed(6));
+          }}
+          onClose={() => setShowLocationPicker(false)}
+          labels={{
+            title: "Izberi lokacijo Eko točke",
+            hint: "Klikni na zemljevid ali premakni marker na prevzemno lokacijo.",
+            selected: "Izbrano",
+            cancel: "Prekliči",
+            confirm: "Potrdi lokacijo",
+            myLocation: "Moja lokacija",
+            locating: "Zaznavam ...",
+          }}
+        />
       )}
 
       <div className="space-y-3 pt-3">

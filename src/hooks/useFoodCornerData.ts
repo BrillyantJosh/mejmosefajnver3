@@ -19,6 +19,7 @@ import {
   buildFoodCornerProducers,
   dedupeReplaceable,
   enrichOrders,
+  makeARef,
   parseFoodCornerFulfillment,
   parseFoodCornerListing,
   parseFoodCornerNode,
@@ -49,7 +50,7 @@ export function useFoodCornerData(): FoodCornerData {
   const { parameters } = useSystemParameters();
   const { businessUnits, isLoading: businessUnitsLoading } = useNostrBusinessUnits();
   const [nodes, setNodes] = useState<FoodCornerNode[]>([]);
-  const [listings, setListings] = useState<FoodCornerListing[]>([]);
+  const [allListings, setAllListings] = useState<FoodCornerListing[]>([]);
   const [orders, setOrders] = useState<FoodCornerOrderWithFulfillment[]>([]);
   const [fulfillments, setFulfillments] = useState<FoodCornerFulfillment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,9 +87,7 @@ export function useFoodCornerData(): FoodCornerData {
           .filter((event) => event.kind === FOOD_CORNER_NODE_KIND)
           .map(parseFoodCornerNode)
           .filter(Boolean) as FoodCornerNode[],
-      )
-        .filter((node) => node.status !== "archived")
-        .sort((a, b) => b.createdAt - a.createdAt);
+      ).sort((a, b) => b.createdAt - a.createdAt);
 
       const parsedListings = dedupeReplaceable(
         rawEvents
@@ -116,7 +115,7 @@ export function useFoodCornerData(): FoodCornerData {
       ).sort((a, b) => b.createdAt - a.createdAt);
 
       setNodes(parsedNodes);
-      setListings(parsedListings);
+      setAllListings(parsedListings);
       setFulfillments(parsedFulfillments);
       setOrders(enrichOrders(parsedOrders, parsedFulfillments));
     } catch (err) {
@@ -133,9 +132,14 @@ export function useFoodCornerData(): FoodCornerData {
     refetch();
   }, [refetch]);
 
+  const eligibleListings = useMemo(() => {
+    const activeUnitRefs = new Set(businessUnits.map((unit) => makeARef(30901, unit.owner, unit.unit_id)));
+    return allListings.filter((listing) => activeUnitRefs.has(listing.unitRef));
+  }, [allListings, businessUnits]);
+
   const producers = useMemo(
-    () => buildFoodCornerProducers(listings, businessUnits),
-    [listings, businessUnits],
+    () => buildFoodCornerProducers(eligibleListings, businessUnits),
+    [eligibleListings, businessUnits],
   );
 
   const getNodeByRef = useCallback(
@@ -144,13 +148,13 @@ export function useFoodCornerData(): FoodCornerData {
   );
 
   const getNodeCatalog = useCallback(
-    (nodeRef?: string) => resolveNodeCatalog(getNodeByRef(nodeRef), listings),
-    [getNodeByRef, listings],
+    (nodeRef?: string) => resolveNodeCatalog(getNodeByRef(nodeRef), eligibleListings),
+    [getNodeByRef, eligibleListings],
   );
 
   return {
     nodes,
-    listings,
+    listings: eligibleListings,
     orders,
     fulfillments,
     producers,

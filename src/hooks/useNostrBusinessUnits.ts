@@ -1,10 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { SimplePool } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 const SHOP_BASE_URL = 'https://shop.lanapays.us';
 const PROCESSOR_PUBKEY = '79730aba75d71584e8a4f9d0cc1173085e75590ce489760078d2bf6f5210d692';
 const DEFAULT_CASHBACK = 5;
+
+interface NostrTagEvent {
+  id: string;
+  pubkey: string;
+  created_at: number;
+  tags: string[][];
+  content?: string;
+}
 
 /** Prepend shop base URL if image is a relative upload path */
 function fixImageUrl(url: string): string {
@@ -61,7 +69,7 @@ export interface BusinessUnit {
   cashbackPercent: number;
 }
 
-const parseBusinessUnit = (event: any): Omit<BusinessUnit, 'cashbackPercent'> | null => {
+const parseBusinessUnit = (event: NostrTagEvent): Omit<BusinessUnit, 'cashbackPercent'> | null => {
   try {
     const tags = event.tags;
     const getTag = (tagName: string) => tags.find((t: string[]) => t[0] === tagName)?.[1];
@@ -91,7 +99,7 @@ const parseBusinessUnit = (event: any): Omit<BusinessUnit, 'cashbackPercent'> | 
       id: event.id,
       unit_id: getTag('unit_id') || getTag('d') || '',
       name: getTag('name') || 'Unknown Business',
-      owner: getTag('owner') || event.pubkey,
+      owner: getTag('owner_hex') || getTag('owner') || event.pubkey,
       receiver_name: getTag('receiver_name') || '',
       receiver_address: getTag('receiver_address') || '',
       receiver_zip: getTag('receiver_zip') || '',
@@ -125,15 +133,17 @@ const parseBusinessUnit = (event: any): Omit<BusinessUnit, 'cashbackPercent'> | 
 };
 
 /** Build cashback map from KIND 30902 fee policy events */
-function buildCashbackMap(events: any[]): Map<string, number> {
+function buildCashbackMap(events: NostrTagEvent[]): Map<string, number> {
   const map = new Map<string, number>();
   // Deduplicate by d-tag, keep newest
-  const byDTag = new Map<string, any>();
+  const byDTag = new Map<string, NostrTagEvent>();
   for (const event of events) {
     const dTag = event.tags.find((t: string[]) => t[0] === 'd')?.[1] || '';
-    const existing = byDTag.get(dTag);
+    const unitId = event.tags.find((t: string[]) => t[0] === 'unit_id')?.[1] || dTag;
+    if (!unitId) continue;
+    const existing = byDTag.get(unitId);
     if (!existing || event.created_at > existing.created_at) {
-      byDTag.set(dTag, event);
+      byDTag.set(unitId, event);
     }
   }
   for (const event of byDTag.values()) {
@@ -150,13 +160,15 @@ function buildCashbackMap(events: any[]): Map<string, number> {
 }
 
 /** Build suspended unit IDs set from KIND 30903 events */
-function buildSuspendedIds(events: any[]): Set<string> {
-  const byDTag = new Map<string, any>();
+function buildSuspendedIds(events: NostrTagEvent[]): Set<string> {
+  const byDTag = new Map<string, NostrTagEvent>();
   for (const event of events) {
     const dTag = event.tags.find((t: string[]) => t[0] === 'd')?.[1] || '';
-    const existing = byDTag.get(dTag);
+    const unitId = event.tags.find((t: string[]) => t[0] === 'unit_id')?.[1] || dTag;
+    if (!unitId) continue;
+    const existing = byDTag.get(unitId);
     if (!existing || event.created_at > existing.created_at) {
-      byDTag.set(dTag, event);
+      byDTag.set(unitId, event);
     }
   }
   const suspended = new Set<string>();
@@ -180,7 +192,7 @@ export const useNostrBusinessUnits = () => {
   const [suspendedIds, setSuspendedIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
 
-  const relays = parameters?.relays || [];
+  const relays = useMemo(() => parameters?.relays || [], [parameters?.relays]);
 
   useEffect(() => {
     if (relays.length === 0) {
@@ -198,8 +210,8 @@ export const useNostrBusinessUnits = () => {
         // Fetch all 3 KINDs in parallel
         const [unitEvents, feeEvents, suspensionEvents] = await Promise.all([
           timeout(pool.querySync(relays, { kinds: [30901], limit: 500 }), 15000),
-          timeout(pool.querySync(relays, { kinds: [30902], authors: [PROCESSOR_PUBKEY] }), 12000).catch(() => [] as any[]),
-          timeout(pool.querySync(relays, { kinds: [30903] }), 12000).catch(() => [] as any[]),
+          timeout(pool.querySync(relays, { kinds: [30902], authors: [PROCESSOR_PUBKEY] }), 12000).catch(() => [] as NostrTagEvent[]),
+          timeout(pool.querySync(relays, { kinds: [30903] }), 12000).catch(() => [] as NostrTagEvent[]),
         ]);
 
         console.log('📦 Fetched: units=%d, fees=%d, suspensions=%d', unitEvents.length, feeEvents.length, suspensionEvents.length);
@@ -211,8 +223,8 @@ export const useNostrBusinessUnits = () => {
         setSuspendedIds(susIds);
 
         // Deduplicate units by d-tag (NIP-33)
-        const unitMap = new Map<string, any>();
-        unitEvents.forEach((event: any) => {
+        const unitMap = new Map<string, NostrTagEvent>();
+        unitEvents.forEach((event: NostrTagEvent) => {
           const unitId = event.tags.find((t: string[]) => t[0] === 'd')?.[1];
           if (!unitId) return;
           const existing = unitMap.get(unitId);
@@ -247,7 +259,7 @@ export const useNostrBusinessUnits = () => {
     };
 
     fetchAll();
-  }, [relays.join(',')]);
+  }, [relays]);
 
   return { businessUnits, cashbackMap, suspendedIds, isLoading };
 };

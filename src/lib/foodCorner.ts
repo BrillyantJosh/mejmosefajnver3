@@ -95,6 +95,7 @@ export function parseFoodCornerNode(event: FoodCornerRawEvent): FoodCornerNode |
   if (!dTag) return null;
   const cutoff = getTagFull(event, "order_cutoff");
   const geo = getTagFull(event, "geo");
+  const pause = getTagFull(event, "pause");
 
   return {
     eventId: event.id,
@@ -129,6 +130,11 @@ export function parseFoodCornerNode(event: FoodCornerRawEvent): FoodCornerNode |
     geoLabel: geo?.[3] || "",
     areas: getTags(event, "area"),
     lud16: getTag(event, "lud16"),
+    pause: {
+      from: pause?.[1] || getTag(event, "pause_from"),
+      until: pause?.[2] || getTag(event, "pause_until"),
+      note: pause?.[3] || getTag(event, "pause_note"),
+    },
     images: getTags(event, "image").map(fixImageUrl),
     websiteUrl: getTag(event, "website_url"),
     tags: getTags(event, "t"),
@@ -267,10 +273,10 @@ export function parseFoodCornerFulfillment(event: FoodCornerRawEvent): FoodCorne
   };
 }
 
-export function dedupeReplaceable<T extends { pubkey: string; dTag: string; createdAt: number }>(items: T[]): T[] {
+export function dedupeReplaceable<T extends { pubkey: string; dTag: string; createdAt: number; rawEvent?: { kind: number } }>(items: T[]): T[] {
   const byKey = new Map<string, T>();
   for (const item of items) {
-    const key = `${item.pubkey}:${item.dTag}`;
+    const key = `${item.rawEvent?.kind || "replaceable"}:${item.pubkey}:${item.dTag}`;
     const existing = byKey.get(key);
     if (!existing || item.createdAt > existing.createdAt) {
       byKey.set(key, item);
@@ -315,15 +321,37 @@ export function resolveNodeCatalog(node: FoodCornerNode | undefined, listings: F
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 
+export function isFoodCornerNodePaused(node: FoodCornerNode, now = new Date()): boolean {
+  if (node.status === "paused") return true;
+  const from = node.pause.from;
+  const until = node.pause.until;
+  if (!from && !until) return false;
+
+  const today = now.toISOString().slice(0, 10);
+  const startsBeforeOrToday = !from || from <= today;
+  const endsAfterOrToday = !until || until >= today;
+  return startsBeforeOrToday && endsAfterOrToday;
+}
+
+export function describeFoodCornerPause(node: FoodCornerNode): string {
+  const parts: string[] = [];
+  if (node.pause.from) parts.push(`od ${node.pause.from}`);
+  if (node.pause.until) parts.push(`do ${node.pause.until}`);
+  const period = parts.join(" ");
+  return [period, node.pause.note].filter(Boolean).join(" · ");
+}
+
 export function buildFoodCornerProducers(
   listings: FoodCornerListing[],
   businessUnits: BusinessUnit[],
 ): FoodCornerProducer[] {
   const unitMap = new Map(businessUnits.map((unit) => [makeARef(30901, unit.owner, unit.unit_id), unit]));
+  const activeUnitRefs = new Set(unitMap.keys());
   const byUnit = new Map<string, FoodCornerListing[]>();
 
   listings
     .filter((listing) => listing.status === "active")
+    .filter((listing) => activeUnitRefs.has(listing.unitRef))
     .forEach((listing) => {
       const current = byUnit.get(listing.unitRef) || [];
       current.push(listing);

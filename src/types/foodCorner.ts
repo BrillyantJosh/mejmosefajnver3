@@ -50,6 +50,12 @@ export interface FoodCornerDelivery {
   radiusKm: string;
 }
 
+export interface FoodCornerPause {
+  from: string;
+  until: string;
+  note: string;
+}
+
 export interface FoodCornerNode {
   eventId: string;
   pubkey: string;
@@ -72,6 +78,7 @@ export interface FoodCornerNode {
   geoLabel: string;
   areas: string[];
   lud16: string;
+  pause: FoodCornerPause;
   images: string[];
   websiteUrl: string;
   tags: string[];
