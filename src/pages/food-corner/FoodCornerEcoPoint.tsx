@@ -28,6 +28,7 @@ import {
   slugifyFoodCorner,
 } from "@/lib/foodCorner";
 import { uploadToLanaMedia } from "@/lib/lanaMediaUpload";
+import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
@@ -264,6 +265,16 @@ export default function FoodCornerEcoPoint() {
   const [ordersGroupBy, setOrdersGroupBy] = useState<"buyer" | "seller">("buyer");
   const [ordersWeekOffset, setOrdersWeekOffset] = useState(0);
   const ordersWeek = useMemo(() => foodCornerWeekRange(ordersWeekOffset), [ordersWeekOffset]);
+
+  // Resolve KIND 0 names for every buyer that ordered through my Eco points.
+  const buyerPubkeys = useMemo(
+    () => Array.from(new Set(myNodeOrders.map((o) => o.buyerPubkey))),
+    [myNodeOrders],
+  );
+  const { profiles: buyerProfiles } = useNostrProfilesCacheBulk(buyerPubkeys);
+  const buyerName = (pk: string) =>
+    buyerProfiles.get(pk)?.display_name || buyerProfiles.get(pk)?.full_name || `${pk.slice(0, 12)}…`;
+
   const weekOrders = useMemo(
     () =>
       myNodeOrders.filter((order) => {
@@ -272,28 +283,79 @@ export default function FoodCornerEcoPoint() {
       }),
     [myNodeOrders, ordersWeek],
   );
-  const orderGroups = useMemo(() => {
-    const map = new Map<
-      string,
-      { key: string; label: string; orders: FoodCornerOrderWithFulfillment[]; total: number; currency: string }
-    >();
+
+  interface BuyerSub {
+    pubkey: string;
+    name: string;
+    orders: FoodCornerOrderWithFulfillment[];
+    total: number;
+  }
+  interface OrderGroup {
+    key: string;
+    label: string;
+    orders: FoodCornerOrderWithFulfillment[];
+    total: number;
+    currency: string;
+    buyers: BuyerSub[] | null; // buyer breakdown (only in "by supplier" mode)
+  }
+
+  const orderGroups = useMemo<OrderGroup[]>(() => {
+    const map = new Map<string, OrderGroup>();
+    const buyerSubs = new Map<string, Map<string, BuyerSub>>(); // groupKey -> buyerPk -> sub
     for (const order of weekOrders) {
-      const key = ordersGroupBy === "buyer" ? order.buyerPubkey : order.sellerRef;
-      const label =
-        ordersGroupBy === "buyer"
-          ? `${order.buyerPubkey.slice(0, 12)}…`
-          : producers.find((p) => p.unitRef === order.sellerRef)?.name || `${order.sellerPubkey.slice(0, 12)}…`;
-      const existing = map.get(key) || { key, label, orders: [], total: 0, currency: order.currency };
-      existing.orders.push(order);
-      existing.total += order.total;
-      map.set(key, existing);
+      const bySeller = ordersGroupBy === "seller";
+      const key = bySeller ? order.sellerRef : order.buyerPubkey;
+      const label = bySeller
+        ? producers.find((p) => p.unitRef === order.sellerRef)?.name || `${order.sellerPubkey.slice(0, 12)}…`
+        : buyerName(order.buyerPubkey);
+      const group =
+        map.get(key) || { key, label, orders: [], total: 0, currency: order.currency, buyers: bySeller ? [] : null };
+      group.orders.push(order);
+      group.total += order.total;
+      map.set(key, group);
+
+      if (bySeller) {
+        const subs = buyerSubs.get(key) || new Map<string, BuyerSub>();
+        const sub =
+          subs.get(order.buyerPubkey) || { pubkey: order.buyerPubkey, name: buyerName(order.buyerPubkey), orders: [], total: 0 };
+        sub.orders.push(order);
+        sub.total += order.total;
+        subs.set(order.buyerPubkey, sub);
+        buyerSubs.set(key, subs);
+      }
     }
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [weekOrders, ordersGroupBy, producers]);
+    const groups = Array.from(map.values());
+    for (const group of groups) {
+      const subs = buyerSubs.get(group.key);
+      if (subs) group.buyers = Array.from(subs.values()).sort((a, b) => b.total - a.total);
+    }
+    return groups.sort((a, b) => b.total - a.total);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekOrders, ordersGroupBy, producers, buyerProfiles]);
   const ordersLocale = lang === "sl" ? "sl-SI" : undefined;
   const weekLabel = `${ordersWeek.start.toLocaleDateString(ordersLocale, { day: "numeric", month: "short" })} – ${new Date(
     ordersWeek.end.getTime() - 1,
   ).toLocaleDateString(ordersLocale, { day: "numeric", month: "short", year: "numeric" })}`;
+  const renderOrderRow = (order: FoodCornerOrderWithFulfillment) => (
+    <div key={order.ref} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-sm">
+      <div className="flex items-center gap-2 min-w-0">
+        <Badge variant={order.fulfillmentStatus ? "default" : "secondary"} className="shrink-0">
+          {order.fulfillmentStatus || order.status}
+        </Badge>
+        <span className="truncate text-muted-foreground">
+          {order.items
+            .map((item) => `${item.qty} ${item.unit} ${item.listing?.title || item.listingRef.slice(-8)}`)
+            .join(" · ")}
+        </span>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <span className="font-medium">{formatFoodMoney(order.total, order.currency)}</span>
+        <span className="text-xs text-muted-foreground">
+          {new Date(order.createdAt * 1000).toLocaleString(ordersLocale)}
+        </span>
+      </div>
+    </div>
+  );
   const pickupLatNumber = Number.parseFloat(pickupLat);
   const pickupLonNumber = Number.parseFloat(pickupLon);
   const hasPickupCoordinates = Number.isFinite(pickupLatNumber) && Number.isFinite(pickupLonNumber);
@@ -765,30 +827,31 @@ export default function FoodCornerEcoPoint() {
                         </div>
                         <span className="text-lg font-bold shrink-0">{formatFoodMoney(group.total, group.currency)}</span>
                       </div>
-                      <div className="space-y-2 border-t pt-2">
-                        {group.orders.map((order) => (
-                          <div
-                            key={order.ref}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-sm"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Badge variant={order.fulfillmentStatus ? "default" : "secondary"} className="shrink-0">
-                                {order.fulfillmentStatus || order.status}
-                              </Badge>
-                              <span className="truncate text-muted-foreground">
-                                {order.items
-                                  .map((item) => `${item.qty} ${item.unit} ${item.listing?.title || item.listingRef.slice(-8)}`)
-                                  .join(" · ")}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                              <span className="font-medium">{formatFoodMoney(order.total, order.currency)}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {new Date(order.createdAt * 1000).toLocaleString(ordersLocale)}
-                              </span>
-                            </div>
+                      <div className="border-t pt-2">
+                        {group.buyers ? (
+                          <div className="space-y-3">
+                            {group.buyers.map((sub) => (
+                              <div key={sub.pubkey} className="space-y-1.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-sm font-medium truncate">
+                                    <span className="font-normal text-muted-foreground">{t("ecoPoint.orders.buyer")}: </span>
+                                    {sub.name}
+                                    <span className="font-normal text-xs text-muted-foreground">
+                                      {" · "}
+                                      {t("ecoPoint.orders.count", { count: sub.orders.length })}
+                                    </span>
+                                  </p>
+                                  <span className="text-sm font-semibold shrink-0">
+                                    {formatFoodMoney(sub.total, group.currency)}
+                                  </span>
+                                </div>
+                                <div className="space-y-1 pl-3 border-l">{sub.orders.map(renderOrderRow)}</div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        ) : (
+                          <div className="space-y-2">{group.orders.map(renderOrderRow)}</div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
