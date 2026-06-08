@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2, MapPin, RefreshCw, Send, ShoppingBasket, Store } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Loader2, MapPin, RefreshCw, Send, ShoppingBasket, Store } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -19,14 +19,37 @@ import {
 } from "@/types/foodCorner";
 import {
   describeFoodCornerPause,
+  foodCornerOrderingWindow,
   formatFoodMoney,
   generateFoodCornerId,
   isFoodCornerNodePaused,
-  nextWeekPickupDate,
 } from "@/lib/foodCorner";
+import type { FoodCornerNode } from "@/types/foodCorner";
 
 function firstImage(listing: FoodCornerListing): string | undefined {
   return listing.images[0] || listing.thumbs[0];
+}
+
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// "2d 4h 13m 5s" — drops leading zero units.
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const parts: string[] = [];
+  if (d) parts.push(`${d}d`);
+  if (d || h) parts.push(`${h}h`);
+  if (d || h || m) parts.push(`${m}m`);
+  parts.push(`${s}s`);
+  return parts.join(" ");
 }
 
 export default function FoodCornerOrder() {
@@ -39,9 +62,32 @@ export default function FoodCornerOrder() {
   const [selectedNodeRef, setSelectedNodeRef] = useState(() => localStorage.getItem(storageKey) || "");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
+  // Ticking clock so the order-deadline countdown updates live (every second).
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const dayLabel = (day?: string) => (day ? t(`days.${day.trim().toLowerCase()}` as FoodCornerKey) : "");
   const cycleLabel = (cycle?: string) => (cycle ? t(`cycle.${cycle}` as FoodCornerKey) : "");
+
+  // Order-deadline (cutoff) info for an Eco point — date string + live countdown.
+  const deadlineInfo = (node: FoodCornerNode) => {
+    const win = foodCornerOrderingWindow(node, now);
+    if (!win.cutoff) return null;
+    const ms = win.cutoff.getTime() - now.getTime();
+    return {
+      cutoffStr: win.cutoff.toLocaleString(lang === "sl" ? "sl-SI" : undefined, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      left: ms > 0 ? formatCountdown(ms) : null,
+    };
+  };
 
   const visibleNodes = useMemo(
     () => nodes.filter((node) => node.status !== "archived"),
@@ -55,11 +101,11 @@ export default function FoodCornerOrder() {
     [canOrderFromSelectedNode, getNodeCatalog, selectedNodeRef],
   );
 
-  // Estimated pickup date = the Eco point's pickup weekday, NEXT week. Read-only.
-  const pickupDay = selectedNode?.pickups[0]?.day || selectedNode?.deliveries[0]?.day || "";
-  const requestedDate = useMemo(() => nextWeekPickupDate(pickupDay), [pickupDay]);
-  const requestedDateDisplay = requestedDate
-    ? new Date(`${requestedDate}T00:00:00`).toLocaleDateString(lang === "sl" ? "sl-SI" : undefined, {
+  // Estimated pickup date = the pickup that follows the next order cutoff. Read-only.
+  const orderWindow = selectedNode ? foodCornerOrderingWindow(selectedNode, now) : null;
+  const requestedDate = orderWindow?.pickup ? toISODate(orderWindow.pickup) : "";
+  const requestedDateDisplay = orderWindow?.pickup
+    ? orderWindow.pickup.toLocaleDateString(lang === "sl" ? "sl-SI" : undefined, {
         weekday: "long",
         day: "numeric",
         month: "long",
@@ -212,9 +258,14 @@ export default function FoodCornerOrder() {
             return (
               <Card
                 key={node.ref}
-                className={`cursor-pointer transition-colors ${isSelected ? "border-primary ring-1 ring-primary/30" : "hover:border-primary/40"} ${nodePaused ? "bg-muted/40" : ""}`}
+                className={`cursor-pointer transition-colors overflow-hidden ${isSelected ? "border-primary ring-1 ring-primary/30" : "hover:border-primary/40"} ${nodePaused ? "bg-muted/40" : ""}`}
                 onClick={() => chooseNode(node.ref)}
               >
+                {node.images?.[0] && (
+                  <div className="aspect-[4/2] overflow-hidden bg-muted">
+                    <img src={node.images[0]} alt={node.name} className="h-full w-full object-cover" loading="lazy" />
+                  </div>
+                )}
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -245,6 +296,18 @@ export default function FoodCornerOrder() {
                       })}
                     </p>
                   )}
+                  {(() => {
+                    const dl = deadlineInfo(node);
+                    return dl ? (
+                      <p className="text-xs font-medium text-primary flex items-center gap-1">
+                        <Clock className="h-3 w-3 shrink-0" />
+                        <span>
+                          {t("order.deadline.label")}: {dl.cutoffStr}
+                          {dl.left ? ` · ${t("order.deadline.left", { time: dl.left })}` : ""}
+                        </span>
+                      </p>
+                    ) : null;
+                  })()}
                   {nodePaused && (
                     <p className="text-xs text-amber-700 dark:text-amber-300">
                       {t("order.notAcceptingShort")}{describeFoodCornerPause(node) ? ` · ${describeFoodCornerPause(node)}` : ""}.
@@ -271,6 +334,30 @@ export default function FoodCornerOrder() {
 
       {selectedNode && canOrderFromSelectedNode && (
         <>
+          {(() => {
+            const dl = deadlineInfo(selectedNode);
+            return dl ? (
+              <Card className="border-primary/40 bg-primary/5">
+                <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-primary shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold">{t("order.deadline.label")}: {dl.cutoffStr}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t("order.cart.estimatedDate")}: {requestedDateDisplay || "—"}
+                      </p>
+                    </div>
+                  </div>
+                  {dl.left && (
+                    <span className="text-xl font-bold tabular-nums text-primary">
+                      {t("order.deadline.left", { time: dl.left })}
+                    </span>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null;
+          })()}
+
           <div className="flex items-center justify-between gap-3 pt-2">
             <div>
               <h2 className="text-lg font-semibold">{t("order.heading.offers", { name: selectedNode.name })}</h2>

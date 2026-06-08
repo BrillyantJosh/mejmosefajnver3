@@ -364,6 +364,45 @@ export function nextWeekPickupDate(dayName: string, from: Date = new Date()): st
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Next future occurrence of an English weekday at HH:MM, strictly after `from`.
+ * Returns null if the weekday is unknown.
+ */
+export function nextWeekdayOccurrence(dayName: string, hhmm: string, from: Date = new Date()): Date | null {
+  const target = WEEKDAY_NAMES.indexOf((dayName || "").trim().toLowerCase());
+  if (target < 0) return null;
+  const [h, m] = (hhmm || "00:00").split(":").map((x) => Number.parseInt(x, 10));
+  const result = new Date(from);
+  result.setHours(Number.isFinite(h) ? h : 0, Number.isFinite(m) ? m : 0, 0, 0);
+  // Advance to the target weekday (0–6 days), then ensure it is strictly in the future.
+  let delta = (target - result.getDay() + 7) % 7;
+  result.setDate(result.getDate() + delta);
+  if (result.getTime() <= from.getTime()) result.setDate(result.getDate() + 7);
+  return result;
+}
+
+export interface FoodCornerOrderingWindow {
+  cutoff: Date | null; // order-by deadline
+  pickup: Date | null; // pickup date that the cutoff feeds into
+  pickupWindow: string;
+}
+
+/**
+ * The current ordering window for an Eco point: the next order cutoff (deadline),
+ * and the pickup that follows it. Used to show "order until …" with a countdown.
+ */
+export function foodCornerOrderingWindow(node: FoodCornerNode, from: Date = new Date()): FoodCornerOrderingWindow {
+  const pickup = node.pickups[0];
+  const cutoff = node.orderCutoffDay
+    ? nextWeekdayOccurrence(node.orderCutoffDay, node.orderCutoffTime || "00:00", from)
+    : null;
+  // Pickup = first pickup-day occurrence after the cutoff (or after now if no cutoff).
+  const pickupDate = pickup?.day
+    ? nextWeekdayOccurrence(pickup.day, "00:00", cutoff ?? from)
+    : null;
+  return { cutoff, pickup: pickupDate, pickupWindow: pickup?.window || "" };
+}
+
 export function describeFoodCornerPause(node: FoodCornerNode): string {
   const parts: string[] = [];
   if (node.pause.from) parts.push(`od ${node.pause.from}`);

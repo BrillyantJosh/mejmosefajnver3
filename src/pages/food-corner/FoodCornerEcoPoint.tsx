@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CheckCircle2, Loader2, MapPin, Plus, RefreshCw, Save, Sparkles, Store } from "lucide-react";
+import { ArrowRight, CheckCircle2, ImagePlus, Loader2, MapPin, Plus, RefreshCw, Save, Sparkles, Store, X } from "lucide-react";
 import { toast } from "sonner";
 import { AddressSearch } from "@/components/AddressSearch";
 import LocationPicker from "@/components/LocationPicker";
@@ -26,6 +26,7 @@ import {
   groupOrdersByNode,
   slugifyFoodCorner,
 } from "@/lib/foodCorner";
+import { uploadToLanaMedia } from "@/lib/lanaMediaUpload";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
@@ -80,6 +81,25 @@ export default function FoodCornerEcoPoint() {
   const [selectedSellers, setSelectedSellers] = useState<string[]>([]);
   const [selectedListings, setSelectedListings] = useState<string[]>([]);
   const [excludedListings, setExcludedListings] = useState<string[]>([]);
+  const [imageUrl, setImageUrl] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const handleImageUpload = async (file: File | undefined) => {
+    if (!file) return;
+    if (!session?.nostrPrivateKey || !session?.nostrHexId) {
+      toast.error(t("ecoPoint.toast.loginRequired"));
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const result = await uploadToLanaMedia(file, session.nostrPrivateKey, session.nostrHexId);
+      setImageUrl(result.url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("ecoPoint.toast.imageFailed"));
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   useEffect(() => {
     if (!editingNodeRef && myNodes.length > 0) {
@@ -112,6 +132,7 @@ export default function FoodCornerEcoPoint() {
     setSelectedSellers(editingNode.sellers);
     setSelectedListings(editingNode.listings);
     setExcludedListings(editingNode.excludes);
+    setImageUrl(editingNode.images[0] || "");
   }, [editingNode, showForm]);
 
   const startNew = () => {
@@ -140,6 +161,7 @@ export default function FoodCornerEcoPoint() {
     setSelectedSellers([]);
     setSelectedListings([]);
     setExcludedListings([]);
+    setImageUrl("");
   };
 
   const toggleSeller = (sellerRef: string, checked: boolean) => {
@@ -216,6 +238,7 @@ export default function FoodCornerEcoPoint() {
       ...(pickupLat.trim() && pickupLon.trim() ? [["geo", pickupLat.trim(), pickupLon.trim(), pickupLabel.trim()]] : []),
       ...areaTags.map((area) => ["area", area]),
       ...(lud16.trim() ? [["lud16", lud16.trim()]] : []),
+      ...(imageUrl.trim() ? [["image", imageUrl.trim()]] : []),
       ...(nodeStatus === "paused" || pauseFrom.trim() || pauseUntil.trim() || pauseNote.trim()
         ? [["pause", pauseFrom.trim(), pauseUntil.trim(), pauseNote.trim()]]
         : []),
@@ -343,6 +366,38 @@ export default function FoodCornerEcoPoint() {
                 <Label>{t("ecoPoint.form.description")}</Label>
                 <Textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t("ecoPoint.form.image")}</Label>
+              {imageUrl ? (
+                <div className="relative w-full max-w-xs">
+                  <img src={imageUrl} alt="" className="rounded-lg border w-full aspect-video object-cover" />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="absolute top-2 right-2 gap-1"
+                    onClick={() => setImageUrl("")}
+                  >
+                    <X className="h-3 w-3" />
+                    {t("ecoPoint.form.imageRemove")}
+                  </Button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed p-4 text-sm text-muted-foreground hover:border-primary/50 w-full max-w-xs">
+                  {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                  {uploadingImage ? t("ecoPoint.form.imageUploading") : t("ecoPoint.form.imageUpload")}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploadingImage}
+                    onChange={(event) => handleImageUpload(event.target.files?.[0])}
+                  />
+                </label>
+              )}
+              <p className="text-xs text-muted-foreground">{t("ecoPoint.form.imageHint")}</p>
             </div>
 
             <div className="grid md:grid-cols-5 gap-4">
