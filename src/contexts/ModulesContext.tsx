@@ -16,6 +16,8 @@ import sellLanaImage from '@/assets/selllana-module.png';
 import buyLanaImage from '@/assets/buylana-module.png';
 import lana8wonderImage from '@/assets/lana8wonder-icon.png';
 import lanapaysImage from '@/assets/lanapays-module.png';
+import abundancePointsEnImage from '@/assets/abundance-points-en.png';
+import abundancePointsSlImage from '@/assets/abundance-points-sl.png';
 import chatImage from '@/assets/chat-module.png';
 import socialImage from '@/assets/social-module.png';
 import walletImage from '@/assets/wallet-module.png';
@@ -60,6 +62,8 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     icon: Utensils,
     path: '/food-corner',
     gradient: 'from-lime-500 to-amber-500',
+    image: abundancePointsEnImage,
+    imageSl: abundancePointsSlImage,
     enabled: true,
     order: 1.5
   },
