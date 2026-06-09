@@ -110,6 +110,11 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
  * t('hello', { name: 'X' }) // → "Hello X"
  * ```
  */
+/** Active UI language (from KIND 0 profile), without needing a module dictionary. */
+export function useLang(): SupportedLang {
+  return useContext(I18nContext).lang;
+}
+
 export function useTranslation<K extends string>(dict: TranslationDict<K>) {
   const { lang } = useContext(I18nContext);
 

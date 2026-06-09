@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video, Sprout, Utensils } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
+
+// Language-aware module display helpers (Slovenian variants when lang === 'sl').
+export const moduleTitle = (m: ModuleConfig, lang: string) => (lang === 'sl' && m.titleSl ? m.titleSl : m.title);
+export const moduleDescription = (m: ModuleConfig, lang: string) =>
+  lang === 'sl' && m.descriptionSl ? m.descriptionSl : m.description;
+export const moduleImage = (m: ModuleConfig, lang: string) => (lang === 'sl' && m.imageSl ? m.imageSl : m.image);
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
 import { useSystemParameters } from './SystemParametersContext';
@@ -47,8 +53,10 @@ const DEFAULT_MODULES: ModuleConfig[] = [
   },
   {
     id: 'foodcorner',
-    title: 'Eco Point',
-    description: 'Order food through Eco Points and manage supplier fulfillment',
+    title: 'Abundance Points',
+    titleSl: 'Točke Obilja',
+    description: 'Order local food through Abundance Points and manage supplier fulfillment',
+    descriptionSl: 'Naročaj lokalno hrano prek Točk obilja in upravljaj dobaviteljska naročila',
     icon: Utensils,
     path: '/food-corner',
     gradient: 'from-lime-500 to-amber-500',
@@ -452,7 +460,7 @@ const mapToNostrId = (id: ModuleType): string => {
     'relays': 'Relays',
     'lana8wonder': 'Lana8Wonder',
     'lanapays': 'LanaPays',
-    'foodcorner': 'Eco Point',
+    'foodcorner': 'Abundance Points',
     'lanapay': 'Lana Pay',
     'lash': 'LASH',
     'lanamusic': 'Lana Music',
@@ -494,7 +502,7 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Relays': 'relays',
     'Lana8Wonder': 'lana8wonder',
     'LanaPays': 'lanapays',
-    'Eco Point': 'foodcorner',
+    'Abundance Points': 'foodcorner',
     'Lana Pay': 'lanapay',
     'LASH': 'lash',
     'Lana Music': 'lanamusic',

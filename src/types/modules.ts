@@ -11,6 +11,10 @@ export interface ModuleConfig {
   gradient: string;
   image?: string; // Optional image for modules that use photos instead of gradients
   imagePosition?: string; // Optional CSS class for image positioning (e.g., 'object-[70%_20%]')
+  // Optional Slovenian variants — used when the user's KIND 0 language is Slovenian.
+  titleSl?: string;
+  descriptionSl?: string;
+  imageSl?: string;
   externalUrl?: string; // Optional external URL to open in new tab instead of routing
   enabled: boolean;
   order: number;

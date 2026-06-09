@@ -13,7 +13,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useModules } from "@/contexts/ModulesContext";
+import { useModules, moduleTitle } from "@/contexts/ModulesContext";
+import { useLang } from "@/i18n/I18nContext";
 import type { ModuleType } from "@/types/modules";
 
 const UNREGISTERED_MODULE_IDS: Set<ModuleType> = new Set([
@@ -56,6 +57,7 @@ export default function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { getEnabledModules } = useModules();
+  const lang = useLang();
   const { isAdmin, appSettings } = useAdmin();
   const { logout: authLogout, refreshSession } = useAuth();
   const { profile } = useNostrProfile();
@@ -459,7 +461,7 @@ export default function MainLayout() {
                     {module.externalUrl ? (
                       <a href={module.externalUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 cursor-pointer">
                         <module.icon className="h-4 w-4" />
-                        <span>{module.title}</span>
+                        <span>{moduleTitle(module, lang)}</span>
                         {!UNREGISTERED_MODULE_IDS.has(module.id) && (
                           <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
                             Reg
@@ -474,7 +476,7 @@ export default function MainLayout() {
                     ) : (
                       <Link to={module.path} className="flex items-center gap-2 cursor-pointer">
                         <module.icon className="h-4 w-4" />
-                        <span>{module.title}</span>
+                        <span>{moduleTitle(module, lang)}</span>
                         {!UNREGISTERED_MODULE_IDS.has(module.id) && (
                           <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
                             Reg
@@ -619,7 +621,7 @@ export default function MainLayout() {
                     className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-secondary/50"
                   >
                     <module.icon className="h-5 w-5" />
-                    <span>{module.title}</span>
+                    <span>{moduleTitle(module, lang)}</span>
                     {!UNREGISTERED_MODULE_IDS.has(module.id) && (
                       <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
                         Reg
@@ -643,7 +645,7 @@ export default function MainLayout() {
                     }`}
                   >
                     <module.icon className="h-5 w-5" />
-                    <span>{module.title}</span>
+                    <span>{moduleTitle(module, lang)}</span>
                     {!UNREGISTERED_MODULE_IDS.has(module.id) && (
                       <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
                         Reg
