@@ -31,6 +31,12 @@ function firstImage(listing: FoodCornerListing): string | undefined {
   return listing.images[0] || listing.thumbs[0];
 }
 
+// Countable units that must be whole numbers (no decimals like 1.2 pieces).
+const WHOLE_UNITS = new Set(["piece", "pieces", "pcs", "kos", "kom", "komad", "kpl", "unit", "units"]);
+function isWholeUnit(unit?: string): boolean {
+  return WHOLE_UNITS.has((unit || "").trim().toLowerCase());
+}
+
 function toISODate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -417,9 +423,18 @@ export default function FoodCornerOrder() {
                           <Input
                             type="number"
                             min="0"
-                            step="0.1"
+                            step={isWholeUnit(listing.unit) ? "1" : "0.1"}
+                            inputMode={isWholeUnit(listing.unit) ? "numeric" : "decimal"}
                             value={quantities[listing.ref] || ""}
-                            onChange={(event) => updateQuantity(listing.ref, event.target.value)}
+                            onChange={(event) => {
+                              let value = event.target.value;
+                              // For piece-type units force whole numbers (strip any decimals).
+                              if (isWholeUnit(listing.unit) && value) {
+                                const whole = Math.floor(Number.parseFloat(value) || 0);
+                                value = whole > 0 ? String(whole) : "";
+                              }
+                              updateQuantity(listing.ref, value);
+                            }}
                             className="w-24"
                             placeholder="0"
                           />
@@ -435,7 +450,7 @@ export default function FoodCornerOrder() {
                 })}
               </div>
 
-              <Card className="sticky top-20">
+              <Card className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <ShoppingBasket className="h-4 w-4" />
