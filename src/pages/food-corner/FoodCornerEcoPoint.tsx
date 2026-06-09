@@ -431,18 +431,16 @@ export default function FoodCornerEcoPoint() {
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-2">
-        <Button onClick={startNew} disabled={!lana8WonderStatus.exists} className="gap-2">
-          <Plus className="h-4 w-4" />
-          {t("ecoPoint.button.create")}
-        </Button>
-        {editingNode && (
-          <Button variant="outline" onClick={() => setShowForm(true)} className="gap-2">
-            <Store className="h-4 w-4" />
-            {t("ecoPoint.button.editSelected")}
+      {/* Create button only when the owner has no Eco point yet — once they have one,
+          editing happens via the per-card "Uredi" button (no duplicate create/edit). */}
+      {myNodes.length === 0 && (
+        <div className="flex">
+          <Button onClick={startNew} disabled={!lana8WonderStatus.exists} className="gap-2">
+            <Plus className="h-4 w-4" />
+            {t("ecoPoint.button.create")}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {showForm && (
         <Card>
