@@ -37,6 +37,36 @@ function isWholeUnit(unit?: string): boolean {
   return WHOLE_UNITS.has((unit || "").trim().toLowerCase());
 }
 
+// Localized labels for product categories (t tags) and eco labels (eco tags).
+const CAT_LABELS: Record<string, { en: string; sl: string }> = {
+  vegetables: { en: "Vegetables", sl: "Zelenjava" },
+  fruits: { en: "Fruits", sl: "Sadje" },
+  grains: { en: "Grains", sl: "Žita" },
+  bread: { en: "Bread", sl: "Kruh" },
+  preserved: { en: "Preserved", sl: "Vloženo" },
+  seeds: { en: "Seeds", sl: "Semena" },
+  superfood: { en: "Superfood", sl: "Super hrana" },
+  herbs: { en: "Herbs", sl: "Zelišča" },
+  drinks: { en: "Drinks", sl: "Pijače" },
+  meat: { en: "Meat", sl: "Meso" },
+  dairy: { en: "Dairy", sl: "Mlečno" },
+  eggs: { en: "Eggs", sl: "Jajca" },
+  honey: { en: "Honey", sl: "Med" },
+  other: { en: "Other", sl: "Drugo" },
+};
+const ECO_LABELS: Record<string, { en: string; sl: string }> = {
+  organic: { en: "Organic", sl: "Ekološko" },
+  no_pesticides: { en: "No pesticides", sl: "Brez pesticidov" },
+  wild: { en: "Wild", sl: "Divje nabrano" },
+  local: { en: "Local", sl: "Lokalno" },
+  locally_sourced: { en: "Local", sl: "Lokalno" },
+  grass_fed: { en: "Grass-fed", sl: "Travna paša" },
+  free_range: { en: "Free range", sl: "Prosta reja" },
+};
+function tagLabel(map: Record<string, { en: string; sl: string }>, key: string, lang: string): string {
+  return map[key]?.[lang === "sl" ? "sl" : "en"] || key;
+}
+
 function toISODate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -108,6 +138,39 @@ export default function FoodCornerOrder() {
     [canOrderFromSelectedNode, getNodeCatalog, selectedNodeRef],
   );
 
+  // Group filters (category `t` tags + eco labels) derived from the current catalog.
+  const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
+  const [selectedEco, setSelectedEco] = useState<Set<string>>(new Set());
+  const toggleFilter = (setter: (fn: (prev: Set<string>) => Set<string>) => void, value: string) =>
+    setter((prev) => {
+      const next = new Set(prev);
+      next.has(value) ? next.delete(value) : next.add(value);
+      return next;
+    });
+  const availableCats = useMemo(
+    () =>
+      Array.from(new Set(catalog.flatMap((l) => l.tags))).filter(Boolean).sort((a, b) =>
+        tagLabel(CAT_LABELS, a, lang).localeCompare(tagLabel(CAT_LABELS, b, lang)),
+      ),
+    [catalog, lang],
+  );
+  const availableEco = useMemo(
+    () =>
+      Array.from(new Set(catalog.flatMap((l) => l.eco))).filter(Boolean).sort((a, b) =>
+        tagLabel(ECO_LABELS, a, lang).localeCompare(tagLabel(ECO_LABELS, b, lang)),
+      ),
+    [catalog, lang],
+  );
+  const filteredCatalog = useMemo(
+    () =>
+      catalog.filter((l) => {
+        const catOk = selectedCats.size === 0 || l.tags.some((t) => selectedCats.has(t));
+        const ecoOk = selectedEco.size === 0 || l.eco.some((t) => selectedEco.has(t));
+        return catOk && ecoOk;
+      }),
+    [catalog, selectedCats, selectedEco],
+  );
+
   // Estimated pickup date = the pickup that follows the next order cutoff. Read-only.
   const orderWindow = selectedNode ? foodCornerOrderingWindow(selectedNode, now) : null;
   const requestedDate = orderWindow?.pickup ? toISODate(orderWindow.pickup) : "";
@@ -163,6 +226,8 @@ export default function FoodCornerOrder() {
     setSelectedNodeRef(nodeRef);
     localStorage.setItem(storageKey, nodeRef);
     setQuantities({});
+    setSelectedCats(new Set());
+    setSelectedEco(new Set());
   };
 
   const updateQuantity = (listingRef: string, value: string) => {
@@ -386,8 +451,56 @@ export default function FoodCornerOrder() {
               <h2 className="text-lg font-semibold">{t("order.heading.offers", { name: selectedNode.name })}</h2>
               <p className="text-sm text-muted-foreground">{t("order.subtitle.offers")}</p>
             </div>
-            <Badge variant="outline">{t("order.badge.offers", { count: catalog.length })}</Badge>
+            <Badge variant="outline">{t("order.badge.offers", { count: filteredCatalog.length })}</Badge>
           </div>
+
+          {/* Group filters: by category (t tags) and by eco label */}
+          {(availableCats.length > 0 || availableEco.length > 0) && (
+            <div className="space-y-2">
+              {availableCats.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground mr-1">{t("order.filter.category")}:</span>
+                  {availableCats.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => toggleFilter(setSelectedCats, c)}
+                      className={`text-xs rounded-full border px-2.5 py-1 transition-colors ${selectedCats.has(c) ? "bg-primary text-primary-foreground border-primary" : "hover:border-primary/50"}`}
+                    >
+                      {tagLabel(CAT_LABELS, c, lang)}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {availableEco.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground mr-1">{t("order.filter.eco")}:</span>
+                  {availableEco.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => toggleFilter(setSelectedEco, c)}
+                      className={`text-xs rounded-full border px-2.5 py-1 transition-colors ${selectedEco.has(c) ? "bg-emerald-600 text-white border-emerald-600" : "hover:border-emerald-500/50"}`}
+                    >
+                      {tagLabel(ECO_LABELS, c, lang)}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {(selectedCats.size > 0 || selectedEco.size > 0) && (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline"
+                  onClick={() => {
+                    setSelectedCats(new Set());
+                    setSelectedEco(new Set());
+                  }}
+                >
+                  {t("order.filter.clear")}
+                </button>
+              )}
+            </div>
+          )}
 
           {catalog.length === 0 ? (
             <Card>
@@ -397,8 +510,15 @@ export default function FoodCornerOrder() {
             </Card>
           ) : (
             <div className="grid md:grid-cols-[1fr_360px] gap-5 items-start">
+              {filteredCatalog.length === 0 ? (
+                <Card>
+                  <CardContent className="p-6 text-center text-muted-foreground">
+                    {t("order.filter.noMatch")}
+                  </CardContent>
+                </Card>
+              ) : (
               <div className="grid md:grid-cols-2 gap-3">
-                {catalog.map((listing) => {
+                {filteredCatalog.map((listing) => {
                   const image = firstImage(listing);
                   return (
                     <Card key={listing.ref} className="overflow-hidden">
@@ -441,7 +561,7 @@ export default function FoodCornerOrder() {
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {listing.eco.slice(0, 3).map((tag) => (
-                            <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>
+                            <Badge key={tag} variant="outline" className="text-[10px]">{tagLabel(ECO_LABELS, tag, lang)}</Badge>
                           ))}
                         </div>
                       </CardContent>
@@ -449,6 +569,7 @@ export default function FoodCornerOrder() {
                   );
                 })}
               </div>
+              )}
 
               <Card className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
                 <CardHeader>
