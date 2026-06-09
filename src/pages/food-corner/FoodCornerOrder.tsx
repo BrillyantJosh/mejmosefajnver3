@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Loader2, MapPin, RefreshCw, Send, ShoppingBasket, Store } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, RefreshCw, Send, ShoppingBasket, Store } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import {
 import {
   describeFoodCornerPause,
   foodCornerOrderingWindow,
+  foodCornerWeekRange,
   formatFoodMoney,
   generateFoodCornerId,
   isFoodCornerNodePaused,
@@ -135,6 +136,22 @@ export default function FoodCornerOrder() {
   const total = selectedItems.reduce((sum, item) => sum + item.qty * item.listing.price, 0);
   const currency = selectedItems[0]?.listing.priceCurrency || "EUR";
   const myOrders = orders.filter((order) => order.buyerPubkey === session?.nostrHexId);
+
+  // "My orders" paginated by week (latest week first, page back week by week).
+  const [myOrdersWeekOffset, setMyOrdersWeekOffset] = useState(0);
+  const myOrdersWeek = useMemo(() => foodCornerWeekRange(myOrdersWeekOffset), [myOrdersWeekOffset]);
+  const myOrdersInWeek = useMemo(
+    () =>
+      myOrders.filter((order) => {
+        const ms = order.createdAt * 1000;
+        return ms >= myOrdersWeek.start.getTime() && ms < myOrdersWeek.end.getTime();
+      }),
+    [myOrders, myOrdersWeek],
+  );
+  const myOrdersLocale = lang === "sl" ? "sl-SI" : undefined;
+  const myOrdersWeekLabel = `${myOrdersWeek.start.toLocaleDateString(myOrdersLocale, { day: "numeric", month: "short" })} – ${new Date(
+    myOrdersWeek.end.getTime() - 1,
+  ).toLocaleDateString(myOrdersLocale, { day: "numeric", month: "short", year: "numeric" })}`;
 
   const chooseNode = (nodeRef: string) => {
     setSelectedNodeRef(nodeRef);
@@ -485,28 +502,75 @@ export default function FoodCornerOrder() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {myOrders.slice(0, 8).map((order) => (
-              <Card key={order.ref}>
-                <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold">{formatFoodMoney(order.total, order.currency)}</span>
-                      <Badge variant={order.fulfillmentStatus ? "default" : "secondary"}>
-                        {order.fulfillmentStatus || order.status}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {order.items.map((item) => `${item.qty} ${item.unit} ${item.listing?.title || item.listingRef.slice(-8)}`).join(" · ")}
-                    </p>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(order.createdAt * 1000).toLocaleDateString()}
-                  </p>
-                </CardContent>
+          <>
+            {/* Week paginator (latest week first, page back week by week) */}
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-1"
+                onClick={() => setMyOrdersWeekOffset((o) => o + 1)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                {t("ecoPoint.orders.prevWeek")}
+              </Button>
+              <span className="text-sm font-medium text-center">
+                {myOrdersWeekOffset === 0 ? t("ecoPoint.orders.thisWeek") : myOrdersWeekLabel}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-1"
+                disabled={myOrdersWeekOffset === 0}
+                onClick={() => setMyOrdersWeekOffset((o) => Math.max(0, o - 1))}
+              >
+                {t("ecoPoint.orders.nextWeek")}
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {myOrdersInWeek.length === 0 ? (
+              <Card>
+                <CardContent className="p-5 text-sm text-muted-foreground">{t("order.myOrders.weekEmpty")}</CardContent>
               </Card>
-            ))}
-          </div>
+            ) : (
+              <div className="space-y-3">
+                {myOrdersInWeek.map((order) => {
+                  const node = getNodeByRef(order.distributionPoint);
+                  return (
+                    <Card key={order.ref}>
+                      <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold">{formatFoodMoney(order.total, order.currency)}</span>
+                            <Badge variant={order.fulfillmentStatus ? "default" : "secondary"}>
+                              {order.fulfillmentStatus || order.status}
+                            </Badge>
+                          </div>
+                          {node && (
+                            <p className="text-xs font-medium text-primary mt-1 flex items-center gap-1">
+                              <Store className="h-3 w-3 shrink-0" />
+                              {t("order.myOrders.via", { point: node.name })}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {order.items
+                              .map((item) => `${item.qty} ${item.unit} ${item.listing?.title || item.listingRef.slice(-8)}`)
+                              .join(" · ")}
+                          </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground shrink-0">
+                          {new Date(order.createdAt * 1000).toLocaleString(myOrdersLocale)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
