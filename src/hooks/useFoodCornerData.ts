@@ -44,7 +44,7 @@ interface FoodCornerData {
 const fetchTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> =>
   Promise.race([
     promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Food Corner fetch timeout")), ms)),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Eco Point fetch timeout")), ms)),
   ]);
 
 export function useFoodCornerData(): FoodCornerData {
@@ -120,8 +120,8 @@ export function useFoodCornerData(): FoodCornerData {
       setFulfillments(parsedFulfillments);
       setOrders(enrichOrders(parsedOrders, parsedFulfillments));
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to fetch Food Corner data";
-      console.error("Food Corner fetch failed:", err);
+      const message = err instanceof Error ? err.message : "Failed to fetch Eco Point data";
+      console.error("Eco Point fetch failed:", err);
       setError(message);
     } finally {
       setIsLoading(false);

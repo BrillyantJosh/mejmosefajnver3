@@ -16,7 +16,7 @@ export default function FoodCornerLayout() {
   return (
     <div className="max-w-7xl mx-auto pb-20">
       <div className="mb-4 px-4 sm:px-0">
-        <h1 className="text-2xl sm:text-3xl font-bold">Food Corner</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold">Eco Point</h1>
         <p className="text-sm text-muted-foreground">{t("common.subtitle")}</p>
       </div>
       <Outlet />
