@@ -104,6 +104,7 @@ export default function EventRegistrations() {
         content: rawEvent.content || '',
         status,
         start,
+        schedule: [],
         end: end && !isNaN(end.getTime()) ? end : undefined,
         language,
         eventType,

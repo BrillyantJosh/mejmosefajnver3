@@ -304,7 +304,7 @@ export default function BeingChat({ beingPubkey }: BeingChatProps = {}) {
 
     // Extract URLs from content
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-    const matches = content.match(urlRegex) || [];
+    const matches: string[] = content.match(urlRegex) || [];
 
     const urls = matches.map(url => {
       if (!url.startsWith('http://') && !url.startsWith('https://')) {

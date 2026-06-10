@@ -50,6 +50,7 @@ interface ParsedEvent {
   youtubeUrl?: string;
   fiatValue?: number;
   donationWallet?: string;
+  donationWalletUnreg?: string;
   timezone?: string;
 }
 

@@ -70,14 +70,22 @@ export function EditTinyRoomDialog({ room, open, onOpenChange }: EditTinyRoomDia
 
       setSearching(true);
       try {
-        const { data, error } = await supabase
-          .from('nostr_profiles')
-          .select('nostr_hex_id, display_name, full_name, picture')
-          .or(`display_name.ilike.%${searchQuery}%,full_name.ilike.%${searchQuery}%`)
-          .limit(10);
-
-        if (error) throw error;
-        setSearchResults(data || []);
+        // Search display_name OR full_name (the API shim has no .or(), so two
+        // ilike queries + merge/dedupe by nostr_hex_id).
+        const cols = 'nostr_hex_id, display_name, full_name, picture';
+        const [byDisplay, byFull] = await Promise.all([
+          supabase.from('nostr_profiles').select(cols).ilike('display_name', `%${searchQuery}%`).limit(10),
+          supabase.from('nostr_profiles').select(cols).ilike('full_name', `%${searchQuery}%`).limit(10),
+        ]);
+        if (byDisplay.error) throw byDisplay.error;
+        if (byFull.error) throw byFull.error;
+        const seen = new Set<string>();
+        const merged = [...(byDisplay.data || []), ...(byFull.data || [])].filter((p: any) => {
+          if (seen.has(p.nostr_hex_id)) return false;
+          seen.add(p.nostr_hex_id);
+          return true;
+        }).slice(0, 10);
+        setSearchResults(merged);
       } catch (error) {
         console.error('Error searching profiles:', error);
       } finally {

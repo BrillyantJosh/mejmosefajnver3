@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 
 interface BusinessUnitCardProps {
   unit: BusinessUnit;
+  distance?: number;
 }
 
 export const BusinessUnitCard = ({ unit }: BusinessUnitCardProps) => {

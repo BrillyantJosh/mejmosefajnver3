@@ -17,6 +17,7 @@ interface AudioPlayerProps {
 export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const blobUrlRef = useRef<string | null>(null);
+  const loadedRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(initialDuration || 0);

@@ -73,6 +73,7 @@ export default function ShopSell() {
   // Scanning step — uses shared <QRScanner> dialog (same as mobile.lanapays.us)
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannedKey, setScannedKey] = useState("");
+  const [scanError, setScanError] = useState("");
   const [buyerWallet, setBuyerWallet] = useState("");
 
   // Processing / result

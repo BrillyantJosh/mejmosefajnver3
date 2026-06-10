@@ -76,6 +76,7 @@ export default function MyTickets() {
         content: rawEvent.content || '',
         status,
         start,
+        schedule: [],
         end: end && !isNaN(end.getTime()) ? end : undefined,
         language,
         eventType,
@@ -127,7 +128,7 @@ export default function MyTickets() {
         }
 
         // 2. Fetch events from Nostr for all unique dTags
-        const uniqueDTags = [...new Set(ticketData.map((t: TicketData) => t.event_dtag))];
+        const uniqueDTags = [...new Set(ticketData.map((t: TicketData) => t.event_dtag))] as string[];
         const eventMap = new Map<string, LanaEvent>();
 
         if (relays.length > 0 && uniqueDTags.length > 0) {

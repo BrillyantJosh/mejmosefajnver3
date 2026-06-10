@@ -361,7 +361,7 @@ export default function Chat() {
     
     // Extract URLs from content - including those without protocol
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-    const matches = content.match(urlRegex) || [];
+    const matches: string[] = content.match(urlRegex) || [];
     
     // Normalize URLs by adding https:// if missing
     const urls = matches.map(url => {

@@ -9,6 +9,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "start": "node --import tsx server/index.ts",
     "start:prod": "NODE_ENV=production node --import tsx server/index.ts",
     "lint": "eslint .",

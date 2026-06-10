@@ -12,6 +12,9 @@ REMOTE="root@app.mejmosefajn.org"
 REMOTE_DIR="/opt/apps/mejmosefajn"
 SSH_OPTS="-o StrictHostKeyChecking=accept-new"
 
+echo "==> Type-checking (fails the deploy on TS errors)"
+npm run typecheck
+
 echo "==> Building frontend"
 npm run build
 
@@ -20,6 +23,16 @@ rsync -az --delete --exclude='.env' -e "ssh $SSH_OPTS" src/ "$REMOTE:$REMOTE_DIR
 
 echo "==> Syncing dist/ (safe: --delete OK)"
 rsync -az --delete -e "ssh $SSH_OPTS" dist/ "$REMOTE:$REMOTE_DIR/dist/"
+
+# Root config files the Docker image build COPYs + uses (Dockerfile). These live
+# outside src/, so they must be synced too or config changes (e.g. vite chunking)
+# won't take effect in the baked image build.
+echo "==> Syncing root build config"
+rsync -az -e "ssh $SSH_OPTS" \
+  vite.config.ts package.json package-lock.json index.html \
+  tsconfig.json tsconfig.app.json tsconfig.node.json \
+  tailwind.config.ts postcss.config.js components.json \
+  "$REMOTE:$REMOTE_DIR/"
 
 echo "==> Syncing server/ (NO --delete, EXCLUDE uploads — protects user files)"
 rsync -az --exclude='uploads/' --exclude='uploads/**' --exclude='.env' \

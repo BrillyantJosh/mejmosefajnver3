@@ -485,7 +485,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'shop': 'Shop',
     'lanadiscount': 'Lana Discount',
     'meet': 'Lana Meet',
-    'theLanaLife': 'TheLana.Life'
+    'theLanaLife': 'TheLana.Life',
+    'direct-fund': 'Direct Fund'
   };
   return mapping[id] || id;
 };

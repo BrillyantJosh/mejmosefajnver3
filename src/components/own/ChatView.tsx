@@ -118,7 +118,7 @@ interface Message {
   sender: string;
   senderPubkey?: string;
   timestamp: string;
-  type: 'text' | 'audio';
+  type: 'text' | 'audio' | 'image';
   content?: string;
   audioUrl?: string;
   audioDuration?: number;
