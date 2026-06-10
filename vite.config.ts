@@ -18,6 +18,19 @@ export default defineConfig(({ mode }) => ({
         entryFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
         chunkFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
         assetFileNames: `assets/[name]-[hash]-${Date.now()}.[ext]`,
+        // Split heavy vendors into their own long-cached chunks so the entry
+        // chunk stays small (routes are also code-split via React.lazy).
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("react-router")) return "react-router";
+          if (id.includes("/react-dom/") || id.includes("/react/") || id.includes("/scheduler/")) return "react";
+          if (id.includes("nostr-tools") || id.includes("@noble") || id.includes("@scure") || id.includes("elliptic")) return "nostr";
+          if (id.includes("@radix-ui")) return "radix";
+          if (id.includes("lucide-react")) return "icons";
+          if (id.includes("recharts") || id.includes("d3-")) return "charts";
+          if (id.includes("date-fns")) return "date-fns";
+          return "vendor";
+        },
       },
     },
   },
