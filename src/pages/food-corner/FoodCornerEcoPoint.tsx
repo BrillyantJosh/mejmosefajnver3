@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, ImagePlus, Loader2, MapPin, Plus, RefreshCw, Save, Sparkles, Store, X } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, ImagePlus, Loader2, MapPin, Plus, RefreshCw, Save, Sparkles, Store, X } from "lucide-react";
 import { toast } from "sonner";
 import { AddressSearch } from "@/components/AddressSearch";
 import LocationPicker from "@/components/LocationPicker";
@@ -875,13 +875,6 @@ export default function FoodCornerEcoPoint() {
           </>
         )}
       </div>
-
-      {myNodes.length > 0 && (
-        <Alert>
-          <CheckCircle2 className="h-4 w-4" />
-          <AlertDescription>{t("ecoPoint.footer")}</AlertDescription>
-        </Alert>
-      )}
     </div>
   );
 }
