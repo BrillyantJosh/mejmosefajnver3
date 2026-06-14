@@ -231,6 +231,52 @@ export default function FoodCornerOrder() {
       }),
     [myOrders, myOrdersWeek],
   );
+  // Group My orders by Točka Obilja (one entry per point per cycle). A single
+  // checkout is split into one KIND 36601 per seller, but the buyer picks up
+  // everything at ONE point — so consolidate per point, aggregating items + total
+  // (the buyer doesn't care about the per-seller split).
+  const myOrdersByPoint = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        nodeRef: string;
+        total: number;
+        currency: string;
+        createdAt: number;
+        hasFulfillment: boolean;
+        statuses: Set<string>;
+        items: Map<string, { title: string; unit: string; qty: number }>;
+      }
+    >();
+    for (const order of myOrdersInWeek) {
+      let g = map.get(order.distributionPoint);
+      if (!g) {
+        g = {
+          nodeRef: order.distributionPoint,
+          total: 0,
+          currency: order.currency || "EUR",
+          createdAt: 0,
+          hasFulfillment: false,
+          statuses: new Set(),
+          items: new Map(),
+        };
+        map.set(order.distributionPoint, g);
+      }
+      g.total += order.total;
+      if (order.currency) g.currency = order.currency;
+      g.createdAt = Math.max(g.createdAt, order.createdAt);
+      g.hasFulfillment = g.hasFulfillment || !!order.fulfillmentStatus;
+      g.statuses.add(order.fulfillmentStatus || order.status);
+      for (const item of order.items) {
+        const key = `${item.listingRef}__${item.unit}`;
+        const ex = g.items.get(key);
+        if (ex) ex.qty += item.qty;
+        else g.items.set(key, { title: item.listing?.title || item.listingRef.slice(-8), unit: item.unit, qty: item.qty });
+      }
+    }
+    return [...map.values()].sort((a, b) => b.createdAt - a.createdAt);
+  }, [myOrdersInWeek]);
+
   const myOrdersLocale = lang === "sl" ? "sl-SI" : undefined;
   const myOrdersWeekLabel = `${myOrdersWeek.start.toLocaleDateString(myOrdersLocale, { day: "numeric", month: "short" })} – ${new Date(
     myOrdersWeek.end.getTime() - 1,
@@ -687,16 +733,16 @@ export default function FoodCornerOrder() {
               </Card>
             ) : (
               <div className="space-y-3">
-                {myOrdersInWeek.map((order) => {
-                  const node = getNodeByRef(order.distributionPoint);
+                {myOrdersByPoint.map((group) => {
+                  const node = getNodeByRef(group.nodeRef);
                   return (
-                    <Card key={order.ref}>
+                    <Card key={group.nodeRef}>
                       <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold">{formatFoodMoney(order.total, order.currency)}</span>
-                            <Badge variant={order.fulfillmentStatus ? "default" : "secondary"}>
-                              {order.fulfillmentStatus || order.status}
+                            <span className="font-semibold">{formatFoodMoney(group.total, group.currency)}</span>
+                            <Badge variant={group.hasFulfillment ? "default" : "secondary"}>
+                              {[...group.statuses].join(" / ")}
                             </Badge>
                           </div>
                           {node && (
@@ -706,13 +752,13 @@ export default function FoodCornerOrder() {
                             </p>
                           )}
                           <p className="text-xs text-muted-foreground mt-1">
-                            {order.items
-                              .map((item) => `${item.qty} ${item.unit} ${item.listing?.title || item.listingRef.slice(-8)}`)
+                            {[...group.items.values()]
+                              .map((item) => `${item.qty} ${item.unit} ${item.title}`)
                               .join(" · ")}
                           </p>
                         </div>
                         <p className="text-xs text-muted-foreground shrink-0">
-                          {new Date(order.createdAt * 1000).toLocaleString(myOrdersLocale)}
+                          {new Date(group.createdAt * 1000).toLocaleString(myOrdersLocale)}
                         </p>
                       </CardContent>
                     </Card>
