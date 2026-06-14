@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, PackageCheck, RefreshCw, Truck, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, PackageCheck, Printer, RefreshCw, Truck, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -205,6 +205,71 @@ export default function FoodCornerSupplier() {
     }
   };
 
+  const escapeHtml = (value: string) =>
+    value.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
+
+  // Printable delivery list: per Točka Obilja, the cutoff + delivery deadline and
+  // the aggregated product totals to bring.
+  const buildPrintHtml = (groups: NodeGroup[]) => {
+    const cycle = weekOffset === 0 ? t("ecoPoint.orders.thisWeek") : weekLabel;
+    const sections = groups
+      .map((g) => {
+        const wi = windowInfo(g.node);
+        const rows = g.products
+          .map(
+            (p) =>
+              `<tr><td>${escapeHtml(p.title)}</td><td class="num">${escapeHtml(`${p.qty} ${p.unit}`)}</td></tr>`,
+          )
+          .join("");
+        const meta: string[] = [];
+        if (wi?.cutoffStr) meta.push(`${escapeHtml(t("order.deadline.label"))}: ${escapeHtml(wi.cutoffStr)}`);
+        if (wi?.pickupStr)
+          meta.push(
+            `${escapeHtml(t("supplier.deliverBy"))}: ${escapeHtml(wi.pickupStr)}${wi.pickupWindow ? " · " + escapeHtml(wi.pickupWindow) : ""}`,
+          );
+        return (
+          `<section><h2>${escapeHtml(g.name)}</h2>` +
+          (meta.length ? `<p class="meta">${meta.join(" &nbsp;·&nbsp; ")}</p>` : "") +
+          `<table><thead><tr><th>${escapeHtml(t("ecoPoint.print.product"))}</th>` +
+          `<th class="num">${escapeHtml(t("ecoPoint.print.qty"))}</th></tr></thead><tbody>${rows}</tbody></table>` +
+          `<p class="total">${escapeHtml(t("ecoPoint.print.total"))}: ${escapeHtml(formatFoodMoney(g.total, g.currency))} · ` +
+          `${escapeHtml(t("supplier.ordersCount", { count: g.orderCount }))}</p></section>`
+        );
+      })
+      .join("");
+    return (
+      `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(t("supplier.print.title"))}</title><style>` +
+      `*{font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif}body{margin:24px;color:#111}` +
+      `h1{font-size:20px;margin:0 0 4px}.meta{color:#555;font-size:13px;margin:0 0 12px}` +
+      `section{margin:0 0 22px;page-break-inside:avoid}section+section{page-break-before:always}` +
+      `h2{font-size:16px;margin:0 0 6px;border-bottom:2px solid #111;padding-bottom:4px}` +
+      `table{width:100%;border-collapse:collapse;font-size:14px}` +
+      `th,td{text-align:left;padding:7px 8px;border-bottom:1px solid #ddd}th{background:#f4f4f4}` +
+      `.num{text-align:right;white-space:nowrap}.total{text-align:right;font-weight:700;margin-top:8px;font-size:14px}` +
+      `@media print{body{margin:12mm}}</style></head><body>` +
+      `<h1>${escapeHtml(t("supplier.print.title"))}</h1>` +
+      `<p class="meta">${escapeHtml(cycle)}</p>` +
+      (sections || `<p>${escapeHtml(t("supplier.weekEmpty"))}</p>`) +
+      `</body></html>`
+    );
+  };
+
+  const printGroups = (groups: NodeGroup[]) => {
+    if (groups.length === 0) {
+      toast.error(t("ecoPoint.print.empty"));
+      return;
+    }
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast.error(t("ecoPoint.print.popupBlocked"));
+      return;
+    }
+    win.document.write(buildPrintHtml(groups));
+    win.document.close();
+    win.focus();
+    win.setTimeout(() => win.print(), 300);
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -234,9 +299,17 @@ export default function FoodCornerSupplier() {
           <h2 className="text-xl font-semibold">{t("supplier.title")}</h2>
           <p className="text-sm text-muted-foreground">{t("supplier.subtitle")}</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={refetch}>
-          <RefreshCw className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {nodeGroups.length > 0 && (
+            <Button type="button" size="sm" variant="outline" className="gap-2" onClick={() => printGroups(nodeGroups)}>
+              <Printer className="h-4 w-4" />
+              {t("ecoPoint.print.all")}
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" onClick={refetch}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Cycle paginator (latest cycle first, page back cycle by cycle). */}
@@ -279,7 +352,19 @@ export default function FoodCornerSupplier() {
                         <MapPin className="h-5 w-5 shrink-0 text-primary" />
                         <span className="truncate">{group.name}</span>
                       </h3>
-                      <span className="text-lg font-semibold shrink-0">{formatFoodMoney(group.total, group.currency)}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-lg font-semibold">{formatFoodMoney(group.total, group.currency)}</span>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          title={t("supplier.print.one")}
+                          onClick={() => printGroups([group])}
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                     {wi?.cutoffStr && (
                       <p className="text-sm font-medium flex items-center gap-1.5 text-primary">
