@@ -90,16 +90,19 @@ export function useFoodCornerData(): FoodCornerData {
           .filter(Boolean) as FoodCornerNode[],
       ).sort((a, b) => b.createdAt - a.createdAt);
 
-      const parsedListings = dedupeReplaceable(
+      const allParsedListings = dedupeReplaceable(
         rawEvents
           .filter((event) => event.kind === FOOD_CORNER_LISTING_KIND)
           .map(parseFoodCornerListing)
           .filter(Boolean) as FoodCornerListing[],
-      )
-        .filter((listing) => listing.status === "active")
-        .sort((a, b) => b.createdAt - a.createdAt);
+      ).sort((a, b) => b.createdAt - a.createdAt);
 
-      const listingMap = new Map(parsedListings.map((listing) => [listing.ref, listing]));
+      // Active listings drive the orderable catalog; the title-resolution map
+      // includes ALL listings so historical orders that reference a now-inactive
+      // listing still show the product name (not a bare ref hash).
+      const parsedListings = allParsedListings.filter((listing) => listing.status === "active");
+
+      const listingMap = new Map(allParsedListings.map((listing) => [listing.ref, listing]));
 
       const parsedOrders = dedupeReplaceable(
         rawEvents

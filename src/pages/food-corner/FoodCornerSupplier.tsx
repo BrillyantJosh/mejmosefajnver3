@@ -1,14 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Clock, Loader2, MapPin, RefreshCw, Truck } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, PackageCheck, RefreshCw, Truck, XCircle } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFoodCornerData } from "@/hooks/useFoodCornerData";
+import { useFoodCornerPublisher } from "@/hooks/useFoodCornerPublisher";
 import { useTranslation } from "@/i18n/I18nContext";
 import foodCornerTranslations, { FoodCornerKey } from "@/i18n/modules/foodCorner";
-import type { FoodCornerNode } from "@/types/foodCorner";
+import {
+  FOOD_CORNER_FULFILLMENT_KIND,
+  FoodCornerFulfillmentStatus,
+  FoodCornerOrderWithFulfillment,
+  type FoodCornerNode,
+} from "@/types/foodCorner";
 import { foodCornerOrderingWindow, foodCornerWeekRange, formatFoodMoney } from "@/lib/foodCorner";
+
+const STATUS_ACTIONS: Array<{ status: FoodCornerFulfillmentStatus; labelKey: FoodCornerKey; icon: LucideIcon; variant?: "default" | "outline" | "destructive" }> = [
+  { status: "confirmed", labelKey: "supplier.action.confirm", icon: CheckCircle2, variant: "default" },
+  { status: "rejected", labelKey: "supplier.action.reject", icon: XCircle, variant: "destructive" },
+  { status: "packed", labelKey: "supplier.action.packed", icon: PackageCheck, variant: "outline" },
+  { status: "delivered", labelKey: "supplier.action.delivered", icon: Truck, variant: "outline" },
+  { status: "completed", labelKey: "supplier.action.completed", icon: CheckCircle2, variant: "outline" },
+];
 
 function formatCountdown(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -38,13 +55,17 @@ interface NodeGroup {
   total: number;
   currency: string;
   products: ProductAgg[];
+  orders: FoodCornerOrderWithFulfillment[];
 }
 
 export default function FoodCornerSupplier() {
   const { session } = useAuth();
   const { t, lang } = useTranslation(foodCornerTranslations);
   const { nodes, listings, orders, isLoading, refetch } = useFoodCornerData();
+  const { publishEvent, isPublishing } = useFoodCornerPublisher();
   const locale = lang === "sl" ? "sl-SI" : undefined;
+
+  const [notes, setNotes] = useState<Record<string, string>>({});
 
   // Live clock so the order-cutoff countdown updates every second.
   const [now, setNow] = useState(() => new Date());
@@ -89,7 +110,8 @@ export default function FoodCornerSupplier() {
   );
 
   // Group by Točka Obilja, then aggregate quantities per product (the supplier
-  // only needs the totals to bring — not individual orders).
+  // needs the totals to bring); keep the orders so a status can be published per
+  // order from the point card.
   const nodeGroups = useMemo<NodeGroup[]>(() => {
     const map = new Map<string, NodeGroup>();
     for (const order of ordersInWeek) {
@@ -105,17 +127,20 @@ export default function FoodCornerSupplier() {
           total: 0,
           currency: order.currency || "EUR",
           products: [],
+          orders: [],
         };
         map.set(ref, group);
       }
       group.orderCount += 1;
       group.total += order.total;
+      group.orders.push(order);
       if (order.currency) group.currency = order.currency;
       for (const item of order.items) {
         const key = `${item.listingRef}__${item.unit}`;
         let product = group.products.find((p) => p.key === key);
         if (!product) {
-          product = { key, title: item.listing?.title || item.listingRef.slice(-8), unit: item.unit, qty: 0 };
+          const title = item.listing?.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`;
+          product = { key, title, unit: item.unit, qty: 0 };
           group.products.push(product);
         }
         product.qty += item.qty;
@@ -153,6 +178,33 @@ export default function FoodCornerSupplier() {
     };
   };
 
+  // Publish a fulfillment status (KIND 36602) for EVERY order at this point,
+  // with the optional note. One status change covers the whole point's batch.
+  const publishGroupStatus = async (group: NodeGroup, status: FoodCornerFulfillmentStatus) => {
+    const note = (notes[group.nodeRef] || "").trim();
+    try {
+      for (const order of group.orders) {
+        await publishEvent(
+          FOOD_CORNER_FULFILLMENT_KIND,
+          [
+            ["d", order.dTag],
+            ["a", order.ref],
+            ["p", order.buyerPubkey],
+            ["status", status],
+            ...(status === "delivered" || status === "completed" ? [["delivered_at", new Date().toISOString()]] : []),
+            ...(note ? [["note", note]] : []),
+          ],
+          note,
+        );
+      }
+      toast.success(t("supplier.toast.published"));
+      setNotes((current) => ({ ...current, [group.nodeRef]: "" }));
+      await refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("supplier.toast.failed"));
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -179,7 +231,7 @@ export default function FoodCornerSupplier() {
     <div className="px-4 sm:px-0 space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">{t("supplier.title")}</h2>
+          <h2 className="text-xl font-semibold">{t("supplier.title")}</h2>
           <p className="text-sm text-muted-foreground">{t("supplier.subtitle")}</p>
         </div>
         <Button variant="ghost" size="icon" onClick={refetch}>
@@ -219,19 +271,19 @@ export default function FoodCornerSupplier() {
             const wi = windowInfo(group.node);
             return (
               <Card key={group.nodeRef}>
-                <CardContent className="p-4 space-y-3">
+                <CardContent className="p-4 sm:p-5 space-y-4">
                   {/* Point header */}
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <h3 className="font-semibold text-base flex items-center gap-2 min-w-0">
-                        <MapPin className="h-4 w-4 shrink-0 text-primary" />
+                      <h3 className="font-bold text-xl flex items-center gap-2 min-w-0">
+                        <MapPin className="h-5 w-5 shrink-0 text-primary" />
                         <span className="truncate">{group.name}</span>
                       </h3>
-                      <span className="text-sm font-medium shrink-0">{formatFoodMoney(group.total, group.currency)}</span>
+                      <span className="text-lg font-semibold shrink-0">{formatFoodMoney(group.total, group.currency)}</span>
                     </div>
                     {wi?.cutoffStr && (
-                      <p className="text-xs font-medium flex items-center gap-1 text-primary">
-                        <Clock className="h-3 w-3 shrink-0" />
+                      <p className="text-sm font-medium flex items-center gap-1.5 text-primary">
+                        <Clock className="h-4 w-4 shrink-0" />
                         <span>
                           {t("order.deadline.label")}: {wi.cutoffStr}
                           {wi.left
@@ -243,8 +295,8 @@ export default function FoodCornerSupplier() {
                       </p>
                     )}
                     {wi?.pickupStr && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Truck className="h-3 w-3 shrink-0" />
+                      <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                        <Truck className="h-4 w-4 shrink-0" />
                         <span>
                           {t("supplier.deliverBy")}: {wi.pickupStr}
                           {wi.pickupWindow ? ` · ${wi.pickupWindow}` : ""}
@@ -255,12 +307,12 @@ export default function FoodCornerSupplier() {
 
                   {/* Aggregated product totals to bring */}
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">{t("supplier.toBring")}</p>
+                    <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">{t("supplier.toBring")}</p>
                     <div className="rounded-md border divide-y">
                       {group.products.map((product) => (
-                        <div key={product.key} className="flex items-center justify-between gap-3 p-3 text-sm">
-                          <span className="font-medium truncate">{product.title}</span>
-                          <span className="font-semibold shrink-0 tabular-nums">
+                        <div key={product.key} className="flex items-center justify-between gap-3 p-3.5">
+                          <span className="text-base font-medium truncate">{product.title}</span>
+                          <span className="text-lg font-bold shrink-0 tabular-nums">
                             {product.qty} {product.unit}
                           </span>
                         </div>
@@ -268,7 +320,34 @@ export default function FoodCornerSupplier() {
                     </div>
                   </div>
 
-                  <p className="text-xs text-muted-foreground">{t("supplier.ordersCount", { count: group.orderCount })}</p>
+                  {/* Per-point status: note + actions, published for every order at this point */}
+                  <div className="space-y-2 pt-1">
+                    <Textarea
+                      value={notes[group.nodeRef] || ""}
+                      onChange={(event) => setNotes((current) => ({ ...current, [group.nodeRef]: event.target.value }))}
+                      placeholder={t("supplier.notePlaceholder")}
+                      rows={2}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {STATUS_ACTIONS.map((action) => {
+                        const Icon = action.icon;
+                        return (
+                          <Button
+                            key={action.status}
+                            size="sm"
+                            variant={action.variant || "outline"}
+                            onClick={() => publishGroupStatus(group, action.status)}
+                            disabled={isPublishing}
+                            className="gap-2"
+                          >
+                            <Icon className="h-4 w-4" />
+                            {t(action.labelKey)}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{t("supplier.ordersCount", { count: group.orderCount })}</p>
+                  </div>
                 </CardContent>
               </Card>
             );
