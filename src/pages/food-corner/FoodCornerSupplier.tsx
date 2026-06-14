@@ -1,160 +1,156 @@
-import { useMemo, useState } from "react";
-import { CheckCircle2, Clock, Loader2, PackageCheck, RefreshCw, Truck, XCircle } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { toast } from "sonner";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Clock, Loader2, MapPin, RefreshCw, Truck } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFoodCornerData } from "@/hooks/useFoodCornerData";
-import { useFoodCornerPublisher } from "@/hooks/useFoodCornerPublisher";
 import { useTranslation } from "@/i18n/I18nContext";
 import foodCornerTranslations, { FoodCornerKey } from "@/i18n/modules/foodCorner";
-import {
-  FOOD_CORNER_FULFILLMENT_KIND,
-  FoodCornerFulfillmentStatus,
-  FoodCornerOrderWithFulfillment,
-} from "@/types/foodCorner";
-import { formatFoodMoney, groupOrdersByNode } from "@/lib/foodCorner";
+import type { FoodCornerNode } from "@/types/foodCorner";
+import { foodCornerOrderingWindow, foodCornerWeekRange, formatFoodMoney } from "@/lib/foodCorner";
 
-const STATUS_ACTIONS: Array<{ status: FoodCornerFulfillmentStatus; labelKey: FoodCornerKey; icon: LucideIcon; variant?: "default" | "outline" | "destructive" }> = [
-  { status: "confirmed", labelKey: "supplier.action.confirm", icon: CheckCircle2, variant: "default" },
-  { status: "rejected", labelKey: "supplier.action.reject", icon: XCircle, variant: "destructive" },
-  { status: "packed", labelKey: "supplier.action.packed", icon: PackageCheck, variant: "outline" },
-  { status: "delivered", labelKey: "supplier.action.delivered", icon: Truck, variant: "outline" },
-  { status: "completed", labelKey: "supplier.action.completed", icon: CheckCircle2, variant: "outline" },
-];
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const parts: string[] = [];
+  if (d) parts.push(`${d}d`);
+  if (d || h) parts.push(`${h}h`);
+  if (d || h || m) parts.push(`${m}m`);
+  parts.push(`${s}s`);
+  return parts.join(" ");
+}
 
-function OrderCard({
-  order,
-  nodeName,
-  note,
-  onNoteChange,
-  onStatus,
-  isPublishing,
-  t,
-}: {
-  order: FoodCornerOrderWithFulfillment;
-  nodeName: string;
-  note: string;
-  onNoteChange: (value: string) => void;
-  onStatus: (status: FoodCornerFulfillmentStatus) => void;
-  isPublishing: boolean;
-  t: (key: FoodCornerKey, vars?: Record<string, string | number>) => string;
-}) {
-  return (
-    <Card>
-      <CardContent className="p-4 space-y-4">
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant={order.fulfillmentStatus ? "default" : "secondary"}>
-                {order.fulfillmentStatus || order.status}
-              </Badge>
-              <span className="font-semibold">{formatFoodMoney(order.total, order.currency)}</span>
-              <span className="text-xs text-muted-foreground">{nodeName}</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {t("supplier.buyer")}: {order.buyerPubkey.slice(0, 12)}... · {new Date(order.createdAt * 1000).toLocaleString()}
-            </p>
-          </div>
-          <div className="text-xs text-muted-foreground md:text-right">
-            {order.requestedDate && <p>{t("supplier.date")}: {order.requestedDate}</p>}
-            {order.requestedWindow && <p>{t("supplier.window")}: {order.requestedWindow}</p>}
-            {order.pickupPoint && <p>{t("supplier.pickup")}: {order.pickupPoint}</p>}
-          </div>
-        </div>
-
-        <div className="rounded-md border divide-y">
-          {order.items.map((item) => (
-            <div key={`${order.ref}-${item.listingRef}`} className="flex items-center justify-between gap-3 p-3 text-sm">
-              <div className="min-w-0">
-                <p className="font-medium truncate">{item.listing?.title || item.listingRef}</p>
-                <p className="text-xs text-muted-foreground">
-                  {item.qty} {item.unit} × {formatFoodMoney(item.unitPrice, item.currency)}
-                </p>
-              </div>
-              {order.fulfillmentStatus && (
-                <Badge variant="outline" className="shrink-0">{order.fulfillmentStatus}</Badge>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {order.content && (
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{order.content}</p>
-        )}
-
-        <Textarea
-          value={note}
-          onChange={(event) => onNoteChange(event.target.value)}
-          placeholder={t("supplier.notePlaceholder")}
-          rows={2}
-        />
-
-        <div className="flex flex-wrap gap-2">
-          {STATUS_ACTIONS.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Button
-                key={action.status}
-                size="sm"
-                variant={action.variant || "outline"}
-                onClick={() => onStatus(action.status)}
-                disabled={isPublishing}
-                className="gap-2"
-              >
-                <Icon className="h-4 w-4" />
-                {t(action.labelKey)}
-              </Button>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
-  );
+interface ProductAgg {
+  key: string;
+  title: string;
+  unit: string;
+  qty: number;
+}
+interface NodeGroup {
+  nodeRef: string;
+  node?: FoodCornerNode;
+  name: string;
+  orderCount: number;
+  total: number;
+  currency: string;
+  products: ProductAgg[];
 }
 
 export default function FoodCornerSupplier() {
   const { session } = useAuth();
-  const { t } = useTranslation(foodCornerTranslations);
+  const { t, lang } = useTranslation(foodCornerTranslations);
   const { nodes, listings, orders, isLoading, refetch } = useFoodCornerData();
-  const { publishEvent, isPublishing } = useFoodCornerPublisher();
-  const [notes, setNotes] = useState<Record<string, string>>({});
+  const locale = lang === "sl" ? "sl-SI" : undefined;
+
+  // Live clock so the order-cutoff countdown updates every second.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const dayLabel = (day?: string) => (day ? t(`days.${day.trim().toLowerCase()}` as FoodCornerKey) : "");
 
   const supplierListings = listings.filter((listing) => listing.pubkey === session?.nostrHexId);
   const supplierOrders = useMemo(
     () => orders.filter((order) => order.sellerPubkey === session?.nostrHexId),
     [orders, session?.nostrHexId],
   );
-  const grouped = groupOrdersByNode(supplierOrders);
-  const nodeNames = new Map(nodes.map((node) => [node.ref, node.name]));
+  const nodeByRef = useMemo(() => new Map(nodes.map((node) => [node.ref, node])), [nodes]);
 
-  const publishStatus = async (order: FoodCornerOrderWithFulfillment, status: FoodCornerFulfillmentStatus) => {
-    const note = notes[order.ref] || "";
-    try {
-      await publishEvent(
-        FOOD_CORNER_FULFILLMENT_KIND,
-        [
-          ["d", order.dTag],
-          ["a", order.ref],
-          ["p", order.buyerPubkey],
-          ["status", status],
-          ...(status === "delivered" || status === "completed"
-            ? [["delivered_at", new Date().toISOString()]]
-            : []),
-          ...(note.trim() ? [["note", note.trim()]] : []),
-        ],
-        note.trim(),
-      );
-      toast.success(t("supplier.toast.published"));
-      setNotes((current) => ({ ...current, [order.ref]: "" }));
-      await refetch();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("supplier.toast.failed"));
+  // Orders are shown per Točka Obilja cycle (pickup day → pickup day, e.g.
+  // Thursday→Thursday — the delivery/pickup day). Anchor to the pickup day of
+  // the point(s) this supplier serves (fall back to Thursday).
+  const [weekOffset, setWeekOffset] = useState(0);
+  const anchorDay = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const o of supplierOrders) {
+      const day = nodeByRef.get(o.distributionPoint)?.pickups?.[0]?.day?.trim().toLowerCase();
+      if (day) counts[day] = (counts[day] || 0) + 1;
     }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "thursday";
+  }, [supplierOrders, nodeByRef]);
+  const week = useMemo(() => foodCornerWeekRange(weekOffset, anchorDay), [weekOffset, anchorDay]);
+  const weekLabel = `${week.start.toLocaleDateString(locale, { day: "numeric", month: "short" })} – ${new Date(
+    week.end.getTime() - 1,
+  ).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" })}`;
+
+  const ordersInWeek = useMemo(
+    () =>
+      supplierOrders.filter((order) => {
+        const ms = order.createdAt * 1000;
+        return ms >= week.start.getTime() && ms < week.end.getTime();
+      }),
+    [supplierOrders, week],
+  );
+
+  // Group by Točka Obilja, then aggregate quantities per product (the supplier
+  // only needs the totals to bring — not individual orders).
+  const nodeGroups = useMemo<NodeGroup[]>(() => {
+    const map = new Map<string, NodeGroup>();
+    for (const order of ordersInWeek) {
+      const ref = order.distributionPoint;
+      let group = map.get(ref);
+      if (!group) {
+        const node = nodeByRef.get(ref);
+        group = {
+          nodeRef: ref,
+          node,
+          name: node?.name || t("supplier.directNode"),
+          orderCount: 0,
+          total: 0,
+          currency: order.currency || "EUR",
+          products: [],
+        };
+        map.set(ref, group);
+      }
+      group.orderCount += 1;
+      group.total += order.total;
+      if (order.currency) group.currency = order.currency;
+      for (const item of order.items) {
+        const key = `${item.listingRef}__${item.unit}`;
+        let product = group.products.find((p) => p.key === key);
+        if (!product) {
+          product = { key, title: item.listing?.title || item.listingRef.slice(-8), unit: item.unit, qty: 0 };
+          group.products.push(product);
+        }
+        product.qty += item.qty;
+      }
+    }
+    const arr = [...map.values()];
+    arr.forEach((g) => g.products.sort((a, b) => a.title.localeCompare(b.title)));
+    arr.sort((a, b) => a.name.localeCompare(b.name));
+    return arr;
+  }, [ordersInWeek, nodeByRef, t]);
+
+  // Order-cutoff + delivery/pickup info for a point's current cycle.
+  const windowInfo = (node?: FoodCornerNode) => {
+    if (!node) return null;
+    const win = foodCornerOrderingWindow(node, now);
+    const cutoffMs = win.cutoff ? win.cutoff.getTime() - now.getTime() : null;
+    return {
+      cutoffStr: win.cutoff
+        ? win.cutoff.toLocaleString(locale, {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : null,
+      left: cutoffMs != null && cutoffMs > 0 ? formatCountdown(cutoffMs) : null,
+      closed: cutoffMs != null && cutoffMs <= 0,
+      pickupStr: win.pickup
+        ? win.pickup.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "short" })
+        : node.pickups?.[0]?.day
+          ? dayLabel(node.pickups[0].day)
+          : null,
+      pickupWindow: win.pickupWindow || node.pickups?.[0]?.window || "",
+    };
   };
 
   if (isLoading) {
@@ -173,9 +169,7 @@ export default function FoodCornerSupplier() {
           <AlertDescription>{t("supplier.empty.alert")}</AlertDescription>
         </Alert>
         <Card>
-          <CardContent className="p-6 text-center text-muted-foreground">
-            {t("supplier.empty.none")}
-          </CardContent>
+          <CardContent className="p-6 text-center text-muted-foreground">{t("supplier.empty.none")}</CardContent>
         </Card>
       </div>
     );
@@ -193,70 +187,94 @@ export default function FoodCornerSupplier() {
         </Button>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-3">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">{t("supplier.stat.activeOffers")}</p>
-            <p className="text-2xl font-bold">{supplierListings.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">{t("supplier.stat.orders")}</p>
-            <p className="text-2xl font-bold">{supplierOrders.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">{t("supplier.stat.unconfirmed")}</p>
-            <p className="text-2xl font-bold">
-              {supplierOrders.filter((order) => !order.fulfillmentStatus).length}
-            </p>
-          </CardContent>
-        </Card>
+      {/* Cycle paginator (latest cycle first, page back cycle by cycle). */}
+      <div className="flex items-center justify-center gap-2">
+        <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setWeekOffset((o) => o + 1)}>
+          <ChevronLeft className="h-4 w-4" />
+          {t("ecoPoint.orders.prevWeek")}
+        </Button>
+        <span className="text-sm font-medium min-w-[9rem] text-center">
+          {weekOffset === 0 ? t("ecoPoint.orders.thisWeek") : weekLabel}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="gap-1"
+          disabled={weekOffset === 0}
+          onClick={() => setWeekOffset((o) => Math.max(0, o - 1))}
+        >
+          {t("ecoPoint.orders.nextWeek")}
+          <ChevronRight className="h-4 w-4" />
+        </Button>
       </div>
 
-      {supplierOrders.length > 0 && (
-        <div className="grid md:grid-cols-3 gap-3">
-          {grouped.map((group) => (
-            <Card key={group.nodeRef}>
-              <CardContent className="p-4">
-                <p className="text-sm text-muted-foreground">{nodeNames.get(group.nodeRef) || t("supplier.directNode")}</p>
-                <p className="text-xl font-bold">{t("supplier.ordersCount", { count: group.orders.length })}</p>
-                <p className="text-sm font-medium">{formatFoodMoney(group.total, group.currency)}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {supplierOrders.length === 0 ? (
+      {nodeGroups.length === 0 ? (
         <Card>
-          <CardContent className="p-6 text-center text-muted-foreground">
-            {t("supplier.empty.noOrders")}
-          </CardContent>
+          <CardContent className="p-6 text-center text-muted-foreground">{t("supplier.weekEmpty")}</CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {supplierOrders.map((order) => (
-            <OrderCard
-              key={order.ref}
-              order={order}
-              nodeName={nodeNames.get(order.distributionPoint) || t("supplier.directNode")}
-              note={notes[order.ref] || ""}
-              onNoteChange={(value) => setNotes((current) => ({ ...current, [order.ref]: value }))}
-              onStatus={(status) => publishStatus(order, status)}
-              isPublishing={isPublishing}
-              t={t}
-            />
-          ))}
+        <div className="space-y-4">
+          {nodeGroups.map((group) => {
+            const wi = windowInfo(group.node);
+            return (
+              <Card key={group.nodeRef}>
+                <CardContent className="p-4 space-y-3">
+                  {/* Point header */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <h3 className="font-semibold text-base flex items-center gap-2 min-w-0">
+                        <MapPin className="h-4 w-4 shrink-0 text-primary" />
+                        <span className="truncate">{group.name}</span>
+                      </h3>
+                      <span className="text-sm font-medium shrink-0">{formatFoodMoney(group.total, group.currency)}</span>
+                    </div>
+                    {wi?.cutoffStr && (
+                      <p className="text-xs font-medium flex items-center gap-1 text-primary">
+                        <Clock className="h-3 w-3 shrink-0" />
+                        <span>
+                          {t("order.deadline.label")}: {wi.cutoffStr}
+                          {wi.left
+                            ? ` · ${t("order.deadline.left", { time: wi.left })}`
+                            : wi.closed
+                              ? ` · ${t("supplier.orderingClosed")}`
+                              : ""}
+                        </span>
+                      </p>
+                    )}
+                    {wi?.pickupStr && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Truck className="h-3 w-3 shrink-0" />
+                        <span>
+                          {t("supplier.deliverBy")}: {wi.pickupStr}
+                          {wi.pickupWindow ? ` · ${wi.pickupWindow}` : ""}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Aggregated product totals to bring */}
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">{t("supplier.toBring")}</p>
+                    <div className="rounded-md border divide-y">
+                      {group.products.map((product) => (
+                        <div key={product.key} className="flex items-center justify-between gap-3 p-3 text-sm">
+                          <span className="font-medium truncate">{product.title}</span>
+                          <span className="font-semibold shrink-0 tabular-nums">
+                            {product.qty} {product.unit}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">{t("supplier.ordersCount", { count: group.orderCount })}</p>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
-
-      <Alert>
-        <Clock className="h-4 w-4" />
-        <AlertDescription>{t("supplier.footer")}</AlertDescription>
-      </Alert>
     </div>
   );
 }
