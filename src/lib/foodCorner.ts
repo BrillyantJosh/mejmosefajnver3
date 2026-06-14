@@ -403,13 +403,25 @@ export function foodCornerOrderingWindow(node: FoodCornerNode, from: Date = new 
   return { cutoff, pickup: pickupDate, pickupWindow: pickup?.window || "" };
 }
 
-/** Monday-start week range for a given offset (0 = current week, 1 = previous week, …). */
-export function foodCornerWeekRange(offset: number, from: Date = new Date()): { start: Date; end: Date } {
+/**
+ * Week range anchored to a given weekday — the Točka Obilja order cycle runs
+ * "from cutoff day to cutoff day" (e.g. Thursday→Thursday), NOT Monday→Sunday.
+ * `anchorDay` is a weekday name (matches `orderCutoffDay`). offset 0 = current
+ * cycle (most recent anchor weekday ≤ today, up to the next anchor weekday),
+ * 1 = previous cycle, … An unknown/empty day name falls back to Monday.
+ */
+export function foodCornerWeekRange(
+  offset: number,
+  anchorDay = "thursday",
+  from: Date = new Date(),
+): { start: Date; end: Date } {
   const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  const day = d.getDay(); // 0=Sun..6=Sat
-  const mondayDelta = day === 0 ? -6 : 1 - day;
+  let anchor = WEEKDAY_NAMES.indexOf((anchorDay || "").trim().toLowerCase());
+  if (anchor < 0) anchor = 1; // fallback: Monday
+  // Days elapsed since the most recent anchor weekday (0–6).
+  const sinceAnchor = (d.getDay() - anchor + 7) % 7;
   const start = new Date(d);
-  start.setDate(d.getDate() + mondayDelta - offset * 7);
+  start.setDate(d.getDate() - sinceAnchor - offset * 7);
   const end = new Date(start);
   end.setDate(start.getDate() + 7);
   return { start, end };

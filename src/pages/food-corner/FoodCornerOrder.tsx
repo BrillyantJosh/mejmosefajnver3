@@ -206,9 +206,22 @@ export default function FoodCornerOrder() {
   const currency = selectedItems[0]?.listing.priceCurrency || "EUR";
   const myOrders = orders.filter((order) => order.buyerPubkey === session?.nostrHexId);
 
-  // "My orders" paginated by week (latest week first, page back week by week).
+  // "My orders" paginated by the Točka Obilja cycle (cutoff day → cutoff day,
+  // e.g. Thursday→Thursday), latest cycle first. Anchor to the cutoff day of the
+  // point(s) the user ordered through (fall back to Thursday).
   const [myOrdersWeekOffset, setMyOrdersWeekOffset] = useState(0);
-  const myOrdersWeek = useMemo(() => foodCornerWeekRange(myOrdersWeekOffset), [myOrdersWeekOffset]);
+  const myOrdersAnchorDay = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const o of myOrders) {
+      const day = getNodeByRef(o.distributionPoint)?.orderCutoffDay?.trim().toLowerCase();
+      if (day) counts[day] = (counts[day] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "thursday";
+  }, [myOrders, getNodeByRef]);
+  const myOrdersWeek = useMemo(
+    () => foodCornerWeekRange(myOrdersWeekOffset, myOrdersAnchorDay),
+    [myOrdersWeekOffset, myOrdersAnchorDay],
+  );
   const myOrdersInWeek = useMemo(
     () =>
       myOrders.filter((order) => {

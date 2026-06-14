@@ -261,10 +261,22 @@ export default function FoodCornerEcoPoint() {
   const myNodeOrders = orders.filter((order) => myNodeRefs.has(order.distributionPoint));
   const groupedOrders = groupOrdersByNode(myNodeOrders);
 
-  // Orders view: group by buyer or supplier, paginated by week (latest week first).
+  // Orders view: group by buyer or supplier, paginated by the Točka Obilja cycle
+  // (cutoff day → cutoff day, e.g. Thursday→Thursday), latest cycle first.
   const [ordersGroupBy, setOrdersGroupBy] = useState<"buyer" | "seller">("buyer");
   const [ordersWeekOffset, setOrdersWeekOffset] = useState(0);
-  const ordersWeek = useMemo(() => foodCornerWeekRange(ordersWeekOffset), [ordersWeekOffset]);
+  const ordersAnchorDay = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const n of myNodes) {
+      const day = n.orderCutoffDay?.trim().toLowerCase();
+      if (day) counts[day] = (counts[day] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "thursday";
+  }, [myNodes]);
+  const ordersWeek = useMemo(
+    () => foodCornerWeekRange(ordersWeekOffset, ordersAnchorDay),
+    [ordersWeekOffset, ordersAnchorDay],
+  );
 
   // Resolve KIND 0 names for every buyer that ordered through my Eco points.
   const buyerPubkeys = useMemo(
