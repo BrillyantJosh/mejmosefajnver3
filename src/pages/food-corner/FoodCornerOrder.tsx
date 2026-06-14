@@ -271,7 +271,12 @@ export default function FoodCornerOrder() {
         const key = `${item.listingRef}__${item.unit}`;
         const ex = g.items.get(key);
         if (ex) ex.qty += item.qty;
-        else g.items.set(key, { title: item.listing?.title || item.listingRef.slice(-8), unit: item.unit, qty: item.qty });
+        else
+          g.items.set(key, {
+            title: item.listing?.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`,
+            unit: item.unit,
+            qty: item.qty,
+          });
       }
     }
     return [...map.values()].sort((a, b) => b.createdAt - a.createdAt);

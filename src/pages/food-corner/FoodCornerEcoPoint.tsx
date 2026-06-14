@@ -358,6 +358,10 @@ export default function FoodCornerEcoPoint() {
   const producerName = (order: FoodCornerOrderWithFulfillment) =>
     producers.find((p) => p.unitRef === order.sellerRef)?.name || `${order.sellerPubkey.slice(0, 12)}…`;
   const nodeName = (ref: string) => nodes.find((n) => n.ref === ref)?.name || t("ecoPoint.orders.direct");
+  // Product name; deleted listings (gone from relays) fall back to a clear label
+  // instead of a bare ref hash.
+  const itemLabel = (item: { listing?: { title?: string }; listingRef: string }) =>
+    item.listing?.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`;
 
   // Buyers in the selected cycle (independent of the buyer/seller toggle), used
   // for the printable per-buyer and all-buyers lists.
@@ -397,7 +401,7 @@ export default function FoodCornerEcoPoint() {
           .flatMap((o) =>
             o.items.map(
               (it) =>
-                `<tr><td>${escapeHtml(it.listing?.title || it.listingRef.slice(-8))}</td>` +
+                `<tr><td>${escapeHtml(itemLabel(it))}</td>` +
                 `<td class="num">${escapeHtml(`${it.qty} ${it.unit}`)}</td>` +
                 `<td>${escapeHtml(producerName(o))}</td>` +
                 `<td class="num">${escapeHtml(formatFoodMoney(it.qty * it.unitPrice, it.currency))}</td></tr>`,
@@ -460,9 +464,7 @@ export default function FoodCornerEcoPoint() {
             {producerName(order)}
           </p>
           <span className="text-muted-foreground">
-            {order.items
-              .map((item) => `${item.qty} ${item.unit} ${item.listing?.title || item.listingRef.slice(-8)}`)
-              .join(" · ")}
+            {order.items.map((item) => `${item.qty} ${item.unit} ${itemLabel(item)}`).join(" · ")}
           </span>
         </div>
       </div>
