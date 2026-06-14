@@ -262,13 +262,14 @@ export default function FoodCornerEcoPoint() {
   const groupedOrders = groupOrdersByNode(myNodeOrders);
 
   // Orders view: group by buyer or supplier, paginated by the Točka Obilja cycle
-  // (cutoff day → cutoff day, e.g. Thursday→Thursday), latest cycle first.
+  // (pickup day → pickup day, e.g. Thursday→Thursday — when orders are fulfilled),
+  // latest cycle first. Anchor to the pickup day (NOT the earlier cutoff day).
   const [ordersGroupBy, setOrdersGroupBy] = useState<"buyer" | "seller">("buyer");
   const [ordersWeekOffset, setOrdersWeekOffset] = useState(0);
   const ordersAnchorDay = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const n of myNodes) {
-      const day = n.orderCutoffDay?.trim().toLowerCase();
+      const day = n.pickups?.[0]?.day?.trim().toLowerCase();
       if (day) counts[day] = (counts[day] || 0) + 1;
     }
     return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "thursday";
