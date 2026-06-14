@@ -13,6 +13,7 @@ import { I18nProvider } from "./i18n/I18nContext";
 import { SystemParametersProvider } from "./contexts/SystemParametersContext";
 import { AdminProtectedRoute, ProtectedRoute } from "./components/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
+import ErrorBoundary from "./components/ErrorBoundary";
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Modules = lazy(() => import("./pages/Modules"));
@@ -193,6 +194,7 @@ const App = () => (
               <TooltipProvider>
               <Toaster />
               <Sonner />
+              <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/login" element={<Login />} />
@@ -402,6 +404,7 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
               </Suspense>
+              </ErrorBoundary>
             </TooltipProvider>
           </ModulesProvider>
         </AdminProvider>
