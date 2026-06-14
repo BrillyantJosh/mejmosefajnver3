@@ -259,7 +259,6 @@ export default function FoodCornerEcoPoint() {
 
   const myNodeRefs = new Set(myNodes.map((node) => node.ref));
   const myNodeOrders = orders.filter((order) => myNodeRefs.has(order.distributionPoint));
-  const groupedOrders = groupOrdersByNode(myNodeOrders);
 
   // Orders view: group by buyer or supplier, paginated by the Točka Obilja cycle
   // (pickup day → pickup day, e.g. Thursday→Thursday — when orders are fulfilled),
@@ -296,6 +295,10 @@ export default function FoodCornerEcoPoint() {
       }),
     [myNodeOrders, ordersWeek],
   );
+
+  // Per-node summary cards (count + total) reflect the SELECTED cycle, so they
+  // stay consistent with the week paginator and detailed list below.
+  const groupedOrders = useMemo(() => groupOrdersByNode(weekOrders), [weekOrders]);
 
   interface BuyerSub {
     pubkey: string;
