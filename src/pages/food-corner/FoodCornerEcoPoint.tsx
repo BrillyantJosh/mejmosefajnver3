@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ChevronLeft, ChevronRight, ImagePlus, Loader2, MapPin, Plus, RefreshCw, Save, Sparkles, Store, X } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, ImagePlus, Loader2, MapPin, Plus, Printer, RefreshCw, Save, Sparkles, Store, X } from "lucide-react";
 import { toast } from "sonner";
 import { AddressSearch } from "@/components/AddressSearch";
 import LocationPicker from "@/components/LocationPicker";
@@ -352,17 +352,119 @@ export default function FoodCornerEcoPoint() {
   const weekLabel = `${ordersWeek.start.toLocaleDateString(ordersLocale, { day: "numeric", month: "short" })} – ${new Date(
     ordersWeek.end.getTime() - 1,
   ).toLocaleDateString(ordersLocale, { day: "numeric", month: "short", year: "numeric" })}`;
+
+  // Supplier (business unit) name for an order — the point needs to see who
+  // supplies each product.
+  const producerName = (order: FoodCornerOrderWithFulfillment) =>
+    producers.find((p) => p.unitRef === order.sellerRef)?.name || `${order.sellerPubkey.slice(0, 12)}…`;
+  const nodeName = (ref: string) => nodes.find((n) => n.ref === ref)?.name || t("ecoPoint.orders.direct");
+
+  // Buyers in the selected cycle (independent of the buyer/seller toggle), used
+  // for the printable per-buyer and all-buyers lists.
+  interface PrintBuyer {
+    name: string;
+    orders: FoodCornerOrderWithFulfillment[];
+    total: number;
+    currency: string;
+  }
+  const buyersInWeek = useMemo<PrintBuyer[]>(() => {
+    const map = new Map<string, PrintBuyer>();
+    for (const o of weekOrders) {
+      let b = map.get(o.buyerPubkey);
+      if (!b) {
+        b = { name: buyerName(o.buyerPubkey), orders: [], total: 0, currency: o.currency || "EUR" };
+        map.set(o.buyerPubkey, b);
+      }
+      b.orders.push(o);
+      b.total += o.total;
+      if (o.currency) b.currency = o.currency;
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekOrders, buyerProfiles]);
+
+  const escapeHtml = (value: string) =>
+    value.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
+
+  const buildPrintHtml = (buyers: PrintBuyer[]) => {
+    const cycle = ordersWeekOffset === 0 ? t("ecoPoint.orders.thisWeek") : weekLabel;
+    const pointNames = Array.from(
+      new Set(buyers.flatMap((b) => b.orders.map((o) => nodeName(o.distributionPoint)))),
+    ).join(", ");
+    const sections = buyers
+      .map((b) => {
+        const rows = b.orders
+          .flatMap((o) =>
+            o.items.map(
+              (it) =>
+                `<tr><td>${escapeHtml(it.listing?.title || it.listingRef.slice(-8))}</td>` +
+                `<td class="num">${escapeHtml(`${it.qty} ${it.unit}`)}</td>` +
+                `<td>${escapeHtml(producerName(o))}</td>` +
+                `<td class="num">${escapeHtml(formatFoodMoney(it.qty * it.unitPrice, it.currency))}</td></tr>`,
+            ),
+          )
+          .join("");
+        return (
+          `<section><h2>${escapeHtml(b.name)}</h2><table><thead><tr>` +
+          `<th>${escapeHtml(t("ecoPoint.print.product"))}</th>` +
+          `<th class="num">${escapeHtml(t("ecoPoint.print.qty"))}</th>` +
+          `<th>${escapeHtml(t("ecoPoint.orders.supplier"))}</th>` +
+          `<th class="num">${escapeHtml(t("ecoPoint.print.price"))}</th>` +
+          `</tr></thead><tbody>${rows}</tbody></table>` +
+          `<p class="total">${escapeHtml(t("ecoPoint.print.total"))}: ${escapeHtml(formatFoodMoney(b.total, b.currency))}</p></section>`
+        );
+      })
+      .join("");
+    return (
+      `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(t("ecoPoint.print.title"))}</title><style>` +
+      `*{font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif}body{margin:24px;color:#111}` +
+      `h1{font-size:20px;margin:0 0 4px}.meta{color:#555;font-size:13px;margin:0 0 18px}` +
+      `section{margin:0 0 22px;page-break-inside:avoid}section+section{page-break-before:always}` +
+      `h2{font-size:16px;margin:0 0 8px;border-bottom:2px solid #111;padding-bottom:4px}` +
+      `table{width:100%;border-collapse:collapse;font-size:13px}` +
+      `th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #ddd}th{background:#f4f4f4}` +
+      `.num{text-align:right;white-space:nowrap}.total{text-align:right;font-weight:700;margin-top:8px;font-size:14px}` +
+      `@media print{body{margin:12mm}}</style></head><body>` +
+      `<h1>${escapeHtml(t("ecoPoint.print.title"))}</h1>` +
+      `<p class="meta">${escapeHtml(pointNames)} · ${escapeHtml(cycle)}</p>` +
+      (sections || `<p>${escapeHtml(t("ecoPoint.orders.weekEmpty"))}</p>`) +
+      `</body></html>`
+    );
+  };
+
+  const printBuyers = (buyers: PrintBuyer[]) => {
+    if (buyers.length === 0) {
+      toast.error(t("ecoPoint.print.empty"));
+      return;
+    }
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast.error(t("ecoPoint.print.popupBlocked"));
+      return;
+    }
+    win.document.write(buildPrintHtml(buyers));
+    win.document.close();
+    win.focus();
+    win.setTimeout(() => win.print(), 300);
+  };
+
   const renderOrderRow = (order: FoodCornerOrderWithFulfillment) => (
-    <div key={order.ref} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-sm">
-      <div className="flex items-center gap-2 min-w-0">
+    <div key={order.ref} className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 text-sm">
+      <div className="flex items-start gap-2 min-w-0">
         <Badge variant={order.fulfillmentStatus ? "default" : "secondary"} className="shrink-0">
           {order.fulfillmentStatus || order.status}
         </Badge>
-        <span className="truncate text-muted-foreground">
-          {order.items
-            .map((item) => `${item.qty} ${item.unit} ${item.listing?.title || item.listingRef.slice(-8)}`)
-            .join(" · ")}
-        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-primary flex items-center gap-1">
+            <Store className="h-3 w-3 shrink-0" />
+            {producerName(order)}
+          </p>
+          <span className="text-muted-foreground">
+            {order.items
+              .map((item) => `${item.qty} ${item.unit} ${item.listing?.title || item.listingRef.slice(-8)}`)
+              .join(" · ")}
+          </span>
+        </div>
       </div>
       <div className="flex items-center gap-3 shrink-0">
         <span className="font-medium">{formatFoodMoney(order.total, order.currency)}</span>
@@ -749,7 +851,15 @@ export default function FoodCornerEcoPoint() {
       )}
 
       <div className="space-y-3 pt-3">
-        <h2 className="text-lg font-semibold">{t("ecoPoint.orders.title")}</h2>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-lg font-semibold">{t("ecoPoint.orders.title")}</h2>
+          {buyersInWeek.length > 0 && (
+            <Button type="button" size="sm" variant="outline" className="gap-2" onClick={() => printBuyers(buyersInWeek)}>
+              <Printer className="h-4 w-4" />
+              {t("ecoPoint.print.all")}
+            </Button>
+          )}
+        </div>
         {myNodeOrders.length === 0 ? (
           <Card>
             <CardContent className="p-5 text-sm text-muted-foreground">
@@ -839,7 +949,25 @@ export default function FoodCornerEcoPoint() {
                             {t("ecoPoint.orders.count", { count: group.orders.length })}
                           </p>
                         </div>
-                        <span className="text-lg font-bold shrink-0">{formatFoodMoney(group.total, group.currency)}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-lg font-bold">{formatFoodMoney(group.total, group.currency)}</span>
+                          {ordersGroupBy === "buyer" && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              title={t("ecoPoint.print.one")}
+                              onClick={() =>
+                                printBuyers([
+                                  { name: group.label, orders: group.orders, total: group.total, currency: group.currency },
+                                ])
+                              }
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <div className="border-t pt-2">
                         {group.buyers ? (
@@ -855,9 +983,23 @@ export default function FoodCornerEcoPoint() {
                                       {t("ecoPoint.orders.count", { count: sub.orders.length })}
                                     </span>
                                   </p>
-                                  <span className="text-sm font-semibold shrink-0">
-                                    {formatFoodMoney(sub.total, group.currency)}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-sm font-semibold">{formatFoodMoney(sub.total, group.currency)}</span>
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-7 w-7"
+                                      title={t("ecoPoint.print.one")}
+                                      onClick={() =>
+                                        printBuyers([
+                                          { name: sub.name, orders: sub.orders, total: sub.total, currency: group.currency },
+                                        ])
+                                      }
+                                    >
+                                      <Printer className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
                                 </div>
                                 <div className="space-y-1 pl-3 border-l">{sub.orders.map(renderOrderRow)}</div>
                               </div>
