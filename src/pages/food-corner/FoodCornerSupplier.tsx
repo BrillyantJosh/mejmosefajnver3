@@ -241,10 +241,10 @@ export default function FoodCornerSupplier() {
       `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(t("supplier.print.title"))}</title><style>` +
       `*{font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif}body{margin:24px;color:#111}` +
       `h1{font-size:20px;margin:0 0 4px}.meta{color:#555;font-size:13px;margin:0 0 12px}` +
-      `section{margin:0 0 22px;page-break-inside:avoid}section+section{page-break-before:always}` +
-      `h2{font-size:16px;margin:0 0 6px;border-bottom:2px solid #111;padding-bottom:4px}` +
-      `table{width:100%;border-collapse:collapse;font-size:14px}` +
-      `th,td{text-align:left;padding:7px 8px;border-bottom:1px solid #ddd}th{background:#f4f4f4}` +
+      `section{margin:0 0 18px}` +
+      `h2{font-size:16px;margin:14px 0 6px;border-bottom:2px solid #111;padding-bottom:4px;page-break-after:avoid}` +
+      `table{width:100%;border-collapse:collapse;font-size:13px}thead{display:table-header-group}tr{page-break-inside:avoid}` +
+      `th,td{text-align:left;padding:5px 8px;border-bottom:1px solid #ddd}th{background:#f4f4f4}` +
       `.num{text-align:right;white-space:nowrap}.total{text-align:right;font-weight:700;margin-top:8px;font-size:14px}` +
       `@media print{body{margin:12mm}}</style></head><body>` +
       `<h1>${escapeHtml(t("supplier.print.title"))}</h1>` +
