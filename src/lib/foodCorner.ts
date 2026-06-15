@@ -1,14 +1,18 @@
 import type { BusinessUnit } from "@/hooks/useNostrBusinessUnits";
 import {
+  FOOD_CORNER_ALLOCATION_KIND,
   FOOD_CORNER_FULFILLMENT_KIND,
   FOOD_CORNER_LISTING_KIND,
   FOOD_CORNER_NODE_KIND,
   FOOD_CORNER_ORDER_KIND,
+  FoodCornerAllocation,
   FoodCornerARef,
+  FoodCornerDeliveredItem,
   FoodCornerFulfillment,
   FoodCornerListing,
   FoodCornerNode,
   FoodCornerOrder,
+  FoodCornerOrderItem,
   FoodCornerOrderWithFulfillment,
   FoodCornerProducer,
   FoodCornerRawEvent,
@@ -252,6 +256,17 @@ export function parseFoodCornerFulfillment(event: FoodCornerRawEvent): FoodCorne
   const settledAmount = Number.parseFloat(settled?.[1] || "");
   const settledRate = Number.parseFloat(settled?.[3] || "");
 
+  // Per-item delivered quantities: ["delivered", listingRef, qty, unit, confirmed]
+  const delivered: FoodCornerDeliveredItem[] = getTagsFull(event, "delivered").map((tag) => {
+    const qty = Number.parseFloat(tag[2] || "");
+    return {
+      listingRef: tag[1] || "",
+      deliveredQty: Number.isFinite(qty) ? qty : 0,
+      unit: tag[3] || "",
+      confirmed: tag[4] === "1",
+    };
+  });
+
   return {
     eventId: event.id,
     pubkey: event.pubkey,
@@ -263,12 +278,50 @@ export function parseFoodCornerFulfillment(event: FoodCornerRawEvent): FoodCorne
     status: (getTag(event, "status") || "received") as FoodCornerFulfillment["status"],
     eta: getTag(event, "eta"),
     deliveredAt: getTag(event, "delivered_at"),
+    delivered,
     adjustTotal: Number.isFinite(adjustValue) ? adjustValue : null,
     adjustCurrency: adjustTotal?.[2] || "EUR",
     settledLanAmount: Number.isFinite(settledAmount) ? settledAmount : null,
     settledRate: Number.isFinite(settledRate) ? settledRate : null,
     settledAt: settled?.[4] || "",
     note: getTag(event, "note"),
+    content: event.content || "",
+    rawEvent: event,
+  };
+}
+
+// KIND 36603 — Točka Obilja per-buyer allocation for a 36601 order.
+export function parseFoodCornerAllocation(event: FoodCornerRawEvent): FoodCornerAllocation | null {
+  const dTag = getTag(event, "d");
+  const orderRef = getTag(event, "a");
+  if (!dTag || !orderRef) return null;
+
+  const items = getTagsFull(event, "alloc").map((tag) => {
+    const qty = Number.parseFloat(tag[2] || "");
+    const unitPrice = Number.parseFloat(tag[4] || "");
+    return {
+      listingRef: tag[1] || "",
+      qty: Number.isFinite(qty) ? qty : 0,
+      unit: tag[3] || "",
+      unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
+      currency: tag[5] || "EUR",
+    };
+  });
+  const totalTag = getTagFull(event, "total");
+  const totalValue = Number.parseFloat(totalTag?.[1] || "");
+
+  return {
+    eventId: event.id,
+    pubkey: event.pubkey,
+    createdAt: event.created_at,
+    dTag,
+    ref: makeARef(FOOD_CORNER_ALLOCATION_KIND, event.pubkey, dTag),
+    orderRef,
+    buyerPubkey: getTag(event, "p"),
+    nodeRef: getTag(event, "distribution_point"),
+    items,
+    total: Number.isFinite(totalValue) ? totalValue : items.reduce((s, i) => s + i.qty * i.unitPrice, 0),
+    currency: totalTag?.[2] || items[0]?.currency || "EUR",
     content: event.content || "",
     rawEvent: event,
   };
@@ -298,15 +351,77 @@ export function latestFulfillmentForOrder(
 export function enrichOrders(
   orders: FoodCornerOrder[],
   fulfillments: FoodCornerFulfillment[],
+  allocations: FoodCornerAllocation[] = [],
 ): FoodCornerOrderWithFulfillment[] {
+  // Latest-wins by orderRef (dedupeReplaceable already collapsed per d-tag, but be defensive).
+  const allocByOrderRef = new Map<string, FoodCornerAllocation>();
+  for (const alloc of allocations) {
+    const existing = allocByOrderRef.get(alloc.orderRef);
+    if (!existing || alloc.createdAt > existing.createdAt) allocByOrderRef.set(alloc.orderRef, alloc);
+  }
   return orders.map((order) => {
     const fulfillmentEvent = latestFulfillmentForOrder(order.ref, fulfillments);
     return {
       ...order,
       fulfillmentEvent,
       fulfillmentStatus: fulfillmentEvent?.status,
+      delivered: fulfillmentEvent?.delivered ?? [],
+      allocation: allocByOrderRef.get(order.ref),
     };
   });
+}
+
+// Join key shared by supplier/Točka/buyer views (listingRef + unit).
+export function foodCornerItemKey(listingRef: string, unit: string): string {
+  return `${listingRef}__${unit}`;
+}
+
+// Per-item reconciliation of ordered vs delivered vs allocated for one order.
+export interface FoodCornerItemRecon {
+  listingRef: string;
+  unit: string;
+  title: string;
+  unitPrice: number;
+  currency: string;
+  orderedQty: number;
+  deliveredQty: number | null; // null = supplier has no delivered line yet
+  allocatedQty: number | null; // null = no allocation yet
+  confirmed: boolean;
+}
+
+export function reconcileOrderItems(order: FoodCornerOrderWithFulfillment): FoodCornerItemRecon[] {
+  const deliveredByKey = new Map<string, FoodCornerDeliveredItem>();
+  for (const d of order.delivered ?? []) deliveredByKey.set(foodCornerItemKey(d.listingRef, d.unit), d);
+  const allocByKey = new Map<string, { qty: number; unitPrice: number; currency: string }>();
+  for (const a of order.allocation?.items ?? [])
+    allocByKey.set(foodCornerItemKey(a.listingRef, a.unit), { qty: a.qty, unitPrice: a.unitPrice, currency: a.currency });
+
+  return order.items.map((item) => {
+    const key = foodCornerItemKey(item.listingRef, item.unit);
+    const d = deliveredByKey.get(key);
+    const a = allocByKey.get(key);
+    return {
+      listingRef: item.listingRef,
+      unit: item.unit,
+      title: item.listing?.title || "",
+      unitPrice: a?.unitPrice ?? item.unitPrice,
+      currency: a?.currency || item.currency,
+      orderedQty: item.qty,
+      deliveredQty: d ? d.deliveredQty : null,
+      allocatedQty: a ? a.qty : null,
+      confirmed: d?.confirmed ?? false,
+    };
+  });
+}
+
+// Quantity the buyer is billed for / shown: allocated when set (incl. 0), else ordered.
+export function effectiveBuyerQty(recon: FoodCornerItemRecon): number {
+  return recon.allocatedQty ?? recon.orderedQty;
+}
+
+// Default delivered qty for the supplier UI: existing reported value, else ordered.
+export function defaultDeliveredQty(item: FoodCornerOrderItem, existing?: FoodCornerDeliveredItem): number {
+  return existing?.deliveredQty ?? item.qty;
 }
 
 export function resolveNodeCatalog(node: FoodCornerNode | undefined, listings: FoodCornerListing[]): FoodCornerListing[] {

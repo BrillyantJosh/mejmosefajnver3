@@ -4,6 +4,7 @@ export const FOOD_CORNER_NODE_KIND = 30905;
 export const FOOD_CORNER_LISTING_KIND = 36500;
 export const FOOD_CORNER_ORDER_KIND = 36601;
 export const FOOD_CORNER_FULFILLMENT_KIND = 36602;
+export const FOOD_CORNER_ALLOCATION_KIND = 36603;
 
 export type FoodCornerBuyerType = "shop" | "restaurant" | "eco_point" | "distributor" | "individual";
 export type FoodCornerNodeStatus = "active" | "paused" | "archived";
@@ -168,6 +169,16 @@ export interface FoodCornerOrder {
   rawEvent: FoodCornerRawEvent;
 }
 
+// Per-item delivered quantity reported by the supplier inside a KIND 36602
+// fulfillment event. Default deliveredQty = ordered qty; `confirmed` marks a line
+// the supplier explicitly confirmed (vs. an untouched default).
+export interface FoodCornerDeliveredItem {
+  listingRef: string;
+  deliveredQty: number;
+  unit: string;
+  confirmed: boolean;
+}
+
 export interface FoodCornerFulfillment {
   eventId: string;
   pubkey: string;
@@ -179,6 +190,7 @@ export interface FoodCornerFulfillment {
   status: FoodCornerFulfillmentStatus;
   eta: string;
   deliveredAt: string;
+  delivered: FoodCornerDeliveredItem[];
   adjustTotal: number | null;
   adjustCurrency: string;
   settledLanAmount: number | null;
@@ -189,7 +201,36 @@ export interface FoodCornerFulfillment {
   rawEvent: FoodCornerRawEvent;
 }
 
+// KIND 36603 — Točka Obilja (distribution node) authored per-buyer allocation for
+// a 36601 order: the quantities the buyer actually receives. Basis for payment +
+// what the buyer is shown. Replaceable by the order's d-tag, author = node owner.
+export interface FoodCornerAllocationItem {
+  listingRef: string;
+  qty: number;
+  unit: string;
+  unitPrice: number;
+  currency: string;
+}
+
+export interface FoodCornerAllocation {
+  eventId: string;
+  pubkey: string; // node/Točka pubkey (author)
+  createdAt: number;
+  dTag: string; // = order d-tag
+  ref: string;
+  orderRef: string; // a-tag → 36601:<buyer>:<orderDTag>
+  buyerPubkey: string; // p-tag
+  nodeRef: string; // distribution_point → 30905:<node>:<dTag>
+  items: FoodCornerAllocationItem[];
+  total: number;
+  currency: string;
+  content: string;
+  rawEvent: FoodCornerRawEvent;
+}
+
 export interface FoodCornerOrderWithFulfillment extends FoodCornerOrder {
   fulfillmentEvent?: FoodCornerFulfillment;
   fulfillmentStatus?: FoodCornerFulfillmentStatus;
+  delivered?: FoodCornerDeliveredItem[];
+  allocation?: FoodCornerAllocation;
 }

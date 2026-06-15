@@ -3,10 +3,12 @@ import { SimplePool } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrBusinessUnits } from "@/hooks/useNostrBusinessUnits";
 import {
+  FOOD_CORNER_ALLOCATION_KIND,
   FOOD_CORNER_FULFILLMENT_KIND,
   FOOD_CORNER_LISTING_KIND,
   FOOD_CORNER_NODE_KIND,
   FOOD_CORNER_ORDER_KIND,
+  FoodCornerAllocation,
   FoodCornerFulfillment,
   FoodCornerListing,
   FoodCornerNode,
@@ -20,6 +22,7 @@ import {
   dedupeReplaceable,
   enrichOrders,
   makeARef,
+  parseFoodCornerAllocation,
   parseFoodCornerFulfillment,
   parseFoodCornerListing,
   parseFoodCornerNode,
@@ -32,6 +35,7 @@ interface FoodCornerData {
   listings: FoodCornerListing[];
   orders: FoodCornerOrderWithFulfillment[];
   fulfillments: FoodCornerFulfillment[];
+  allocations: FoodCornerAllocation[];
   producers: FoodCornerProducer[];
   isLoading: boolean;
   businessUnitsLoading: boolean;
@@ -54,6 +58,7 @@ export function useFoodCornerData(): FoodCornerData {
   const [allListings, setAllListings] = useState<FoodCornerListing[]>([]);
   const [orders, setOrders] = useState<FoodCornerOrderWithFulfillment[]>([]);
   const [fulfillments, setFulfillments] = useState<FoodCornerFulfillment[]>([]);
+  const [allocations, setAllocations] = useState<FoodCornerAllocation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +82,7 @@ export function useFoodCornerData(): FoodCornerData {
             FOOD_CORNER_LISTING_KIND,
             FOOD_CORNER_ORDER_KIND,
             FOOD_CORNER_FULFILLMENT_KIND,
+            FOOD_CORNER_ALLOCATION_KIND,
           ],
           limit: 4000,
         }),
@@ -118,10 +124,18 @@ export function useFoodCornerData(): FoodCornerData {
           .filter(Boolean) as FoodCornerFulfillment[],
       ).sort((a, b) => b.createdAt - a.createdAt);
 
+      const parsedAllocations = dedupeReplaceable(
+        rawEvents
+          .filter((event) => event.kind === FOOD_CORNER_ALLOCATION_KIND)
+          .map(parseFoodCornerAllocation)
+          .filter(Boolean) as FoodCornerAllocation[],
+      ).sort((a, b) => b.createdAt - a.createdAt);
+
       setNodes(parsedNodes);
       setAllListings(parsedListings);
       setFulfillments(parsedFulfillments);
-      setOrders(enrichOrders(parsedOrders, parsedFulfillments));
+      setAllocations(parsedAllocations);
+      setOrders(enrichOrders(parsedOrders, parsedFulfillments, parsedAllocations));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch Eco Point data";
       console.error("Eco Point fetch failed:", err);
@@ -166,6 +180,7 @@ export function useFoodCornerData(): FoodCornerData {
     listings: eligibleListings,
     orders,
     fulfillments,
+    allocations,
     producers,
     // Don't block the whole module on the heavy business-units fetch — the orderable
     // catalog no longer needs it. Producer enrichment (names) fills in progressively

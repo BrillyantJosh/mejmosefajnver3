@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ChevronLeft, ChevronRight, ImagePlus, Loader2, MapPin, Plus, Printer, RefreshCw, Save, Sparkles, Store, X } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, ImagePlus, Loader2, MapPin, Plus, Printer, RefreshCw, Save, Scale, Sparkles, Store, X } from "lucide-react";
 import { toast } from "sonner";
 import { AddressSearch } from "@/components/AddressSearch";
 import LocationPicker from "@/components/LocationPicker";
@@ -18,13 +18,15 @@ import { useFoodCornerPublisher } from "@/hooks/useFoodCornerPublisher";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { useTranslation } from "@/i18n/I18nContext";
 import foodCornerTranslations, { FoodCornerKey } from "@/i18n/modules/foodCorner";
-import { FOOD_CORNER_NODE_KIND, FoodCornerNodeStatus, FoodCornerOrderWithFulfillment } from "@/types/foodCorner";
+import { FOOD_CORNER_ALLOCATION_KIND, FOOD_CORNER_NODE_KIND, FoodCornerNodeStatus, FoodCornerOrderWithFulfillment } from "@/types/foodCorner";
 import {
   describeFoodCornerPause,
+  foodCornerItemKey,
   foodCornerWeekRange,
   formatFoodMoney,
   generateFoodCornerId,
   groupOrdersByNode,
+  reconcileOrderItems,
   slugifyFoodCorner,
 } from "@/lib/foodCorner";
 import { uploadToLanaMedia } from "@/lib/lanaMediaUpload";
@@ -300,6 +302,88 @@ export default function FoodCornerEcoPoint() {
   // stay consistent with the week paginator and detailed list below.
   const groupedOrders = useMemo(() => groupOrdersByNode(weekOrders), [weekOrders]);
 
+  // Shortage summary: per product across ALL buyers in the cycle — total ordered
+  // vs total delivered (from supplier 36602). Flags where delivered < ordered.
+  interface ShortageRow {
+    key: string;
+    title: string;
+    unit: string;
+    ordered: number;
+    delivered: number;
+    hasDelivered: boolean;
+  }
+  const shortageRows = useMemo<ShortageRow[]>(() => {
+    const map = new Map<string, ShortageRow>();
+    for (const order of weekOrders) {
+      for (const r of reconcileOrderItems(order)) {
+        const key = foodCornerItemKey(r.listingRef, r.unit);
+        let row = map.get(key);
+        if (!row) {
+          row = { key, title: r.title || r.listingRef.slice(-6), unit: r.unit, ordered: 0, delivered: 0, hasDelivered: false };
+          map.set(key, row);
+        }
+        row.ordered += r.orderedQty;
+        if (r.deliveredQty != null) {
+          row.delivered += r.deliveredQty;
+          row.hasDelivered = true;
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.title.localeCompare(b.title));
+  }, [weekOrders]);
+
+  // Per-buyer allocation editor state: orderDTag → itemKey → qty string.
+  const [allocState, setAllocState] = useState<Record<string, Record<string, string>>>({});
+  const [allocOpen, setAllocOpen] = useState<Record<string, boolean>>({});
+
+  // Current allocation rows for an order: local edits override the published
+  // allocation, which defaults to delivered ?? ordered.
+  const allocRowsFor = (order: FoodCornerOrderWithFulfillment) => {
+    const local = allocState[order.dTag] || {};
+    return reconcileOrderItems(order).map((r) => {
+      const key = foodCornerItemKey(r.listingRef, r.unit);
+      const stored = local[key];
+      const defaultQty = r.allocatedQty ?? r.deliveredQty ?? r.orderedQty;
+      return { recon: r, key, qty: stored ?? String(defaultQty) };
+    });
+  };
+
+  const setAllocQty = (orderDTag: string, key: string, qty: string) =>
+    setAllocState((cur) => ({ ...cur, [orderDTag]: { ...(cur[orderDTag] || {}), [key]: qty } }));
+
+  // Publish KIND 36603 allocation for one order (full per-item set, latest-wins).
+  const publishAllocation = async (order: FoodCornerOrderWithFulfillment) => {
+    if (!myNodeRefs.has(order.distributionPoint)) return;
+    const rows = allocRowsFor(order);
+    const total = rows.reduce((sum, { recon, qty }) => sum + (Number.parseFloat(qty) || 0) * recon.unitPrice, 0);
+    const currency = rows[0]?.recon.currency || order.currency || "EUR";
+    try {
+      await publishEvent(
+        FOOD_CORNER_ALLOCATION_KIND,
+        [
+          ["d", order.dTag],
+          ["a", order.ref],
+          ["p", order.buyerPubkey],
+          ["distribution_point", order.distributionPoint],
+          ...rows.map(({ recon, qty }) => [
+            "alloc",
+            recon.listingRef,
+            String(Number.parseFloat(qty) || 0),
+            recon.unit,
+            recon.unitPrice.toFixed(2),
+            recon.currency,
+          ]),
+          ["total", total.toFixed(2), currency],
+        ],
+        "",
+      );
+      toast.success(t("ecoPoint.toast.allocPublished"));
+      await refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("ecoPoint.toast.allocFailed"));
+    }
+  };
+
   interface BuyerSub {
     pubkey: string;
     name: string;
@@ -452,30 +536,73 @@ export default function FoodCornerEcoPoint() {
     win.setTimeout(() => win.print(), 300);
   };
 
-  const renderOrderRow = (order: FoodCornerOrderWithFulfillment) => (
-    <div key={order.ref} className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 text-sm">
-      <div className="flex items-start gap-2 min-w-0">
-        <Badge variant={order.fulfillmentStatus ? "default" : "secondary"} className="shrink-0">
-          {order.fulfillmentStatus || order.status}
-        </Badge>
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-primary flex items-center gap-1">
-            <Store className="h-3 w-3 shrink-0" />
-            {producerName(order)}
-          </p>
-          <span className="text-muted-foreground">
-            {order.items.map((item) => `${item.qty} ${item.unit} ${itemLabel(item)}`).join(" · ")}
-          </span>
+  const renderOrderRow = (order: FoodCornerOrderWithFulfillment) => {
+    const open = allocOpen[order.dTag] ?? false;
+    const rows = allocRowsFor(order);
+    return (
+      <div key={order.ref} className="text-sm">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1">
+          <div className="flex items-start gap-2 min-w-0">
+            <Badge variant={order.fulfillmentStatus ? "default" : "secondary"} className="shrink-0">
+              {order.fulfillmentStatus || order.status}
+            </Badge>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-primary flex items-center gap-1">
+                <Store className="h-3 w-3 shrink-0" />
+                {producerName(order)}
+              </p>
+              <span className="text-muted-foreground">
+                {order.items.map((item) => `${item.qty} ${item.unit} ${itemLabel(item)}`).join(" · ")}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {order.allocation && <Check className="h-4 w-4 text-green-600" />}
+            <span className="font-medium">{formatFoodMoney(order.allocation?.total ?? order.total, order.currency)}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1"
+              onClick={() => setAllocOpen((c) => ({ ...c, [order.dTag]: !open }))}
+            >
+              <Scale className="h-3.5 w-3.5" />
+              {t("ecoPoint.alloc.allocate")}
+            </Button>
+          </div>
         </div>
+        {open && (
+          <div className="mt-2 rounded-md border p-3 space-y-2 bg-muted/30">
+            {rows.map(({ recon, key, qty }) => (
+              <div key={key} className="flex items-center gap-2 flex-wrap">
+                <span className="flex-1 min-w-0 truncate">
+                  {recon.title || recon.listingRef.slice(-6)}
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {t("ecoPoint.alloc.ordered")} {recon.orderedQty}
+                    {recon.deliveredQty != null ? ` · ${t("ecoPoint.alloc.delivered")} ${recon.deliveredQty}` : ""} {recon.unit}
+                  </span>
+                </span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={qty}
+                  onChange={(e) => setAllocQty(order.dTag, key, e.target.value)}
+                  className="h-9 w-20 shrink-0 tabular-nums"
+                />
+                <span className="text-muted-foreground w-10 shrink-0">{recon.unit}</span>
+              </div>
+            ))}
+            <Button type="button" size="sm" className="gap-2" disabled={isPublishing} onClick={() => publishAllocation(order)}>
+              <Check className="h-4 w-4" />
+              {t("ecoPoint.alloc.publish")}
+            </Button>
+          </div>
+        )}
       </div>
-      <div className="flex items-center gap-3 shrink-0">
-        <span className="font-medium">{formatFoodMoney(order.total, order.currency)}</span>
-        <span className="text-xs text-muted-foreground">
-          {new Date(order.createdAt * 1000).toLocaleString(ordersLocale)}
-        </span>
-      </div>
-    </div>
-  );
+    );
+  };
   const pickupLatNumber = Number.parseFloat(pickupLat);
   const pickupLonNumber = Number.parseFloat(pickupLon);
   const hasPickupCoordinates = Number.isFinite(pickupLatNumber) && Number.isFinite(pickupLonNumber);
@@ -884,6 +1011,40 @@ export default function FoodCornerEcoPoint() {
                 );
               })}
             </div>
+
+            {/* Shortage summary: ordered vs delivered per product across all buyers */}
+            {shortageRows.some((r) => r.hasDelivered) && (
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                    {t("ecoPoint.shortage.title")}
+                  </p>
+                  <div className="rounded-md border divide-y">
+                    {shortageRows
+                      .filter((r) => r.hasDelivered)
+                      .map((r) => {
+                        const short = r.delivered < r.ordered;
+                        return (
+                          <div key={r.key} className="flex items-center justify-between gap-3 p-2.5 text-sm">
+                            <span className="font-medium truncate">{r.title}</span>
+                            <span className="shrink-0 tabular-nums flex items-center gap-3">
+                              <span className="text-muted-foreground">
+                                {t("ecoPoint.shortage.ordered")} {r.ordered} · {t("ecoPoint.shortage.delivered")} {r.delivered} {r.unit}
+                              </span>
+                              {short && (
+                                <Badge variant="destructive">
+                                  −{Number((r.ordered - r.delivered).toFixed(2))} {r.unit}
+                                </Badge>
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Group-by toggle + week paginator (latest week first, page back week by week) */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="inline-flex rounded-lg border p-0.5">

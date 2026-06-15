@@ -19,11 +19,13 @@ import {
 } from "@/types/foodCorner";
 import {
   describeFoodCornerPause,
+  effectiveBuyerQty,
   foodCornerOrderingWindow,
   foodCornerWeekRange,
   formatFoodMoney,
   generateFoodCornerId,
   isFoodCornerNodePaused,
+  reconcileOrderItems,
 } from "@/lib/foodCorner";
 import type { FoodCornerNode } from "@/types/foodCorner";
 
@@ -244,8 +246,9 @@ export default function FoodCornerOrder() {
         currency: string;
         createdAt: number;
         hasFulfillment: boolean;
+        hasAllocation: boolean;
         statuses: Set<string>;
-        items: Map<string, { title: string; unit: string; qty: number }>;
+        items: Map<string, { title: string; unit: string; qty: number; orderedQty: number }>;
       }
     >();
     for (const order of myOrdersInWeek) {
@@ -257,26 +260,35 @@ export default function FoodCornerOrder() {
           currency: order.currency || "EUR",
           createdAt: 0,
           hasFulfillment: false,
+          hasAllocation: false,
           statuses: new Set(),
           items: new Map(),
         };
         map.set(order.distributionPoint, g);
       }
-      g.total += order.total;
+      // Prefer the Točka Obilja allocation (KIND 36603) when present — that's the
+      // quantity/total the buyer actually receives; else fall back to ordered.
+      g.total += order.allocation?.total ?? order.total;
       if (order.currency) g.currency = order.currency;
       g.createdAt = Math.max(g.createdAt, order.createdAt);
       g.hasFulfillment = g.hasFulfillment || !!order.fulfillmentStatus;
+      g.hasAllocation = g.hasAllocation || !!order.allocation;
       g.statuses.add(order.fulfillmentStatus || order.status);
-      for (const item of order.items) {
-        const key = `${item.listingRef}__${item.unit}`;
+      for (const recon of reconcileOrderItems(order)) {
+        const key = `${recon.listingRef}__${recon.unit}`;
+        const qty = effectiveBuyerQty(recon);
         const ex = g.items.get(key);
-        if (ex) ex.qty += item.qty;
-        else
+        if (ex) {
+          ex.qty += qty;
+          ex.orderedQty += recon.orderedQty;
+        } else {
           g.items.set(key, {
-            title: item.listing?.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`,
-            unit: item.unit,
-            qty: item.qty,
+            title: recon.title || `${t("supplier.unknownProduct")} (${recon.listingRef.slice(-6)})`,
+            unit: recon.unit,
+            qty,
+            orderedQty: recon.orderedQty,
           });
+        }
       }
     }
     return [...map.values()].sort((a, b) => b.createdAt - a.createdAt);
@@ -749,6 +761,7 @@ export default function FoodCornerOrder() {
                             <Badge variant={group.hasFulfillment ? "default" : "secondary"}>
                               {[...group.statuses].join(" / ")}
                             </Badge>
+                            {group.hasAllocation && <Badge variant="outline">{t("order.myOrders.allocated")}</Badge>}
                           </div>
                           {node && (
                             <p className="text-xs font-medium text-primary mt-1 flex items-center gap-1">
@@ -758,7 +771,13 @@ export default function FoodCornerOrder() {
                           )}
                           <p className="text-xs text-muted-foreground mt-1">
                             {[...group.items.values()]
-                              .map((item) => `${item.qty} ${item.unit} ${item.title}`)
+                              .map(
+                                (item) =>
+                                  `${item.qty} ${item.unit} ${item.title}` +
+                                  (item.qty !== item.orderedQty
+                                    ? ` (${t("order.myOrders.orderedShort")} ${item.orderedQty})`
+                                    : ""),
+                              )
                               .join(" · ")}
                           </p>
                         </div>
