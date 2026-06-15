@@ -5,6 +5,7 @@ export const FOOD_CORNER_LISTING_KIND = 36500;
 export const FOOD_CORNER_ORDER_KIND = 36601;
 export const FOOD_CORNER_FULFILLMENT_KIND = 36602;
 export const FOOD_CORNER_ALLOCATION_KIND = 36603;
+export const FOOD_CORNER_DELIVERY_KIND = 36604;
 
 export type FoodCornerBuyerType = "shop" | "restaurant" | "eco_point" | "distributor" | "individual";
 export type FoodCornerNodeStatus = "active" | "paused" | "archived";
@@ -169,16 +170,6 @@ export interface FoodCornerOrder {
   rawEvent: FoodCornerRawEvent;
 }
 
-// Per-item delivered quantity reported by the supplier inside a KIND 36602
-// fulfillment event. Default deliveredQty = ordered qty; `confirmed` marks a line
-// the supplier explicitly confirmed (vs. an untouched default).
-export interface FoodCornerDeliveredItem {
-  listingRef: string;
-  deliveredQty: number;
-  unit: string;
-  confirmed: boolean;
-}
-
 export interface FoodCornerFulfillment {
   eventId: string;
   pubkey: string;
@@ -190,13 +181,34 @@ export interface FoodCornerFulfillment {
   status: FoodCornerFulfillmentStatus;
   eta: string;
   deliveredAt: string;
-  delivered: FoodCornerDeliveredItem[];
   adjustTotal: number | null;
   adjustCurrency: string;
   settledLanAmount: number | null;
   settledRate: number | null;
   settledAt: string;
   note: string;
+  content: string;
+  rawEvent: FoodCornerRawEvent;
+}
+
+// KIND 36604 — supplier-authored aggregate delivery to a Točka Obilja for one cycle:
+// the actual total quantity the supplier brought per product (reduced if short). NOT
+// per buyer. The Točka reads this to detect shortages. Replaceable per (supplier,
+// node, cycle); address 36604:<supplier_hex>:<nodeDTag>__<cycleStartEpoch>.
+export interface FoodCornerDeliveredItem {
+  listingRef: string;
+  qty: number;
+  unit: string;
+}
+
+export interface FoodCornerSupplierDelivery {
+  eventId: string;
+  pubkey: string; // supplier pubkey (author)
+  createdAt: number;
+  dTag: string;
+  nodeRef: string; // a-tag → 30905:<node>:<dTag>
+  cycleStart: number; // epoch seconds of the cycle start (pickup-day week start)
+  items: FoodCornerDeliveredItem[];
   content: string;
   rawEvent: FoodCornerRawEvent;
 }
@@ -231,6 +243,5 @@ export interface FoodCornerAllocation {
 export interface FoodCornerOrderWithFulfillment extends FoodCornerOrder {
   fulfillmentEvent?: FoodCornerFulfillment;
   fulfillmentStatus?: FoodCornerFulfillmentStatus;
-  delivered?: FoodCornerDeliveredItem[];
   allocation?: FoodCornerAllocation;
 }

@@ -1,37 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, PackageCheck, Printer, RefreshCw, Truck, XCircle } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, Loader2, MapPin, Printer, RefreshCw, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFoodCornerData } from "@/hooks/useFoodCornerData";
 import { useFoodCornerPublisher } from "@/hooks/useFoodCornerPublisher";
-import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { useTranslation } from "@/i18n/I18nContext";
 import foodCornerTranslations, { FoodCornerKey } from "@/i18n/modules/foodCorner";
 import {
-  FOOD_CORNER_FULFILLMENT_KIND,
-  FoodCornerFulfillmentStatus,
+  FOOD_CORNER_DELIVERY_KIND,
   FoodCornerOrderWithFulfillment,
   type FoodCornerNode,
 } from "@/types/foodCorner";
-import { foodCornerItemKey, foodCornerOrderingWindow, foodCornerWeekRange, formatFoodMoney, reconcileOrderItems } from "@/lib/foodCorner";
+import { foodCornerItemKey, foodCornerOrderingWindow, foodCornerWeekRange, formatFoodMoney } from "@/lib/foodCorner";
 
 // Countable units that must be whole numbers (mirrors the buyer order form).
 const WHOLE_UNITS = new Set(["piece", "pieces", "pcs", "kos", "kom", "komad", "kpl", "unit", "units"]);
 const isWholeUnit = (unit?: string): boolean => WHOLE_UNITS.has((unit || "").trim().toLowerCase());
-
-const STATUS_ACTIONS: Array<{ status: FoodCornerFulfillmentStatus; labelKey: FoodCornerKey; icon: LucideIcon; variant?: "default" | "outline" | "destructive" }> = [
-  { status: "confirmed", labelKey: "supplier.action.confirm", icon: CheckCircle2, variant: "default" },
-  { status: "rejected", labelKey: "supplier.action.reject", icon: XCircle, variant: "destructive" },
-  { status: "packed", labelKey: "supplier.action.packed", icon: PackageCheck, variant: "outline" },
-  { status: "delivered", labelKey: "supplier.action.delivered", icon: Truck, variant: "outline" },
-  { status: "completed", labelKey: "supplier.action.completed", icon: CheckCircle2, variant: "outline" },
-];
 
 function formatCountdown(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -49,6 +37,7 @@ function formatCountdown(ms: number): string {
 
 interface ProductAgg {
   key: string;
+  listingRef: string;
   title: string;
   unit: string;
   qty: number;
@@ -67,15 +56,14 @@ interface NodeGroup {
 export default function FoodCornerSupplier() {
   const { session } = useAuth();
   const { t, lang } = useTranslation(foodCornerTranslations);
-  const { nodes, listings, orders, isLoading, refetch } = useFoodCornerData();
+  const { nodes, listings, orders, isLoading, refetch, deliveries } = useFoodCornerData();
   const { publishEvent, isPublishing } = useFoodCornerPublisher();
   const locale = lang === "sl" ? "sl-SI" : undefined;
 
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  // Per-order, per-item delivered state: orderDTag → itemKey → { qty, confirmed }.
-  // Seeded lazily from the order's reconciliation; each publish re-emits the FULL set.
-  const [deliveredState, setDeliveredState] = useState<Record<string, Record<string, { qty: string; confirmed: boolean }>>>({});
-  const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+  // Per-product delivered TOTAL the supplier brings to a point (aggregate, not per
+  // buyer): nodeRef → productKey → qty string. The supplier delivers the whole
+  // amount to the Točka Obilja, reduced if short.
+  const [deliveredTotals, setDeliveredTotals] = useState<Record<string, Record<string, string>>>({});
 
   // Live clock so the order-cutoff countdown updates every second.
   const [now, setNow] = useState(() => new Date());
@@ -92,10 +80,6 @@ export default function FoodCornerSupplier() {
     [orders, session?.nostrHexId],
   );
   const nodeByRef = useMemo(() => new Map(nodes.map((node) => [node.ref, node])), [nodes]);
-  const buyerPubkeys = useMemo(() => Array.from(new Set(supplierOrders.map((o) => o.buyerPubkey))), [supplierOrders]);
-  const { profiles: buyerProfiles } = useNostrProfilesCacheBulk(buyerPubkeys);
-  const buyerName = (pk: string) =>
-    buyerProfiles.get(pk)?.display_name || buyerProfiles.get(pk)?.full_name || `${pk.slice(0, 10)}…`;
 
   // Orders are shown per Točka Obilja cycle (pickup day → pickup day, e.g.
   // Thursday→Thursday — the delivery/pickup day). Anchor to the pickup day of
@@ -113,6 +97,10 @@ export default function FoodCornerSupplier() {
   const weekLabel = `${week.start.toLocaleDateString(locale, { day: "numeric", month: "short" })} – ${new Date(
     week.end.getTime() - 1,
   ).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" })}`;
+  // Cycle start for a node = start of the current cycle anchored to THAT node's
+  // pickup day (so it matches the Točka's per-node cycle key for 36604).
+  const nodeCycleStart = (node?: FoodCornerNode) =>
+    Math.floor(foodCornerWeekRange(weekOffset, node?.pickups?.[0]?.day || anchorDay).start.getTime() / 1000);
 
   const ordersInWeek = useMemo(
     () =>
@@ -154,7 +142,7 @@ export default function FoodCornerSupplier() {
         let product = group.products.find((p) => p.key === key);
         if (!product) {
           const title = item.listing?.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`;
-          product = { key, title, unit: item.unit, qty: 0 };
+          product = { key, listingRef: item.listingRef, title, unit: item.unit, qty: 0 };
           group.products.push(product);
         }
         product.qty += item.qty;
@@ -192,81 +180,55 @@ export default function FoodCornerSupplier() {
     };
   };
 
-  // Current delivered qty/confirmed for one order item: local edits override the
-  // last-published value, which falls back to the ordered qty.
-  const itemDeliveredState = (order: FoodCornerOrderWithFulfillment) => {
-    const recon = reconcileOrderItems(order);
-    const local = deliveredState[order.dTag] || {};
-    return recon.map((r) => {
-      const key = foodCornerItemKey(r.listingRef, r.unit);
-      const stored = local[key];
-      return {
-        recon: r,
-        key,
-        qty: stored ? stored.qty : String(r.deliveredQty ?? r.orderedQty),
-        confirmed: stored ? stored.confirmed : r.deliveredQty != null ? r.confirmed : false,
-      };
-    });
-  };
-
-  const setItemDelivered = (orderDTag: string, key: string, patch: Partial<{ qty: string; confirmed: boolean }>) =>
-    setDeliveredState((cur) => {
-      const order = cur[orderDTag] || {};
-      const existing = order[key] || { qty: "", confirmed: false };
-      return { ...cur, [orderDTag]: { ...order, [key]: { ...existing, ...patch } } };
-    });
-
-  // Build the full set of ["delivered", ...] tags for an order (latest-wins → MUST
-  // re-emit every item on every publish, or delivered data silently disappears).
-  const buildDeliveredTags = (order: FoodCornerOrderWithFulfillment): string[][] =>
-    itemDeliveredState(order).map(({ recon, qty, confirmed }) => [
-      "delivered",
-      recon.listingRef,
-      String(Number.parseFloat(qty) || 0),
-      recon.unit,
-      confirmed ? "1" : "0",
-    ]);
-
-  // Single builder for ALL KIND 36602 writes — always carries current delivered lines.
-  const publishFulfillment = async (
-    order: FoodCornerOrderWithFulfillment,
-    status: FoodCornerFulfillmentStatus,
-    note: string,
-  ) => {
-    const trimmed = note.trim();
-    await publishEvent(
-      FOOD_CORNER_FULFILLMENT_KIND,
-      [
-        ["d", order.dTag],
-        ["a", order.ref],
-        ["p", order.buyerPubkey],
-        ["status", status],
-        ...(status === "delivered" || status === "completed" ? [["delivered_at", new Date().toISOString()]] : []),
-        ...buildDeliveredTags(order),
-        ...(trimmed ? [["note", trimmed]] : []),
-      ],
-      trimmed,
-    );
-  };
-
-  // Publish a fulfillment status (KIND 36602) for EVERY order at this point.
-  // One status change covers the whole point's batch (delivered lines preserved).
-  const publishGroupStatus = async (group: NodeGroup, status: FoodCornerFulfillmentStatus) => {
-    const note = notes[group.nodeRef] || "";
-    try {
-      for (const order of group.orders) await publishFulfillment(order, status, note);
-      toast.success(t("supplier.toast.published"));
-      setNotes((current) => ({ ...current, [group.nodeRef]: "" }));
-      await refetch();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("supplier.toast.failed"));
+  // This supplier's already-published delivered totals for a node this cycle.
+  const publishedDeliveredFor = (group: NodeGroup) => {
+    const cs = nodeCycleStart(group.node);
+    const map = new Map<string, number>();
+    for (const d of deliveries) {
+      if (d.pubkey !== session?.nostrHexId || d.nodeRef !== group.nodeRef || d.cycleStart !== cs) continue;
+      for (const it of d.items) map.set(foodCornerItemKey(it.listingRef, it.unit), it.qty);
     }
+    return map;
   };
 
-  // Publish delivered quantities for a single order (keeps its current status).
-  const publishOrderDelivery = async (order: FoodCornerOrderWithFulfillment, note: string) => {
+  // Delivered value shown for a product: local edit → last published (this cycle) →
+  // default = ordered total.
+  const deliveredValue = (nodeRef: string, product: ProductAgg, publishedMap: Map<string, number>): string => {
+    const local = deliveredTotals[nodeRef]?.[product.key];
+    if (local !== undefined) return local;
+    const published = publishedMap.get(product.key);
+    return String(published ?? product.qty);
+  };
+
+  const setDelivered = (nodeRef: string, key: string, qty: string) =>
+    setDeliveredTotals((cur) => ({ ...cur, [nodeRef]: { ...(cur[nodeRef] || {}), [key]: qty } }));
+
+  // Publish the supplier's aggregate delivery for a point (KIND 36604) — one event
+  // per (supplier, node, cycle), re-emitting ALL products (replaceable, latest-wins).
+  const publishDelivery = async (group: NodeGroup) => {
+    const node = group.node;
+    if (!node) {
+      toast.error(t("supplier.toast.failed"));
+      return;
+    }
+    const cs = nodeCycleStart(node);
+    const publishedMap = publishedDeliveredFor(group);
     try {
-      await publishFulfillment(order, order.fulfillmentStatus || "confirmed", note);
+      await publishEvent(
+        FOOD_CORNER_DELIVERY_KIND,
+        [
+          ["d", `${node.dTag}__${cs}`],
+          ["a", group.nodeRef],
+          ["cycle_start", String(cs)],
+          ...group.products.map((p) => [
+            "delivered",
+            p.listingRef,
+            String(Number.parseFloat(deliveredValue(group.nodeRef, p, publishedMap)) || 0),
+            p.unit,
+          ]),
+        ],
+        "",
+      );
       toast.success(t("supplier.toast.deliveredPublished"));
       await refetch();
     } catch (err) {
@@ -459,126 +421,54 @@ export default function FoodCornerSupplier() {
                     )}
                   </div>
 
-                  {/* Aggregated product totals to bring */}
-                  <div>
-                    <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">{t("supplier.toBring")}</p>
-                    <div className="rounded-md border divide-y">
-                      {group.products.map((product) => (
-                        <div key={product.key} className="flex items-center justify-between gap-3 p-3.5">
-                          <span className="text-base font-medium truncate">{product.title}</span>
-                          <span className="text-lg font-bold shrink-0 tabular-nums">
-                            {product.qty} {product.unit}
-                          </span>
+                  {/* Delivered totals to the point — the supplier brings the whole
+                      amount per product (reduced if short), NOT per buyer. */}
+                  {(() => {
+                    const publishedMap = publishedDeliveredFor(group);
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("supplier.delivered.title")}</p>
+                        <div className="rounded-md border divide-y">
+                          {group.products.map((product) => {
+                            const val = deliveredValue(group.nodeRef, product, publishedMap);
+                            const short = (Number.parseFloat(val) || 0) < product.qty;
+                            return (
+                              <div key={product.key} className="flex items-center gap-2 p-3 flex-wrap">
+                                <span className="flex-1 min-w-0">
+                                  <span className="text-base font-medium">{product.title}</span>
+                                  <span className="text-sm text-muted-foreground">
+                                    {" · "}
+                                    {t("supplier.delivered.ordered")} {product.qty} {product.unit}
+                                  </span>
+                                </span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step={isWholeUnit(product.unit) ? "1" : "0.1"}
+                                  inputMode={isWholeUnit(product.unit) ? "numeric" : "decimal"}
+                                  value={val}
+                                  onChange={(e) => {
+                                    let v = e.target.value;
+                                    if (isWholeUnit(product.unit) && v) v = String(Math.floor(Number.parseFloat(v) || 0));
+                                    setDelivered(group.nodeRef, product.key, v);
+                                  }}
+                                  className={`h-10 w-24 shrink-0 text-lg font-bold tabular-nums ${short ? "border-amber-500" : ""}`}
+                                />
+                                <span className="text-sm text-muted-foreground w-10 shrink-0">{product.unit}</span>
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Per-order delivered quantities — supplier confirms item by item. */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("supplier.delivered.title")}</p>
-                    {group.orders.map((order) => {
-                      const open = expandedOrders[order.dTag] ?? false;
-                      const rows = itemDeliveredState(order);
-                      const allConfirmed = rows.length > 0 && rows.every((r) => r.confirmed);
-                      return (
-                        <div key={order.dTag} className="rounded-md border">
-                          <button
-                            type="button"
-                            className="w-full flex items-center justify-between gap-2 p-3 text-left"
-                            onClick={() => setExpandedOrders((c) => ({ ...c, [order.dTag]: !open }))}
-                          >
-                            <span className="flex items-center gap-2 min-w-0">
-                              <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`} />
-                              <span className="font-medium truncate">{buyerName(order.buyerPubkey)}</span>
-                              {allConfirmed && <Check className="h-4 w-4 text-green-600 shrink-0" />}
-                            </span>
-                            <span className="text-sm text-muted-foreground shrink-0">
-                              {formatFoodMoney(order.total, order.currency)}
-                            </span>
-                          </button>
-                          {open && (
-                            <div className="border-t p-3 space-y-2">
-                              {rows.map(({ recon, key, qty, confirmed }) => {
-                                const short = recon.deliveredQty != null && recon.deliveredQty < recon.orderedQty;
-                                return (
-                                  <div key={key} className="flex items-center gap-2 flex-wrap">
-                                    <span className="flex-1 min-w-0 text-sm truncate">
-                                      {recon.title || recon.listingRef.slice(-6)}
-                                      <span className="text-muted-foreground"> · {t("supplier.delivered.ordered")} {recon.orderedQty} {recon.unit}</span>
-                                    </span>
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      step={isWholeUnit(recon.unit) ? "1" : "0.1"}
-                                      inputMode={isWholeUnit(recon.unit) ? "numeric" : "decimal"}
-                                      value={qty}
-                                      onChange={(e) => {
-                                        let v = e.target.value;
-                                        if (isWholeUnit(recon.unit) && v) v = String(Math.floor(Number.parseFloat(v) || 0));
-                                        setItemDelivered(order.dTag, key, { qty: v });
-                                      }}
-                                      className={`h-9 w-20 shrink-0 tabular-nums ${short ? "border-amber-500" : ""}`}
-                                    />
-                                    <span className="text-sm text-muted-foreground w-10 shrink-0">{recon.unit}</span>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant={confirmed ? "default" : "outline"}
-                                      className="gap-1 shrink-0"
-                                      onClick={() => setItemDelivered(order.dTag, key, { confirmed: !confirmed })}
-                                    >
-                                      <Check className="h-4 w-4" />
-                                      {confirmed ? t("supplier.delivered.confirmed") : t("supplier.delivered.confirm")}
-                                    </Button>
-                                  </div>
-                                );
-                              })}
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="gap-2"
-                                disabled={isPublishing}
-                                onClick={() => publishOrderDelivery(order, notes[group.nodeRef] || "")}
-                              >
-                                <Truck className="h-4 w-4" />
-                                {t("supplier.delivered.publish")}
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Per-point status: note + actions, published for every order at this point */}
-                  <div className="space-y-2 pt-1">
-                    <Textarea
-                      value={notes[group.nodeRef] || ""}
-                      onChange={(event) => setNotes((current) => ({ ...current, [group.nodeRef]: event.target.value }))}
-                      placeholder={t("supplier.notePlaceholder")}
-                      rows={2}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      {STATUS_ACTIONS.map((action) => {
-                        const Icon = action.icon;
-                        return (
-                          <Button
-                            key={action.status}
-                            size="sm"
-                            variant={action.variant || "outline"}
-                            onClick={() => publishGroupStatus(group, action.status)}
-                            disabled={isPublishing}
-                            className="gap-2"
-                          >
-                            <Icon className="h-4 w-4" />
-                            {t(action.labelKey)}
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <Button type="button" size="sm" className="gap-2" disabled={isPublishing} onClick={() => publishDelivery(group)}>
+                            <Truck className="h-4 w-4" />
+                            {t("supplier.delivered.publish")}
                           </Button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-sm text-muted-foreground">{t("supplier.ordersCount", { count: group.orderCount })}</p>
-                  </div>
+                          <p className="text-sm text-muted-foreground">{t("supplier.ordersCount", { count: group.orderCount })}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             );

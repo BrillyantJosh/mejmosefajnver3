@@ -7,15 +7,14 @@ import {
   FOOD_CORNER_ORDER_KIND,
   FoodCornerAllocation,
   FoodCornerARef,
-  FoodCornerDeliveredItem,
   FoodCornerFulfillment,
   FoodCornerListing,
   FoodCornerNode,
   FoodCornerOrder,
-  FoodCornerOrderItem,
   FoodCornerOrderWithFulfillment,
   FoodCornerProducer,
   FoodCornerRawEvent,
+  FoodCornerSupplierDelivery,
 } from "@/types/foodCorner";
 
 const SHOP_BASE_URL = "https://shop.lanapays.us";
@@ -256,17 +255,6 @@ export function parseFoodCornerFulfillment(event: FoodCornerRawEvent): FoodCorne
   const settledAmount = Number.parseFloat(settled?.[1] || "");
   const settledRate = Number.parseFloat(settled?.[3] || "");
 
-  // Per-item delivered quantities: ["delivered", listingRef, qty, unit, confirmed]
-  const delivered: FoodCornerDeliveredItem[] = getTagsFull(event, "delivered").map((tag) => {
-    const qty = Number.parseFloat(tag[2] || "");
-    return {
-      listingRef: tag[1] || "",
-      deliveredQty: Number.isFinite(qty) ? qty : 0,
-      unit: tag[3] || "",
-      confirmed: tag[4] === "1",
-    };
-  });
-
   return {
     eventId: event.id,
     pubkey: event.pubkey,
@@ -278,7 +266,6 @@ export function parseFoodCornerFulfillment(event: FoodCornerRawEvent): FoodCorne
     status: (getTag(event, "status") || "received") as FoodCornerFulfillment["status"],
     eta: getTag(event, "eta"),
     deliveredAt: getTag(event, "delivered_at"),
-    delivered,
     adjustTotal: Number.isFinite(adjustValue) ? adjustValue : null,
     adjustCurrency: adjustTotal?.[2] || "EUR",
     settledLanAmount: Number.isFinite(settledAmount) ? settledAmount : null,
@@ -327,6 +314,31 @@ export function parseFoodCornerAllocation(event: FoodCornerRawEvent): FoodCorner
   };
 }
 
+// KIND 36604 — supplier aggregate delivery to a node for one cycle.
+export function parseFoodCornerSupplierDelivery(event: FoodCornerRawEvent): FoodCornerSupplierDelivery | null {
+  const dTag = getTag(event, "d");
+  const nodeRef = getTag(event, "a");
+  if (!dTag || !nodeRef) return null;
+
+  const items = getTagsFull(event, "delivered").map((tag) => {
+    const qty = Number.parseFloat(tag[2] || "");
+    return { listingRef: tag[1] || "", qty: Number.isFinite(qty) ? qty : 0, unit: tag[3] || "" };
+  });
+  const cycleStart = Number.parseInt(getTag(event, "cycle_start") || "", 10);
+
+  return {
+    eventId: event.id,
+    pubkey: event.pubkey,
+    createdAt: event.created_at,
+    dTag,
+    nodeRef,
+    cycleStart: Number.isFinite(cycleStart) ? cycleStart : 0,
+    items,
+    content: event.content || "",
+    rawEvent: event,
+  };
+}
+
 export function dedupeReplaceable<T extends { pubkey: string; dTag: string; createdAt: number; rawEvent?: { kind: number } }>(items: T[]): T[] {
   const byKey = new Map<string, T>();
   for (const item of items) {
@@ -365,7 +377,6 @@ export function enrichOrders(
       ...order,
       fulfillmentEvent,
       fulfillmentStatus: fulfillmentEvent?.status,
-      delivered: fulfillmentEvent?.delivered ?? [],
       allocation: allocByOrderRef.get(order.ref),
     };
   });
@@ -376,7 +387,9 @@ export function foodCornerItemKey(listingRef: string, unit: string): string {
   return `${listingRef}__${unit}`;
 }
 
-// Per-item reconciliation of ordered vs delivered vs allocated for one order.
+// Per-item reconciliation of ordered vs allocated for one order. Delivery is now an
+// aggregate per product at the point (KIND 36604), not per order — see
+// deliveredTotalsForNode.
 export interface FoodCornerItemRecon {
   listingRef: string;
   unit: string;
@@ -384,21 +397,16 @@ export interface FoodCornerItemRecon {
   unitPrice: number;
   currency: string;
   orderedQty: number;
-  deliveredQty: number | null; // null = supplier has no delivered line yet
   allocatedQty: number | null; // null = no allocation yet
-  confirmed: boolean;
 }
 
 export function reconcileOrderItems(order: FoodCornerOrderWithFulfillment): FoodCornerItemRecon[] {
-  const deliveredByKey = new Map<string, FoodCornerDeliveredItem>();
-  for (const d of order.delivered ?? []) deliveredByKey.set(foodCornerItemKey(d.listingRef, d.unit), d);
   const allocByKey = new Map<string, { qty: number; unitPrice: number; currency: string }>();
   for (const a of order.allocation?.items ?? [])
     allocByKey.set(foodCornerItemKey(a.listingRef, a.unit), { qty: a.qty, unitPrice: a.unitPrice, currency: a.currency });
 
   return order.items.map((item) => {
     const key = foodCornerItemKey(item.listingRef, item.unit);
-    const d = deliveredByKey.get(key);
     const a = allocByKey.get(key);
     return {
       listingRef: item.listingRef,
@@ -407,9 +415,7 @@ export function reconcileOrderItems(order: FoodCornerOrderWithFulfillment): Food
       unitPrice: a?.unitPrice ?? item.unitPrice,
       currency: a?.currency || item.currency,
       orderedQty: item.qty,
-      deliveredQty: d ? d.deliveredQty : null,
       allocatedQty: a ? a.qty : null,
-      confirmed: d?.confirmed ?? false,
     };
   });
 }
@@ -419,9 +425,24 @@ export function effectiveBuyerQty(recon: FoodCornerItemRecon): number {
   return recon.allocatedQty ?? recon.orderedQty;
 }
 
-// Default delivered qty for the supplier UI: existing reported value, else ordered.
-export function defaultDeliveredQty(item: FoodCornerOrderItem, existing?: FoodCornerDeliveredItem): number {
-  return existing?.deliveredQty ?? item.qty;
+// Delivered totals per listing for a node + cycle, summed across the supplier
+// delivery events (36604) matching that node and cycle_start.
+export function deliveredTotalsForNode(
+  deliveries: FoodCornerSupplierDelivery[],
+  nodeRef: string,
+  cycleStart: number,
+): Map<string, { qty: number; unit: string }> {
+  const totals = new Map<string, { qty: number; unit: string }>();
+  for (const d of deliveries) {
+    if (d.nodeRef !== nodeRef || d.cycleStart !== cycleStart) continue;
+    for (const item of d.items) {
+      const key = foodCornerItemKey(item.listingRef, item.unit);
+      const existing = totals.get(key);
+      if (existing) existing.qty += item.qty;
+      else totals.set(key, { qty: item.qty, unit: item.unit });
+    }
+  }
+  return totals;
 }
 
 export function resolveNodeCatalog(node: FoodCornerNode | undefined, listings: FoodCornerListing[]): FoodCornerListing[] {
