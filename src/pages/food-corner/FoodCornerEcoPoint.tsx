@@ -377,10 +377,18 @@ export default function FoodCornerEcoPoint() {
 
   // Per-buyer allocation assignment: orderDTag → productKey → qty string.
   const [allocAssign, setAllocAssign] = useState<Record<string, Record<string, string>>>({});
-  // Short-product allocations start at 0 — the Točka distributes only what was
-  // actually delivered; a fully-undelivered product stays 0 (buyer not charged).
-  const allocValue = (orderDTag: string, productKey: string, _orderedQty: number) =>
-    allocAssign[orderDTag]?.[productKey] ?? "0";
+  // Seed value for an allocation cell: a live edit wins; otherwise the ALREADY
+  // PUBLISHED allocation (KIND 36603) so a refresh / re-publish keeps the split;
+  // otherwise 0 for short products (undelivered → not charged) or the ordered qty
+  // for full items.
+  const seedAllocQty = (order: FoodCornerOrderWithFulfillment, productKey: string, orderedQty: number, isShort: boolean) => {
+    const published = order.allocation?.items.find((i) => foodCornerItemKey(i.listingRef, i.unit) === productKey)?.qty;
+    if (published != null) return published;
+    return isShort ? 0 : orderedQty;
+  };
+  // Panel cells are always short products → seed = published ?? 0.
+  const allocValue = (order: FoodCornerOrderWithFulfillment, productKey: string) =>
+    allocAssign[order.dTag]?.[productKey] ?? String(seedAllocQty(order, productKey, 0, true));
   const setAlloc = (orderDTag: string, productKey: string, qty: string) =>
     setAllocAssign((cur) => ({ ...cur, [orderDTag]: { ...(cur[orderDTag] || {}), [productKey]: qty } }));
 
@@ -407,7 +415,8 @@ export default function FoodCornerEcoPoint() {
           return {
             listingRef: item.listingRef,
             unit: item.unit,
-            qty: Number.isFinite(assigned) ? assigned : isShort ? 0 : item.qty,
+            // live edit wins; else keep the already-published split / 0 (short) / ordered (full)
+            qty: Number.isFinite(assigned) ? assigned : seedAllocQty(order, pk, item.qty, isShort),
             unitPrice: item.unitPrice,
             currency: item.currency,
           };
@@ -608,7 +617,25 @@ export default function FoodCornerEcoPoint() {
             {producerName(order)}
           </p>
           <span className="text-muted-foreground">
-            {order.items.map((item) => `${item.qty} ${item.unit} ${itemLabel(item)}`).join(" · ")}
+            {reconcileOrderItems(order).map((r, idx) => {
+              const label = itemLabel({ listing: { title: r.title }, listingRef: r.listingRef });
+              const reduced = r.allocatedQty != null && r.allocatedQty !== r.orderedQty;
+              return (
+                <span key={`${r.listingRef}__${r.unit}`}>
+                  {idx > 0 && " · "}
+                  {reduced ? (
+                    <>
+                      <span className="line-through opacity-60">{Number(r.orderedQty.toFixed(2))}</span>
+                      {" → "}
+                      <span className="text-destructive font-medium">{Number((r.allocatedQty as number).toFixed(2))}</span>
+                      {` ${r.unit} ${label}`}
+                    </>
+                  ) : (
+                    `${Number(r.orderedQty.toFixed(2))} ${r.unit} ${label}`
+                  )}
+                </span>
+              );
+            })}
           </span>
         </div>
       </div>
@@ -1035,8 +1062,7 @@ export default function FoodCornerEcoPoint() {
                   <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("ecoPoint.alloc.title")}</p>
                   {shortItems.map((s) => {
                     const assignedSum = s.orders.reduce((sum, o) => {
-                      const item = o.items.find((i) => foodCornerItemKey(i.listingRef, i.unit) === s.productKey);
-                      return sum + (Number.parseFloat(allocValue(o.dTag, s.productKey, item?.qty ?? 0)) || 0);
+                      return sum + (Number.parseFloat(allocValue(o, s.productKey)) || 0);
                     }, 0);
                     const over = assignedSum > s.delivered + 1e-9;
                     return (
@@ -1063,7 +1089,7 @@ export default function FoodCornerEcoPoint() {
                                 type="number"
                                 min="0"
                                 step="0.1"
-                                value={allocValue(o.dTag, s.productKey, ordered)}
+                                value={allocValue(o, s.productKey)}
                                 onChange={(e) => setAlloc(o.dTag, s.productKey, e.target.value)}
                                 className="h-9 w-20 shrink-0 tabular-nums"
                               />
