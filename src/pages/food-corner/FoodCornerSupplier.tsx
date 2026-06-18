@@ -253,8 +253,9 @@ export default function FoodCornerSupplier() {
           )
           .join("");
         const meta: string[] = [];
-        if (wi?.cutoffStr) meta.push(`${escapeHtml(t("order.deadline.label"))}: ${escapeHtml(wi.cutoffStr)}`);
-        if (wi?.pickupStr)
+        // Cutoff/delivery (next occurrence) only apply to the current cycle.
+        if (weekOffset === 0 && wi?.cutoffStr) meta.push(`${escapeHtml(t("order.deadline.label"))}: ${escapeHtml(wi.cutoffStr)}`);
+        if (weekOffset === 0 && wi?.pickupStr)
           meta.push(
             `${escapeHtml(t("supplier.deliverBy"))}: ${escapeHtml(wi.pickupStr)}${wi.pickupWindow ? " · " + escapeHtml(wi.pickupWindow) : ""}`,
           );
@@ -397,7 +398,10 @@ export default function FoodCornerSupplier() {
                         </Button>
                       </div>
                     </div>
-                    {wi?.cutoffStr && (
+                    {/* Cutoff countdown + delivery date only make sense for the
+                        current cycle; for past weeks ordering is already closed,
+                        so the date range in the paginator is enough. */}
+                    {weekOffset === 0 && wi?.cutoffStr && (
                       <p className="text-sm font-medium flex items-center gap-1.5 text-primary">
                         <Clock className="h-4 w-4 shrink-0" />
                         <span>
@@ -410,7 +414,7 @@ export default function FoodCornerSupplier() {
                         </span>
                       </p>
                     )}
-                    {wi?.pickupStr && (
+                    {weekOffset === 0 && wi?.pickupStr && (
                       <p className="text-sm text-muted-foreground flex items-center gap-1.5">
                         <Truck className="h-4 w-4 shrink-0" />
                         <span>
