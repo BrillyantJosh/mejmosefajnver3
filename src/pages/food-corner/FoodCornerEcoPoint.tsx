@@ -331,6 +331,7 @@ export default function FoodCornerEcoPoint() {
     title: string;
     ordered: number;
     delivered: number;
+    isShort: boolean; // delivered < ordered (true) vs surplus delivered > ordered (false)
     orders: FoodCornerOrderWithFulfillment[];
   }
   const shortItems = useMemo<ShortageItem[]>(() => {
@@ -350,6 +351,7 @@ export default function FoodCornerEcoPoint() {
             title: item.listing?.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`,
             ordered: 0,
             delivered: 0,
+            isShort: false,
             orders: [],
           };
           map.set(k, s);
@@ -364,13 +366,16 @@ export default function FoodCornerEcoPoint() {
         deliveredCache.set(nodeRef, deliveredTotalsForNode(deliveries, nodeRef, nodeCycleStart(nodeRef)));
       return deliveredCache.get(nodeRef)!;
     };
-    // Only keep products the supplier delivered SHORT (reported total < ordered).
+    // Keep products where the supplier's delivered total DIFFERS from ordered —
+    // short (delivered < ordered) OR surplus (delivered > ordered). Both need the
+    // Točka to (re)distribute among buyers.
     return Array.from(map.values())
       .map((s) => {
         const d = getDelivered(s.nodeRef).get(s.productKey);
-        return { ...s, delivered: d ? d.qty : s.ordered };
+        const delivered = d ? d.qty : s.ordered;
+        return { ...s, delivered, isShort: delivered < s.ordered - 1e-9 };
       })
-      .filter((s) => s.delivered < s.ordered - 1e-9)
+      .filter((s) => Math.abs(s.delivered - s.ordered) > 1e-9)
       .sort((a, b) => a.title.localeCompare(b.title));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOrders, deliveries, ordersWeekOffset, ordersAnchorDay, nodes, t]);
@@ -386,9 +391,9 @@ export default function FoodCornerEcoPoint() {
     if (published != null) return published;
     return isShort ? 0 : orderedQty;
   };
-  // Panel cells are always short products → seed = published ?? 0.
-  const allocValue = (order: FoodCornerOrderWithFulfillment, productKey: string) =>
-    allocAssign[order.dTag]?.[productKey] ?? String(seedAllocQty(order, productKey, 0, true));
+  // Seed an input: live edit > published split > (short ? 0 : ordered).
+  const allocValue = (order: FoodCornerOrderWithFulfillment, productKey: string, orderedQty: number, isShort: boolean) =>
+    allocAssign[order.dTag]?.[productKey] ?? String(seedAllocQty(order, productKey, orderedQty, isShort));
   const setAlloc = (orderDTag: string, productKey: string, qty: string) =>
     setAllocAssign((cur) => ({ ...cur, [orderDTag]: { ...(cur[orderDTag] || {}), [productKey]: qty } }));
 
@@ -401,9 +406,9 @@ export default function FoodCornerEcoPoint() {
   }, [shortItems]);
 
   const publishAllocations = async () => {
-    // Short (node, product) pairs: untouched short items default to 0 (undelivered
-    // → not charged); full items default to the ordered qty.
-    const shortKeySet = new Set(shortItems.map((s) => `${s.nodeRef}|${s.productKey}`));
+    // Only TRULY short (node, product) pairs default untouched items to 0
+    // (undelivered → not charged); surplus + full items default to the ordered qty.
+    const shortKeySet = new Set(shortItems.filter((s) => s.isShort).map((s) => `${s.nodeRef}|${s.productKey}`));
     try {
       let count = 0;
       for (const order of affectedOrders) {
@@ -627,7 +632,11 @@ export default function FoodCornerEcoPoint() {
                     <>
                       <span className="line-through opacity-60">{Number(r.orderedQty.toFixed(2))}</span>
                       {" → "}
-                      <span className="text-destructive font-medium">{Number((r.allocatedQty as number).toFixed(2))}</span>
+                      <span
+                        className={`font-medium ${(r.allocatedQty as number) < r.orderedQty ? "text-destructive" : "text-emerald-600"}`}
+                      >
+                        {Number((r.allocatedQty as number).toFixed(2))}
+                      </span>
                       {` ${r.unit} ${label}`}
                     </>
                   ) : (
@@ -1054,17 +1063,19 @@ export default function FoodCornerEcoPoint() {
               })}
             </div>
 
-            {/* Shortages — the supplier delivered less than ordered for these products.
-                Split the delivered total among the buyers who ordered them. */}
+            {/* Delivery deviation — the supplier delivered LESS (short) or MORE
+                (surplus) than ordered. Distribute the delivered total among buyers. */}
             {shortItems.length > 0 && (
               <Card>
                 <CardContent className="p-4 space-y-4">
                   <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("ecoPoint.alloc.title")}</p>
                   {shortItems.map((s) => {
                     const assignedSum = s.orders.reduce((sum, o) => {
-                      return sum + (Number.parseFloat(allocValue(o, s.productKey)) || 0);
+                      const ord = o.items.find((i) => foodCornerItemKey(i.listingRef, i.unit) === s.productKey)?.qty ?? 0;
+                      return sum + (Number.parseFloat(allocValue(o, s.productKey, ord, s.isShort)) || 0);
                     }, 0);
                     const over = assignedSum > s.delivered + 1e-9;
+                    const diff = Number((s.delivered - s.ordered).toFixed(2));
                     return (
                       <div key={`${s.nodeRef}|${s.productKey}`} className="rounded-md border p-3 space-y-2">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -1073,7 +1084,11 @@ export default function FoodCornerEcoPoint() {
                             <span className="text-muted-foreground">
                               {t("ecoPoint.shortage.delivered")} {Number(s.delivered.toFixed(2))} / {t("ecoPoint.shortage.ordered")} {Number(s.ordered.toFixed(2))} {s.unit}
                             </span>
-                            <Badge variant="destructive">−{Number((s.ordered - s.delivered).toFixed(2))} {s.unit}</Badge>
+                            {s.isShort ? (
+                              <Badge variant="destructive">−{Math.abs(diff)} {s.unit}</Badge>
+                            ) : (
+                              <Badge className="bg-emerald-600 hover:bg-emerald-600">+{Math.abs(diff)} {s.unit}</Badge>
+                            )}
                           </span>
                         </div>
                         {s.orders.map((o) => {
@@ -1089,7 +1104,7 @@ export default function FoodCornerEcoPoint() {
                                 type="number"
                                 min="0"
                                 step="0.1"
-                                value={allocValue(o, s.productKey)}
+                                value={allocValue(o, s.productKey, ordered, s.isShort)}
                                 onChange={(e) => setAlloc(o.dTag, s.productKey, e.target.value)}
                                 className="h-9 w-20 shrink-0 tabular-nums"
                               />
