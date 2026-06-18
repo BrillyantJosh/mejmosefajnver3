@@ -364,8 +364,10 @@ export default function FoodCornerEcoPoint() {
 
   // Per-buyer allocation assignment: orderDTag → productKey → qty string.
   const [allocAssign, setAllocAssign] = useState<Record<string, Record<string, string>>>({});
-  const allocValue = (orderDTag: string, productKey: string, orderedQty: number) =>
-    allocAssign[orderDTag]?.[productKey] ?? String(orderedQty);
+  // Short-product allocations start at 0 — the Točka distributes only what was
+  // actually delivered; a fully-undelivered product stays 0 (buyer not charged).
+  const allocValue = (orderDTag: string, productKey: string, _orderedQty: number) =>
+    allocAssign[orderDTag]?.[productKey] ?? "0";
   const setAlloc = (orderDTag: string, productKey: string, qty: string) =>
     setAllocAssign((cur) => ({ ...cur, [orderDTag]: { ...(cur[orderDTag] || {}), [productKey]: qty } }));
 
@@ -378,6 +380,9 @@ export default function FoodCornerEcoPoint() {
   }, [shortItems]);
 
   const publishAllocations = async () => {
+    // Short (node, product) pairs: untouched short items default to 0 (undelivered
+    // → not charged); full items default to the ordered qty.
+    const shortKeySet = new Set(shortItems.map((s) => `${s.nodeRef}|${s.productKey}`));
     try {
       let count = 0;
       for (const order of affectedOrders) {
@@ -385,10 +390,11 @@ export default function FoodCornerEcoPoint() {
         const items = order.items.map((item) => {
           const pk = foodCornerItemKey(item.listingRef, item.unit);
           const assigned = Number.parseFloat(allocAssign[order.dTag]?.[pk] ?? "");
+          const isShort = shortKeySet.has(`${order.distributionPoint}|${pk}`);
           return {
             listingRef: item.listingRef,
             unit: item.unit,
-            qty: Number.isFinite(assigned) ? assigned : item.qty, // default = ordered for untouched items
+            qty: Number.isFinite(assigned) ? assigned : isShort ? 0 : item.qty,
             unitPrice: item.unitPrice,
             currency: item.currency,
           };
