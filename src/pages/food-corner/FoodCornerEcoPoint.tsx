@@ -27,12 +27,18 @@ import {
   formatFoodMoney,
   generateFoodCornerId,
   groupOrdersByNode,
+  reconcileOrderItems,
   slugifyFoodCorner,
 } from "@/lib/foodCorner";
 import { uploadToLanaMedia } from "@/lib/lanaMediaUpload";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+// What the buyer is actually billed for an order: the Točka allocation total when
+// one was published (short items reduced), else the ordered total. Used for every
+// buyer/supplier roll-up so the header matches the per-order line.
+const orderEffectiveTotal = (order: FoodCornerOrderWithFulfillment) => order.allocation?.total ?? order.total;
 
 function splitAreas(value: string): string[] {
   return value
@@ -300,7 +306,14 @@ export default function FoodCornerEcoPoint() {
 
   // Per-node summary cards (count + total) reflect the SELECTED cycle, so they
   // stay consistent with the week paginator and detailed list below.
-  const groupedOrders = useMemo(() => groupOrdersByNode(weekOrders), [weekOrders]);
+  const groupedOrders = useMemo(
+    () =>
+      groupOrdersByNode(weekOrders).map((g) => ({
+        ...g,
+        total: g.orders.reduce((s, o) => s + orderEffectiveTotal(o), 0),
+      })),
+    [weekOrders],
+  );
 
   // Shortages: per (node, product), ordered total (from orders) vs delivered total
   // (from supplier KIND 36604 for this node + cycle). The supplier brings ONE total
@@ -453,7 +466,7 @@ export default function FoodCornerEcoPoint() {
       const group =
         map.get(key) || { key, label, orders: [], total: 0, currency: order.currency, buyers: bySeller ? [] : null };
       group.orders.push(order);
-      group.total += order.total;
+      group.total += orderEffectiveTotal(order);
       map.set(key, group);
 
       if (bySeller) {
@@ -461,7 +474,7 @@ export default function FoodCornerEcoPoint() {
         const sub =
           subs.get(order.buyerPubkey) || { pubkey: order.buyerPubkey, name: buyerName(order.buyerPubkey), orders: [], total: 0 };
         sub.orders.push(order);
-        sub.total += order.total;
+        sub.total += orderEffectiveTotal(order);
         subs.set(order.buyerPubkey, sub);
         buyerSubs.set(key, subs);
       }
@@ -506,7 +519,7 @@ export default function FoodCornerEcoPoint() {
         map.set(o.buyerPubkey, b);
       }
       b.orders.push(o);
-      b.total += o.total;
+      b.total += orderEffectiveTotal(o);
       if (o.currency) b.currency = o.currency;
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
@@ -525,13 +538,18 @@ export default function FoodCornerEcoPoint() {
       .map((b) => {
         const rows = b.orders
           .flatMap((o) =>
-            o.items.map(
-              (it) =>
-                `<tr><td>${escapeHtml(itemLabel(it))}</td>` +
-                `<td class="num">${escapeHtml(`${it.qty} ${it.unit}`)}</td>` +
+            // Reflect the allocation (what the buyer actually gets/pays) — allocated
+            // qty when published, else ordered — so lines sum to the section total.
+            reconcileOrderItems(o).map((r) => {
+              const qty = r.allocatedQty ?? r.orderedQty;
+              const title = r.title || `${t("supplier.unknownProduct")} (${r.listingRef.slice(-6)})`;
+              return (
+                `<tr><td>${escapeHtml(title)}</td>` +
+                `<td class="num">${escapeHtml(`${Number(qty.toFixed(2))} ${r.unit}`)}</td>` +
                 `<td>${escapeHtml(producerName(o))}</td>` +
-                `<td class="num">${escapeHtml(formatFoodMoney(it.qty * it.unitPrice, it.currency))}</td></tr>`,
-            ),
+                `<td class="num">${escapeHtml(formatFoodMoney(qty * r.unitPrice, r.currency))}</td></tr>`
+              );
+            }),
           )
           .join("");
         return (
