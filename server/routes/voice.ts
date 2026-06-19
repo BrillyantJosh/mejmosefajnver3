@@ -108,6 +108,74 @@ router.post('/stt', audioUpload.single('file'), async (req: Request, res: Respon
 });
 
 // =============================================
+// POST /api/voice/translate — Translate text/transcript to English via Groq (LLM)
+// So participants who don't speak the source language can follow the process.
+// =============================================
+router.post('/translate', async (req: Request, res: Response) => {
+  try {
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    if (!GROQ_API_KEY) {
+      return res.status(500).json({ error: 'GROQ_API_KEY not configured' });
+    }
+    const text = String(req.body?.text || '').trim();
+    if (!text) return res.json({ translation: '' });
+    const capped = text.slice(0, 8000); // safety cap
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        temperature: 0.2,
+        max_tokens: 2048,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a professional translator. Translate the user message into natural, fluent English. Output ONLY the translation — no quotes, no explanations, no notes. If the text is already in English, return it unchanged.',
+          },
+          { role: 'user', content: capped },
+        ],
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`🌐 Groq translate error ${response.status}: ${errText.slice(0, 300)}`);
+      throw new Error(`Groq translate error ${response.status}`);
+    }
+
+    const data = await response.json();
+    const translation = (data?.choices?.[0]?.message?.content || '').trim();
+
+    try {
+      const db = getDb();
+      const usage = data?.usage || {};
+      const promptTokens = usage.prompt_tokens || 0;
+      const completionTokens = usage.completion_tokens || 0;
+      const totalTokens = usage.total_tokens || promptTokens + completionTokens;
+      const costUsd = (promptTokens / 1e6) * 0.59 + (completionTokens / 1e6) * 0.79;
+      const costLana = costUsd * 270;
+      db.prepare(`
+        INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
+        VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)
+      `).run('voice-translate', 'groq-llama-3.3-70b', promptTokens, completionTokens, totalTokens, costUsd, costLana);
+    } catch (err) {
+      console.error('Failed to log translate usage:', err);
+    }
+
+    return res.json({ translation });
+  } catch (error: any) {
+    console.error('Voice translate error:', error.message);
+    return res.status(500).json({ error: error.message || 'Translation failed' });
+  }
+});
+
+// =============================================
 // POST /api/voice/tts — Text-to-Speech via OpenAI
 // =============================================
 router.post('/tts', async (req: Request, res: Response) => {

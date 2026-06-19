@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { Heart, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import TranslateButton from "@/components/own/TranslateButton";
 
 /** Extract YouTube video ID from any youtube.com / youtu.be URL, or null. */
 function getYouTubeId(url: string): string | null {
@@ -55,9 +56,12 @@ function TranscriptToggle({ text }: { text: string }) {
         {open ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
       </button>
       {open && (
-        <p className="text-sm text-muted-foreground italic whitespace-pre-wrap break-words mt-2">
-          {text}
-        </p>
+        <>
+          <p className="text-sm text-muted-foreground italic whitespace-pre-wrap break-words mt-2">
+            {text}
+          </p>
+          <TranslateButton text={text} />
+        </>
       )}
     </div>
   );
@@ -204,6 +208,7 @@ export default function ChatMessage({
             }
             return <p className="text-sm break-words whitespace-pre-wrap">{content}</p>;
           })()}
+          {content && content.trim() && <TranslateButton text={content} />}
         </Card>
       </div>
     </div>

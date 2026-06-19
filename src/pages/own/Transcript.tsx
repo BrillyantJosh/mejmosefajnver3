@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ArrowLeft, Calendar, Clock, Image as ImageIcon, Mic, File } from 'lucide-react';
 import { AudioPlayer } from '@/components/AudioPlayer';
+import TranslateButton from '@/components/own/TranslateButton';
 import { format } from 'date-fns';
 import { useMemo } from 'react';
 
@@ -242,16 +243,22 @@ export default function Transcript() {
                       <div className="mt-1">
                         <AudioPlayer audioUrl={parsed.audioUrl} initialDuration={parsed.audioDuration} />
                         {parsed.transcript && (
-                          <p className="text-xs text-muted-foreground italic mt-1 whitespace-pre-wrap break-words">
-                            {parsed.transcript}
-                          </p>
+                          <>
+                            <p className="text-xs text-muted-foreground italic mt-1 whitespace-pre-wrap break-words">
+                              {parsed.transcript}
+                            </p>
+                            <TranslateButton text={parsed.transcript} />
+                          </>
                         )}
                       </div>
                     )}
 
                     {/* Text message */}
                     {parsed.type === 'text' && (
-                      <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">{parsed.content}</p>
+                      <>
+                        <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">{parsed.content}</p>
+                        {parsed.content.trim() && <TranslateButton text={parsed.content} />}
+                      </>
                     )}
 
                     {/* Attachments */}
