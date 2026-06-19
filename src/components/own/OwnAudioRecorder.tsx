@@ -39,6 +39,7 @@ export default function OwnAudioRecorder({
   const streamRef = useRef<MediaStream | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const audioBlobRef = useRef<Blob | null>(null);
+  const uploadingRef = useRef(false); // guards against duplicate / rapid Send taps
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingTimeRef = useRef(0);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -241,19 +242,25 @@ export default function OwnAudioRecorder({
   };
 
   const uploadAudio = async () => {
+    if (uploadingRef.current) return; // ignore rapid repeat taps while a send is in flight
+    uploadingRef.current = true;
+    setIsUploading(true);             // instant "Sending…" feedback the moment Send is tapped
+    setUploadFailed(false);
+
     if (!audioBlobRef.current) {
       toast.error("No recording to upload");
+      setIsUploading(false);
+      uploadingRef.current = false;
       return;
     }
 
     const maxSize = 50 * 1024 * 1024; // 50MB
     if (audioBlobRef.current.size > maxSize) {
       toast.error("Recording too large (max 50MB / ~15 min)");
+      setIsUploading(false);
+      uploadingRef.current = false;
       return;
     }
-
-    setIsUploading(true);
-    setUploadFailed(false);
     try {
       const timestamp = Date.now();
       const randomStr = Math.random().toString(36).substring(7);
@@ -355,6 +362,7 @@ export default function OwnAudioRecorder({
       toast.error("Network error — tap retry to try again");
     } finally {
       setIsUploading(false);
+      uploadingRef.current = false;
     }
   };
 
@@ -505,7 +513,7 @@ export default function OwnAudioRecorder({
             variant="ghost"
             onClick={handleDiscardPreview}
             disabled={isUploading}
-            className="h-8"
+            className="h-11 px-4 text-base"
           >
             <X className="h-4 w-4 mr-1" />
             Discard
@@ -525,7 +533,7 @@ export default function OwnAudioRecorder({
               size="sm"
               onClick={handleSendAudio}
               disabled={isUploading}
-              className="h-8"
+              className="h-11 px-6 text-base"
             >
               {isUploading ? (
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
