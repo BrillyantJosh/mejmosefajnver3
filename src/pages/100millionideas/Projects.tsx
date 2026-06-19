@@ -25,6 +25,7 @@ const FILTER_LABELS: Record<ProjectFilter, string> = {
   funded: 'Funded',
   completed: 'Completed',
   all: 'All',
+  hidden: 'Hidden',
 };
 
 const Projects = () => {
@@ -338,7 +339,9 @@ const Projects = () => {
       {/* Filter Tabs + Translation toggle */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-          {(Object.keys(FILTER_LABELS) as ProjectFilter[]).map(f => (
+          {(Object.keys(FILTER_LABELS) as ProjectFilter[])
+            .filter(f => f !== 'hidden' || is100MAdmin)
+            .map(f => (
             <button
               key={f}
               onClick={() => { setFilter(f); setPage(1); }}

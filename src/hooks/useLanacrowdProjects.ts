@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-export type ProjectFilter = 'open' | 'funded' | 'completed' | 'all';
+export type ProjectFilter = 'open' | 'funded' | 'completed' | 'all' | 'hidden';
 
 export interface LanacrowdProject {
   id: string;

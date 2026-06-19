@@ -110,8 +110,13 @@ router.get('/projects', (req, res) => {
   // Drafts are never shown in the public listing (only visible in my-projects)
   conditions.push("status != 'draft'");
 
-  // Non-admins can't see hidden projects
-  if (!isAdmin) {
+  // Hidden projects live ONLY under the 'hidden' tab (admin-only). Every other
+  // tab excludes them for all viewers (incl. admins), so they never appear in
+  // Open/Funded/Completed/All nor in the public totals.
+  if (filter === 'hidden') {
+    conditions.push('is_hidden = 1');
+    if (!isAdmin) conditions.push('1 = 0'); // non-admins may never see hidden
+  } else {
     conditions.push('is_hidden = 0');
   }
 
@@ -138,6 +143,7 @@ router.get('/projects', (req, res) => {
     case 'completed':
       conditions.push('is_completed = 1');
       break;
+    case 'hidden': // is_hidden = 1 already applied above; show all hidden regardless of fund/complete
     case 'all':
     default:
       break;
@@ -548,11 +554,14 @@ router.get('/summary', (req, res) => {
   // Summary always reflects what USERS see: approved + visible + non-draft only.
   // Admins see pending/hidden in the list for moderation, but those don't count
   // toward public statistics.
-  const conditions: string[] = [
-    "status != 'draft'",
-    'is_hidden = 0',
-    'is_approved = 1',
-  ];
+  const conditions: string[] = ["status != 'draft'"];
+  if (filter === 'hidden') {
+    // The Hidden tab's header reflects the hidden projects themselves.
+    conditions.push('is_hidden = 1');
+  } else {
+    // Public totals: approved + visible only (hidden/pending never counted).
+    conditions.push('is_hidden = 0', 'is_approved = 1');
+  }
   switch (filter) {
     case 'open':      conditions.push('is_funded = 0', 'is_completed = 0'); break;
     case 'funded':    conditions.push('is_funded = 1', 'is_completed = 0'); break;
