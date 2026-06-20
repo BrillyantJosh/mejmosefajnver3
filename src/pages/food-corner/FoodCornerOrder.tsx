@@ -648,7 +648,9 @@ export default function FoodCornerOrder() {
               </div>
               )}
 
-              <Card className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
+              {/* max-h leaves room for the sticky top offset (top-20) AND the fixed
+                  bottom nav (layout pb-20) so the Confirm button never hides behind it. */}
+              <Card className="sticky top-20 max-h-[calc(100vh-11rem)] overflow-y-auto">
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <ShoppingBasket className="h-4 w-4" />
