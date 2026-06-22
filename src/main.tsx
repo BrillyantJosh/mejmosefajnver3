@@ -3,6 +3,33 @@ import { registerSW } from "virtual:pwa-register";
 import App from "./App.tsx";
 import "./index.css";
 
+// Guard against the "NotFoundError: Failed to execute 'removeChild' on 'Node'"
+// crash that hits users with the browser's auto-translation on (Google Translate
+// wraps/moves text nodes, then React's reconciler removes/inserts a node that is
+// no longer where it expects). Make removeChild/insertBefore no-throw when the
+// node has already been detached/moved — React then re-syncs harmlessly instead
+// of white-screening. Battle-tested fix used by many React apps.
+if (typeof Node === "function" && Node.prototype) {
+  const originalRemoveChild = Node.prototype.removeChild;
+  Node.prototype.removeChild = function <T extends Node>(this: Node, child: T): T {
+    if (child.parentNode !== this) {
+      if (typeof console !== "undefined") console.warn("removeChild: node is not a child of this node", child, this);
+      return child;
+    }
+    // eslint-disable-next-line prefer-rest-params
+    return originalRemoveChild.apply(this, arguments as never) as T;
+  };
+  const originalInsertBefore = Node.prototype.insertBefore;
+  Node.prototype.insertBefore = function <T extends Node>(this: Node, newNode: T, referenceNode: Node | null): T {
+    if (referenceNode && referenceNode.parentNode !== this) {
+      if (typeof console !== "undefined") console.warn("insertBefore: reference node is not a child of this node", referenceNode, this);
+      return newNode;
+    }
+    // eslint-disable-next-line prefer-rest-params
+    return originalInsertBefore.apply(this, arguments as never) as T;
+  };
+}
+
 // Register service worker with automatic update
 const updateSW = registerSW({
   onNeedRefresh() {
