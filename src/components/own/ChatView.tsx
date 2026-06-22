@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useLayoutEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -173,9 +173,32 @@ export default function ChatView({
 
   const hasMoreMessages = messages.length > visibleCount;
 
+  // Load History prepends older messages at the top of the scroll area. Browser
+  // scroll-anchoring keeps the view pinned, so the new messages land above the
+  // viewport and look like nothing happened. Capture the scroll position, then
+  // after the older messages render, scroll up so they're actually revealed.
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const restoreScrollRef = useRef<{ height: number; top: number } | null>(null);
+  const getViewport = () =>
+    scrollAreaRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]") ?? null;
+
   const handleLoadMore = () => {
+    const vp = getViewport();
+    if (vp) restoreScrollRef.current = { height: vp.scrollHeight, top: vp.scrollTop };
     setVisibleCount(prev => prev + MESSAGES_PER_PAGE);
   };
+
+  useLayoutEffect(() => {
+    const saved = restoreScrollRef.current;
+    if (!saved) return;
+    restoreScrollRef.current = null;
+    const vp = getViewport();
+    if (!vp) return;
+    // Keeping the OLD scrollTop value (without compensating for the added height)
+    // scrolls the viewport up by exactly the prepended height → the freshly loaded
+    // older messages scroll into view above the previous position.
+    vp.scrollTop = Math.max(0, saved.top);
+  }, [visibleCount]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -306,7 +329,7 @@ export default function ChatView({
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 px-2 md:px-4">
+      <ScrollArea ref={scrollAreaRef} className="flex-1 px-2 md:px-4">
         <div className="space-y-2 pb-4">
           {isLoading ? (
             <div className="text-center py-8 text-sm text-muted-foreground">
