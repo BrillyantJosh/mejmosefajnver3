@@ -112,7 +112,10 @@ export const useNostrGroupMessages = (
         {
           kinds: [87046],
           '#e': [processEventId],
-          limit: 50,
+          // Load the FULL case history (one conversation), not just the latest 50 —
+          // otherwise "Load History" can never reach the real first message. Rendering
+          // stays paged in ChatView, so a large backlog isn't shown all at once.
+          limit: 2000,
         },
         {
           onevent(event: Event) {
