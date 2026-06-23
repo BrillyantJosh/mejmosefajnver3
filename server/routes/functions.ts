@@ -2182,8 +2182,16 @@ router.post('/consolidate-wallet', async (req: Request, res: Response) => {
 
     console.log(`💰 Consolidate: total=${totalValue}, fee=${fee}, sending=${amountToSend} back to ${senderAddress}`);
 
-    if (amountToSend <= 0) {
-      return res.json({ success: false, error: 'Insufficient funds to cover transaction fee' });
+    // The consolidated output must exceed both the fee AND a minimal output value,
+    // otherwise the network rejects it as a dust output. A pure-dust batch (its
+    // combined value is less than the fee to move it) can never satisfy this on its
+    // own — it has to be merged with a funded UTXO.
+    const MIN_CONSOLIDATE_OUTPUT = 1000; // lanoshis
+    if (amountToSend < MIN_CONSOLIDATE_OUTPUT) {
+      return res.json({
+        success: false,
+        error: `These UTXOs are worth less than the network fee to move them (value ${(totalValue / 100000000).toFixed(8)} LANA, fee ${(fee / 100000000).toFixed(8)} LANA). Consolidate a funded batch first — its output can then cover these.`
+      });
     }
 
     const built = await buildSignedTx(
