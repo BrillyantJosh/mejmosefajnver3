@@ -11,7 +11,7 @@ import webpush from 'web-push';
 import { getDb } from '../db/connection';
 import { electrumCall, fetchBatchBalances } from '../lib/electrum';
 import { detectMissingFields, createPendingTask } from '../lib/aiTasks';
-import { sendLanaTransaction, sendBatchLanaTransaction, base58CheckDecode, uint8ArrayToHex, privateKeyToPublicKey, privateKeyToUncompressedPublicKey, publicKeyToAddress, normalizeWif } from '../lib/crypto';
+import { sendLanaTransaction, sendBatchLanaTransaction, base58CheckDecode, uint8ArrayToHex, privateKeyToPublicKey, privateKeyToUncompressedPublicKey, publicKeyToAddress, normalizeWif, buildSignedTx } from '../lib/crypto';
 import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays, discoverNewProfiles } from '../lib/nostr';
 import { sendPushToUser } from '../lib/pushNotification';
 import multer from 'multer';
@@ -2023,6 +2023,198 @@ router.post('/get-utxo-info', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('❌ get-utxo-info error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
+// ANALYZE WALLET UTXOS — full UTXO breakdown for the Consolidate page
+// (ports the registrar's analyze-wallet-utxos using the app's electrumCall)
+// =============================================
+const UTXO_DUST_THRESHOLD = 10000; // < 10,000 lanoshis is considered dust
+router.post('/analyze-wallet-utxos', async (req: Request, res: Response) => {
+  try {
+    // Accept both camelCase (app) and snake_case (registrar) param names
+    const address = req.body.address || req.body.wallet_address;
+    const electrumServers = req.body.electrumServers || req.body.electrum_servers;
+    if (!address) {
+      return res.status(400).json({ success: false, error: 'address required' });
+    }
+
+    const servers = electrumServers && electrumServers.length > 0
+      ? electrumServers
+      : [
+          { host: 'electrum1.lanacoin.com', port: 5097 },
+          { host: 'electrum2.lanacoin.com', port: 5097 }
+        ];
+
+    const utxos = await electrumCall('blockchain.address.listunspent', [address], servers);
+
+    if (!utxos || utxos.length === 0) {
+      return res.json({
+        success: true,
+        total_utxos: 0,
+        total_value: 0,
+        total_value_lana: '0.00000000',
+        all_utxos: [],
+        largest_utxos: [],
+        dust_count: 0,
+        dust_value: 0,
+        dust_value_lana: '0.00000000',
+        dust_threshold: UTXO_DUST_THRESHOLD,
+        dust_threshold_lana: (UTXO_DUST_THRESHOLD / 100000000).toFixed(8),
+        non_dust_count: 0,
+        non_dust_value: 0,
+        non_dust_value_lana: '0.00000000',
+        message: 'No UTXOs found for this wallet'
+      });
+    }
+
+    const sortedUTXOs = [...utxos].sort((a: any, b: any) => b.value - a.value);
+    const totalValue = utxos.reduce((sum: number, u: any) => sum + u.value, 0);
+
+    const mapUtxo = (u: any) => ({
+      tx_hash: u.tx_hash,
+      tx_pos: u.tx_pos,
+      height: u.height,
+      value: u.value,
+      value_lana: (u.value / 100000000).toFixed(8)
+    });
+
+    const dustUtxos = sortedUTXOs.filter((u: any) => u.value < UTXO_DUST_THRESHOLD);
+    const dustValue = dustUtxos.reduce((sum: number, u: any) => sum + u.value, 0);
+
+    return res.json({
+      success: true,
+      total_utxos: utxos.length,
+      total_value: totalValue,
+      total_value_lana: (totalValue / 100000000).toFixed(8),
+      all_utxos: sortedUTXOs.map(mapUtxo),
+      largest_utxos: sortedUTXOs.slice(0, 20).map(mapUtxo),
+      dust_count: dustUtxos.length,
+      dust_value: dustValue,
+      dust_value_lana: (dustValue / 100000000).toFixed(8),
+      dust_threshold: UTXO_DUST_THRESHOLD,
+      dust_threshold_lana: (UTXO_DUST_THRESHOLD / 100000000).toFixed(8),
+      non_dust_count: utxos.length - dustUtxos.length,
+      non_dust_value: totalValue - dustValue,
+      non_dust_value_lana: ((totalValue - dustValue) / 100000000).toFixed(8)
+    });
+  } catch (error: any) {
+    console.error('❌ analyze-wallet-utxos error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =============================================
+// CONSOLIDATE WALLET — merge a batch of UTXOs into ONE output back to the
+// same address. Server-side signing (same trust model as send-lana-transaction).
+// =============================================
+router.post('/consolidate-wallet', async (req: Request, res: Response) => {
+  try {
+    // Accept both camelCase (app) and snake_case (registrar) param names
+    const senderAddress = req.body.senderAddress || req.body.sender_address;
+    const selectedUtxos = req.body.selectedUtxos || req.body.selected_utxos;
+    const privateKey = req.body.privateKey || req.body.private_key;
+    const userPubkey = req.body.userPubkey;
+    const electrumServers = req.body.electrumServers || req.body.electrum_servers;
+
+    if (!senderAddress || !selectedUtxos || !privateKey || selectedUtxos.length === 0) {
+      return res.status(400).json({ success: false, error: 'Missing required parameters' });
+    }
+
+    console.log('📋 consolidate-wallet:', {
+      senderAddress,
+      utxoCount: selectedUtxos.length,
+      hasKey: !!privateKey
+    });
+
+    // Server-side freeze check (same pattern as send-lana-transaction)
+    if (userPubkey) {
+      const relays = getRelaysFromDb();
+      const db = getDb();
+      const params = db.prepare('SELECT trusted_signers FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+      let trustedSigners: string[] = [];
+      if (params?.trusted_signers) {
+        try {
+          const parsed = JSON.parse(params.trusted_signers);
+          if (parsed?.LanaRegistrar) trustedSigners = parsed.LanaRegistrar;
+        } catch {}
+      }
+      const wallets = await fetchUserWallets(userPubkey, relays, trustedSigners);
+      const senderWallet = wallets.find(w => w.walletId === senderAddress);
+      if (senderWallet?.freezeStatus) {
+        console.log(`🚫 BLOCKED: Consolidation from frozen wallet ${senderAddress} (freeze: ${senderWallet.freezeStatus})`);
+        return res.json({ success: false, error: 'This wallet is frozen. Outgoing transactions are disabled.' });
+      }
+    }
+
+    // Validate the WIF derives the sender address (compressed OR uncompressed)
+    let useCompressed: boolean;
+    try {
+      const normalizedKey = normalizeWif(privateKey);
+      const privateKeyBytes = base58CheckDecode(normalizedKey);
+      const privateKeyHex = uint8ArrayToHex(privateKeyBytes.slice(1, 33));
+      const compressedAddress = publicKeyToAddress(privateKeyToPublicKey(privateKeyHex));
+      const uncompressedAddress = publicKeyToAddress(privateKeyToUncompressedPublicKey(privateKeyHex));
+      const matchesCompressed = compressedAddress === senderAddress;
+      const matchesUncompressed = uncompressedAddress === senderAddress;
+      if (!matchesCompressed && !matchesUncompressed) {
+        return res.json({ success: false, error: 'Private key does not match this wallet address' });
+      }
+      useCompressed = matchesCompressed;
+      console.log(`✅ Private key validated (${matchesCompressed ? 'compressed' : 'uncompressed'} key match)`);
+    } catch (keyErr: any) {
+      return res.json({ success: false, error: `Invalid private key: ${keyErr.message}` });
+    }
+
+    const servers = electrumServers && electrumServers.length > 0
+      ? electrumServers
+      : [
+          { host: 'electrum1.lanacoin.com', port: 5097 },
+          { host: 'electrum2.lanacoin.com', port: 5097 }
+        ];
+
+    // Single output back to the same address (no change) → outputCount = 1
+    const totalValue = selectedUtxos.reduce((sum: number, u: any) => sum + u.value, 0);
+    const fee = Math.floor((selectedUtxos.length * 180 + 1 * 34 + 10) * 100 * 1.5);
+    const amountToSend = totalValue - fee;
+
+    console.log(`💰 Consolidate: total=${totalValue}, fee=${fee}, sending=${amountToSend} back to ${senderAddress}`);
+
+    if (amountToSend <= 0) {
+      return res.json({ success: false, error: 'Insufficient funds to cover transaction fee' });
+    }
+
+    const built = await buildSignedTx(
+      selectedUtxos,
+      privateKey,
+      [{ address: senderAddress, amount: amountToSend }],
+      fee,
+      senderAddress,
+      servers,
+      useCompressed
+    );
+
+    const broadcastResult = await electrumCall('blockchain.transaction.broadcast', [built.txHex], servers, 45000);
+    if (!broadcastResult) {
+      return res.json({ success: false, error: 'Broadcast failed: no response' });
+    }
+    const txid = typeof broadcastResult === 'string' ? broadcastResult : String(broadcastResult);
+    if (!/^[0-9a-f]{64}$/i.test(txid)) {
+      return res.json({ success: false, error: `Broadcast failed: ${txid}` });
+    }
+
+    console.log(`✅ Consolidation broadcast: ${txid}`);
+    return res.json({
+      success: true,
+      txid,
+      utxos_consolidated: selectedUtxos.length,
+      amount: amountToSend,
+      fee
+    });
+  } catch (error: any) {
+    console.error('❌ consolidate-wallet error:', error);
     return res.status(500).json({ success: false, error: error.message });
   }
 });

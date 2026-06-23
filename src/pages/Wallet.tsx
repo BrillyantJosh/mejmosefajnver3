@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wallet as WalletIcon, CreditCard, FileText, ExternalLink, TrendingUp, Copy, QrCode, Snowflake, ShieldAlert } from "lucide-react";
+import { Wallet as WalletIcon, CreditCard, FileText, ExternalLink, TrendingUp, Copy, QrCode, Snowflake, ShieldAlert, Layers } from "lucide-react";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -54,8 +54,13 @@ export default function Wallet() {
   const { records: unregRecords, count: unregCount } = useUnregisteredLana();
   const splitWarning = useWarningBeforeSplit();
   const [walletsWithBalances, setWalletsWithBalances] = useState<WalletWithBalance[]>([]);
+  const [utxoCounts, setUtxoCounts] = useState<Record<string, number>>({});
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [selectedWalletForQr, setSelectedWalletForQr] = useState<string>("");
+
+  // Threshold above which we surface the Consolidate action (matches the
+  // 20-input cap the Send flow enforces — beyond this, sends start failing).
+  const CONSOLIDATE_THRESHOLD = 20;
 
   // Refresh system parameters when wallet page loads
   useEffect(() => {
@@ -66,6 +71,38 @@ export default function Wallet() {
     if (wallets.length > 0 && parameters?.electrumServers) {
       fetchBalances();
     }
+  }, [wallets, parameters?.electrumServers]);
+
+  // Fetch per-wallet UTXO counts (non-frozen only) to decide whether to offer
+  // Consolidate. Runs in parallel and tolerates failures — a wallet whose count
+  // can't be resolved simply won't show the button.
+  useEffect(() => {
+    if (wallets.length === 0 || !parameters?.electrumServers) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        wallets
+          .filter(w => !w.freezeStatus)
+          .map(async (w) => {
+            try {
+              const { data } = await supabase.functions.invoke('get-utxo-info', {
+                body: { address: w.walletId, electrumServers: parameters.electrumServers },
+              });
+              if (data?.success && typeof data.utxoCount === 'number') {
+                return [w.walletId, data.utxoCount] as const;
+              }
+            } catch {
+              // tolerate — no button for this wallet
+            }
+            return null;
+          })
+      );
+      if (cancelled) return;
+      const map: Record<string, number> = {};
+      for (const e of entries) if (e) map[e[0]] = e[1];
+      setUtxoCounts(map);
+    })();
+    return () => { cancelled = true; };
   }, [wallets, parameters?.electrumServers]);
 
   const fetchBalances = async () => {
@@ -464,6 +501,19 @@ export default function Wallet() {
                     onClick={() => window.location.href = `/send-lana?walletId=${wallet.walletId}&balance=${wallet.balance || 0}`}
                   >
                     Send
+                  </Button>
+                )}
+
+                {/* Consolidate — surfaced when this wallet has too many UTXOs */}
+                {!wallet.freezeStatus && (utxoCounts[wallet.walletId] ?? 0) > CONSOLIDATE_THRESHOLD && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                    onClick={() => window.location.href = `/wallet/consolidate/${encodeURIComponent(wallet.walletId)}`}
+                  >
+                    <Layers className="h-4 w-4 mr-2" />
+                    Consolidate ({utxoCounts[wallet.walletId]} UTXOs)
                   </Button>
                 )}
 

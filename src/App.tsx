@@ -134,6 +134,7 @@ const FoodCornerSupplier = lazy(() => import("./pages/food-corner/FoodCornerSupp
 
 const Chat = lazy(() => import("./pages/Chat"));
 const Wallet = lazy(() => import("./pages/Wallet"));
+const WalletConsolidate = lazy(() => import("./pages/WalletConsolidate"));
 const RegisterWallet = lazy(() => import("./pages/RegisterWallet"));
 const RegisterWalletResult = lazy(() => import("./pages/RegisterWalletResult"));
 const SendLana = lazy(() => import("./pages/SendLana"));
@@ -322,6 +323,7 @@ const App = () => (
                     <Route path="room/:roomId" element={<EncryptedRoomChat />} />
                   </Route>
                   <Route path="/wallet" element={<Wallet />} />
+                  <Route path="/wallet/consolidate/:walletId" element={<WalletConsolidate />} />
                   <Route path="/wallet/register" element={<RegisterWallet />} />
                   <Route path="/wallet/register/result" element={<RegisterWalletResult />} />
                   <Route path="/direct-fund" element={<DirectFundLayout />}>
