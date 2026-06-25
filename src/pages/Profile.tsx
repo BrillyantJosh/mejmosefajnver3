@@ -1188,14 +1188,17 @@ export default function Profile() {
                       <FormItem>
                         <FormLabel>Statement of Self-Responsibility *</FormLabel>
                         <FormControl>
-                          <Textarea 
+                          <Textarea
                             placeholder="Write in your own words that you accept unconditional self-responsibility inside the Lana World..."
-                            className="min-h-[100px]"
-                            {...field} 
+                            {...field}
+                            readOnly={!!profile?.statement_of_responsibility}
+                            className={`min-h-[100px] ${profile?.statement_of_responsibility ? 'bg-muted/50 cursor-not-allowed opacity-90' : ''}`}
                           />
                         </FormControl>
                         <FormDescription>
-                          You must explicitly accept unconditional self-responsibility before saving your profile. Minimum 10 characters.
+                          {profile?.statement_of_responsibility
+                            ? 'Your statement of self-responsibility is locked and can no longer be changed.'
+                            : 'You must explicitly accept unconditional self-responsibility before saving your profile. Minimum 10 characters.'}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
