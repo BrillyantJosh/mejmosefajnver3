@@ -325,7 +325,7 @@ export default function ChatView({
           </Button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 md:gap-3 flex-wrap">
-              <h2 className="text-base md:text-lg font-semibold truncate">{conversationTitle}</h2>
+              <h2 className="text-base md:text-lg font-semibold truncate min-w-0">{conversationTitle}</h2>
               <Badge className={`text-xs shrink-0 ${currentPhase.bg} ${currentPhase.color} border`}>
                 {currentPhase.emoji} {currentPhase.label}
               </Badge>
@@ -336,7 +336,7 @@ export default function ChatView({
               variant="outline"
               size="sm"
               onClick={onExit}
-              className="shrink-0 text-destructive border-destructive/40 hover:bg-destructive/10"
+              className="shrink-0 whitespace-nowrap px-2 md:px-3 text-destructive border-destructive/40 hover:bg-destructive/10"
             >
               <LogOut className="w-4 h-4 mr-1.5" />
               Exit
