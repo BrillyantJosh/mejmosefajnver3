@@ -79,8 +79,8 @@ export default function Own() {
     selectedProcess?.processEventId || null,
     session?.nostrHexId || null
   );
-  // Only plain participants may exit (not the initiator, facilitator, or guest)
-  const canExit = selectedProcess?.userRole === 'participant';
+  // Participants and the initiator may exit (not the facilitator or guest)
+  const canExit = selectedProcess?.userRole === 'participant' || selectedProcess?.userRole === 'initiator';
 
   // Get message IDs for LASH counts from Supabase
   const messageIds = messages.map(m => m.id);

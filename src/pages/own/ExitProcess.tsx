@@ -101,7 +101,8 @@ export default function ExitProcess() {
     );
   }
 
-  const notEligible = !process || process.userRole !== 'participant' || process.status !== 'open';
+  const eligibleRole = process?.userRole === 'participant' || process?.userRole === 'initiator';
+  const notEligible = !process || !eligibleRole || process.status !== 'open';
   if (notEligible) {
     return (
       <div className="max-w-2xl mx-auto p-4 space-y-6">
@@ -117,7 +118,7 @@ export default function ExitProcess() {
               ? 'This process was not found or is no longer open.'
               : process.status !== 'open'
                 ? 'This process is no longer open, so it cannot be exited.'
-                : 'Only participants can exit a process.'}
+                : 'Only participants or the initiator can exit a process.'}
           </CardContent>
         </Card>
         <Button className="w-full" variant="outline" onClick={goBack}>
