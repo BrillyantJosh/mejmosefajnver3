@@ -66,6 +66,7 @@ const OwnSearch = lazy(() => import("./pages/own/Search"));
 const OwnMyCases = lazy(() => import("./pages/own/MyCases"));
 const OwnTranscript = lazy(() => import("./pages/own/Transcript"));
 const StartOwnProcess = lazy(() => import("./pages/own/StartOwnProcess"));
+const OwnExitProcess = lazy(() => import("./pages/own/ExitProcess"));
 const RockLayout = lazy(() => import("./pages/rock/RockLayout"));
 const RockGrant = lazy(() => import("./pages/rock/Grant"));
 const RockGrantNew = lazy(() => import("./pages/rock/GrantNew"));
@@ -271,6 +272,7 @@ const App = () => (
                     <Route path="my-cases" element={<OwnMyCases />} />
                     <Route path="transcript/:caseId" element={<OwnTranscript />} />
                     <Route path="start/:postId" element={<StartOwnProcess />} />
+                    <Route path="exit/:processId" element={<OwnExitProcess />} />
                   </Route>
           <Route path="/rock" element={<RockLayout />}>
             <Route index element={<RockGrant />} />

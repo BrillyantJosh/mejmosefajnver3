@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, Send, MessageCircle, History, ImagePlus, Camera, Loader2 } from "lucide-react";
+import { ArrowLeft, Send, MessageCircle, History, ImagePlus, Camera, Loader2, LogOut } from "lucide-react";
 import ChatMessage from "./ChatMessage";
 import OwnAudioRecorder from "./OwnAudioRecorder";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
@@ -118,8 +118,9 @@ interface Message {
   sender: string;
   senderPubkey?: string;
   timestamp: string;
-  type: 'text' | 'audio' | 'image';
+  type: 'text' | 'audio' | 'image' | 'system';
   content?: string;
+  systemText?: string;
   audioUrl?: string;
   audioDuration?: number;
   transcript?: string;
@@ -138,6 +139,11 @@ interface ChatViewProps {
   onSendAudio?: (audioPath: string) => Promise<boolean>;
   onSendMessage?: (text: string) => Promise<boolean>;
   isLoading?: boolean;
+  // Exit / Re-enter props
+  isExited?: boolean;
+  canExit?: boolean;
+  onExit?: () => void;
+  onReEnter?: () => Promise<void>;
   // LASH props
   lashedEventIds?: Set<string>;
   onGiveLash?: (messageId: string, recipientPubkey: string) => Promise<void>;
@@ -156,6 +162,10 @@ export default function ChatView({
   onSendAudio,
   onSendMessage,
   isLoading = false,
+  isExited = false,
+  canExit = false,
+  onExit,
+  onReEnter,
   lashedEventIds = new Set(),
   onGiveLash,
   lashingMessageId,
@@ -163,7 +173,18 @@ export default function ChatView({
 }: ChatViewProps) {
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isReEntering, setIsReEntering] = useState(false);
   const [visibleCount, setVisibleCount] = useState(MESSAGES_PER_PAGE);
+
+  const handleReEnter = async () => {
+    if (!onReEnter) return;
+    setIsReEntering(true);
+    try {
+      await onReEnter();
+    } finally {
+      setIsReEntering(false);
+    }
+  };
 
   // Show only the last N messages (most recent)
   const visibleMessages = useMemo(() => {
@@ -310,6 +331,17 @@ export default function ChatView({
               </Badge>
             </div>
           </div>
+          {canExit && !isExited && onExit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExit}
+              className="shrink-0 text-destructive border-destructive/40 hover:bg-destructive/10"
+            >
+              <LogOut className="w-4 h-4 mr-1.5" />
+              Exit
+            </Button>
+          )}
         </div>
       </Card>
 
@@ -328,6 +360,32 @@ export default function ChatView({
         </div>
       </div>
 
+      {isExited ? (
+        /* Exited view — process content + input hidden; only the notice + Re-enter */
+        <div className="flex-1 flex flex-col items-center justify-center text-center p-6 gap-4">
+          <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+            <LogOut className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold">You have exited this process</h3>
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+              You no longer see the process content. You can return at any time while the process is
+              still open — re-entering unfreezes your wallets and cancels the deregistration.
+            </p>
+          </div>
+          <Button onClick={handleReEnter} disabled={isReEntering || !onReEnter}>
+            {isReEntering ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Re-entering...
+              </>
+            ) : (
+              "Re-enter the process"
+            )}
+          </Button>
+        </div>
+      ) : (
+      <>
       {/* Messages */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 px-2 md:px-4">
         <div className="space-y-2 pb-4">
@@ -361,7 +419,7 @@ export default function ChatView({
                   sender={msg.sender}
                   timestamp={msg.timestamp}
                   type={msg.type}
-                  content={msg.content}
+                  content={msg.type === 'system' ? msg.systemText : msg.content}
                   audioUrl={msg.audioUrl}
                   audioDuration={msg.audioDuration}
                   transcript={msg.transcript}
@@ -438,6 +496,8 @@ export default function ChatView({
           </div>
         </div>
       </Card>
+      </>
+      )}
     </div>
   );
 }

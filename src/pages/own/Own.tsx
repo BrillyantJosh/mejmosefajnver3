@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import ConversationList from "@/components/own/ConversationList";
 import ChatView from "@/components/own/ChatView";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
 import { useNostrGroupKey } from "@/hooks/useNostrGroupKey";
 import { useNostrGroupMessages } from "@/hooks/useNostrGroupMessages";
+import { useNostrProcessExitState, PROCESS_EXIT_KIND } from "@/hooks/useNostrProcessExitState";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { finalizeEvent, nip44 } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
@@ -32,6 +34,7 @@ const hexToBytes = (hex: string): Uint8Array => {
 export default function Own() {
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
+  const navigate = useNavigate();
   const [selectedProcessId, setSelectedProcessId] = useState<string>();
   
   // LASH state
@@ -70,6 +73,14 @@ export default function Own() {
     selectedProcess?.processEventId || null,
     groupKey
   );
+
+  // Exit / Re-enter (KIND 87055) state for the selected process
+  const { exitEvents, isExited } = useNostrProcessExitState(
+    selectedProcess?.processEventId || null,
+    session?.nostrHexId || null
+  );
+  // Only plain participants may exit (not the initiator, facilitator, or guest)
+  const canExit = selectedProcess?.userRole === 'participant';
 
   // Get message IDs for LASH counts from Supabase
   const messageIds = messages.map(m => m.id);
@@ -289,6 +300,43 @@ export default function Own() {
     }
   };
 
+  // Publish a KIND 87055 exit/re-enter event (signed by the user, public). The
+  // Exit flow has its own 2-step page; this helper backs the inline Re-enter
+  // button on the gated view. Mirrors the sendOwnMessage publish path but
+  // unencrypted (the registrar + all participants must read it).
+  const publishExitEvent = async (action: 'exit' | 'enter', statement: string): Promise<boolean> => {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId || !selectedProcess) {
+      toast.error("Missing authentication");
+      return false;
+    }
+    try {
+      const tags: string[][] = [
+        ['e', selectedProcess.processEventId, '', 'process'],
+        ['a', `37044:${selectedProcess.initiator}:${selectedProcess.id}`],
+        ['action', action],
+        ['client', 'lana-own'],
+      ];
+      if (selectedProcess.initiator) tags.push(['p', selectedProcess.initiator, '', 'initiator']);
+      if (selectedProcess.facilitator) tags.push(['p', selectedProcess.facilitator, '', 'facilitator']);
+
+      const signedEvent = finalizeEvent({
+        kind: PROCESS_EXIT_KIND,
+        created_at: Math.floor(Date.now() / 1000),
+        tags,
+        content: statement.trim(),
+      }, hexToBytes(session.nostrPrivateKey));
+
+      await supabase.functions.invoke('publish-dm-event', { body: { event: signedEvent } });
+      supabase.functions
+        .invoke('queue-relay-event', { body: { signedEvent, userPubkey: session.nostrHexId } })
+        .catch(() => {});
+      return true;
+    } catch (error) {
+      console.error('❌ Error publishing exit/enter event:', error);
+      return false;
+    }
+  };
+
   // Helper to determine user role in process
   const getUserRole = (pubkey: string): string => {
     if (!selectedProcess) return '';
@@ -405,6 +453,28 @@ export default function Own() {
     };
   });
 
+  // Build "X has exited / re-entered the process" system lines from KIND 87055
+  // events and merge them with the real messages, sorted chronologically.
+  // (formattedMessages is 1:1 with messages, so the raw numeric timestamp for
+  // each real message comes from messages[i].timestamp.)
+  const realMessages = formattedMessages.map((fm, i) => ({ ...fm, _sortTs: messages[i].timestamp }));
+  const systemMessages = exitEvents.map(ev => {
+    const name = profiles.get(ev.authorPubkey)?.full_name || ev.authorPubkey.slice(0, 8);
+    const verb = ev.action === 'exit' ? 'has exited the process' : 'has re-entered the process';
+    return {
+      id: ev.id,
+      sender: name,
+      senderPubkey: ev.authorPubkey,
+      role: '',
+      timestamp: new Date(ev.createdAt * 1000).toLocaleString(),
+      type: 'system' as const,
+      systemText: `${name} ${verb}`,
+      isCurrentUser: false,
+      _sortTs: ev.createdAt,
+    };
+  });
+  const allMessages = [...realMessages, ...systemMessages].sort((a, b) => a._sortTs - b._sortTs);
+
   if (processesLoading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -439,8 +509,16 @@ export default function Own() {
             conversationStatus={selectedProcess?.status}
             processEventId={selectedProcess?.processEventId}
             senderPubkey={session?.nostrHexId}
-            messages={formattedMessages}
+            messages={allMessages}
             phase={selectedProcess?.phase}
+            isExited={isExited}
+            canExit={canExit}
+            onExit={() => selectedProcess && navigate(`/own/exit/${encodeURIComponent(selectedProcess.id)}`)}
+            onReEnter={async () => {
+              const ok = await publishExitEvent('enter', '');
+              if (ok) toast.success('You have re-entered the process');
+              else toast.error('Failed to re-enter the process');
+            }}
             onBack={() => setSelectedProcessId(undefined)}
             onSendAudio={async (audioPath: string) => {
               return await sendOwnMessage(audioPath);

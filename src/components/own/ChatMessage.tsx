@@ -71,7 +71,7 @@ interface ChatMessageProps {
   sender: string;
   role?: string;
   timestamp: string;
-  type: 'text' | 'audio' | 'image';
+  type: 'text' | 'audio' | 'image' | 'system';
   content?: string;
   audioUrl?: string;
   audioDuration?: number;
@@ -102,6 +102,17 @@ export default function ChatMessage({
   isLashing = false,
   lashCount = 0
 }: ChatMessageProps) {
+  // System lines (e.g. "X has exited the process") — centered, no avatar/role/LASH.
+  if (type === 'system') {
+    return (
+      <div className="flex justify-center my-2">
+        <span className="text-xs text-muted-foreground bg-muted/50 rounded-full px-3 py-1 text-center">
+          {content}
+        </span>
+      </div>
+    );
+  }
+
   // Show LASH button for all messages - disabled for own messages but shows count
   const showLashButton = messageId && (onLash || lashCount > 0);
   const canLash = !isCurrentUser && onLash;
