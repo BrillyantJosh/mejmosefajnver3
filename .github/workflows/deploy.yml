@@ -17,6 +17,9 @@ jobs:
           script: |
             set -e
             cd /opt/apps/mejmosefajn
+            # Allow root to operate on this repo even if it's owned by another uid
+            # (git "dubious ownership" guard). Idempotent — only adds once.
+            git config --global --get-all safe.directory 2>/dev/null | grep -qxF /opt/apps/mejmosefajn || git config --global --add safe.directory /opt/apps/mejmosefajn
             GIT_SSH_COMMAND="ssh -i /root/.ssh/github_deploy_mejmosefajn -o StrictHostKeyChecking=no" git pull origin main
             docker compose -f docker-compose.prod.yml build --no-cache
             docker compose -f docker-compose.prod.yml up -d
