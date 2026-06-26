@@ -33,6 +33,7 @@ export default function Chat() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
+  const [audioStarting, setAudioStarting] = useState(false); // mic-button "preparing…" feedback during the getUserMedia gap
   const [optimisticLashes, setOptimisticLashes] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [visibleCount, setVisibleCount] = useState(MESSAGES_PER_PAGE);
@@ -798,6 +799,7 @@ export default function Chat() {
                   />
                   <DMAudioRecorder
                     recipientPubkey={displayConversation.pubkey}
+                    onStartChange={setAudioStarting}
                     onSendMessage={async (audioUrl) => {
                       await sendMessage(displayConversation.pubkey, audioUrl, replyingTo?.id);
                       setReplyingTo(null);
@@ -812,10 +814,11 @@ export default function Chat() {
                         const audioRecorder = document.querySelector('[data-audio-recorder]') as HTMLButtonElement;
                         if (audioRecorder) audioRecorder.click();
                       }}
+                      disabled={audioStarting}
                       title="Record audio message"
                       className="touch-manipulation h-11 w-11 md:h-10 md:w-10"
                     >
-                      <Mic className="h-5 w-5" />
+                      {audioStarting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
                     </Button>
                     <Button
                       type="button"

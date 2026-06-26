@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Mic, Square, Loader2, Send, X, Play, Pause } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,27 +6,54 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Slider } from '@/components/ui/slider';
 
+const MAX_RECORDING_SECONDS = 300; // 5 minutes — cap so messages stay small enough to upload
+const WARNING_SECONDS = 240;       // warn at 4:00 (1 min left)
+
 interface DMAudioRecorderProps {
   recipientPubkey: string;
   onAudioUploaded?: (audioUrl: string) => void;
   onSendMessage: (audioUrl: string) => Promise<void>;
   compact?: boolean;
+  /** Fires the instant the mic button is tapped (true) and when start completes or fails
+   *  (false), so the parent's visible button can show immediate "preparing…" feedback
+   *  during the getUserMedia permission gap. */
+  onStartChange?: (starting: boolean) => void;
 }
 
-export function DMAudioRecorder({ recipientPubkey, onAudioUploaded, onSendMessage, compact = false }: DMAudioRecorderProps) {
+export function DMAudioRecorder({ recipientPubkey, onAudioUploaded, onSendMessage, compact = false, onStartChange }: DMAudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string; mimeType: string } | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [recordingTime, setRecordingTime] = useState(0); // elapsed seconds while recording
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const startingRef = useRef(false); // guards against rapid repeat taps before recording starts
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
   const { session } = useAuth();
+
+  const clearRecordingTimer = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
+
+  // Cleanup on unmount: stop the timer and release the mic if still held.
+  useEffect(() => {
+    return () => {
+      clearRecordingTimer();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   // Detect best supported MIME type
   const getSupportedMimeType = (): string => {
@@ -48,16 +75,21 @@ export function DMAudioRecorder({ recipientPubkey, onAudioUploaded, onSendMessag
   };
 
   const startRecording = async () => {
+    // Absorb rapid repeat taps: ignore if a start is already in flight or we're recording.
+    // (Each tap previously queued another getUserMedia with no visible feedback.)
+    if (startingRef.current || isRecording) return;
+    startingRef.current = true;
+    onStartChange?.(true); // instant feedback on the parent's button during the permission gap
     try {
       // Request microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
         }
       });
-      
+
       streamRef.current = stream;
       chunksRef.current = [];
 
@@ -76,9 +108,10 @@ export function DMAudioRecorder({ recipientPubkey, onAudioUploaded, onSendMessag
       };
 
       mediaRecorder.onstop = () => {
+        clearRecordingTimer();
         const blob = new Blob(chunksRef.current, { type: mimeType });
         console.log('Audio blob size:', blob.size, 'Type:', blob.type);
-        
+
         // Stop all tracks to release microphone
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
@@ -94,6 +127,30 @@ export function DMAudioRecorder({ recipientPubkey, onAudioUploaded, onSendMessag
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
 
+      // Recording timer: warn at 4:00, auto-stop at 5:00 so messages stay uploadable.
+      setRecordingTime(0);
+      clearRecordingTimer();
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime(prev => {
+          const next = prev + 1;
+          if (next === WARNING_SECONDS) {
+            toast({ title: '1 minute left', description: 'Recording stops at 5:00' });
+          }
+          if (next >= MAX_RECORDING_SECONDS) {
+            // Defer the stop so we don't mutate the recorder inside the state updater.
+            setTimeout(() => {
+              if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                mediaRecorderRef.current.stop();
+                setIsRecording(false);
+                clearRecordingTimer();
+                toast({ title: 'Maximum length reached', description: 'Recording stopped at 5:00' });
+              }
+            }, 0);
+          }
+          return next;
+        });
+      }, 1000);
+
     } catch (error) {
       console.error('Error accessing microphone:', error);
       toast({
@@ -101,6 +158,11 @@ export function DMAudioRecorder({ recipientPubkey, onAudioUploaded, onSendMessag
         description: "Cannot access microphone. Please check permissions.",
         variant: "destructive"
       });
+    } finally {
+      // Start finished — either the recording UI is now showing, or it failed. Either way
+      // clear the "preparing" feedback so the button is usable again.
+      startingRef.current = false;
+      onStartChange?.(false);
     }
   };
 
@@ -108,6 +170,7 @@ export function DMAudioRecorder({ recipientPubkey, onAudioUploaded, onSendMessag
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      clearRecordingTimer();
     }
   };
 
@@ -210,8 +273,10 @@ export function DMAudioRecorder({ recipientPubkey, onAudioUploaded, onSendMessag
         streamRef.current = null;
       }
       setIsRecording(false);
+      clearRecordingTimer();
+      setRecordingTime(0);
       chunksRef.current = [];
-      
+
       toast({
         title: "Cancelled",
         description: "Audio recording cancelled"
@@ -339,13 +404,18 @@ export function DMAudioRecorder({ recipientPubkey, onAudioUploaded, onSendMessag
   }
 
   if (isRecording) {
+    const isNearLimit = recordingTime >= WARNING_SECONDS;
     return (
       <div className="flex items-center gap-2 bg-background border rounded-lg p-2">
+        <span className={`h-2.5 w-2.5 rounded-full ${isNearLimit ? 'bg-orange-500' : 'bg-red-500'} animate-pulse`} />
+        <span className={`text-sm font-mono font-medium min-w-[40px] ${isNearLimit ? 'text-orange-500' : 'text-red-500'}`}>
+          {formatTime(recordingTime)}
+        </span>
+        <span className="text-xs text-muted-foreground">/ {formatTime(MAX_RECORDING_SECONDS)}</span>
         <Button
           variant="destructive"
           size="icon"
           onClick={stopRecording}
-          className="animate-pulse"
         >
           <Square className="h-5 w-5" />
         </Button>

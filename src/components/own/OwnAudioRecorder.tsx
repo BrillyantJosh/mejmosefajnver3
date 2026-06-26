@@ -24,6 +24,7 @@ export default function OwnAudioRecorder({
   compact = false
 }: OwnAudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
+  const [isStarting, setIsStarting] = useState(false); // mic tapped, awaiting permission/setup — instant button feedback
   const [isUploading, setIsUploading] = useState(false);
   const [audioPreview, setAudioPreview] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -40,6 +41,7 @@ export default function OwnAudioRecorder({
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const audioBlobRef = useRef<Blob | null>(null);
   const uploadingRef = useRef(false); // guards against duplicate / rapid Send taps
+  const startingRef = useRef(false);  // guards against rapid repeat taps before recording starts
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingTimeRef = useRef(0);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -111,6 +113,10 @@ export default function OwnAudioRecorder({
   };
 
   const startRecording = async () => {
+    // Absorb rapid repeat taps and show instant feedback before the (slow) permission prompt.
+    if (startingRef.current || isRecording) return;
+    startingRef.current = true;
+    setIsStarting(true);
     try {
       // Check browser support
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -226,6 +232,10 @@ export default function OwnAudioRecorder({
       } else {
         toast.error("Could not start recording. Please try a different browser.");
       }
+    } finally {
+      // Start finished — recording UI now showing, or it failed. Clear the "preparing" state.
+      startingRef.current = false;
+      setIsStarting(false);
     }
   };
 
@@ -594,9 +604,9 @@ export default function OwnAudioRecorder({
       size="icon"
       variant="ghost"
       onClick={startRecording}
-      disabled={isUploading}
+      disabled={isUploading || isStarting}
     >
-      <Mic className="h-4 w-4" />
+      {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
     </Button>
   );
 }
