@@ -354,6 +354,19 @@ export default function ChatView({
               </Badge>
             </div>
           </div>
+          {/* Exit lives in the STICKY header so it stays visible while scrolling
+              the conversation (the phase banner below scrolls away on mobile). */}
+          {canExit && !isExited && onExit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExit}
+              className="shrink-0 whitespace-nowrap px-2 md:px-3 text-destructive border-destructive/40 hover:bg-destructive/10"
+            >
+              <LogOut className="w-4 h-4 mr-1.5" />
+              Exit
+            </Button>
+          )}
         </div>
       </Card>
 
@@ -369,17 +382,6 @@ export default function ChatView({
               {currentPhase.description}
             </p>
           </div>
-          {canExit && !isExited && onExit && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onExit}
-              className="shrink-0 whitespace-nowrap bg-background/80 text-destructive border-destructive/40 hover:bg-destructive/10"
-            >
-              <LogOut className="w-4 h-4 mr-1.5" />
-              Exit
-            </Button>
-          )}
         </div>
       </div>
 
