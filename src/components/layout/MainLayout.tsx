@@ -76,25 +76,48 @@ export default function MainLayout() {
   const dynamicModules = getEnabledModules();
   const appVersion = import.meta.env.VITE_APP_VERSION || 'dev';
 
-  // Version check - clear caches on version mismatch
+  // Self-healing update check: compare this client's baked-in BUILD_ID against the
+  // server's dist/version.json (which is NEVER service-worker-cached → always fresh).
+  // If a newer build is live, unregister the SW + clear caches + hard-reload — this
+  // defeats the iOS/PWA "stale cached bundle" problem that otherwise persists across
+  // ordinary reloads. Runs on mount and whenever the app returns to the foreground.
   useEffect(() => {
-    const storedVersion = localStorage.getItem('app_version');
-    
-    if (storedVersion !== appVersion) {
-      console.log(`[Version] Mismatch detected: ${storedVersion} -> ${appVersion}`);
-      localStorage.setItem('app_version', appVersion);
-      
-      // Clear service worker caches on version change
-      if (storedVersion && 'caches' in window) {
-        console.log('[Version] Clearing old caches...');
-        caches.keys().then(names => {
-          names.forEach(name => {
-            caches.delete(name);
-          });
-        });
-      }
-    }
-  }, [appVersion]);
+    const BUILD_ID = import.meta.env.VITE_BUILD_ID as string | undefined;
+    if (!BUILD_ID) return;
+
+    const checkForNewBuild = async () => {
+      try {
+        const res = await fetch(`/version.json?cb=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const liveBuild = data?.build ? String(data.build) : '';
+        if (!liveBuild || liveBuild === String(BUILD_ID)) return; // up to date
+
+        // New deploy detected. Guard against reload loops (one attempt per target build).
+        const guard = sessionStorage.getItem('build_reload_target');
+        if (guard === liveBuild) return;
+        sessionStorage.setItem('build_reload_target', liveBuild);
+
+        console.log(`[Update] New build ${liveBuild} (running ${BUILD_ID}) → self-healing reload`);
+        try {
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map((r) => r.unregister()));
+          }
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
+        } catch { /* best effort */ }
+        window.location.reload();
+      } catch { /* offline / fetch failed — ignore */ }
+    };
+
+    checkForNewBuild();
+    const onVisible = () => { if (document.visibilityState === 'visible') checkForNewBuild(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   // --- PWA install prompt state (shared for banner + header) ---
   const [installHelpOpen, setInstallHelpOpen] = useState(false);

@@ -3,21 +3,26 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
+import fs from "fs";
 
-// VERSION: 2.3 - Fix service worker navigation fallback for /api/ paths
-const APP_VERSION = '2.3.0';
+// VERSION: 2.4 - reliable auto-update (version.json self-heal + foreground check)
+const APP_VERSION = '2.4.0';
+// Unique per build — baked into the client AND written to dist/version.json (NOT
+// service-worker-cached), so a stale client can detect a new deploy and hard-refresh.
+const BUILD_ID = String(Date.now());
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(APP_VERSION),
+    'import.meta.env.VITE_BUILD_ID': JSON.stringify(BUILD_ID),
   },
   build: {
     rollupOptions: {
       output: {
-        entryFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
-        chunkFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
-        assetFileNames: `assets/[name]-[hash]-${Date.now()}.[ext]`,
+        entryFileNames: `assets/[name]-[hash]-${BUILD_ID}.js`,
+        chunkFileNames: `assets/[name]-[hash]-${BUILD_ID}.js`,
+        assetFileNames: `assets/[name]-[hash]-${BUILD_ID}.[ext]`,
         // Only split React-independent heavy libs into their own chunks.
         // We deliberately do NOT manually split React / @radix-ui / lucide etc.:
         // forcing @radix-ui into a separate chunk from React broke the module
@@ -93,6 +98,21 @@ export default defineConfig(({ mode }) => ({
         ],
       },
     }),
+    {
+      // Emit dist/version.json (NOT precached by the SW → always fetched fresh).
+      // The client compares its baked-in BUILD_ID against this to detect a new deploy.
+      name: "emit-version-json",
+      writeBundle() {
+        try {
+          fs.writeFileSync(
+            path.resolve(__dirname, "dist/version.json"),
+            JSON.stringify({ version: APP_VERSION, build: BUILD_ID })
+          );
+        } catch (e) {
+          console.warn("emit-version-json failed:", e);
+        }
+      },
+    },
   ].filter(Boolean),
   resolve: {
     alias: {
