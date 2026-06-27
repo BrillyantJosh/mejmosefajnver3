@@ -24,6 +24,7 @@ import { useAdmin } from "@/contexts/AdminContext";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 import { useNostrPaymentScore } from "@/hooks/useNostrPaymentScore";
+import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { supabase } from "@/integrations/supabase/client";
 import { convertWifToIds } from "@/lib/crypto";
 import { toast } from "sonner";
@@ -68,10 +69,16 @@ export default function DiscountSell() {
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
   const { profile } = useNostrProfile();
   const { score: paymentScore, isLoading: scoreLoading } = useNostrPaymentScore(session?.nostrHexId);
+  const { status: lana8WonderStatus, isLoading: l8wLoading } = useNostrLana8Wonder();
 
   // Rating check
   const userRating = paymentScore ? parseFloat(paymentScore.score) : null;
-  const ratingBlocked = userRating === null || userRating < MIN_RATING;
+  const hasLana8Wonder = lana8WonderStatus.exists;
+  // When there is NO payment rating yet — e.g. the user just joined Lana8Wonder,
+  // so no subscriptions have run and no rating has accrued — allow selling if a
+  // Lana8Wonder (KIND 88888) record exists. An actual rating below the minimum
+  // still blocks the sale.
+  const ratingBlocked = userRating === null ? !hasLana8Wonder : userRating < MIN_RATING;
 
   // Admin-configurable settings with defaults
   const BUYBACK_WALLET = appSettings?.discount_buyback_wallet || DEFAULT_BUYBACK_WALLET;
@@ -468,7 +475,7 @@ export default function DiscountSell() {
         ))}
       </div>
 
-      {walletsLoading || scoreLoading ? (
+      {walletsLoading || scoreLoading || l8wLoading ? (
         <div className="flex items-center justify-center py-20">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
@@ -479,7 +486,11 @@ export default function DiscountSell() {
             <div className="flex items-center gap-3 rounded-xl border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-4 py-3 mb-4">
               <CheckCircle className="h-5 w-5 text-green-600 shrink-0" />
               <span className="text-sm text-green-700 dark:text-green-400">
-                Payment Rating: <strong>{userRating}/10</strong> — Selling enabled
+                {userRating !== null ? (
+                  <>Payment Rating: <strong>{userRating}/10</strong> — Selling enabled</>
+                ) : (
+                  <><strong>Lana8Wonder member</strong> — Selling enabled (no rating yet)</>
+                )}
               </span>
             </div>
           ) : (
@@ -499,7 +510,7 @@ export default function DiscountSell() {
                     </span>
                   </div>
                 ) : (
-                  <p className="text-xs text-red-500/70">No payment rating found for your account.</p>
+                  <p className="text-xs text-red-500/70">No payment rating and no active Lana8Wonder plan found for your account.</p>
                 )}
               </div>
             </div>
