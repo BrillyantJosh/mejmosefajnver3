@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { AudioPlayer } from "@/components/AudioPlayer";
-import { Heart, FileText, ChevronDown, ChevronUp } from "lucide-react";
+import { Heart, FileText, ChevronDown, ChevronUp, Reply } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TranslateButton from "@/components/own/TranslateButton";
 
@@ -83,6 +83,9 @@ interface ChatMessageProps {
   onLash?: () => void;
   isLashing?: boolean;
   lashCount?: number;
+  onReply?: () => void;
+  repliedToSender?: string;
+  repliedToSnippet?: string;
 }
 
 export default function ChatMessage({
@@ -100,7 +103,10 @@ export default function ChatMessage({
   isLashed = false,
   onLash,
   isLashing = false,
-  lashCount = 0
+  lashCount = 0,
+  onReply,
+  repliedToSender,
+  repliedToSnippet
 }: ChatMessageProps) {
   // System lines (e.g. "X has exited the process") — centered, no avatar/role/LASH.
   if (type === 'system') {
@@ -145,6 +151,27 @@ export default function ChatMessage({
     </button>
   );
 
+  const ReplyButton = () => (
+    <button
+      onClick={onReply}
+      className="p-1.5 rounded-full text-muted-foreground hover:text-primary transition-all flex items-center"
+      title="Reply"
+    >
+      <Reply className="w-4 h-4" />
+    </button>
+  );
+
+  // Quoted block shown at the top of a bubble when this message is a reply.
+  const QuotedReply = () =>
+    (repliedToSender || repliedToSnippet) ? (
+      <div className="mb-1.5 border-l-2 border-primary/50 pl-2 py-0.5 max-w-full">
+        {repliedToSender && (
+          <p className="text-[11px] font-medium text-primary/80 truncate">{repliedToSender}</p>
+        )}
+        <p className="text-xs text-muted-foreground/80 truncate">{repliedToSnippet}</p>
+      </div>
+    ) : null;
+
   if (type === 'audio' && audioUrl) {
     return (
       <div className={`flex flex-col mb-4 ${isCurrentUser ? 'items-end' : 'items-start'}`}>
@@ -153,7 +180,9 @@ export default function ChatMessage({
         </div>
         <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
           {showLashButton && <LashButton />}
+          {onReply && <ReplyButton />}
           <Card className={`p-2 md:p-3 flex-1 min-w-0 ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
+            <QuotedReply />
             <AudioPlayer audioUrl={audioUrl} initialDuration={audioDuration} />
             {transcript && <TranscriptToggle text={transcript} />}
           </Card>
@@ -170,7 +199,9 @@ export default function ChatMessage({
         </div>
         <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
           {showLashButton && <LashButton />}
+          {onReply && <ReplyButton />}
           <Card className={`p-1 md:p-2 ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
+            <QuotedReply />
             <a href={imageUrl} target="_blank" rel="noopener noreferrer">
               <img
                 src={imageUrl}
@@ -192,7 +223,9 @@ export default function ChatMessage({
       </div>
       <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
         {showLashButton && <LashButton />}
+        {onReply && <ReplyButton />}
         <Card className={`p-2 md:p-3 max-w-[85vw] md:max-w-md ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
+          <QuotedReply />
           {(() => {
             const ytUrl = content ? findYouTubeUrl(content) : null;
             const ytId = ytUrl ? getYouTubeId(ytUrl) : null;

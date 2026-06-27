@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, Send, MessageCircle, History, ImagePlus, Camera, Loader2, LogOut } from "lucide-react";
+import { ArrowLeft, Send, MessageCircle, History, ImagePlus, Camera, Loader2, LogOut, X } from "lucide-react";
 import ChatMessage from "./ChatMessage";
 import OwnAudioRecorder from "./OwnAudioRecorder";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
@@ -126,6 +126,9 @@ interface Message {
   transcript?: string;
   imageUrl?: string;
   isCurrentUser?: boolean;
+  replyTo?: string;
+  repliedToSender?: string;
+  repliedToSnippet?: string;
 }
 
 interface ChatViewProps {
@@ -136,8 +139,8 @@ interface ChatViewProps {
   messages?: Message[];
   phase?: string;
   onBack: () => void;
-  onSendAudio?: (audioPath: string) => Promise<boolean>;
-  onSendMessage?: (text: string) => Promise<boolean>;
+  onSendAudio?: (audioPath: string, replyTo?: string) => Promise<boolean>;
+  onSendMessage?: (text: string, replyTo?: string) => Promise<boolean>;
   isLoading?: boolean;
   // Exit / Re-enter props
   isExited?: boolean;
@@ -175,6 +178,25 @@ export default function ChatView({
   const [isSending, setIsSending] = useState(false);
   const [isReEntering, setIsReEntering] = useState(false);
   const [visibleCount, setVisibleCount] = useState(MESSAGES_PER_PAGE);
+  // The message currently being replied to (null = not replying)
+  const [replyingTo, setReplyingTo] = useState<{ id: string; sender: string; snippet: string } | null>(null);
+
+  // Short preview of a message for the "replying to" bar (operates on the
+  // already-formatted message: media is known from its type).
+  const snippetForMessage = (m: Message): string => {
+    if (m.type === 'audio') return '🎤 Voice message';
+    if (m.type === 'image') return '🖼 Photo';
+    const t = (m.content || '').trim();
+    return t.length > 80 ? t.slice(0, 80) + '…' : t;
+  };
+
+  // Media (audio/image) send that injects the active reply + clears it on success
+  const handleSendMedia = async (path: string): Promise<boolean> => {
+    if (!onSendAudio) return false;
+    const ok = await onSendAudio(path, replyingTo?.id);
+    if (ok) setReplyingTo(null);
+    return ok;
+  };
 
   const handleReEnter = async () => {
     if (!onReEnter) return;
@@ -227,9 +249,10 @@ export default function ChatView({
     if (!messageText.trim() || !onSendMessage) return;
 
     setIsSending(true);
-    const success = await onSendMessage(messageText.trim());
+    const success = await onSendMessage(messageText.trim(), replyingTo?.id);
     if (success) {
       setMessageText("");
+      setReplyingTo(null);
       // Reset textarea height back to single line
       if (textareaRef.current) {
         textareaRef.current.style.height = '40px';
@@ -426,6 +449,13 @@ export default function ChatView({
                   imageUrl={msg.imageUrl}
                   isCurrentUser={msg.isCurrentUser}
                   messageId={msg.id}
+                  repliedToSender={msg.repliedToSender}
+                  repliedToSnippet={msg.repliedToSnippet}
+                  onReply={
+                    msg.type !== 'system'
+                      ? () => setReplyingTo({ id: msg.id, sender: msg.sender, snippet: snippetForMessage(msg) })
+                      : undefined
+                  }
                   isLashed={lashedEventIds.has(msg.id)}
                   onLash={
                     !msg.isCurrentUser && msg.senderPubkey && onGiveLash
@@ -444,13 +474,31 @@ export default function ChatView({
       {/* Input */}
       <Card className="p-2 md:p-4 sticky bottom-0">
         <div className="flex flex-col gap-2">
+          {/* Replying-to preview */}
+          {replyingTo && (
+            <div className="flex items-start gap-2 rounded-lg border-l-2 border-primary bg-muted/40 px-3 py-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-primary">Replying to {replyingTo.sender}</p>
+                <p className="text-xs text-muted-foreground truncate">{replyingTo.snippet || '…'}</p>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 shrink-0"
+                onClick={() => setReplyingTo(null)}
+                title="Cancel reply"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
           {/* Audio recorder + Image upload */}
           <div className="flex items-center gap-2">
             {processEventId && senderPubkey && onSendAudio && (
               <OwnAudioRecorder
                 processEventId={processEventId}
                 senderPubkey={senderPubkey}
-                onSendAudio={onSendAudio}
+                onSendAudio={handleSendMedia}
                 compact
               />
             )}
@@ -458,7 +506,7 @@ export default function ChatView({
               <ImageUploadButton
                 processEventId={processEventId}
                 senderPubkey={senderPubkey}
-                onSendImage={onSendAudio}
+                onSendImage={handleSendMedia}
               />
             )}
           </div>

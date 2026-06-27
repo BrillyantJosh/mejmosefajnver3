@@ -31,6 +31,15 @@ const hexToBytes = (hex: string): Uint8Array => {
   return bytes;
 };
 
+// Short preview of a message for the "replying to" quote. Detects media from the
+// raw (decrypted) text encoding (audio:/image:); otherwise truncates the text.
+const ownReplySnippet = (rawText: string): string => {
+  const t = (rawText || '').trim();
+  if (t.startsWith('audio:')) return '🎤 Voice message';
+  if (t.startsWith('image:')) return '🖼 Photo';
+  return t.length > 80 ? t.slice(0, 80) + '…' : t;
+};
+
 export default function Own() {
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
@@ -200,8 +209,9 @@ export default function Own() {
     lastActivity: new Date(process.openedAt * 1000).toLocaleDateString()
   }));
 
-  // Send OWN message (text or audio)
-  const sendOwnMessage = async (content: string): Promise<boolean> => {
+  // Send OWN message (text or audio). replyTo = event id of the message being
+  // replied to (kept INSIDE the encrypted payload, never as a public e-tag).
+  const sendOwnMessage = async (content: string, replyTo?: string): Promise<boolean> => {
     if (!session?.nostrPrivateKey || !session?.nostrHexId || !groupKey || !selectedProcess) {
       toast.error("Missing authentication or group key");
       return false;
@@ -220,10 +230,11 @@ export default function Own() {
       });
 
       // 1. Prepare message payload
-      const messagePayload = {
+      const messagePayload: { text: string; timestamp: number; replyTo?: string } = {
         text: content.trim(),
         timestamp: Math.floor(Date.now() / 1000)
       };
+      if (replyTo) messagePayload.replyTo = replyTo;
 
       const plaintextJson = JSON.stringify(messagePayload);
       console.log('📝 Plaintext payload:', plaintextJson);
@@ -457,7 +468,22 @@ export default function Own() {
   // events and merge them with the real messages, sorted chronologically.
   // (formattedMessages is 1:1 with messages, so the raw numeric timestamp for
   // each real message comes from messages[i].timestamp.)
-  const realMessages = formattedMessages.map((fm, i) => ({ ...fm, _sortTs: messages[i].timestamp }));
+  const messageById = new Map(messages.map(m => [m.id, m]));
+  const realMessages = formattedMessages.map((fm, i) => {
+    const raw = messages[i];
+    const base = { ...fm, _sortTs: raw.timestamp };
+    if (!raw.replyTo) return base;
+    // Resolve the quoted message (sender + snippet) from the loaded history.
+    const target = messageById.get(raw.replyTo);
+    return {
+      ...base,
+      replyTo: raw.replyTo,
+      repliedToSender: target
+        ? (profiles.get(target.senderPubkey)?.full_name || target.senderPubkey.slice(0, 8))
+        : undefined,
+      repliedToSnippet: target ? ownReplySnippet(target.text) : 'Replied message',
+    };
+  });
   const systemMessages = exitEvents.map(ev => {
     const name = profiles.get(ev.authorPubkey)?.full_name || ev.authorPubkey.slice(0, 8);
     const verb = ev.action === 'exit' ? 'has exited the process' : 'has re-entered the process';
@@ -520,11 +546,11 @@ export default function Own() {
               else toast.error('Failed to re-enter the process');
             }}
             onBack={() => setSelectedProcessId(undefined)}
-            onSendAudio={async (audioPath: string) => {
-              return await sendOwnMessage(audioPath);
+            onSendAudio={async (audioPath: string, replyTo?: string) => {
+              return await sendOwnMessage(audioPath, replyTo);
             }}
-            onSendMessage={async (text: string) => {
-              return await sendOwnMessage(text);
+            onSendMessage={async (text: string, replyTo?: string) => {
+              return await sendOwnMessage(text, replyTo);
             }}
             isLoading={keyLoading || messagesLoading}
             lashedEventIds={lashedEvents}
