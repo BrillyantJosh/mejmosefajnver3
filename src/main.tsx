@@ -42,12 +42,22 @@ const updateSW = registerSW({
   },
   onRegistered(registration) {
     console.log("[PWA] Service worker registered:", registration);
-    // Periodically check for SW updates (every 60 seconds)
-    // This ensures users get new deploys without manual hard refresh
     if (registration) {
+      // Periodically check for SW updates (every 60 seconds) so users get new
+      // deploys without a manual hard refresh.
       setInterval(() => {
         registration.update();
       }, 60 * 1000);
+      // ALSO check whenever the app returns to the foreground. Mobile browsers /
+      // installed PWAs suspend background timers, so the 60s interval does NOT run
+      // while the app is backgrounded — which is exactly why reopening the app kept
+      // serving a stale cached bundle. Checking on visibility makes a reopen pick up
+      // the latest deploy (paired with onNeedRefresh → updateSW(true) below).
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          registration.update();
+        }
+      });
     }
   },
   onRegisterError(error) {
