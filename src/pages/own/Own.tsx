@@ -230,11 +230,28 @@ export default function Own() {
       });
 
       // 1. Prepare message payload
-      const messagePayload: { text: string; timestamp: number; replyTo?: string } = {
+      const messagePayload: {
+        text: string;
+        timestamp: number;
+        replyTo?: string;
+        replyToSender?: string;
+        replyToSnippet?: string;
+      } = {
         text: content.trim(),
         timestamp: Math.floor(Date.now() / 1000)
       };
-      if (replyTo) messagePayload.replyTo = replyTo;
+      if (replyTo) {
+        messagePayload.replyTo = replyTo;
+        // Embed the quote (sender + snippet) IN the encrypted payload so every
+        // recipient renders it identically — without needing the original message
+        // loaded/decrypted on their side.
+        const target = messages.find(m => m.id === replyTo);
+        if (target) {
+          messagePayload.replyToSender =
+            profiles.get(target.senderPubkey)?.full_name || target.senderPubkey.slice(0, 8);
+          messagePayload.replyToSnippet = ownReplySnippet(target.text);
+        }
+      }
 
       const plaintextJson = JSON.stringify(messagePayload);
       console.log('📝 Plaintext payload:', plaintextJson);
@@ -473,15 +490,19 @@ export default function Own() {
     const raw = messages[i];
     const base = { ...fm, _sortTs: raw.timestamp };
     if (!raw.replyTo) return base;
-    // Resolve the quoted message (sender + snippet) from the loaded history.
+    // Prefer the quote embedded in the message itself (works for everyone, no
+    // dependency on having the original loaded); fall back to resolving it from
+    // local history for older replies that predate the embedded preview.
     const target = messageById.get(raw.replyTo);
     return {
       ...base,
       replyTo: raw.replyTo,
-      repliedToSender: target
-        ? (profiles.get(target.senderPubkey)?.full_name || target.senderPubkey.slice(0, 8))
-        : undefined,
-      repliedToSnippet: target ? ownReplySnippet(target.text) : 'Replied message',
+      repliedToSender:
+        raw.replyToSender
+        ?? (target ? (profiles.get(target.senderPubkey)?.full_name || target.senderPubkey.slice(0, 8)) : undefined),
+      repliedToSnippet:
+        raw.replyToSnippet
+        ?? (target ? ownReplySnippet(target.text) : 'Replied message'),
     };
   });
   const systemMessages = exitEvents.map(ev => {

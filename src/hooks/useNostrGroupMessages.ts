@@ -19,6 +19,8 @@ export interface GroupMessage {
   createdAt: number;
   phase: string;
   replyTo?: string; // event id of the message this one replies to (kept inside the encrypted payload)
+  replyToSender?: string; // embedded quote: original sender's display name
+  replyToSnippet?: string; // embedded quote: short preview of the original message
 }
 
 export const useNostrGroupMessages = (
@@ -93,6 +95,8 @@ export const useNostrGroupMessages = (
           createdAt: event.created_at,
           phase,
           replyTo: typeof messageData.replyTo === 'string' ? messageData.replyTo : undefined,
+          replyToSender: typeof messageData.replyToSender === 'string' ? messageData.replyToSender : undefined,
+          replyToSnippet: typeof messageData.replyToSnippet === 'string' ? messageData.replyToSnippet : undefined,
         };
       } catch (decryptError) {
         console.error('❌ Failed to decrypt/parse message:', {
