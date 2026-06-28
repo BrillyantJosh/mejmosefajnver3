@@ -161,6 +161,16 @@ export default function ChatMessage({
     </button>
   );
 
+  // Heart + Reply stacked VERTICALLY in a narrow column so they don't eat the
+  // horizontal width of the bubble (which was cutting off audio players).
+  const ActionButtons = () =>
+    (showLashButton || onReply) ? (
+      <div className="flex flex-col items-center gap-0.5 self-center shrink-0">
+        {showLashButton && <LashButton />}
+        {onReply && <ReplyButton />}
+      </div>
+    ) : null;
+
   // Quoted block shown at the top of a bubble when this message is a reply.
   const QuotedReply = () =>
     (repliedToSender || repliedToSnippet) ? (
@@ -179,8 +189,7 @@ export default function ChatMessage({
           {sender}{role && ` (${role})`} • {timestamp}
         </div>
         <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-          {showLashButton && <LashButton />}
-          {onReply && <ReplyButton />}
+          <ActionButtons />
           <Card className={`p-2 md:p-3 flex-1 min-w-0 ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
             <QuotedReply />
             <AudioPlayer audioUrl={audioUrl} initialDuration={audioDuration} />
@@ -198,8 +207,7 @@ export default function ChatMessage({
           {sender}{role && ` (${role})`} • {timestamp}
         </div>
         <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-          {showLashButton && <LashButton />}
-          {onReply && <ReplyButton />}
+          <ActionButtons />
           <Card className={`p-1 md:p-2 ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
             <QuotedReply />
             <a href={imageUrl} target="_blank" rel="noopener noreferrer">
@@ -222,8 +230,7 @@ export default function ChatMessage({
         {sender}{role && ` (${role})`} • {timestamp}
       </div>
       <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-        {showLashButton && <LashButton />}
-        {onReply && <ReplyButton />}
+        <ActionButtons />
         <Card className={`p-2 md:p-3 max-w-[85vw] md:max-w-md ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
           <QuotedReply />
           {(() => {
