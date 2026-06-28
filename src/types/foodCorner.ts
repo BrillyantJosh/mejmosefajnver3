@@ -1,7 +1,10 @@
 import type { BusinessUnit } from "@/hooks/useNostrBusinessUnits";
 
 export const FOOD_CORNER_NODE_KIND = 30905;
-export const FOOD_CORNER_LISTING_KIND = 36500;
+export const FOOD_CORNER_LISTING_KIND = 36500; // Pridelki / Izdelki (produce/eco)
+export const FOOD_CORNER_BEAUTY_LISTING_KIND = 36509; // Lepota & Nega (beauty & care)
+// Listing kinds the Food Corner browses/curates (produce + beauty)
+export const FOOD_CORNER_LISTING_KINDS = [FOOD_CORNER_LISTING_KIND, FOOD_CORNER_BEAUTY_LISTING_KIND];
 export const FOOD_CORNER_ORDER_KIND = 36601;
 export const FOOD_CORNER_FULFILLMENT_KIND = 36602;
 export const FOOD_CORNER_ALLOCATION_KIND = 36603;
@@ -95,6 +98,7 @@ export interface FoodCornerListing {
   listingId: string;
   dTag: string; // addressable d-tag — required for correct replaceable-event dedup
   ref: string;
+  listingKind: number; // 36500 produce | 36509 beauty — the event kind this listing came from
   unitRef: string;
   title: string;
   type: string;

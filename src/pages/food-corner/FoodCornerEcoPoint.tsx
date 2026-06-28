@@ -26,6 +26,7 @@ import {
   foodCornerWeekRange,
   formatFoodMoney,
   generateFoodCornerId,
+  listingCategory,
   groupOrdersByNode,
   reconcileOrderItems,
   slugifyFoodCorner,
@@ -67,6 +68,11 @@ export default function FoodCornerEcoPoint() {
   const editingNode = myNodes.find((node) => node.ref === editingNodeRef);
 
   const [showForm, setShowForm] = useState(false);
+  // Which section of the form to show: 'new' = full form (node + offers, when
+  // creating); 'node' = node fields only (Uredi); 'offers' = offer curation only
+  // (Uredi ponudbe). saveNode always re-publishes the FULL node, so neither flow
+  // drops the other section's data.
+  const [formMode, setFormMode] = useState<"new" | "node" | "offers">("new");
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -147,6 +153,7 @@ export default function FoodCornerEcoPoint() {
 
   const startNew = () => {
     setEditingNodeRef("");
+    setFormMode("new");
     setShowForm(true);
     setName("");
     setDescription("");
@@ -711,18 +718,32 @@ export default function FoodCornerEcoPoint() {
                     {t("ecoPoint.label.pause")}{describeFoodCornerPause(node) ? ` · ${describeFoodCornerPause(node)}` : ""}
                   </p>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-2"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setEditingNodeRef(node.ref);
-                    setShowForm(true);
-                  }}
-                >
-                  {t("ecoPoint.button.edit")}
-                </Button>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEditingNodeRef(node.ref);
+                      setFormMode("node");
+                      setShowForm(true);
+                    }}
+                  >
+                    {t("ecoPoint.button.edit")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEditingNodeRef(node.ref);
+                      setFormMode("offers");
+                      setShowForm(true);
+                    }}
+                  >
+                    {t("ecoPoint.button.editOffers")}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -743,9 +764,15 @@ export default function FoodCornerEcoPoint() {
       {showForm && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{editingNode ? t("ecoPoint.form.titleEdit") : t("ecoPoint.form.titleNew")}</CardTitle>
+            <CardTitle className="text-base">
+              {formMode === "offers"
+                ? t("ecoPoint.button.editOffers")
+                : editingNode ? t("ecoPoint.form.titleEdit") : t("ecoPoint.form.titleNew")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            {(formMode === "new" || formMode === "node") && (
+            <>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>{t("ecoPoint.form.name")}</Label>
@@ -935,8 +962,11 @@ export default function FoodCornerEcoPoint() {
                 </>
               )}
             </div>
+            </>
+            )}
 
-            <div className="space-y-3">
+            {(formMode === "new" || formMode === "offers") && (
+            <div className="space-y-5">
               <div>
                 <h3 className="font-semibold">{t("ecoPoint.suppliers.title")}</h3>
                 <p className="text-sm text-muted-foreground">{t("ecoPoint.suppliers.subtitle")}</p>
@@ -948,55 +978,75 @@ export default function FoodCornerEcoPoint() {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="space-y-3">
-                  {producers.map((producer) => {
-                    const sellerSelected = selectedSellers.includes(producer.unitRef);
-                    return (
-                      <Card key={producer.unitRef}>
-                        <CardContent className="p-4 space-y-3">
-                          <label className="flex items-start gap-3">
-                            <Checkbox
-                              checked={sellerSelected}
-                              onCheckedChange={(checked) => toggleSeller(producer.unitRef, checked === true)}
-                              className="mt-1"
-                            />
-                            <span className="flex-1">
-                              <span className="font-medium block">{producer.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {t("ecoPoint.suppliers.producerLine", {
-                                  place: producer.city || producer.country || producer.pubkey.slice(0, 10),
-                                  count: producer.listings.length,
-                                })}
-                              </span>
-                            </span>
-                          </label>
+                (["produce", "beauty"] as const).map((category) => {
+                  const catProducers = producers
+                    .map((producer) => ({
+                      producer,
+                      listings: producer.listings.filter((listing) => listingCategory(listing) === category),
+                    }))
+                    .filter((entry) => entry.listings.length > 0);
+                  return (
+                    <div key={category} className="space-y-2">
+                      <h4 className="text-sm font-semibold text-primary">
+                        {category === "produce" ? t("ecoPoint.offers.produce") : t("ecoPoint.offers.beauty")}
+                      </h4>
+                      {catProducers.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">{t("ecoPoint.offers.emptyCategory")}</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {catProducers.map(({ producer, listings }) => {
+                            const sellerSelected = selectedSellers.includes(producer.unitRef);
+                            return (
+                              <Card key={`${category}-${producer.unitRef}`}>
+                                <CardContent className="p-4 space-y-3">
+                                  <label className="flex items-start gap-3">
+                                    <Checkbox
+                                      checked={sellerSelected}
+                                      onCheckedChange={(checked) => toggleSeller(producer.unitRef, checked === true)}
+                                      className="mt-1"
+                                    />
+                                    <span className="flex-1">
+                                      <span className="font-medium block">{producer.name}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {t("ecoPoint.suppliers.producerLine", {
+                                          place: producer.city || producer.country || producer.pubkey.slice(0, 10),
+                                          count: listings.length,
+                                        })}
+                                      </span>
+                                    </span>
+                                  </label>
 
-                          <div className="grid md:grid-cols-2 gap-2 pl-7">
-                            {producer.listings.map((listing) => {
-                              const checked = sellerSelected
-                                ? !excludedListings.includes(listing.ref)
-                                : selectedListings.includes(listing.ref);
-                              return (
-                                <label key={listing.ref} className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                                  <Checkbox
-                                    checked={checked}
-                                    onCheckedChange={(value) => toggleListing(producer.unitRef, listing.ref, value === true)}
-                                  />
-                                  <span className="flex-1 truncate">{listing.title}</span>
-                                  <span className="text-xs text-muted-foreground shrink-0">
-                                    {formatFoodMoney(listing.price, listing.priceCurrency)}/{listing.unit}
-                                  </span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
+                                  <div className="grid md:grid-cols-2 gap-2 pl-7">
+                                    {listings.map((listing) => {
+                                      const checked = sellerSelected
+                                        ? !excludedListings.includes(listing.ref)
+                                        : selectedListings.includes(listing.ref);
+                                      return (
+                                        <label key={listing.ref} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                                          <Checkbox
+                                            checked={checked}
+                                            onCheckedChange={(value) => toggleListing(producer.unitRef, listing.ref, value === true)}
+                                          />
+                                          <span className="flex-1 truncate">{listing.title}</span>
+                                          <span className="text-xs text-muted-foreground shrink-0">
+                                            {formatFoodMoney(listing.price, listing.priceCurrency)}/{listing.unit}
+                                          </span>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
+            )}
 
             <div className="flex flex-col sm:flex-row gap-2">
               <Button onClick={saveNode} disabled={isPublishing} className="gap-2">

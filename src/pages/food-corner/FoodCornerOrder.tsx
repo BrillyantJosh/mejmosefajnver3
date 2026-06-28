@@ -25,7 +25,9 @@ import {
   formatFoodMoney,
   generateFoodCornerId,
   isFoodCornerNodePaused,
+  listingCategory,
   reconcileOrderItems,
+  type FoodCornerListingCategory,
 } from "@/lib/foodCorner";
 import type { FoodCornerNode } from "@/types/foodCorner";
 
@@ -140,7 +142,31 @@ export default function FoodCornerOrder() {
     [canOrderFromSelectedNode, getNodeCatalog, selectedNodeRef],
   );
 
-  // Group filters (category `t` tags + eco labels) derived from the current catalog.
+  // Offer-category chooser: produce (36500) vs beauty (36509). Only meaningful
+  // when the node curates BOTH; otherwise we just show everything.
+  const hasProduce = useMemo(() => catalog.some((l) => listingCategory(l) === "produce"), [catalog]);
+  const hasBeauty = useMemo(() => catalog.some((l) => listingCategory(l) === "beauty"), [catalog]);
+  const showKindChooser = hasProduce && hasBeauty;
+  const [selectedKinds, setSelectedKinds] = useState<Set<FoodCornerListingCategory>>(
+    () => new Set<FoodCornerListingCategory>(["produce", "beauty"]),
+  );
+  const toggleKind = (value: FoodCornerListingCategory) =>
+    setSelectedKinds((prev) => {
+      const next = new Set(prev);
+      // keep at least one category selected
+      if (next.has(value)) {
+        if (next.size > 1) next.delete(value);
+      } else {
+        next.add(value);
+      }
+      return next;
+    });
+  const catalogByKind = useMemo(
+    () => (showKindChooser ? catalog.filter((l) => selectedKinds.has(listingCategory(l))) : catalog),
+    [catalog, showKindChooser, selectedKinds],
+  );
+
+  // Group filters (category `t` tags + eco labels) derived from the chosen-kind catalog.
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
   const [selectedEco, setSelectedEco] = useState<Set<string>>(new Set());
   const toggleFilter = (setter: (fn: (prev: Set<string>) => Set<string>) => void, value: string) =>
@@ -151,26 +177,26 @@ export default function FoodCornerOrder() {
     });
   const availableCats = useMemo(
     () =>
-      Array.from(new Set(catalog.flatMap((l) => l.tags))).filter(Boolean).sort((a, b) =>
+      Array.from(new Set(catalogByKind.flatMap((l) => l.tags))).filter(Boolean).sort((a, b) =>
         tagLabel(CAT_LABELS, a, lang).localeCompare(tagLabel(CAT_LABELS, b, lang)),
       ),
-    [catalog, lang],
+    [catalogByKind, lang],
   );
   const availableEco = useMemo(
     () =>
-      Array.from(new Set(catalog.flatMap((l) => l.eco))).filter(Boolean).sort((a, b) =>
+      Array.from(new Set(catalogByKind.flatMap((l) => l.eco))).filter(Boolean).sort((a, b) =>
         tagLabel(ECO_LABELS, a, lang).localeCompare(tagLabel(ECO_LABELS, b, lang)),
       ),
-    [catalog, lang],
+    [catalogByKind, lang],
   );
   const filteredCatalog = useMemo(
     () =>
-      catalog.filter((l) => {
+      catalogByKind.filter((l) => {
         const catOk = selectedCats.size === 0 || l.tags.some((t) => selectedCats.has(t));
         const ecoOk = selectedEco.size === 0 || l.eco.some((t) => selectedEco.has(t));
         return catOk && ecoOk;
       }),
-    [catalog, selectedCats, selectedEco],
+    [catalogByKind, selectedCats, selectedEco],
   );
 
   // Estimated pickup date = the pickup that follows the next order cutoff. Read-only.
@@ -530,6 +556,23 @@ export default function FoodCornerOrder() {
             </div>
             <Badge variant="outline">{t("order.badge.offers", { count: filteredCatalog.length })}</Badge>
           </div>
+
+          {/* Offer-category chooser: Produce (36500) vs Beauty & Care (36509) */}
+          {showKindChooser && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground mr-1">{t("order.filter.offerType")}:</span>
+              {(["produce", "beauty"] as const).map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => toggleKind(cat)}
+                  className={`text-xs rounded-full border px-2.5 py-1 transition-colors ${selectedKinds.has(cat) ? "bg-primary text-primary-foreground border-primary" : "hover:border-primary/50"}`}
+                >
+                  {cat === "produce" ? t("order.offerType.produce") : t("order.offerType.beauty")}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Group filters: by category (t tags) and by eco label */}
           {(availableCats.length > 0 || availableEco.length > 0) && (

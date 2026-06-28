@@ -1,6 +1,7 @@
 import type { BusinessUnit } from "@/hooks/useNostrBusinessUnits";
 import {
   FOOD_CORNER_ALLOCATION_KIND,
+  FOOD_CORNER_BEAUTY_LISTING_KIND,
   FOOD_CORNER_FULFILLMENT_KIND,
   FOOD_CORNER_LISTING_KIND,
   FOOD_CORNER_NODE_KIND,
@@ -161,7 +162,10 @@ export function parseFoodCornerListing(event: FoodCornerRawEvent): FoodCornerLis
     createdAt: event.created_at,
     listingId: dTag,
     dTag,
-    ref: makeARef(FOOD_CORNER_LISTING_KIND, event.pubkey, dTag),
+    // Use the EVENT kind (not a hardcoded 36500) so beauty (36509) refs are
+    // correct and resolve against node listing/exclude tags + order item refs.
+    ref: makeARef(event.kind, event.pubkey, dTag),
+    listingKind: event.kind,
     unitRef,
     title,
     type: getTag(event, "type") || "product",
@@ -443,6 +447,13 @@ export function deliveredTotalsForNode(
     }
   }
   return totals;
+}
+
+export type FoodCornerListingCategory = "produce" | "beauty";
+
+/** Which offer category a listing belongs to (produce = 36500, beauty = 36509). */
+export function listingCategory(listing: FoodCornerListing): FoodCornerListingCategory {
+  return listing.listingKind === FOOD_CORNER_BEAUTY_LISTING_KIND ? "beauty" : "produce";
 }
 
 export function resolveNodeCatalog(node: FoodCornerNode | undefined, listings: FoodCornerListing[]): FoodCornerListing[] {

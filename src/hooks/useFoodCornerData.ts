@@ -6,7 +6,9 @@ import {
   FOOD_CORNER_ALLOCATION_KIND,
   FOOD_CORNER_DELIVERY_KIND,
   FOOD_CORNER_FULFILLMENT_KIND,
+  FOOD_CORNER_BEAUTY_LISTING_KIND,
   FOOD_CORNER_LISTING_KIND,
+  FOOD_CORNER_LISTING_KINDS,
   FOOD_CORNER_NODE_KIND,
   FOOD_CORNER_ORDER_KIND,
   FoodCornerAllocation,
@@ -85,6 +87,7 @@ export function useFoodCornerData(): FoodCornerData {
           kinds: [
             FOOD_CORNER_NODE_KIND,
             FOOD_CORNER_LISTING_KIND,
+            FOOD_CORNER_BEAUTY_LISTING_KIND,
             FOOD_CORNER_ORDER_KIND,
             FOOD_CORNER_FULFILLMENT_KIND,
             FOOD_CORNER_ALLOCATION_KIND,
@@ -104,7 +107,7 @@ export function useFoodCornerData(): FoodCornerData {
 
       const allParsedListings = dedupeReplaceable(
         rawEvents
-          .filter((event) => event.kind === FOOD_CORNER_LISTING_KIND)
+          .filter((event) => FOOD_CORNER_LISTING_KINDS.includes(event.kind))
           .map(parseFoodCornerListing)
           .filter(Boolean) as FoodCornerListing[],
       ).sort((a, b) => b.createdAt - a.createdAt);
