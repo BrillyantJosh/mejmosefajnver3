@@ -114,16 +114,23 @@ export default function WalletConsolidate() {
   }, [privateKey, walletAddress]);
 
   const buildBatches = (allUtxos: UTXO[]) => {
-    // Sort by value descending, then round-robin into bins. This spreads the
-    // funded (fee-paying) UTXOs across batches instead of dumping them all into
-    // the first batch — so each batch can cover its own fee whenever there are
-    // enough funded UTXOs to go around. (With a single funded UTXO only one
-    // batch can be viable; the rest become viable on the next round once the
-    // consolidated output lands.)
-    const sorted = [...allUtxos].sort((a, b) => b.value - a.value);
-    const numBatches = Math.max(1, Math.ceil(sorted.length / BATCH_SIZE));
-    const bins: UTXO[][] = Array.from({ length: numBatches }, () => []);
-    sorted.forEach((u, i) => bins[i % numBatches].push(u));
+    // Seed-based packing: each batch takes the LARGEST remaining UTXO as its
+    // fee-paying seed, then fills the rest of the batch with the SMALLEST
+    // remaining UTXOs (dust). This pairs every funded UTXO with a full load of
+    // dust (1 big + up to 19 dust per batch), so as many batches as there are
+    // funded UTXOs become viable and each one clears the maximum amount of dust.
+    // Once funded UTXOs run out, the leftover pure-dust batches are gated
+    // "Fee too high" and become consolidatable on the next round, after a funded
+    // batch's output lands and re-analysis pairs it with the remaining dust.
+    const pool = [...allUtxos].sort((a, b) => b.value - a.value); // descending
+    const bins: UTXO[][] = [];
+    while (pool.length > 0) {
+      const batch: UTXO[] = [pool.shift() as UTXO]; // largest remaining = the seed
+      while (batch.length < BATCH_SIZE && pool.length > 0) {
+        batch.push(pool.pop() as UTXO); // smallest remaining = dust
+      }
+      bins.push(batch);
+    }
 
     return bins.map((utxos, idx) => {
       const totalValue = utxos.reduce((sum, u) => sum + u.value, 0);
