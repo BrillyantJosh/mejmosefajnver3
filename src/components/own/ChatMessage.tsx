@@ -190,7 +190,7 @@ export default function ChatMessage({
         </div>
         <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
           <ActionButtons />
-          <Card className={`p-2 md:p-3 flex-1 min-w-0 md:max-w-2xl lg:max-w-3xl ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
+          <Card className={`p-2 md:p-3 flex-1 min-w-0 md:max-w-2xl lg:max-w-4xl xl:max-w-6xl ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
             <QuotedReply />
             <AudioPlayer audioUrl={audioUrl} initialDuration={audioDuration} />
             {transcript && <TranscriptToggle text={transcript} />}
@@ -214,7 +214,7 @@ export default function ChatMessage({
               <img
                 src={imageUrl}
                 alt="Shared image"
-                className="max-w-[280px] sm:max-w-sm rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                className="max-w-[280px] sm:max-w-md md:max-w-lg lg:max-w-2xl rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                 loading="lazy"
               />
             </a>
@@ -231,7 +231,7 @@ export default function ChatMessage({
       </div>
       <div className={`flex items-center gap-1.5 max-w-[calc(100vw-3rem)] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
         <ActionButtons />
-        <Card className={`p-2 md:p-3 max-w-[85vw] md:max-w-2xl lg:max-w-3xl ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
+        <Card className={`p-2 md:p-3 max-w-[85vw] md:max-w-2xl lg:max-w-4xl xl:max-w-6xl ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
           <QuotedReply />
           {(() => {
             const ytUrl = content ? findYouTubeUrl(content) : null;
