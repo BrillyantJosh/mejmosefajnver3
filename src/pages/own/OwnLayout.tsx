@@ -11,11 +11,12 @@ const ownNavItems = [
 export default function OwnLayout() {
   return (
     <div className="max-w-7xl mx-auto pb-20">
-      <div className="mb-4 md:mb-6 px-4 md:px-0">
-        <h1 className="text-2xl md:text-3xl font-bold">OWN</h1>
-        <p className="text-sm md:text-base text-muted-foreground">Unconditional Self Responsibility</p>
+      <div className="mb-2 md:mb-3 px-4 md:px-0">
+        <h1 className="text-lg md:text-xl font-bold">
+          OWN <span className="text-xs md:text-sm font-normal text-muted-foreground">— Unconditional Self Responsibility</span>
+        </h1>
       </div>
-      
+
       <Outlet />
       
       <SubNavigation items={ownNavItems} variant="bottom" />

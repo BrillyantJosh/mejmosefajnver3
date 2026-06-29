@@ -531,7 +531,7 @@ export default function Own() {
   }
 
   return (
-    <div className="min-h-[60vh] md:h-[calc(100vh-200px)]">
+    <div className="h-[calc(100dvh-220px)] md:h-[calc(100dvh-210px)]">
       {!selectedProcessId ? (
         // Conversation List - full width when no chat selected
         <div className="overflow-y-auto h-full max-w-2xl mx-auto px-4 md:px-0">
