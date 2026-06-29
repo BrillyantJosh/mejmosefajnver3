@@ -340,37 +340,27 @@ export default function ChatView({
 
   return (
     <div className={`flex flex-col h-full ${currentPhase.bgFull}`}>
-      {/* Header */}
-      <Card className="p-3 md:p-4 mb-0 sticky top-0 z-10">
+      {/* Header — title + phase badge on ONE compact line (the old separate
+          phase banner is gone to free vertical room for messages; the phase
+          description is on the badge tooltip). */}
+      <Card className="px-3 py-2.5 mb-0 sticky top-0 z-10">
         <div className="flex items-center gap-2 md:gap-3">
-          <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
+          <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0 h-8 w-8">
             <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
           </Button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 md:gap-3 flex-wrap">
               <h2 className="text-base md:text-lg font-semibold truncate min-w-0">{conversationTitle}</h2>
-              <Badge className={`text-xs shrink-0 ${currentPhase.bg} ${currentPhase.color} border`}>
+              <Badge
+                title={currentPhase.description}
+                className={`text-xs shrink-0 ${currentPhase.bg} ${currentPhase.color} border`}
+              >
                 {currentPhase.emoji} {currentPhase.label}
               </Badge>
             </div>
           </div>
         </div>
       </Card>
-
-      {/* Phase Banner — always visible */}
-      <div className={`mx-2 md:mx-4 mt-2 mb-3 rounded-lg border ${currentPhase.borderColor} ${currentPhase.bg} p-3`}>
-        <div className="flex items-start gap-2">
-          <span className="text-lg leading-none mt-0.5">{currentPhase.emoji}</span>
-          <div className="flex-1 min-w-0">
-            <p className={`text-sm font-semibold ${currentPhase.color}`}>
-              Phase: {currentPhase.label}
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {currentPhase.description}
-            </p>
-          </div>
-        </div>
-      </div>
 
       {isExited ? (
         /* Exited view — process content + input hidden; only the notice + Re-enter */
