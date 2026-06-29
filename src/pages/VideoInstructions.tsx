@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   Accordion,
   AccordionContent,
@@ -5,8 +6,31 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { PlayCircle, ExternalLink } from "lucide-react";
+import { PlayCircle, ExternalLink, HelpCircle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import lana8wonderIcon from "@/assets/lana8wonder-icon.png";
+
+interface FaqItem {
+  id: string;
+  title: string;
+  youtube_url: string | null;
+  display_order: number;
+  published: number;
+}
+
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
 
 const lana8wonderVideos = [
   {
@@ -100,6 +124,27 @@ const videos = [
 ];
 
 export default function VideoInstructions() {
+  // Admin-managed FAQ entries (from the `faq` table, edited in /admin/faq).
+  const [faqItems, setFaqItems] = useState<FaqItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("faq")
+          .select("id,title,youtube_url,display_order,published")
+          .order("display_order", { ascending: true });
+        if (!cancelled) setFaqItems((data || []).filter((item: FaqItem) => !!item.published));
+      } catch {
+        if (!cancelled) setFaqItems([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="mb-6">
@@ -108,6 +153,50 @@ export default function VideoInstructions() {
           Click a question to watch the video tutorial
         </p>
       </div>
+
+      {/* Admin FAQ Card — managed in /admin/faq */}
+      {faqItems.length > 0 && (
+        <Card className="mb-8 border-2 border-violet-500/30 bg-gradient-to-r from-violet-500/5 to-fuchsia-500/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-3">
+              <HelpCircle className="h-6 w-6 text-violet-500 shrink-0" />
+              <span className="text-xl font-bold">FAQ</span>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Accordion type="single" collapsible className="space-y-2">
+              {faqItems.map((faq) => {
+                const ytId = faq.youtube_url ? extractYouTubeId(faq.youtube_url) : null;
+                return (
+                  <AccordionItem key={faq.id} value={faq.id} className="border rounded-lg px-4">
+                    <AccordionTrigger className="text-left">
+                      <div className="flex items-center gap-3">
+                        <PlayCircle className="h-5 w-5 text-red-500 shrink-0" />
+                        <span>{faq.title}</span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      {ytId ? (
+                        <div className="aspect-video rounded-lg overflow-hidden">
+                          <iframe
+                            src={`https://www.youtube.com/embed/${ytId}`}
+                            title={faq.title}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            className="w-full h-full"
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground py-2">No video available for this FAQ</p>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Lana8Wonder Card */}
       <Card className="mb-8 border-2 border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-orange-500/5">
