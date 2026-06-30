@@ -543,9 +543,13 @@ export function foodCornerOrderingWindow(node: FoodCornerNode, from: Date = new 
   const cutoff = node.orderCutoffDay
     ? nextWeekdayOccurrence(node.orderCutoffDay, node.orderCutoffTime || "00:00", from)
     : null;
-  // Pickup = first pickup-day occurrence after the cutoff (or after now if no cutoff).
+  // Pickup = first pickup-day occurrence at/after the cutoff. Use the pickup window's
+  // START time (e.g. "18:00" from "18:00-20:00"), NOT midnight — otherwise a same-day
+  // pickup that is LATER than the cutoff (order Thu 09:00 → pickup Thu 18:00) gets wrapped
+  // a full week forward, because midnight Thu (00:00) is "before" the cutoff time (09:00).
+  const pickupStart = (pickup?.window || "").split(/[–—-]/)[0].trim() || "00:00";
   const pickupDate = pickup?.day
-    ? nextWeekdayOccurrence(pickup.day, "00:00", cutoff ?? from)
+    ? nextWeekdayOccurrence(pickup.day, pickupStart, cutoff ?? from)
     : null;
   return { cutoff, pickup: pickupDate, pickupWindow: pickup?.window || "" };
 }
