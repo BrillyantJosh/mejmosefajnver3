@@ -32,6 +32,7 @@ export default function OwnAudioRecorder({
   const [duration, setDuration] = useState(0);
   const [recordingTime, setRecordingTime] = useState(0);
   const [uploadFailed, setUploadFailed] = useState(false);
+  const [failReason, setFailReason] = useState<string>(''); // specific cause shown in the banner (which step failed)
   const [retryCount, setRetryCount] = useState(0);
   const [showTimeWarning, setShowTimeWarning] = useState(false);
 
@@ -256,6 +257,7 @@ export default function OwnAudioRecorder({
     uploadingRef.current = true;
     setIsUploading(true);             // instant "Sending…" feedback the moment Send is tapped
     setUploadFailed(false);
+    setFailReason('');
 
     if (!audioBlobRef.current) {
       toast.error("No recording to upload");
@@ -307,20 +309,30 @@ export default function OwnAudioRecorder({
             cacheControl: "3600",
             upsert: false,
           }),
-        // Transcribe via Groq Whisper
+        // Transcribe via Groq Whisper. Bounded by its OWN timeout (25s) so a slow/hung
+        // transcription can never stall the parallel send — the audio is sent without a
+        // transcript if STT is slow. (STT is optional; the upload result gates success.)
         (async () => {
+          const sttController = new AbortController();
+          const sttTimeout = setTimeout(() => sttController.abort(), 25_000);
           try {
             const file = new File([audioBlob], `recording.${extension}`, { type: cleanMime });
             const formData = new FormData();
             formData.append('file', file);
             formData.append('language', 'sl');
-            const res = await fetch(`${API_URL}/api/voice/stt`, { method: 'POST', body: formData });
+            const res = await fetch(`${API_URL}/api/voice/stt`, {
+              method: 'POST',
+              body: formData,
+              signal: sttController.signal,
+            });
             if (!res.ok) throw new Error(`STT ${res.status}`);
             const data = await res.json();
             return data.text?.trim() || '';
           } catch (err) {
-            console.warn('🔇 STT transcription failed (audio will be sent without transcript):', err);
+            console.warn('🔇 STT transcription failed/timed out (audio will be sent without transcript):', err);
             return '';
+          } finally {
+            clearTimeout(sttTimeout);
           }
         })(),
       ]);
@@ -329,6 +341,7 @@ export default function OwnAudioRecorder({
       if (uploadResult.status === 'rejected') {
         console.error("Upload error:", uploadResult.reason);
         setUploadFailed(true);
+        setFailReason('Upload failed (network) — tap retry');
         setRetryCount(prev => prev + 1);
         toast.error("Upload failed — tap retry");
         return;
@@ -337,8 +350,9 @@ export default function OwnAudioRecorder({
       if (uploadData.error) {
         console.error("Upload error:", uploadData.error);
         setUploadFailed(true);
-        setRetryCount(prev => prev + 1);
         const errMsg = uploadData.error?.message || uploadData.error?.error || "Upload failed";
+        setFailReason(`Upload: ${errMsg}`);
+        setRetryCount(prev => prev + 1);
         toast.error(`${errMsg} — tap retry`);
         return;
       }
@@ -357,6 +371,9 @@ export default function OwnAudioRecorder({
 
       if (!sent) {
         setUploadFailed(true);
+        // Upload succeeded (file is stored) but publishing the KIND 87046 event to the
+        // relays returned false — distinct from an upload failure, so name it precisely.
+        setFailReason('Uploaded OK — publishing to relays failed. Tap retry');
         setRetryCount(prev => prev + 1);
         toast.error("Sending failed — tap retry to try again");
         return;
@@ -368,6 +385,7 @@ export default function OwnAudioRecorder({
     } catch (error) {
       console.error('Error uploading audio:', error);
       setUploadFailed(true);
+      setFailReason(`Error: ${(error as Error)?.message || 'unknown'} — tap retry`);
       setRetryCount(prev => prev + 1);
       toast.error("Network error — tap retry to try again");
     } finally {
@@ -512,7 +530,7 @@ export default function OwnAudioRecorder({
         {uploadFailed && !isUploading && (
           <div className="flex items-center gap-2 px-1">
             <span className="text-xs text-destructive flex-1">
-              ⚠ Sending failed{retryCount > 1 ? ` (${retryCount}×)` : ''}
+              ⚠ {failReason || 'Sending failed'}{retryCount > 1 ? ` (${retryCount}×)` : ''}
             </span>
           </div>
         )}

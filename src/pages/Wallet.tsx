@@ -159,9 +159,9 @@ export default function Wallet() {
   // Sort wallets by type priority
   const walletTypeOrder: Record<string, number> = {
     "Main Wallet": 1,
-    "Wallet": 2,
-    "LanaPays.Us": 3,
-    "Retail": 4,
+    "Retail": 2,
+    "Wallet": 3,
+    "LanaPays.Us": 4,
     "Knights": 5,
     "Lana8Wonder": 6,
     "Lana.Discount": 7,
