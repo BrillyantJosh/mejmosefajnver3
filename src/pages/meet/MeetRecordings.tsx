@@ -9,6 +9,7 @@ import { Film, Download, Play, Clock, HardDrive, RefreshCw, Timer, AlertTriangle
 import { useTranslation } from "@/i18n/I18nContext";
 import meetTranslations from "@/i18n/modules/meet";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdmin } from "@/contexts/AdminContext";
 import { finalizeEvent } from "nostr-tools";
 
 const MEET_BASE_URL = "https://meet.lanaloves.us";
@@ -74,6 +75,7 @@ function formatBytes(bytes: number): string {
 export default function MeetRecordings() {
   const { t } = useTranslation(meetTranslations);
   const { session } = useAuth();
+  const { isAdmin } = useAdmin(); // app admins may delete ANY recording (incl. creatorless ones)
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -395,28 +397,31 @@ export default function MeetRecordings() {
                       )}
                     </Button>
                     {session && r.creatorPubkey === session.nostrHexId && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openEdit(r)}
-                          title={t('recordings.edit')}
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-destructive hover:bg-destructive/10"
-                          onClick={() => deleteRecording(r)}
-                          disabled={deletingId === r.id}
-                          title={t('recordings.delete')}
-                        >
-                          {deletingId === r.id
-                            ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            : <Trash2 className="w-3.5 h-3.5" />}
-                        </Button>
-                      </>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openEdit(r)}
+                        title={t('recordings.edit')}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                    {/* Delete is available to the recording's creator OR a MejmoSeFajn admin
+                        (admins can remove any recording, including creatorless ones). The
+                        request is signed with the acting user's key; the Meet server authorizes it. */}
+                    {session && (r.creatorPubkey === session.nostrHexId || isAdmin) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive hover:bg-destructive/10"
+                        onClick={() => deleteRecording(r)}
+                        disabled={deletingId === r.id}
+                        title={t('recordings.delete')}
+                      >
+                        {deletingId === r.id
+                          ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          : <Trash2 className="w-3.5 h-3.5" />}
+                      </Button>
                     )}
                   </div>
                 </div>
