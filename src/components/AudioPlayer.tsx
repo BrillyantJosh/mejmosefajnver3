@@ -88,9 +88,13 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
 
     try {
       // Fetch as blob — works on both Chrome and Safari
-      // Chrome needs blob URL for stereo Opus + Duration=0 WebM files
-      // Safari also handles blob URLs fine
-      const response = await fetch(audioUrl);
+      // Chrome needs blob URL for stereo Opus + Duration=0 WebM files.
+      // Bound the download so a large voice message on a slow mobile connection
+      // aborts and falls back to native streaming instead of hanging → "Ni na voljo".
+      const controller = new AbortController();
+      const fetchTimeout = setTimeout(() => controller.abort(), 15000);
+      const response = await fetch(audioUrl, { signal: controller.signal });
+      clearTimeout(fetchTimeout);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
 
@@ -114,18 +118,39 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
       setIsLoading(false);
       setIsPlaying(true);
     } catch (err: any) {
-      // play() rejected — might be autoplay policy or decode error
-      console.error('Error loading/playing audio:', err?.message || err);
+      console.error('Error loading/playing audio (blob):', err?.message || err);
 
-      // If we got the blob loaded but play failed (autoplay policy),
-      // mark as ready so user can click play again
-      if (audio.src && audio.readyState >= 2) {
+      // Blob loaded but play() was blocked (autoplay policy) — ready for the next tap.
+      if (audio.src && audio.src.startsWith('blob:') && audio.readyState >= 2) {
         setReady(true);
         setIsLoading(false);
         setIsPlaying(false);
-      } else {
+        return;
+      }
+
+      // Blob download/decode failed (large/slow file on mobile, or an aborted fetch).
+      // Fall back to NATIVE streaming: the browser plays progressively without
+      // downloading the whole file first — far more reliable on mobile.
+      try {
+        if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+        audio.src = audioUrl;
+        setReady(true); // direct URL is now the source; a later tap uses the ready fast-path
+        await audio.play();
+        audio.playbackRate = playbackRate;
+        if (isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration);
         setIsLoading(false);
-        setHasError(true);
+        setIsPlaying(true);
+      } catch (nativeErr: any) {
+        console.error('Error loading/playing audio (native):', nativeErr?.message || nativeErr);
+        // readyState >= 1 → media loaded, play() was just autoplay-blocked (next tap plays).
+        // Otherwise (404 / undecodable) the <audio> onError also fires → show the error.
+        if (audio.readyState >= 1) {
+          setIsLoading(false);
+          setIsPlaying(false);
+        } else {
+          setIsLoading(false);
+          setHasError(true);
+        }
       }
     }
   };
