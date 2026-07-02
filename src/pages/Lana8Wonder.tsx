@@ -8,7 +8,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, ExternalLink, Sparkles, CheckCircle2, AlertCircle, ArrowRightLeft, Copy, X } from 'lucide-react';
+import { Loader2, ExternalLink, Sparkles, CheckCircle2, AlertCircle, ArrowRightLeft, Copy, X, Snowflake } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
@@ -255,6 +255,30 @@ const Lana8Wonder = () => {
     setEligibleWallets(eligible);
   }, [wallets, exchangeRates, annuityPlan, accountBalances]);
 
+  // Frozen-wallet detection (registrar freeze, same source as the Wallet module).
+  // A frozen wallet blocks payouts; the user must unfreeze it on LanaWatch.us.
+  const frozenAddresses = new Set((wallets || []).filter(w => w.freezeStatus).map(w => w.walletId));
+  const frozenAlert = frozenAddresses.size > 0 ? (
+    <Alert variant="destructive" className="border-blue-500/50 bg-blue-500/10">
+      <Snowflake className="h-4 w-4 text-blue-500" />
+      <AlertTitle className="text-blue-700 dark:text-blue-400">{t('plan.frozen.title')}</AlertTitle>
+      <AlertDescription className="text-blue-700/80 dark:text-blue-300/80">
+        <span className="block mb-2">{t('plan.frozen.description')}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          asChild
+          className="border-blue-500/50 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10"
+        >
+          <a href="https://www.lanawatch.us" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+            {t('plan.frozen.action')}
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        </Button>
+      </AlertDescription>
+    </Alert>
+  ) : null;
+
   if (isLoading || walletsLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -267,6 +291,7 @@ const Lana8Wonder = () => {
   if (annuityPlan) {
     return (
       <div className="container mx-auto p-3 md:p-4 pb-24 space-y-4 md:space-y-6">
+        {frozenAlert}
         {showSuccessBanner && successData && (
           <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
             <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -398,23 +423,38 @@ const Lana8Wonder = () => {
                                 </AlertDescription>
                               </div>
                             </div>
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="whitespace-nowrap bg-green-600 hover:bg-green-700 text-white self-end md:self-auto"
-                              onClick={() => navigate('/lana8wonder/transfer', {
-                                state: {
-                                  sourceWalletId: account.wallet,
-                                  cashOutAmount: cashOutAmount,
-                                  cashOutFiat: cashOutFiat,
-                                  currency: annuityPlan.currency,
-                                  accountId: account.account_id,
-                                }
-                              })}
-                            >
-                              <ArrowRightLeft className="h-4 w-4 mr-2" />
-                              {t('plan.transfer')}
-                            </Button>
+                            {frozenAddresses.has(account.wallet) ? (
+                              // Wallet frozen → no payout. Direct the user to LanaWatch.us to unfreeze.
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                                className="whitespace-nowrap border-blue-500/50 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10 self-end md:self-auto"
+                              >
+                                <a href="https://www.lanawatch.us" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+                                  <Snowflake className="h-4 w-4" />
+                                  {t('plan.frozen.action')}
+                                </a>
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="whitespace-nowrap bg-green-600 hover:bg-green-700 text-white self-end md:self-auto"
+                                onClick={() => navigate('/lana8wonder/transfer', {
+                                  state: {
+                                    sourceWalletId: account.wallet,
+                                    cashOutAmount: cashOutAmount,
+                                    cashOutFiat: cashOutFiat,
+                                    currency: annuityPlan.currency,
+                                    accountId: account.account_id,
+                                  }
+                                })}
+                              >
+                                <ArrowRightLeft className="h-4 w-4 mr-2" />
+                                {t('plan.transfer')}
+                              </Button>
+                            )}
                           </Alert>
                         )}
                         {account.levels.map(level => {
@@ -509,6 +549,8 @@ const Lana8Wonder = () => {
           <p className="text-sm md:text-base text-muted-foreground">{t('plan.checkEligibility')}</p>
         </div>
       </div>
+
+      {frozenAlert}
 
       <Card>
         <CardHeader className="p-4 md:p-6">
