@@ -16,6 +16,9 @@ export interface OpenProcess {
   language: string;
   topic?: string;
   userRole?: string;
+  /** Set when a facilitator has offered to hand this process over (cross-app: selfresponsible.life). */
+  handoverTo?: string;
+  createdAt?: number;
 }
 
 export const useNostrOpenProcesses = (userPubkey: string | null) => {
@@ -103,15 +106,22 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
               guests,
               language,
               topic,
-              userRole
+              userRole,
+              handoverTo: event.tags.find(t => t[0] === 'handover_to')?.[1],
+              createdAt: event.created_at
             };
           })
-          .filter(process => 
-            process.status === 'open' && 
+          .filter(process =>
+            process.status === 'open' &&
             process.userRole !== undefined
           )
-          // Deduplicate by id - keep only the first (newest) occurrence
-          .filter((process, index, self) => 
+          // A facilitator handover (selfresponsible.life) leaves TWO same-d records:
+          // the outgoing facilitator's (carries handover_to) and the new one's
+          // (authoritative). Order them so the authoritative + newest wins the
+          // dedup below — otherwise which facilitator shows is relay-arrival luck.
+          .sort((a, b) => (a.handoverTo ? 1 : 0) - (b.handoverTo ? 1 : 0) || (b.createdAt || 0) - (a.createdAt || 0))
+          // Deduplicate by id - keep the preferred (first after the sort above) occurrence
+          .filter((process, index, self) =>
             self.findIndex(p => p.id === process.id) === index
           )
           .sort((a, b) => b.openedAt - a.openedAt);
