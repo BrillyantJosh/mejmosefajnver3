@@ -61,7 +61,9 @@ export function useLanacrowdProjects(
       const params = new URLSearchParams({
         filter,
         page: String(page),
-        limit: '20',
+        // 24 = multiple of the grid columns (2 on md, 3 on lg) so every page fills
+        // completely — no empty slots at the end of a page before it rolls to the next.
+        limit: '24',
       });
       if (search) params.set('search', search);
       if (adminPubkey) params.set('adminPubkey', adminPubkey);
