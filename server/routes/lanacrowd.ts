@@ -175,7 +175,7 @@ router.get('/projects', (req, res) => {
         GROUP BY project_id
       ) d ON p.id = d.project_id
       ${where}
-      ORDER BY p.nostr_created_at DESC
+      ORDER BY p.is_approved ASC, p.nostr_created_at DESC
       LIMIT ? OFFSET ?
     `).all(...params, limit, offset) as any[];
 
