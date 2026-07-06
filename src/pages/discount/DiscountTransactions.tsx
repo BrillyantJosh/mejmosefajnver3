@@ -55,12 +55,16 @@ function TransactionCard({
   const [expanded, setExpanded] = useState(false);
 
   const isPaid = tx.status === "paid";
+  // External payouts don't track paidFiat, so a "paid" status is the source of truth
+  // for fully paid. "Partial" = some payment tracked, but less than the full amount owed.
+  const isFullyPaid = isPaid || tx.paidFiat >= tx.netFiat;
+  const isPartial = !isFullyPaid && tx.paidFiat > 0;
   const txPayouts = payouts.filter((p) => p.txRef === tx.id);
 
   return (
     <Card
       className={`transition-shadow ${
-        isPaid
+        isFullyPaid
           ? "border-green-200 dark:border-green-800/50"
           : "border-yellow-200 dark:border-yellow-800/50"
       }`}
@@ -74,7 +78,7 @@ function TransactionCard({
           <div className="flex items-center gap-3">
             {/* Status icon */}
             <div className="shrink-0">
-              {isPaid ? (
+              {isFullyPaid ? (
                 <CheckCircle className="h-5 w-5 text-green-600" />
               ) : (
                 <Clock className="h-5 w-5 text-yellow-500" />
@@ -99,12 +103,12 @@ function TransactionCard({
                 <div className="mt-1.5 flex items-center gap-2">
                   <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all ${tx.paidFiat >= tx.netFiat ? 'bg-green-500' : tx.paidFiat > 0 ? 'bg-yellow-500' : 'bg-muted-foreground/20'}`}
-                      style={{ width: `${Math.min(100, (tx.paidFiat / tx.netFiat) * 100)}%` }}
+                      className={`h-full rounded-full transition-all ${isFullyPaid ? 'bg-green-500' : isPartial ? 'bg-yellow-500' : 'bg-muted-foreground/20'}`}
+                      style={{ width: `${isFullyPaid ? 100 : Math.min(100, (tx.paidFiat / tx.netFiat) * 100)}%` }}
                     />
                   </div>
                   <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
-                    {formatFiat(tx.paidFiat, tx.currency)} / {formatFiat(tx.netFiat, tx.currency)}
+                    {formatFiat(isFullyPaid ? tx.netFiat : tx.paidFiat, tx.currency)} / {formatFiat(tx.netFiat, tx.currency)}
                   </span>
                 </div>
               )}
@@ -112,12 +116,16 @@ function TransactionCard({
 
             {/* Badges + expand */}
             <div className="flex items-center gap-1.5 shrink-0">
-              {isPaid ? (
+              {isFullyPaid ? (
                 <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs">
                   Paid
                 </Badge>
-              ) : (
+              ) : isPartial ? (
                 <Badge className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs">
+                  Partial paid
+                </Badge>
+              ) : (
+                <Badge className="bg-muted text-muted-foreground text-xs">
                   Completed
                 </Badge>
               )}
@@ -302,7 +310,12 @@ export default function DiscountTransactions() {
     const pending = transactions.filter((t) => t.status !== "paid").length;
     // Use first transaction's currency or default to EUR
     const currency = transactions.length > 0 ? transactions[0].currency : "EUR";
-    const totalPaid = transactions.reduce((sum, t) => sum + t.paidFiat, 0);
+    // Fully-paid transactions (status=paid, incl. external whose paidFiat isn't tracked)
+    // count at their full net amount; partial ones count their tracked paidFiat.
+    const totalPaid = transactions.reduce(
+      (sum, t) => sum + ((t.status === "paid" || t.paidFiat >= t.netFiat) ? t.netFiat : t.paidFiat),
+      0,
+    );
     const remaining = Math.round((totalNetFiat - totalPaid) * 100) / 100;
     return {
       count: transactions.length,
