@@ -9,6 +9,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+// Touch devices (phones/tablets) block audio.play() unless it's called synchronously
+// inside the tap gesture. So on touch we start playback via native streaming FIRST
+// (play() invoked before any await), and only fall back to blob-fetch. On desktop we
+// keep blob-first (works reliably there and gives the best seeking for Duration=0 WebM).
+const IS_TOUCH =
+  typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window);
+
 interface AudioPlayerProps {
   audioUrl: string;
   initialDuration?: number;
@@ -18,6 +25,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const blobUrlRef = useRef<string | null>(null);
   const loadedRef = useRef(false);
+  const loadingAttemptRef = useRef(false); // true while loadAndPlay is trying src/blob — suppress the <audio> error event during fallbacks
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(initialDuration || 0);
@@ -47,6 +55,9 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
     const onEnded = () => { setIsPlaying(false); setCurrentTime(0); };
     const onError = () => {
       console.error('Audio error:', audio.error?.code, audio.error?.message);
+      // Ignore errors while loadAndPlay is running — it handles its own fallbacks
+      // (a failed native attempt must not flip the UI to "Retry" before the blob try).
+      if (loadingAttemptRef.current) return;
       setIsLoading(false);
       setHasError(true);
     };
@@ -85,73 +96,63 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
 
     setIsLoading(true);
     setHasError(false);
+    loadingAttemptRef.current = true;
 
-    try {
-      // Fetch as blob — works on both Chrome and Safari
-      // Chrome needs blob URL for stereo Opus + Duration=0 WebM files.
-      // Bound the download so a large voice message on a slow mobile connection
-      // aborts and falls back to native streaming instead of hanging → "Ni na voljo".
+    // Native streaming: set the direct URL and call play() SYNCHRONOUSLY (no await before
+    // it) so a touch device keeps the tap gesture and doesn't block playback. Plays
+    // progressively — no full download first.
+    const tryNative = async () => {
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+      audio.src = audioUrl;
+      audio.playbackRate = playbackRate;
+      await audio.play();
+      if (isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration);
+      setReady(true);
+      setIsPlaying(true);
+    };
+
+    // Blob download then play — reliable seeking for Duration=0 WebM (desktop Chrome).
+    // Bounded by a 15s timeout so a slow file can't hang.
+    const tryBlob = async () => {
       const controller = new AbortController();
       const fetchTimeout = setTimeout(() => controller.abort(), 15000);
       const response = await fetch(audioUrl, { signal: controller.signal });
       clearTimeout(fetchTimeout);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
-
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
       const url = URL.createObjectURL(blob);
       blobUrlRef.current = url;
-
-      // Set src and immediately try to play
       audio.src = url;
-
-      // play() returns a promise — resolves when playback starts
-      await audio.play();
-      // Apply current playback rate after play starts
-      audio.playbackRate = playbackRate;
-
-      if (isFinite(audio.duration) && audio.duration > 0) {
-        setDuration(audio.duration);
-      }
-
       setReady(true);
-      setIsLoading(false);
-      setIsPlaying(true);
-    } catch (err: any) {
-      console.error('Error loading/playing audio (blob):', err?.message || err);
-
-      // Blob loaded but play() was blocked (autoplay policy) — ready for the next tap.
-      if (audio.src && audio.src.startsWith('blob:') && audio.readyState >= 2) {
-        setReady(true);
-        setIsLoading(false);
-        setIsPlaying(false);
-        return;
-      }
-
-      // Blob download/decode failed (large/slow file on mobile, or an aborted fetch).
-      // Fall back to NATIVE streaming: the browser plays progressively without
-      // downloading the whole file first — far more reliable on mobile.
       try {
-        if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
-        audio.src = audioUrl;
-        setReady(true); // direct URL is now the source; a later tap uses the ready fast-path
         await audio.play();
         audio.playbackRate = playbackRate;
         if (isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration);
-        setIsLoading(false);
         setIsPlaying(true);
-      } catch (nativeErr: any) {
-        console.error('Error loading/playing audio (native):', nativeErr?.message || nativeErr);
-        // readyState >= 1 → media loaded, play() was just autoplay-blocked (next tap plays).
-        // Otherwise (404 / undecodable) the <audio> onError also fires → show the error.
-        if (audio.readyState >= 1) {
-          setIsLoading(false);
-          setIsPlaying(false);
-        } else {
-          setIsLoading(false);
-          setHasError(true);
-        }
+      } catch {
+        // Blob loaded but play() blocked (gesture gone after the fetch) — the next tap
+        // plays it via the ready fast-path. NOT an error.
+        setIsPlaying(false);
       }
+    };
+
+    // Touch → native first (gesture-safe); desktop → blob first (best seeking).
+    const attempts = IS_TOUCH ? [tryNative, tryBlob] : [tryBlob, tryNative];
+    try {
+      try {
+        await attempts[0]();
+      } catch (primaryErr: any) {
+        console.warn('Primary audio attempt failed, trying fallback:', primaryErr?.message || primaryErr);
+        await attempts[1]();
+      }
+    } catch (err: any) {
+      // Both attempts failed (e.g. 404 / genuinely unplayable) → show Retry.
+      console.error('Audio load/play failed:', err?.message || err);
+      setHasError(true);
+    } finally {
+      setIsLoading(false);
+      loadingAttemptRef.current = false;
     }
   };
 
