@@ -17,8 +17,12 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { QRScanner } from "@/components/QRScanner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScanLine, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+// Registered wallet types allowed as the PLAN15 paying wallet (from KIND 30889).
+const PAYMENT_WALLET_TYPES = ["Main Wallet", "Wallet", "Retail"];
 
 const fmtLana = (lanoshis: number) =>
   (lanoshis / LANOSHIS_PER_LANA).toLocaleString("en-US", { maximumFractionDigits: 8 });
@@ -31,6 +35,7 @@ export default function Plan15Followers() {
   const pubkeys = useMemo(() => members.map(m => m.pubkey), [members]);
   const { profiles } = useNostrProfilesCacheBulk(pubkeys);
   const { wallets: registeredWallets } = useNostrUserWallets(session?.nostrHexId || null);
+  const eligibleWallets = registeredWallets.filter(w => PAYMENT_WALLET_TYPES.includes(w.walletType));
 
   const [dialogOffer, setDialogOffer] = useState<Plan15Offer | null>(null);
   const [buyLana, setBuyLana] = useState("");
@@ -39,7 +44,6 @@ export default function Plan15Followers() {
   const [wif, setWif] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [buyerWalletStatus, setBuyerWalletStatus] = useState<WalletRegistrationStatus | "idle" | "checking">("idle");
-  const [payingWalletStatus, setPayingWalletStatus] = useState<WalletRegistrationStatus | "idle" | "checking">("idle");
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const nameFor = (pk: string) => {
@@ -57,7 +61,6 @@ export default function Plan15Followers() {
     setPayingWallet("");
     setWif("");
     setBuyerWalletStatus("idle");
-    setPayingWalletStatus("idle");
   };
 
   // Receiving wallet must be UNREGISTERED (it receives unregistered LANA).
@@ -69,14 +72,9 @@ export default function Plan15Followers() {
     return () => clearTimeout(timer);
   }, [buyerWallet, dialogOffer]);
 
-  // Paying wallet must be REGISTERED (payment is registered LANA).
-  useEffect(() => {
-    const w = payingWallet.trim();
-    if (!dialogOffer || !w) { setPayingWalletStatus("idle"); return; }
-    setPayingWalletStatus("checking");
-    const timer = setTimeout(async () => setPayingWalletStatus(await checkWalletRegistration(w)), 600);
-    return () => clearTimeout(timer);
-  }, [payingWallet, dialogOffer]);
+  // The paying wallet is PICKED from the registered KIND 30889 list, so it is
+  // registered by construction — no async check needed.
+  const payingWalletOk = !!payingWallet && eligibleWallets.some(w => w.walletId === payingWallet);
 
   const amountLanoshis = Math.round((parseFloat(buyLana || "0") || 0) * LANOSHIS_PER_LANA);
   const remainingLana = dialogOffer ? getOfferRemaining(dialogOffer) / LANOSHIS_PER_LANA : 0;
@@ -94,7 +92,7 @@ export default function Plan15Followers() {
     if (!buyerWallet) { toast.error(t("followers.errAddr")); return; }
     if (buyerWalletStatus === "registered") { toast.error(t("followers.errBuyerRegistered")); return; }
     if (buyerWalletStatus !== "unregistered") { toast.error(t("me.errWaitCheck")); return; }
-    if (!payingWallet || payingWalletStatus !== "registered") { toast.error(t("followers.errPayWalletReg")); return; }
+    if (!payingWallet || !payingWalletOk) { toast.error(t("followers.errPayWalletReg")); return; }
     if (!wif.trim()) { toast.error(t("followers.errWif")); return; }
     if (payLanoshis <= 0) { toast.error(t("followers.errAmount")); return; }
 
@@ -157,7 +155,7 @@ export default function Plan15Followers() {
   const canSubmit =
     !!sellerPaymentWallet &&
     buyerWalletStatus === "unregistered" &&
-    payingWalletStatus === "registered" &&
+    payingWalletOk &&
     !!wif.trim() &&
     payLanoshis > 0;
 
@@ -273,31 +271,19 @@ export default function Plan15Followers() {
 
               <div>
                 <Label>{t("followers.payingWallet")}</Label>
-                {registeredWallets.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-2 mt-1">
-                    {registeredWallets.map(w => (
-                      <Button
-                        key={w.walletId}
-                        type="button"
-                        size="sm"
-                        variant={payingWallet === w.walletId ? "default" : "outline"}
-                        onClick={() => setPayingWallet(w.walletId)}
-                        className="font-mono text-xs"
-                      >
-                        {w.walletId.slice(0, 8)}…{w.walletType ? ` · ${w.walletType}` : ""}
-                      </Button>
-                    ))}
-                  </div>
-                )}
-                <Input value={payingWallet} onChange={e => setPayingWallet(e.target.value)} placeholder="L..." />
-                {payingWalletStatus === "checking" && (
-                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {t("me.checking")}</p>
-                )}
-                {payingWalletStatus === "registered" && (
-                  <p className="mt-1 flex items-center gap-1 text-xs text-green-600 dark:text-green-400"><CheckCircle2 className="h-3 w-3" /> {t("followers.payWalletOk")}</p>
-                )}
-                {payingWalletStatus === "unregistered" && (
-                  <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" /> {t("followers.payWalletBad")}</p>
+                {eligibleWallets.length > 0 ? (
+                  <Select value={payingWallet} onValueChange={setPayingWallet}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder={t("followers.selectWallet")} /></SelectTrigger>
+                    <SelectContent>
+                      {eligibleWallets.map(w => (
+                        <SelectItem key={w.walletId} value={w.walletId}>
+                          {w.walletType} · {w.walletId.slice(0, 10)}…
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">{t("me.noRegisteredWallets")}</p>
                 )}
               </div>
 

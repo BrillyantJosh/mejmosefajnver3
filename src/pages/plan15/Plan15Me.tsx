@@ -13,15 +13,20 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QRScanner } from "@/components/QRScanner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { checkWalletRegistration, WalletRegistrationStatus } from "@/lib/walletRegistration";
 import { ScanLine, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+// Registered wallet types allowed as the PLAN15 payment wallet (from KIND 30889).
+const PAYMENT_WALLET_TYPES = ["Main Wallet", "Wallet", "Retail"];
 
 export default function Plan15Me() {
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
   const { t } = useTranslation(plan15Translations);
   const { wallets: registeredWallets } = useNostrUserWallets(session?.nostrHexId || null);
+  const eligibleWallets = registeredWallets.filter(w => PAYMENT_WALLET_TYPES.includes(w.walletType));
   const {
     isLoading, myMembership, myOffers, myPurchases, getPayoutForAcceptance,
     publishMembership, publishOffer, getMemberHoldings, getMemberSellable, priceFor,
@@ -32,7 +37,6 @@ export default function Plan15Me() {
   const [isStaker, setIsStaker] = useState(false);
   const [stakerWallet, setStakerWallet] = useState("");
   const [paymentWallet, setPaymentWallet] = useState("");
-  const [paymentWalletStatus, setPaymentWalletStatus] = useState<WalletRegistrationStatus | "idle" | "checking">("idle");
   const [savingMember, setSavingMember] = useState(false);
 
   // offer form
@@ -66,16 +70,9 @@ export default function Plan15Me() {
     return () => clearTimeout(timer);
   }, [wallet]);
 
-  // Debounced check: the payment wallet MUST be a REGISTERED wallet.
-  useEffect(() => {
-    const w = paymentWallet.trim();
-    if (!w) { setPaymentWalletStatus("idle"); return; }
-    setPaymentWalletStatus("checking");
-    const timer = setTimeout(async () => {
-      setPaymentWalletStatus(await checkWalletRegistration(w));
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [paymentWallet]);
+  // The payment wallet is PICKED from the registered KIND 30889 list, so it is
+  // registered by construction — no async check needed.
+  const paymentWalletOk = !!paymentWallet && eligibleWallets.some(w => w.walletId === paymentWallet);
 
   const holdings = myMembership ? getMemberHoldings(myMembership) : 0;
   const sellable = myMembership ? getMemberSellable(myMembership) : 0;
@@ -85,7 +82,7 @@ export default function Plan15Me() {
     if (walletStatus === "registered") { toast.error(t("me.errRegistered")); return; }
     if (walletStatus !== "unregistered") { toast.error(t("me.errWaitCheck")); return; }
     if (isStaker && !stakerWallet) { toast.error(t("me.errStakerWallet")); return; }
-    if (paymentWallet && paymentWalletStatus !== "registered") { toast.error(t("me.paymentWalletBad")); return; }
+    if (paymentWallet && !paymentWalletOk) { toast.error(t("me.paymentWalletBad")); return; }
     setSavingMember(true);
     try {
       await publishMembership({ plan15Wallet: wallet, isStaker, stakerWallet, paymentWallet });
@@ -177,34 +174,19 @@ export default function Plan15Me() {
           )}
           <div>
             <Label>{t("me.paymentWalletLabel")}</Label>
-            {registeredWallets.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2 mt-1">
-                {registeredWallets.map(w => (
-                  <Button
-                    key={w.walletId}
-                    type="button"
-                    size="sm"
-                    variant={paymentWallet === w.walletId ? "default" : "outline"}
-                    onClick={() => setPaymentWallet(w.walletId)}
-                    className="font-mono text-xs"
-                  >
-                    {w.walletId.slice(0, 8)}…{w.walletType ? ` · ${w.walletType}` : ""}
-                  </Button>
-                ))}
-              </div>
-            )}
-            {registeredWallets.length === 0 && (
-              <p className="text-xs text-muted-foreground mb-1 mt-1">{t("me.noRegisteredWallets")}</p>
-            )}
-            <Input value={paymentWallet} onChange={e => setPaymentWallet(e.target.value)} placeholder="L..." />
-            {paymentWalletStatus === "checking" && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {t("me.checking")}</p>
-            )}
-            {paymentWalletStatus === "registered" && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-green-600 dark:text-green-400"><CheckCircle2 className="h-3 w-3" /> {t("followers.payWalletOk")}</p>
-            )}
-            {paymentWalletStatus === "unregistered" && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" /> {t("me.paymentWalletBad")}</p>
+            {eligibleWallets.length > 0 ? (
+              <Select value={paymentWallet} onValueChange={setPaymentWallet}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder={t("me.selectWallet")} /></SelectTrigger>
+                <SelectContent>
+                  {eligibleWallets.map(w => (
+                    <SelectItem key={w.walletId} value={w.walletId}>
+                      {w.walletType} · {w.walletId.slice(0, 10)}…
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">{t("me.noRegisteredWallets")}</p>
             )}
           </div>
           <Button onClick={saveMembership} disabled={savingMember || walletStatus !== "unregistered"}>
