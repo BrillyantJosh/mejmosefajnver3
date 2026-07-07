@@ -141,12 +141,15 @@ export default function Plan15Followers() {
                 <div className="space-y-2">
                   {memberOffers.map(offer => {
                     const rem = getOfferRemaining(offer);
+                    const offerFiat = ((rem / LANOSHIS_PER_LANA) * priceFor(offer.currency))
+                      .toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     const canBuy = member.pubkey !== session?.nostrHexId && rem > 0;
                     return (
                       <div key={offer.address} className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
                         <div>
                           <span className="font-medium">{fmtLana(rem)} LANA</span>
                           <span className="text-muted-foreground"> @ {priceFor(offer.currency)} {offer.currency}/LANA</span>
+                          <span className="font-semibold"> = {offerFiat} {offer.currency}</span>
                         </div>
                         <Button size="sm" disabled={!canBuy} onClick={() => openBuy(offer)}>{t("followers.buy")}</Button>
                       </div>
