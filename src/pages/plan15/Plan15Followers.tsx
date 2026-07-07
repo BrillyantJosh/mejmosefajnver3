@@ -31,7 +31,7 @@ export default function Plan15Followers() {
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
   const { t } = useTranslation(plan15Translations);
-  const { members, offers, isLoading, myMembership, getOfferRemaining, getMemberHoldings, priceFor, getRegisteredPayLanoshis, publishAcceptance } = useNostrPlan15();
+  const { members, offers, isLoading, myMembership, getOfferRemaining, getMemberHoldings, priceFor, fxFor, getRegisteredPayLanoshis, publishAcceptance } = useNostrPlan15();
   const pubkeys = useMemo(() => members.map(m => m.pubkey), [members]);
   const { profiles } = useNostrProfilesCacheBulk(pubkeys);
   const { wallets: registeredWallets } = useNostrUserWallets(session?.nostrHexId || null);
@@ -45,6 +45,7 @@ export default function Plan15Followers() {
   const [submitting, setSubmitting] = useState(false);
   const [buyerWalletStatus, setBuyerWalletStatus] = useState<WalletRegistrationStatus | "idle" | "checking">("idle");
   const [scannerTarget, setScannerTarget] = useState<null | "receiving" | "wif">(null);
+  const [payingBalance, setPayingBalance] = useState(0);
 
   const nameFor = (pk: string) => {
     const p = profiles.get(pk);
@@ -76,12 +77,39 @@ export default function Plan15Followers() {
   // registered by construction — no async check needed.
   const payingWalletOk = !!payingWallet && eligibleWallets.some(w => w.walletId === payingWallet);
 
+  // Fetch the paying wallet's on-chain balance (used for the frozen-wallet limit).
+  useEffect(() => {
+    const w = payingWallet.trim();
+    if (!w || !parameters?.electrumServers?.length) { setPayingBalance(0); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke("get-wallet-balances", {
+          body: { wallet_addresses: [w], electrum_servers: parameters.electrumServers },
+        });
+        if (cancelled) return;
+        const b = (data?.wallets || []).find((x: any) => x.wallet_id === w);
+        setPayingBalance(b?.confirmed_balance ?? b?.balance ?? 0);
+      } catch { if (!cancelled) setPayingBalance(0); }
+    })();
+    return () => { cancelled = true; };
+  }, [payingWallet, parameters?.electrumServers]);
+
   const amountLanoshis = Math.round((parseFloat(buyLana || "0") || 0) * LANOSHIS_PER_LANA);
   const remainingLana = dialogOffer ? getOfferRemaining(dialogOffer) / LANOSHIS_PER_LANA : 0;
   const price = dialogOffer ? priceFor(dialogOffer.currency) : 0;
   const fiat = (parseFloat(buyLana || "0") * price).toFixed(2);
   const payLanoshis = dialogOffer ? getRegisteredPayLanoshis(amountLanoshis, dialogOffer.currency) : 0;
   const payLana = payLanoshis / LANOSHIS_PER_LANA;
+
+  // A FROZEN paying wallet may still transact, but capped: max 50% of funds AND max €100.
+  const payingWalletObj = eligibleWallets.find(w => w.walletId === payingWallet);
+  const payingFrozen = !!payingWalletObj?.freezeStatus;
+  const fxCur = dialogOffer ? fxFor(dialogOffer.currency) : 0;
+  const frozenCapLana = payingFrozen
+    ? Math.min(0.5 * payingBalance, fxCur > 0 ? 100 / fxCur : 0)
+    : Infinity;
+  const overFrozenLimit = payingFrozen && payLana > frozenCapLana;
 
   const submitBuy = async () => {
     if (!dialogOffer) return;
@@ -95,6 +123,7 @@ export default function Plan15Followers() {
     if (!payingWallet || !payingWalletOk) { toast.error(t("followers.errPayWalletReg")); return; }
     if (!wif.trim()) { toast.error(t("followers.errWif")); return; }
     if (payLanoshis <= 0) { toast.error(t("followers.errAmount")); return; }
+    if (overFrozenLimit) { toast.error(t("followers.errFrozenLimit")); return; }
 
     setSubmitting(true);
     try {
@@ -114,7 +143,9 @@ export default function Plan15Followers() {
           amount: payLana,
           privateKey: wif.trim(),
           electrumServers: parameters?.electrumServers || [],
-          userPubkey: session?.nostrHexId,
+          // Omit userPubkey for a FROZEN wallet so the server skips its freeze block;
+          // the 50% / €100 limit is enforced client-side (overFrozenLimit) above.
+          userPubkey: payingFrozen ? undefined : session?.nostrHexId,
         },
       });
       if (error) throw error;
@@ -157,7 +188,8 @@ export default function Plan15Followers() {
     buyerWalletStatus === "unregistered" &&
     payingWalletOk &&
     !!wif.trim() &&
-    payLanoshis > 0;
+    payLanoshis > 0 &&
+    !overFrozenLimit;
 
   return (
     <div className="space-y-4">
@@ -295,6 +327,11 @@ export default function Plan15Followers() {
                   </Select>
                 ) : (
                   <p className="text-xs text-muted-foreground mt-1">{t("me.noRegisteredWallets")}</p>
+                )}
+                {payingFrozen && (
+                  <p className="mt-1 text-xs text-yellow-600 dark:text-yellow-400">
+                    {t("followers.frozenLimit", { amount: (isFinite(frozenCapLana) ? frozenCapLana : 0).toLocaleString("en-US", { maximumFractionDigits: 8 }) })}
+                  </p>
                 )}
               </div>
 
