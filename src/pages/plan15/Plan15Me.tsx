@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNostrPlan15, LANOSHIS_PER_LANA } from "@/hooks/useNostrPlan15";
-import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +14,6 @@ import { ScanLine, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Plan15Me() {
-  const { session } = useAuth();
   const { parameters } = useSystemParameters();
   const {
     isLoading, myMembership, myOffers, myPurchases, getPayoutForAcceptance,
@@ -37,14 +35,14 @@ export default function Plan15Me() {
   const [scannerTarget, setScannerTarget] = useState<null | "wallet" | "staker">(null);
 
   useEffect(() => {
+    // Pre-fill ONLY for an existing member (their own previously-saved wallet).
+    // For a new user leave the field EMPTY — never auto-fill the main wallet.
     if (myMembership) {
       setWallet(myMembership.wallet);
       setIsStaker(myMembership.isStaker);
       setStakerWallet(myMembership.stakerWallet);
-    } else if (session?.walletId) {
-      setWallet(session.walletId);
     }
-  }, [myMembership, session?.walletId]);
+  }, [myMembership]);
 
   // Debounced check: the PLAN15 wallet must NOT be a registered wallet.
   useEffect(() => {
