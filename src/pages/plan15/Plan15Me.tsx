@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNostrPlan15, LANOSHIS_PER_LANA } from "@/hooks/useNostrPlan15";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { useTranslation } from "@/i18n/I18nContext";
+import plan15Translations from "@/i18n/modules/plan15";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +17,7 @@ import { toast } from "sonner";
 
 export default function Plan15Me() {
   const { parameters } = useSystemParameters();
+  const { t } = useTranslation(plan15Translations);
   const {
     isLoading, myMembership, myOffers, myPurchases, getPayoutForAcceptance,
     publishMembership, publishOffer, getHoldingsLana, getSellableLana, priceFor,
@@ -49,27 +52,27 @@ export default function Plan15Me() {
     const w = wallet.trim();
     if (!w) { setWalletStatus("idle"); return; }
     setWalletStatus("checking");
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       const status = await checkWalletRegistration(w);
       setWalletStatus(status);
     }, 600);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [wallet]);
 
   const holdings = myMembership ? getHoldingsLana(myMembership.wallet) : 0;
   const sellable = myMembership ? getSellableLana(myMembership.wallet) : 0;
 
   const saveMembership = async () => {
-    if (!wallet) { toast.error("Vnesi PLAN15 denarnico"); return; }
-    if (walletStatus === "registered") { toast.error("Ta denarnica je REGISTRIRANA — PLAN15 zahteva neregistrirano denarnico"); return; }
-    if (walletStatus !== "unregistered") { toast.error("Počakaj na preverbo registracije denarnice"); return; }
-    if (isStaker && !stakerWallet) { toast.error("Vnesi stejkersko denarnico"); return; }
+    if (!wallet) { toast.error(t("me.errEnterWallet")); return; }
+    if (walletStatus === "registered") { toast.error(t("me.errRegistered")); return; }
+    if (walletStatus !== "unregistered") { toast.error(t("me.errWaitCheck")); return; }
+    if (isStaker && !stakerWallet) { toast.error(t("me.errStakerWallet")); return; }
     setSavingMember(true);
     try {
       await publishMembership({ plan15Wallet: wallet, isStaker, stakerWallet });
-      toast.success(myMembership ? "Članstvo posodobljeno" : "Vključen v PLAN15!");
+      toast.success(myMembership ? t("me.membershipUpdated") : t("me.joined"));
     } catch (e: any) {
-      toast.error(e?.message || "Napaka");
+      toast.error(e?.message || t("me.error"));
     } finally {
       setSavingMember(false);
     }
@@ -77,17 +80,17 @@ export default function Plan15Me() {
 
   const saveOffer = async () => {
     const lana = parseFloat(offerLana);
-    if (!myMembership) { toast.error("Najprej se vključi v PLAN15"); return; }
-    if (walletStatus === "registered") { toast.error("Tvoja PLAN15 denarnica je registrirana — vnesi neregistrirano in posodobi članstvo"); return; }
-    if (!lana || lana <= 0) { toast.error("Vnesi veljavno količino"); return; }
-    if (lana > sellable) { toast.error(`Preveč — največ ${sellable} LANA (nad pragom)`); return; }
+    if (!myMembership) { toast.error(t("me.errJoinFirst")); return; }
+    if (walletStatus === "registered") { toast.error(t("me.errWalletRegisteredOffer")); return; }
+    if (!lana || lana <= 0) { toast.error(t("followers.errAmount")); return; }
+    if (lana > sellable) { toast.error(t("me.errTooMuchFloor", { amount: sellable })); return; }
     setSavingOffer(true);
     try {
       await publishOffer({ wallet: myMembership.wallet, amountLanoshis: Math.round(lana * LANOSHIS_PER_LANA) });
-      toast.success("Ponudba objavljena");
+      toast.success(t("me.offerPublished"));
       setOfferLana("");
     } catch (e: any) {
-      toast.error(e?.message || "Napaka");
+      toast.error(e?.message || t("me.error"));
     } finally {
       setSavingOffer(false);
     }
@@ -108,52 +111,52 @@ export default function Plan15Me() {
           else if (scannerTarget === "staker") setStakerWallet(addr);
           setScannerTarget(null);
         }}
-        title="Skeniraj denarnico"
-        description="Postavi QR kodo naslova denarnice v okvir."
+        title={t("me.scanWallet")}
+        description={t("me.scanWalletDesc")}
       />
 
       {/* Membership */}
       <Card>
-        <CardHeader><CardTitle className="text-base">{myMembership ? "Moje članstvo" : "Vključi se v PLAN15"}</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{myMembership ? t("me.myMembership") : t("me.join")}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <Label>PLAN15 denarnica (šteje kot imetje) — mora biti NEREGISTRIRANA</Label>
+            <Label>{t("me.walletLabel")}</Label>
             <div className="flex gap-2">
               <Input value={wallet} onChange={e => setWallet(e.target.value)} placeholder="L..." />
-              <Button type="button" variant="outline" size="icon" onClick={() => setScannerTarget("wallet")} title="Skeniraj QR">
+              <Button type="button" variant="outline" size="icon" onClick={() => setScannerTarget("wallet")} title={t("me.scanQR")}>
                 <ScanLine className="h-4 w-4" />
               </Button>
             </div>
             {walletStatus === "checking" && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Preverjam registracijo…</p>
+              <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {t("me.checking")}</p>
             )}
             {walletStatus === "unregistered" && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-green-600 dark:text-green-400"><CheckCircle2 className="h-3 w-3" /> Neregistrirana denarnica ✓</p>
+              <p className="mt-1 flex items-center gap-1 text-xs text-green-600 dark:text-green-400"><CheckCircle2 className="h-3 w-3" /> {t("me.unregisteredOk")}</p>
             )}
             {walletStatus === "registered" && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" /> REGISTRIRANA denarnica — ni dovoljeno. PLAN15 uporablja samo neregistrirane LANE.</p>
+              <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" /> {t("me.registeredBad")}</p>
             )}
             {walletStatus === "error" && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400"><XCircle className="h-3 w-3" /> Registracije ni bilo mogoče preveriti — poskusi znova.</p>
+              <p className="mt-1 flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400"><XCircle className="h-3 w-3" /> {t("me.checkError")}</p>
             )}
           </div>
           <div className="flex items-center gap-2">
             <Switch checked={isStaker} onCheckedChange={setIsStaker} />
-            <Label>Sem stejker</Label>
+            <Label>{t("me.isStaker")}</Label>
           </div>
           {isStaker && (
             <div>
-              <Label>Stejkerska denarnica</Label>
+              <Label>{t("me.stakerWallet")}</Label>
               <div className="flex gap-2">
                 <Input value={stakerWallet} onChange={e => setStakerWallet(e.target.value)} placeholder="L... / T..." />
-                <Button type="button" variant="outline" size="icon" onClick={() => setScannerTarget("staker")} title="Skeniraj QR">
+                <Button type="button" variant="outline" size="icon" onClick={() => setScannerTarget("staker")} title={t("me.scanQR")}>
                   <ScanLine className="h-4 w-4" />
                 </Button>
               </div>
             </div>
           )}
           <Button onClick={saveMembership} disabled={savingMember || walletStatus !== "unregistered"}>
-            {savingMember ? "Shranjujem…" : (myMembership ? "Posodobi" : "Vključi se")}
+            {savingMember ? t("me.saving") : (myMembership ? t("me.update") : t("me.joinBtn"))}
           </Button>
         </CardContent>
       </Card>
@@ -162,18 +165,18 @@ export default function Plan15Me() {
         <>
           {/* Holdings */}
           <Card>
-            <CardHeader><CardTitle className="text-base">Moje imetje</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("me.myHoldings")}</CardTitle></CardHeader>
             <CardContent className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
               <div>
-                <span className="text-muted-foreground">Imam: </span>
+                <span className="text-muted-foreground">{t("me.iHave")} </span>
                 <span className="font-semibold">{holdings.toLocaleString("en-US", { maximumFractionDigits: 2 })} LANA</span>
               </div>
               <div>
-                <span className="text-muted-foreground">Prag: </span>
+                <span className="text-muted-foreground">{t("me.floor")} </span>
                 <span className="font-semibold">{(parameters?.plan15Floor || 0).toLocaleString("en-US")} LANA</span>
               </div>
               <div>
-                <span className="text-muted-foreground">Za prodajo (presežek): </span>
+                <span className="text-muted-foreground">{t("me.forSale")} </span>
                 <span className="font-semibold">{sellable.toLocaleString("en-US", { maximumFractionDigits: 2 })} LANA</span>
               </div>
             </CardContent>
@@ -181,15 +184,15 @@ export default function Plan15Me() {
 
           {/* Publish offer */}
           <Card>
-            <CardHeader><CardTitle className="text-base">Objavi prodajno ponudbo</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("me.publishOffer")}</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div>
-                <Label>Količina za prodajo (LANA, ≤ presežek)</Label>
-                <Input value={offerLana} onChange={e => setOfferLana(e.target.value)} inputMode="decimal" placeholder={`največ ${sellable}`} />
+                <Label>{t("me.amountToSell")}</Label>
+                <Input value={offerLana} onChange={e => setOfferLana(e.target.value)} inputMode="decimal" placeholder={t("me.max", { amount: sellable })} />
               </div>
-              <p className="text-xs text-muted-foreground">Cena je skupnostna: {priceFor("EUR")} EUR/LANA (iz KIND 38888).</p>
+              <p className="text-xs text-muted-foreground">{t("me.communityPrice", { price: priceFor("EUR") })}</p>
               <Button onClick={saveOffer} disabled={savingOffer || sellable <= 0}>
-                {savingOffer ? "Objavljam…" : "Objavi ponudbo"}
+                {savingOffer ? t("followers.publishing") : t("me.publishOfferBtn")}
               </Button>
             </CardContent>
           </Card>
@@ -197,7 +200,7 @@ export default function Plan15Me() {
           {/* My active offers */}
           {myOffers.length > 0 && (
             <Card>
-              <CardHeader><CardTitle className="text-base">Moje ponudbe</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{t("me.myOffers")}</CardTitle></CardHeader>
               <CardContent className="space-y-2 text-sm">
                 {myOffers.map(o => (
                   <div key={o.address} className="flex items-center justify-between rounded-md border p-2">
@@ -213,9 +216,9 @@ export default function Plan15Me() {
 
       {/* My purchases */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Ponudbe, ki sem jih kupil</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{t("me.myPurchases")}</CardTitle></CardHeader>
         <CardContent className="space-y-2 text-sm">
-          {myPurchases.length === 0 && <p className="text-muted-foreground">Še nič kupljenega.</p>}
+          {myPurchases.length === 0 && <p className="text-muted-foreground">{t("me.nothingBought")}</p>}
           {myPurchases.map(p => {
             const payout = getPayoutForAcceptance(p.id);
             return (
@@ -224,7 +227,7 @@ export default function Plan15Me() {
                   <div>{(p.amount / LANOSHIS_PER_LANA).toLocaleString("en-US", { maximumFractionDigits: 8 })} LANA · {p.amountFiat} {p.currency}</div>
                   {payout?.txid && <div className="text-xs text-muted-foreground font-mono break-all">TX: {payout.txid}</div>}
                 </div>
-                {payout ? <Badge className="bg-green-600 hover:bg-green-600">Poplačano</Badge> : <Badge variant="secondary">Čaka</Badge>}
+                {payout ? <Badge className="bg-green-600 hover:bg-green-600">{t("me.paidOut")}</Badge> : <Badge variant="secondary">{t("me.pending")}</Badge>}
               </div>
             );
           })}

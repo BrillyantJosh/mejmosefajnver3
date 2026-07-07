@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNostrPlan15, Plan15Acceptance, LANOSHIS_PER_LANA } from "@/hooks/useNostrPlan15";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { useTranslation } from "@/i18n/I18nContext";
+import plan15Translations from "@/i18n/modules/plan15";
 import { supabase } from "@/integrations/supabase/client";
 import { convertWifToIds } from "@/lib/crypto";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +16,7 @@ import { toast } from "sonner";
 export default function Plan15Payouts() {
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
+  const { t } = useTranslation(plan15Translations);
   const { isLoading, incomingAcceptances, offers, publishPayout } = useNostrPlan15();
   const [wifByAcceptance, setWifByAcceptance] = useState<Record<string, string>>({});
   const [paying, setPaying] = useState<string | null>(null);
@@ -22,10 +25,10 @@ export default function Plan15Payouts() {
 
   const doPayout = async (a: Plan15Acceptance) => {
     const wif = (wifByAcceptance[a.id] || "").trim();
-    if (!wif) { toast.error("Vnesi svoj WIF"); return; }
+    if (!wif) { toast.error(t("payouts.errWif")); return; }
     const offer = offerFor(a);
     const fromWallet = offer?.wallet || "";
-    if (!fromWallet) { toast.error("Ne najdem izvorne denarnice ponudbe"); return; }
+    if (!fromWallet) { toast.error(t("payouts.errNoSource")); return; }
     setPaying(a.id);
     try {
       // Validate WIF matches the source wallet
@@ -34,7 +37,7 @@ export default function Plan15Payouts() {
         ids.walletIdCompressed === fromWallet ||
         ids.walletIdUncompressed === fromWallet ||
         ids.walletId === fromWallet;
-      if (!match) { toast.error("WIF se ne ujema z izvorno denarnico ponudbe"); setPaying(null); return; }
+      if (!match) { toast.error(t("payouts.errWifMismatch")); setPaying(null); return; }
 
       const amountLana = a.amount / LANOSHIS_PER_LANA;
       const { data, error } = await supabase.functions.invoke("send-lana-transaction", {
@@ -48,13 +51,13 @@ export default function Plan15Payouts() {
         },
       });
       if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || "Transakcija ni uspela");
+      if (!data?.success) throw new Error(data?.error || t("payouts.errTxFailed"));
 
       await publishPayout({ acceptance: a, fromWallet, txid: data.txHash });
-      toast.success(`Izplačano! TX ${String(data.txHash).slice(0, 16)}…`);
+      toast.success(t("payouts.paidOut", { tx: String(data.txHash).slice(0, 16) }));
       setWifByAcceptance(prev => { const n = { ...prev }; delete n[a.id]; return n; });
     } catch (e: any) {
-      toast.error(e?.message || "Napaka pri izplačilu");
+      toast.error(e?.message || t("payouts.errPayout"));
     } finally {
       setPaying(null);
     }
@@ -68,7 +71,7 @@ export default function Plan15Payouts() {
     return (
       <Card>
         <CardContent className="p-6 text-center text-muted-foreground">
-          Ni čakajočih odkupov na tvojih ponudbah.
+          {t("payouts.empty")}
         </CardContent>
       </Card>
     );
@@ -78,7 +81,7 @@ export default function Plan15Payouts() {
     <div className="space-y-4">
       <Card className="border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30">
         <CardContent className="p-3 text-sm text-blue-900 dark:text-blue-200">
-          Preveri prejem fiata na svojem TRR, nato vnesi SVOJ WIF (od izvorne denarnice ponudbe) in izplačaj neregistrirane LANE kupcu.
+          {t("payouts.instruction")}
         </CardContent>
       </Card>
       {incomingAcceptances.map(a => {
@@ -91,11 +94,11 @@ export default function Plan15Payouts() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <div><span className="text-muted-foreground">Kupčev naslov: </span><span className="font-mono break-all">{a.buyerWallet}</span></div>
-              <div><span className="text-muted-foreground">Referenca plačila: </span><span className="font-medium">{a.paymentReference || "—"}</span></div>
-              <div><span className="text-muted-foreground">Izvorna denarnica: </span><span className="font-mono break-all">{offer?.wallet || "?"}</span></div>
+              <div><span className="text-muted-foreground">{t("payouts.buyerAddr")} </span><span className="font-mono break-all">{a.buyerWallet}</span></div>
+              <div><span className="text-muted-foreground">{t("payouts.paymentRef")} </span><span className="font-medium">{a.paymentReference || "—"}</span></div>
+              <div><span className="text-muted-foreground">{t("payouts.sourceWallet")} </span><span className="font-mono break-all">{offer?.wallet || "?"}</span></div>
               <div>
-                <Label>Tvoj WIF (od izvorne denarnice)</Label>
+                <Label>{t("payouts.wifLabel")}</Label>
                 <Input
                   type="password"
                   value={wifByAcceptance[a.id] || ""}
@@ -104,7 +107,7 @@ export default function Plan15Payouts() {
                 />
               </div>
               <Button onClick={() => doPayout(a)} disabled={paying === a.id}>
-                {paying === a.id ? "Izplačujem…" : "Potrdi & izplačaj LAN"}
+                {paying === a.id ? t("payouts.paying") : t("payouts.confirmPay")}
               </Button>
             </CardContent>
           </Card>

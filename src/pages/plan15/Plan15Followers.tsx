@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useNostrPlan15, Plan15Offer, LANOSHIS_PER_LANA } from "@/hooks/useNostrPlan15";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTranslation } from "@/i18n/I18nContext";
+import plan15Translations from "@/i18n/modules/plan15";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +18,7 @@ const fmtLana = (lanoshis: number) =>
 
 export default function Plan15Followers() {
   const { session } = useAuth();
+  const { t } = useTranslation(plan15Translations);
   const { members, offers, isLoading, getOfferRemaining, getHoldingsLana, priceFor, publishAcceptance } = useNostrPlan15();
   const pubkeys = useMemo(() => members.map(m => m.pubkey), [members]);
   const { profiles } = useNostrProfilesCacheBulk(pubkeys);
@@ -45,9 +48,9 @@ export default function Plan15Followers() {
   const submitBuy = async () => {
     if (!dialogOffer) return;
     const lana = parseFloat(buyLana);
-    if (!lana || lana <= 0) { toast.error("Vnesi veljavno količino"); return; }
-    if (lana > remainingLana) { toast.error("Preveč — presega preostanek ponudbe"); return; }
-    if (!buyerWallet) { toast.error("Vnesi svoj prejemni naslov"); return; }
+    if (!lana || lana <= 0) { toast.error(t("followers.errAmount")); return; }
+    if (lana > remainingLana) { toast.error(t("followers.errTooMuch")); return; }
+    if (!buyerWallet) { toast.error(t("followers.errAddr")); return; }
     setSubmitting(true);
     try {
       await publishAcceptance({
@@ -56,10 +59,10 @@ export default function Plan15Followers() {
         amountLanoshis: Math.round(lana * LANOSHIS_PER_LANA),
         paymentReference: paymentRef,
       });
-      toast.success("Ponudba sprejeta! Plačaj fiat prodajalcu, nato bo izvedel nakazilo LAN.");
+      toast.success(t("followers.accepted"));
       setDialogOffer(null);
     } catch (e: any) {
-      toast.error(e?.message || "Napaka pri objavi");
+      toast.error(e?.message || t("followers.errPublish"));
     } finally {
       setSubmitting(false);
     }
@@ -73,7 +76,7 @@ export default function Plan15Followers() {
     return (
       <Card>
         <CardContent className="p-6 text-center text-muted-foreground">
-          Ni še sledilcev PLANA15. Bodi prvi — pojdi na zavihek „Moj PLAN15“.
+          {t("followers.empty")}
         </CardContent>
       </Card>
     );
@@ -89,18 +92,18 @@ export default function Plan15Followers() {
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
                 {nameFor(member.pubkey)}
-                {member.isStaker && <Badge variant="secondary">Stejker</Badge>}
-                {member.pubkey === session?.nostrHexId && <Badge variant="outline">Jaz</Badge>}
+                {member.isStaker && <Badge variant="secondary">{t("followers.staker")}</Badge>}
+                {member.pubkey === session?.nostrHexId && <Badge variant="outline">{t("followers.me")}</Badge>}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
                 <div>
-                  <span className="text-muted-foreground">Ima: </span>
+                  <span className="text-muted-foreground">{t("followers.holds")} </span>
                   <span className="font-semibold">{getHoldingsLana(member.wallet).toLocaleString("en-US", { maximumFractionDigits: 2 })} LANA</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Prodaja: </span>
+                  <span className="text-muted-foreground">{t("followers.selling")} </span>
                   <span className="font-semibold">{fmtLana(sellingLanoshis)} LANA</span>
                 </div>
               </div>
@@ -115,7 +118,7 @@ export default function Plan15Followers() {
                           <span className="font-medium">{fmtLana(rem)} LANA</span>
                           <span className="text-muted-foreground"> @ {priceFor(offer.currency)} {offer.currency}/LANA</span>
                         </div>
-                        <Button size="sm" disabled={!canBuy} onClick={() => openBuy(offer)}>Odkupi</Button>
+                        <Button size="sm" disabled={!canBuy} onClick={() => openBuy(offer)}>{t("followers.buy")}</Button>
                       </div>
                     );
                   })}
@@ -128,33 +131,35 @@ export default function Plan15Followers() {
 
       <Dialog open={!!dialogOffer} onOpenChange={(o) => !o && setDialogOffer(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Odkup neregistriranih LAN</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{t("followers.dialogTitle")}</DialogTitle></DialogHeader>
           {dialogOffer && (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Preostanek: {remainingLana.toLocaleString("en-US", { maximumFractionDigits: 8 })} LANA · cena {price} {dialogOffer.currency}/LANA
+                {t("followers.remaining", {
+                  amount: remainingLana.toLocaleString("en-US", { maximumFractionDigits: 8 }),
+                  price,
+                  currency: dialogOffer.currency,
+                })}
               </p>
               <div>
-                <Label>Količina (LANA)</Label>
-                <Input value={buyLana} onChange={e => setBuyLana(e.target.value)} inputMode="decimal" placeholder="npr. 100" />
+                <Label>{t("followers.amountLabel")}</Label>
+                <Input value={buyLana} onChange={e => setBuyLana(e.target.value)} inputMode="decimal" placeholder="100" />
               </div>
               <div>
-                <Label>Tvoj prejemni naslov</Label>
+                <Label>{t("followers.receivingAddr")}</Label>
                 <Input value={buyerWallet} onChange={e => setBuyerWallet(e.target.value)} placeholder="L..." />
               </div>
               <div>
-                <Label>Referenca plačila (TRR/Revolut)</Label>
-                <Input value={paymentRef} onChange={e => setPaymentRef(e.target.value)} placeholder="sklic / referenca" />
+                <Label>{t("followers.paymentRef")}</Label>
+                <Input value={paymentRef} onChange={e => setPaymentRef(e.target.value)} />
               </div>
-              <p className="text-sm">Za plačilo: <span className="font-semibold">{fiat} {dialogOffer.currency}</span></p>
-              <p className="text-xs text-muted-foreground">
-                Fiat nakažeš prodajalcu sam (na njegov TRR). Aplikacija plačila NE izvaja. Ko prodajalec potrdi prejem, ti nakaže neregistrirane LANE.
-              </p>
+              <p className="text-sm">{t("followers.toPay")} <span className="font-semibold">{fiat} {dialogOffer.currency}</span></p>
+              <p className="text-xs text-muted-foreground">{t("followers.fiatNote")}</p>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOffer(null)}>Prekliči</Button>
-            <Button onClick={submitBuy} disabled={submitting}>{submitting ? "Objavljam…" : "Sprejmi ponudbo"}</Button>
+            <Button variant="outline" onClick={() => setDialogOffer(null)}>{t("followers.cancel")}</Button>
+            <Button onClick={submitBuy} disabled={submitting}>{submitting ? t("followers.publishing") : t("followers.acceptOffer")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
