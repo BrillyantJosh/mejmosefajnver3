@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QRScanner } from "@/components/QRScanner";
+import { checkWalletRegistration, WalletRegistrationStatus } from "@/lib/walletRegistration";
+import { ScanLine, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Plan15Me() {
@@ -29,6 +32,10 @@ export default function Plan15Me() {
   const [offerLana, setOfferLana] = useState("");
   const [savingOffer, setSavingOffer] = useState(false);
 
+  // wallet registration guard (PLAN15 requires an UNREGISTERED wallet) + QR scan
+  const [walletStatus, setWalletStatus] = useState<WalletRegistrationStatus | "idle" | "checking">("idle");
+  const [scannerTarget, setScannerTarget] = useState<null | "wallet" | "staker">(null);
+
   useEffect(() => {
     if (myMembership) {
       setWallet(myMembership.wallet);
@@ -39,11 +46,25 @@ export default function Plan15Me() {
     }
   }, [myMembership, session?.walletId]);
 
+  // Debounced check: the PLAN15 wallet must NOT be a registered wallet.
+  useEffect(() => {
+    const w = wallet.trim();
+    if (!w) { setWalletStatus("idle"); return; }
+    setWalletStatus("checking");
+    const t = setTimeout(async () => {
+      const status = await checkWalletRegistration(w);
+      setWalletStatus(status);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [wallet]);
+
   const holdings = myMembership ? getHoldingsLana(myMembership.wallet) : 0;
   const sellable = myMembership ? getSellableLana(myMembership.wallet) : 0;
 
   const saveMembership = async () => {
     if (!wallet) { toast.error("Vnesi PLAN15 denarnico"); return; }
+    if (walletStatus === "registered") { toast.error("Ta denarnica je REGISTRIRANA — PLAN15 zahteva neregistrirano denarnico"); return; }
+    if (walletStatus !== "unregistered") { toast.error("Počakaj na preverbo registracije denarnice"); return; }
     if (isStaker && !stakerWallet) { toast.error("Vnesi stejkersko denarnico"); return; }
     setSavingMember(true);
     try {
@@ -59,6 +80,7 @@ export default function Plan15Me() {
   const saveOffer = async () => {
     const lana = parseFloat(offerLana);
     if (!myMembership) { toast.error("Najprej se vključi v PLAN15"); return; }
+    if (walletStatus === "registered") { toast.error("Tvoja PLAN15 denarnica je registrirana — vnesi neregistrirano in posodobi članstvo"); return; }
     if (!lana || lana <= 0) { toast.error("Vnesi veljavno količino"); return; }
     if (lana > sellable) { toast.error(`Preveč — največ ${sellable} LANA (nad pragom)`); return; }
     setSavingOffer(true);
@@ -79,13 +101,43 @@ export default function Plan15Me() {
 
   return (
     <div className="space-y-6">
+      <QRScanner
+        isOpen={scannerTarget !== null}
+        onClose={() => setScannerTarget(null)}
+        onScan={(decoded) => {
+          const addr = decoded.replace(/^[a-zA-Z]+:/, "").split("?")[0].trim();
+          if (scannerTarget === "wallet") setWallet(addr);
+          else if (scannerTarget === "staker") setStakerWallet(addr);
+          setScannerTarget(null);
+        }}
+        title="Skeniraj denarnico"
+        description="Postavi QR kodo naslova denarnice v okvir."
+      />
+
       {/* Membership */}
       <Card>
         <CardHeader><CardTitle className="text-base">{myMembership ? "Moje članstvo" : "Vključi se v PLAN15"}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <Label>PLAN15 denarnica (šteje kot imetje)</Label>
-            <Input value={wallet} onChange={e => setWallet(e.target.value)} placeholder="L..." />
+            <Label>PLAN15 denarnica (šteje kot imetje) — mora biti NEREGISTRIRANA</Label>
+            <div className="flex gap-2">
+              <Input value={wallet} onChange={e => setWallet(e.target.value)} placeholder="L..." />
+              <Button type="button" variant="outline" size="icon" onClick={() => setScannerTarget("wallet")} title="Skeniraj QR">
+                <ScanLine className="h-4 w-4" />
+              </Button>
+            </div>
+            {walletStatus === "checking" && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Preverjam registracijo…</p>
+            )}
+            {walletStatus === "unregistered" && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-green-600 dark:text-green-400"><CheckCircle2 className="h-3 w-3" /> Neregistrirana denarnica ✓</p>
+            )}
+            {walletStatus === "registered" && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" /> REGISTRIRANA denarnica — ni dovoljeno. PLAN15 uporablja samo neregistrirane LANE.</p>
+            )}
+            {walletStatus === "error" && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400"><XCircle className="h-3 w-3" /> Registracije ni bilo mogoče preveriti — poskusi znova.</p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Switch checked={isStaker} onCheckedChange={setIsStaker} />
@@ -94,10 +146,15 @@ export default function Plan15Me() {
           {isStaker && (
             <div>
               <Label>Stejkerska denarnica</Label>
-              <Input value={stakerWallet} onChange={e => setStakerWallet(e.target.value)} placeholder="L... / T..." />
+              <div className="flex gap-2">
+                <Input value={stakerWallet} onChange={e => setStakerWallet(e.target.value)} placeholder="L... / T..." />
+                <Button type="button" variant="outline" size="icon" onClick={() => setScannerTarget("staker")} title="Skeniraj QR">
+                  <ScanLine className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
-          <Button onClick={saveMembership} disabled={savingMember}>
+          <Button onClick={saveMembership} disabled={savingMember || walletStatus !== "unregistered"}>
             {savingMember ? "Shranjujem…" : (myMembership ? "Posodobi" : "Vključi se")}
           </Button>
         </CardContent>
