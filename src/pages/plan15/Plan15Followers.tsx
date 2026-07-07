@@ -44,7 +44,7 @@ export default function Plan15Followers() {
   const [wif, setWif] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [buyerWalletStatus, setBuyerWalletStatus] = useState<WalletRegistrationStatus | "idle" | "checking">("idle");
-  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerTarget, setScannerTarget] = useState<null | "receiving" | "wif">(null);
 
   const nameFor = (pk: string) => {
     const p = profiles.get(pk);
@@ -162,14 +162,18 @@ export default function Plan15Followers() {
   return (
     <div className="space-y-4">
       <QRScanner
-        isOpen={scannerOpen}
-        onClose={() => setScannerOpen(false)}
+        isOpen={scannerTarget !== null}
+        onClose={() => setScannerTarget(null)}
         onScan={(decoded) => {
-          setBuyerWallet(decoded.replace(/^[a-zA-Z]+:/, "").split("?")[0].trim());
-          setScannerOpen(false);
+          if (scannerTarget === "wif") {
+            setWif(decoded.trim());
+          } else {
+            setBuyerWallet(decoded.replace(/^[a-zA-Z]+:/, "").split("?")[0].trim());
+          }
+          setScannerTarget(null);
         }}
-        title={t("me.scanWallet")}
-        description={t("me.scanWalletDesc")}
+        title={scannerTarget === "wif" ? t("followers.scanWif") : t("me.scanWallet")}
+        description={scannerTarget === "wif" ? t("followers.scanWifDesc") : t("me.scanWalletDesc")}
       />
 
       {members.map(member => {
@@ -251,13 +255,13 @@ export default function Plan15Followers() {
                 <Label>{t("followers.receivingAddr")}</Label>
                 {myMembership?.wallet ? (
                   <>
-                    <Input value={buyerWallet} readOnly className="mt-1 font-mono text-sm" />
+                    <div className="mt-1 rounded-md border bg-muted/50 px-3 py-2 font-mono text-sm break-all">{buyerWallet}</div>
                     <p className="mt-1 text-xs text-muted-foreground">{t("followers.receivingFromProfile")}</p>
                   </>
                 ) : (
                   <div className="flex gap-2">
                     <Input value={buyerWallet} onChange={e => setBuyerWallet(e.target.value)} placeholder="L..." />
-                    <Button type="button" variant="outline" size="icon" onClick={() => setScannerOpen(true)} title={t("me.scanQR")}>
+                    <Button type="button" variant="outline" size="icon" onClick={() => setScannerTarget("receiving")} title={t("me.scanQR")}>
                       <ScanLine className="h-4 w-4" />
                     </Button>
                   </div>
@@ -296,7 +300,12 @@ export default function Plan15Followers() {
 
               <div>
                 <Label>{t("followers.wifLabel")}</Label>
-                <Input type="password" value={wif} onChange={e => setWif(e.target.value)} placeholder="WIF" />
+                <div className="flex gap-2">
+                  <Input type="password" value={wif} onChange={e => setWif(e.target.value)} placeholder="WIF" />
+                  <Button type="button" variant="outline" size="icon" onClick={() => setScannerTarget("wif")} title={t("followers.scanWif")}>
+                    <ScanLine className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           )}
