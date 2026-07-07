@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QRScanner } from "@/components/QRScanner";
+import { ScanLine } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Plan15Payouts() {
@@ -20,6 +22,7 @@ export default function Plan15Payouts() {
   const { isLoading, incomingAcceptances, offers, publishPayout } = useNostrPlan15();
   const [wifByAcceptance, setWifByAcceptance] = useState<Record<string, string>>({});
   const [paying, setPaying] = useState<string | null>(null);
+  const [scanForId, setScanForId] = useState<string | null>(null);
 
   const offerFor = (a: Plan15Acceptance) => offers.find(o => o.address === a.offerAddress);
 
@@ -79,6 +82,16 @@ export default function Plan15Payouts() {
 
   return (
     <div className="space-y-4">
+      <QRScanner
+        isOpen={scanForId !== null}
+        onClose={() => setScanForId(null)}
+        onScan={(decoded) => {
+          if (scanForId) setWifByAcceptance(prev => ({ ...prev, [scanForId]: decoded.trim() }));
+          setScanForId(null);
+        }}
+        title={t("followers.scanWif")}
+        description={t("followers.scanWifDesc")}
+      />
       <Card className="border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30">
         <CardContent className="p-3 text-sm text-blue-900 dark:text-blue-200">
           {t("payouts.instruction")}
@@ -90,7 +103,7 @@ export default function Plan15Payouts() {
           <Card key={a.id}>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">
-                {(a.amount / LANOSHIS_PER_LANA).toLocaleString("en-US", { maximumFractionDigits: 8 })} LANA · {a.amountFiat} {a.currency}
+                {(a.amount / LANOSHIS_PER_LANA).toLocaleString("en-US", { maximumFractionDigits: 8 })} LANA
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
@@ -100,12 +113,17 @@ export default function Plan15Payouts() {
               <div><span className="text-muted-foreground">{t("payouts.sourceWallet")} </span><span className="font-mono break-all">{offer?.wallet || "?"}</span></div>
               <div>
                 <Label>{t("payouts.wifLabel")}</Label>
-                <Input
-                  type="password"
-                  value={wifByAcceptance[a.id] || ""}
-                  onChange={e => setWifByAcceptance(prev => ({ ...prev, [a.id]: e.target.value }))}
-                  placeholder="WIF"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    value={wifByAcceptance[a.id] || ""}
+                    onChange={e => setWifByAcceptance(prev => ({ ...prev, [a.id]: e.target.value }))}
+                    placeholder="WIF"
+                  />
+                  <Button type="button" variant="outline" size="icon" onClick={() => setScanForId(a.id)} title={t("followers.scanWif")}>
+                    <ScanLine className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <Button onClick={() => doPayout(a)} disabled={paying === a.id}>
                 {paying === a.id ? t("payouts.paying") : t("payouts.confirmPay")}
