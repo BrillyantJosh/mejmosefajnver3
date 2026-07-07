@@ -153,6 +153,18 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     order: 6
   },
   {
+    id: 'plan15',
+    title: 'PLAN15',
+    titleSl: 'PLAN15',
+    description: 'Buy and resell unregistered LANA — accumulate to 1M, then progressively redistribute (peer2peer)',
+    descriptionSl: 'Kupuj in preprodajaj neregistrirane LANE — do 1 MIO, nato postopno drobljenje (peer2peer)',
+    icon: TrendingUp,
+    path: '/plan15',
+    gradient: 'from-cyan-500 to-blue-500',
+    enabled: true,
+    order: 6.5
+  },
+  {
     id: 'lanapaper',
     title: 'Lana Paper',
     description: 'Create a paper wallet from your existing wallets, including your NOSTR ID.',
@@ -459,6 +471,7 @@ const mapToNostrId = (id: ModuleType): string => {
     'unconditionalpayment': 'Unconditional Payment',
     'selllana': 'SellLana',
     'buylana': 'BuyLana',
+    'plan15': 'PLAN15',
     'lanapaper': 'LanaPaper',
     'offlinelana': 'OfflineLana',
     'relays': 'Relays',
@@ -502,6 +515,7 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Unconditional Payment': 'unconditionalpayment',
     'SellLana': 'selllana',
     'BuyLana': 'buylana',
+    'PLAN15': 'plan15',
     'LanaPaper': 'lanapaper',
     'OfflineLana': 'offlinelana',
     'Relays': 'relays',

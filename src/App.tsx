@@ -60,6 +60,10 @@ const UnconditionalPaymentCompleted = lazy(() => import("./pages/unconditional-p
 const UnconditionalPaymentConfirmPayment = lazy(() => import("./pages/unconditional-payment/ConfirmPayment"));
 const UnconditionalPaymentResult = lazy(() => import("./pages/unconditional-payment/Result"));
 const UnconditionalPaymentRetryEvents = lazy(() => import("./pages/unconditional-payment/RetryEvents"));
+const Plan15Layout = lazy(() => import("./pages/plan15/Plan15Layout"));
+const Plan15Followers = lazy(() => import("./pages/plan15/Plan15Followers"));
+const Plan15Me = lazy(() => import("./pages/plan15/Plan15Me"));
+const Plan15Payouts = lazy(() => import("./pages/plan15/Plan15Payouts"));
 const OwnLayout = lazy(() => import("./pages/own/OwnLayout"));
 const Own = lazy(() => import("./pages/own/Own"));
 const OwnSearch = lazy(() => import("./pages/own/Search"));
@@ -262,6 +266,11 @@ const App = () => (
                   </Route>
                   <Route path="/unconditional-payment/confirm-payment" element={<UnconditionalPaymentConfirmPayment />} />
                   <Route path="/unconditional-payment/result" element={<UnconditionalPaymentResult />} />
+                  <Route path="/plan15" element={<Plan15Layout />}>
+                    <Route index element={<Plan15Followers />} />
+                    <Route path="me" element={<Plan15Me />} />
+                    <Route path="payouts" element={<Plan15Payouts />} />
+                  </Route>
                   {/* Backward compatibility redirects */}
                   <Route path="/donate" element={<Navigate to="/unconditional-payment" replace />} />
                   <Route path="/donate/donated" element={<Navigate to="/unconditional-payment/completed" replace />} />

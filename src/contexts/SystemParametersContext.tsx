@@ -37,6 +37,9 @@ interface SystemParameters {
   validFrom: string;
   splitStartedAt: string;
   splitTargetLana: number;
+  plan15Floor: number;
+  plan15Price: Record<string, number>;
+  plan15Round: string;
   connectedRelays: number;
   isLoading: boolean;
   trustedSigners: TrustedSigners;
@@ -113,6 +116,29 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
       // Parse trusted signers
       const trustedSigners = (data.trusted_signers as TrustedSigners) || {};
 
+      // Parse PLAN15 fields from the raw KIND 38888 event (tags first, content fallback).
+      // Pure client-side: no server/DB changes needed — raw_event is already returned.
+      let rawEvent: any = data.raw_event || {};
+      if (typeof rawEvent === 'string') {
+        try { rawEvent = JSON.parse(rawEvent); } catch { rawEvent = {}; }
+      }
+      const rawTags: string[][] = Array.isArray(rawEvent.tags) ? rawEvent.tags : [];
+      let rawContent: any = {};
+      try {
+        rawContent = typeof rawEvent.content === 'string' && rawEvent.content.trim().startsWith('{')
+          ? JSON.parse(rawEvent.content)
+          : (rawEvent.content || {});
+      } catch { rawContent = {}; }
+      const plan15Floor = parseInt(rawTags.find(t => t[0] === 'plan15_floor')?.[1] || rawContent.plan15_floor || '0') || 0;
+      const plan15PriceTags = rawTags.filter(t => t[0] === 'plan15_price');
+      const plan15PriceContent = (rawContent.plan15_price as Record<string, number>) || {};
+      const plan15Price: Record<string, number> = {
+        EUR: parseFloat(plan15PriceTags.find(t => t[1] === 'EUR')?.[2] || '') || plan15PriceContent.EUR || 0,
+        USD: parseFloat(plan15PriceTags.find(t => t[1] === 'USD')?.[2] || '') || plan15PriceContent.USD || 0,
+        GBP: parseFloat(plan15PriceTags.find(t => t[1] === 'GBP')?.[2] || '') || plan15PriceContent.GBP || 0,
+      };
+      const plan15Round = rawTags.find(t => t[0] === 'plan15_round')?.[1] || rawContent.plan15_round || '';
+
       // Create relay statuses - mark all as connected since we got data from DB
       // Server-side sync validates relay connectivity
       const relayStatuses: RelayStatus[] = relays.map(url => ({
@@ -131,6 +157,9 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
         validFrom: data.valid_from ? new Date(data.valid_from * 1000).toISOString() : '',
         splitStartedAt: data.split_started_at ? new Date(data.split_started_at * 1000).toISOString() : '',
         splitTargetLana: data.split_target_lana || 0,
+        plan15Floor,
+        plan15Price,
+        plan15Round,
         connectedRelays: relays.length,
         isLoading: false,
         trustedSigners
