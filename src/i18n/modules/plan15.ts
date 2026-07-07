@@ -9,12 +9,12 @@ const plan15 = {
   'layout.price': 'Buyback price:',
   'layout.notPublished': 'not published',
   'layout.paramsWarning': '⚠️ PLAN15 parameters (floor / price) are not yet published in KIND 38888. Publishing offers only makes sense once the parameters are set.',
-  'nav.followers': 'Followers',
+  'nav.followers': 'Creators',
   'nav.me': 'My PLAN15',
   'nav.payouts': 'To pay out',
 
   // ── Followers ──
-  'followers.empty': 'No PLAN15 followers yet. Be the first — go to the “My PLAN15” tab.',
+  'followers.empty': 'No PLAN15 creators yet. Be the first — go to the “My PLAN15” tab.',
   'followers.staker': 'Staker',
   'followers.me': 'Me',
   'followers.holds': 'Holds:',
@@ -128,12 +128,12 @@ const translations: TranslationDict<Plan15Key> = {
     'layout.price': 'Odkupna cena:',
     'layout.notPublished': 'ni objavljeno',
     'layout.paramsWarning': '⚠️ PLAN15 parametri (prag / cena) še niso objavljeni v KIND 38888. Objava ponudb je smiselna šele, ko so parametri nastavljeni.',
-    'nav.followers': 'Sledilci',
+    'nav.followers': 'Osvajalci',
     'nav.me': 'Moj PLAN15',
     'nav.payouts': 'Za poplačati',
 
     // ── Followers ──
-    'followers.empty': 'Ni še sledilcev PLANA15. Bodi prvi — pojdi na zavihek „Moj PLAN15“.',
+    'followers.empty': 'Ni še osvajalcev PLANA15. Bodi prvi — pojdi na zavihek „Moj PLAN15“.',
     'followers.staker': 'Stejker',
     'followers.me': 'Jaz',
     'followers.holds': 'Ima:',
