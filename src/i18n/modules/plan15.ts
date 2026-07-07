@@ -35,6 +35,7 @@ const plan15 = {
   'followers.errAddr': 'Enter your receiving address',
   'followers.accepted': 'Offer accepted! Pay the fiat to the seller, then they will send the LANA.',
   'followers.errPublish': 'Error while publishing',
+  'followers.errBuyerRegistered': 'Your receiving wallet is REGISTERED — use an unregistered wallet',
 
   // ── My PLAN15 ──
   'me.myMembership': 'My membership',
@@ -51,6 +52,7 @@ const plan15 = {
   'me.joinBtn': 'Join',
   'me.myHoldings': 'My holdings',
   'me.iHave': 'I have:',
+  'me.includesStaker': '(PLAN15 + staker wallet)',
   'me.floor': 'Floor:',
   'me.forSale': 'For sale (excess):',
   'me.publishOffer': 'Publish sell offer',
@@ -132,6 +134,7 @@ const translations: TranslationDict<Plan15Key> = {
     'followers.errAddr': 'Vnesi svoj prejemni naslov',
     'followers.accepted': 'Ponudba sprejeta! Plačaj fiat prodajalcu, nato bo izvedel nakazilo LAN.',
     'followers.errPublish': 'Napaka pri objavi',
+    'followers.errBuyerRegistered': 'Tvoj prejemni naslov je REGISTRIRAN — uporabi neregistrirano denarnico',
 
     // ── Moj PLAN15 ──
     'me.myMembership': 'Moje članstvo',
@@ -148,6 +151,7 @@ const translations: TranslationDict<Plan15Key> = {
     'me.joinBtn': 'Vključi se',
     'me.myHoldings': 'Moje imetje',
     'me.iHave': 'Imam:',
+    'me.includesStaker': '(PLAN15 + stejkerska denarnica)',
     'me.floor': 'Prag:',
     'me.forSale': 'Za prodajo (presežek):',
     'me.publishOffer': 'Objavi prodajno ponudbo',

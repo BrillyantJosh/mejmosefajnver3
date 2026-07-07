@@ -20,7 +20,7 @@ export default function Plan15Me() {
   const { t } = useTranslation(plan15Translations);
   const {
     isLoading, myMembership, myOffers, myPurchases, getPayoutForAcceptance,
-    publishMembership, publishOffer, getHoldingsLana, getSellableLana, priceFor,
+    publishMembership, publishOffer, getMemberHoldings, getMemberSellable, priceFor,
   } = useNostrPlan15();
 
   // membership form
@@ -59,8 +59,8 @@ export default function Plan15Me() {
     return () => clearTimeout(timer);
   }, [wallet]);
 
-  const holdings = myMembership ? getHoldingsLana(myMembership.wallet) : 0;
-  const sellable = myMembership ? getSellableLana(myMembership.wallet) : 0;
+  const holdings = myMembership ? getMemberHoldings(myMembership) : 0;
+  const sellable = myMembership ? getMemberSellable(myMembership) : 0;
 
   const saveMembership = async () => {
     if (!wallet) { toast.error(t("me.errEnterWallet")); return; }
@@ -170,6 +170,9 @@ export default function Plan15Me() {
               <div>
                 <span className="text-muted-foreground">{t("me.iHave")} </span>
                 <span className="font-semibold">{holdings.toLocaleString("en-US", { maximumFractionDigits: 2 })} LANA</span>
+                {myMembership.isStaker && myMembership.stakerWallet && (
+                  <span className="text-muted-foreground text-xs ml-1">{t("me.includesStaker")}</span>
+                )}
               </div>
               <div>
                 <span className="text-muted-foreground">{t("me.floor")} </span>

@@ -231,7 +231,11 @@ export const useNostrPlan15 = () => {
   }, [parameters?.electrumServers]);
 
   useEffect(() => {
-    if (members.length > 0) fetchBalances(members.map(m => m.wallet));
+    if (members.length > 0) {
+      // Include BOTH the PLAN15 (buyout) wallet and the staker wallet in balance lookups.
+      const wallets = members.flatMap(m => [m.wallet, m.stakerWallet]).filter(Boolean);
+      fetchBalances(wallets);
+    }
   }, [members, fetchBalances]);
 
   // ---- Derived helpers ----
@@ -251,6 +255,15 @@ export const useNostrPlan15 = () => {
   const getHoldingsLana = useCallback((wallet: string): number => balances[wallet] ?? 0, [balances]);
   const getSellableLana = useCallback((wallet: string): number =>
     Math.max(0, (balances[wallet] ?? 0) - plan15Floor), [balances, plan15Floor]);
+
+  // Combined holdings = PLAN15 (buyout) wallet + staker wallet; the floor applies to the TOTAL.
+  const getMemberHoldings = useCallback((member: Plan15Member): number => {
+    const main = balances[member.wallet] ?? 0;
+    const staker = member.stakerWallet ? (balances[member.stakerWallet] ?? 0) : 0;
+    return main + staker;
+  }, [balances]);
+  const getMemberSellable = useCallback((member: Plan15Member): number =>
+    Math.max(0, getMemberHoldings(member) - plan15Floor), [getMemberHoldings, plan15Floor]);
 
   const priceFor = useCallback((currency: string): number => plan15Price[currency] || plan15Price['EUR'] || 0, [plan15Price]);
 
@@ -369,7 +382,7 @@ export const useNostrPlan15 = () => {
     // params
     plan15Floor, plan15Price, priceFor,
     // derived
-    getOfferRemaining, getPayoutForAcceptance, getHoldingsLana, getSellableLana,
+    getOfferRemaining, getPayoutForAcceptance, getHoldingsLana, getSellableLana, getMemberHoldings, getMemberSellable,
     myMembership, myOffers, myPurchases, incomingAcceptances,
     // actions
     publishMembership, publishOffer, publishAcceptance, publishPayout,

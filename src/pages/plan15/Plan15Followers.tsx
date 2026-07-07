@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNostrPlan15, Plan15Offer, LANOSHIS_PER_LANA } from "@/hooks/useNostrPlan15";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslation } from "@/i18n/I18nContext";
 import plan15Translations from "@/i18n/modules/plan15";
+import { checkWalletRegistration, WalletRegistrationStatus } from "@/lib/walletRegistration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { QRScanner } from "@/components/QRScanner";
+import { ScanLine, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const fmtLana = (lanoshis: number) =>
@@ -19,7 +22,7 @@ const fmtLana = (lanoshis: number) =>
 export default function Plan15Followers() {
   const { session } = useAuth();
   const { t } = useTranslation(plan15Translations);
-  const { members, offers, isLoading, getOfferRemaining, getHoldingsLana, priceFor, publishAcceptance } = useNostrPlan15();
+  const { members, offers, isLoading, getOfferRemaining, getMemberHoldings, priceFor, publishAcceptance } = useNostrPlan15();
   const pubkeys = useMemo(() => members.map(m => m.pubkey), [members]);
   const { profiles } = useNostrProfilesCacheBulk(pubkeys);
 
@@ -28,6 +31,8 @@ export default function Plan15Followers() {
   const [buyerWallet, setBuyerWallet] = useState("");
   const [paymentRef, setPaymentRef] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [buyerWalletStatus, setBuyerWalletStatus] = useState<WalletRegistrationStatus | "idle" | "checking">("idle");
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const nameFor = (pk: string) => {
     const p = profiles.get(pk);
@@ -37,9 +42,21 @@ export default function Plan15Followers() {
   const openBuy = (offer: Plan15Offer) => {
     setDialogOffer(offer);
     setBuyLana("");
-    setBuyerWallet(session?.walletId || "");
+    setBuyerWallet(""); // leave empty — the buyer enters their own UNREGISTERED receiving wallet
     setPaymentRef("");
+    setBuyerWalletStatus("idle");
   };
+
+  // The buyer's receiving wallet must also be UNREGISTERED (it receives unregistered LANA).
+  useEffect(() => {
+    const w = buyerWallet.trim();
+    if (!dialogOffer || !w) { setBuyerWalletStatus("idle"); return; }
+    setBuyerWalletStatus("checking");
+    const timer = setTimeout(async () => {
+      setBuyerWalletStatus(await checkWalletRegistration(w));
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [buyerWallet, dialogOffer]);
 
   const remainingLana = dialogOffer ? getOfferRemaining(dialogOffer) / LANOSHIS_PER_LANA : 0;
   const price = dialogOffer ? priceFor(dialogOffer.currency) : 0;
@@ -51,6 +68,8 @@ export default function Plan15Followers() {
     if (!lana || lana <= 0) { toast.error(t("followers.errAmount")); return; }
     if (lana > remainingLana) { toast.error(t("followers.errTooMuch")); return; }
     if (!buyerWallet) { toast.error(t("followers.errAddr")); return; }
+    if (buyerWalletStatus === "registered") { toast.error(t("followers.errBuyerRegistered")); return; }
+    if (buyerWalletStatus !== "unregistered") { toast.error(t("me.errWaitCheck")); return; }
     setSubmitting(true);
     try {
       await publishAcceptance({
@@ -84,6 +103,17 @@ export default function Plan15Followers() {
 
   return (
     <div className="space-y-4">
+      <QRScanner
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={(decoded) => {
+          setBuyerWallet(decoded.replace(/^[a-zA-Z]+:/, "").split("?")[0].trim());
+          setScannerOpen(false);
+        }}
+        title={t("me.scanWallet")}
+        description={t("me.scanWalletDesc")}
+      />
+
       {members.map(member => {
         const memberOffers = offers.filter(o => o.seller === member.pubkey && o.status === "active");
         const sellingLanoshis = memberOffers.reduce((s, o) => s + getOfferRemaining(o), 0);
@@ -100,7 +130,7 @@ export default function Plan15Followers() {
               <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
                 <div>
                   <span className="text-muted-foreground">{t("followers.holds")} </span>
-                  <span className="font-semibold">{getHoldingsLana(member.wallet).toLocaleString("en-US", { maximumFractionDigits: 2 })} LANA</span>
+                  <span className="font-semibold">{getMemberHoldings(member).toLocaleString("en-US", { maximumFractionDigits: 2 })} LANA</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">{t("followers.selling")} </span>
@@ -147,7 +177,24 @@ export default function Plan15Followers() {
               </div>
               <div>
                 <Label>{t("followers.receivingAddr")}</Label>
-                <Input value={buyerWallet} onChange={e => setBuyerWallet(e.target.value)} placeholder="L..." />
+                <div className="flex gap-2">
+                  <Input value={buyerWallet} onChange={e => setBuyerWallet(e.target.value)} placeholder="L..." />
+                  <Button type="button" variant="outline" size="icon" onClick={() => setScannerOpen(true)} title={t("me.scanQR")}>
+                    <ScanLine className="h-4 w-4" />
+                  </Button>
+                </div>
+                {buyerWalletStatus === "checking" && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {t("me.checking")}</p>
+                )}
+                {buyerWalletStatus === "unregistered" && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-green-600 dark:text-green-400"><CheckCircle2 className="h-3 w-3" /> {t("me.unregisteredOk")}</p>
+                )}
+                {buyerWalletStatus === "registered" && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" /> {t("me.registeredBad")}</p>
+                )}
+                {buyerWalletStatus === "error" && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400"><XCircle className="h-3 w-3" /> {t("me.checkError")}</p>
+                )}
               </div>
               <div>
                 <Label>{t("followers.paymentRef")}</Label>
@@ -159,7 +206,9 @@ export default function Plan15Followers() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOffer(null)}>{t("followers.cancel")}</Button>
-            <Button onClick={submitBuy} disabled={submitting}>{submitting ? t("followers.publishing") : t("followers.acceptOffer")}</Button>
+            <Button onClick={submitBuy} disabled={submitting || buyerWalletStatus !== "unregistered"}>
+              {submitting ? t("followers.publishing") : t("followers.acceptOffer")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
