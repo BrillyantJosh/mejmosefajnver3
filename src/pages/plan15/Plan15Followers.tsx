@@ -31,7 +31,7 @@ export default function Plan15Followers() {
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
   const { t } = useTranslation(plan15Translations);
-  const { members, offers, isLoading, getOfferRemaining, getMemberHoldings, priceFor, getRegisteredPayLanoshis, publishAcceptance } = useNostrPlan15();
+  const { members, offers, isLoading, myMembership, getOfferRemaining, getMemberHoldings, priceFor, getRegisteredPayLanoshis, publishAcceptance } = useNostrPlan15();
   const pubkeys = useMemo(() => members.map(m => m.pubkey), [members]);
   const { profiles } = useNostrProfilesCacheBulk(pubkeys);
   const { wallets: registeredWallets } = useNostrUserWallets(session?.nostrHexId || null);
@@ -57,7 +57,7 @@ export default function Plan15Followers() {
   const openBuy = (offer: Plan15Offer) => {
     setDialogOffer(offer);
     setBuyLana("");
-    setBuyerWallet("");
+    setBuyerWallet(myMembership?.wallet || ""); // receive into MY PLAN15 profile wallet (NOT the staker wallet)
     setPayingWallet("");
     setWif("");
     setBuyerWalletStatus("idle");
@@ -249,12 +249,19 @@ export default function Plan15Followers() {
 
               <div>
                 <Label>{t("followers.receivingAddr")}</Label>
-                <div className="flex gap-2">
-                  <Input value={buyerWallet} onChange={e => setBuyerWallet(e.target.value)} placeholder="L..." />
-                  <Button type="button" variant="outline" size="icon" onClick={() => setScannerOpen(true)} title={t("me.scanQR")}>
-                    <ScanLine className="h-4 w-4" />
-                  </Button>
-                </div>
+                {myMembership?.wallet ? (
+                  <>
+                    <Input value={buyerWallet} readOnly className="mt-1 font-mono text-sm" />
+                    <p className="mt-1 text-xs text-muted-foreground">{t("followers.receivingFromProfile")}</p>
+                  </>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input value={buyerWallet} onChange={e => setBuyerWallet(e.target.value)} placeholder="L..." />
+                    <Button type="button" variant="outline" size="icon" onClick={() => setScannerOpen(true)} title={t("me.scanQR")}>
+                      <ScanLine className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
                 {buyerWalletStatus === "checking" && (
                   <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {t("me.checking")}</p>
                 )}
