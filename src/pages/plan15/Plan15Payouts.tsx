@@ -95,7 +95,8 @@ export default function Plan15Payouts() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div><span className="text-muted-foreground">{t("payouts.buyerAddr")} </span><span className="font-mono break-all">{a.buyerWallet}</span></div>
-              <div><span className="text-muted-foreground">{t("payouts.paymentRef")} </span><span className="font-medium">{a.paymentReference || "—"}</span></div>
+              <div><span className="text-muted-foreground">{t("payouts.paymentReceived")} </span><span className="font-semibold">{(a.paymentAmount / LANOSHIS_PER_LANA).toLocaleString("en-US", { maximumFractionDigits: 8 })} LANA</span></div>
+              {a.paymentTxid && <div className="text-xs break-all"><span className="text-muted-foreground">{t("payouts.paymentTxidLabel")} </span><span className="font-mono">{a.paymentTxid}</span></div>}
               <div><span className="text-muted-foreground">{t("payouts.sourceWallet")} </span><span className="font-mono break-all">{offer?.wallet || "?"}</span></div>
               <div>
                 <Label>{t("payouts.wifLabel")}</Label>

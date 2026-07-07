@@ -18,6 +18,7 @@ export interface Plan15Member {
   wallet: string;        // plan15_wallet
   isStaker: boolean;
   stakerWallet: string;
+  paymentWallet: string; // REGISTERED wallet (KIND 30889) that receives buyer payments
   status: string;        // active | inactive
   joinedAt: number;
   eventId: string;
@@ -44,10 +45,13 @@ export interface Plan15Acceptance {
   seller: string;        // p
   buyer: string;         // author pubkey
   buyerWallet: string;
-  amount: number;        // Lanoshis
-  amountFiat: string;
+  amount: number;        // Lanoshis (unregistered LANA bought)
+  amountFiat: string;    // reference € value
   currency: string;
-  paymentReference: string;
+  paymentAmount: number; // registered LANA paid (Lanoshis)
+  paymentFrom: string;   // buyer's registered paying wallet
+  paymentTo: string;     // seller's registered payment_wallet
+  paymentTxid: string;   // on-chain txid of the registered-LANA payment
   status: string;
   createdAt: number;
 }
@@ -89,7 +93,8 @@ export const useNostrPlan15 = () => {
 
   const relays = parameters?.relays || [];
   const plan15Floor = parameters?.plan15Floor || 0;           // whole LANA
-  const plan15Price = parameters?.plan15Price || {};          // { EUR, USD, GBP } fiat per LANA
+  const plan15Price = parameters?.plan15Price || {};          // { EUR, USD, GBP } fiat per 1 UNREGISTERED LANA
+  const exchangeRates = parameters?.exchangeRates || {};      // { EUR, USD, GBP } fiat per 1 REGISTERED LANA (fx)
   const me = session?.nostrHexId || '';
 
   const fetchAll = useCallback(async () => {
@@ -117,6 +122,7 @@ export const useNostrPlan15 = () => {
           wallet: tagVal(e, 'plan15_wallet'),
           isStaker: (tagVal(e, 'is_staker') || '').toLowerCase() === 'yes',
           stakerWallet: tagVal(e, 'staker_wallet'),
+          paymentWallet: tagVal(e, 'payment_wallet'),
           status: tagVal(e, 'status') || 'active',
           joinedAt: parseInt(tagVal(e, 'joined_at') || '0') || 0,
           eventId: e.id,
@@ -167,8 +173,11 @@ export const useNostrPlan15 = () => {
         amount: parseInt(tagVal(e, 'amount') || '0') || 0,
         amountFiat: tagVal(e, 'amount_fiat'),
         currency: tagVal(e, 'currency') || 'EUR',
-        paymentReference: tagVal(e, 'payment_reference'),
-        status: tagVal(e, 'status') || 'pending',
+        paymentAmount: parseInt(tagVal(e, 'payment_amount') || '0') || 0,
+        paymentFrom: tagVal(e, 'payment_from'),
+        paymentTo: tagVal(e, 'payment_to'),
+        paymentTxid: tagVal(e, 'payment_txid'),
+        status: tagVal(e, 'status') || 'paid',
         createdAt: e.created_at,
       }));
 
@@ -266,6 +275,18 @@ export const useNostrPlan15 = () => {
     Math.max(0, getMemberHoldings(member) - plan15Floor), [getMemberHoldings, plan15Floor]);
 
   const priceFor = useCallback((currency: string): number => plan15Price[currency] || plan15Price['EUR'] || 0, [plan15Price]);
+  const fxFor = useCallback((currency: string): number => (exchangeRates as Record<string, number>)[currency] || (exchangeRates as Record<string, number>)['EUR'] || 0, [exchangeRates]);
+
+  // Registered LANA the buyer must pay (Lanoshis) for `unregLanoshis` unregistered LANA:
+  //   € value = unregLANA × plan15_price ; registered LANA = € value / fx
+  const getRegisteredPayLanoshis = useCallback((unregLanoshis: number, currency: string): number => {
+    const price = priceFor(currency);
+    const fx = fxFor(currency);
+    if (!fx || !price) return 0;
+    const unregLana = unregLanoshis / LANOSHIS_PER_LANA;
+    const registeredLana = (unregLana * price) / fx;
+    return Math.round(registeredLana * LANOSHIS_PER_LANA);
+  }, [priceFor, fxFor]);
 
   const myMembership = members.find(m => m.pubkey === me) || null;
   const myOffers = offers.filter(o => o.seller === me);
@@ -293,7 +314,7 @@ export const useNostrPlan15 = () => {
   }, [session?.nostrPrivateKey, relays.join(',')]);
 
   const publishMembership = useCallback(async (opts: {
-    plan15Wallet: string; isStaker: boolean; stakerWallet?: string; status?: string;
+    plan15Wallet: string; isStaker: boolean; stakerWallet?: string; paymentWallet?: string; status?: string;
   }) => {
     if (!me) throw new Error('Not logged in');
     const tags: string[][] = [
@@ -305,6 +326,7 @@ export const useNostrPlan15 = () => {
       ['joined_at', String(Math.floor(Date.now() / 1000))],
     ];
     if (opts.isStaker && opts.stakerWallet) tags.push(['staker_wallet', opts.stakerWallet]);
+    if (opts.paymentWallet) tags.push(['payment_wallet', opts.paymentWallet]);
     const ev = await publish(PLAN15_MEMBERSHIP_KIND, 'Joined PLAN15.', tags);
     await fetchAll();
     return ev;
@@ -332,7 +354,8 @@ export const useNostrPlan15 = () => {
   }, [me, publish, fetchAll, priceFor]);
 
   const publishAcceptance = useCallback(async (opts: {
-    offer: Plan15Offer; buyerWallet: string; amountLanoshis: number; paymentReference: string;
+    offer: Plan15Offer; buyerWallet: string; amountLanoshis: number;
+    paymentFrom: string; paymentTo: string; paymentAmountLanoshis: number; paymentTxid: string;
   }) => {
     const currency = opts.offer.currency || 'EUR';
     const amountLana = opts.amountLanoshis / LANOSHIS_PER_LANA;
@@ -345,10 +368,13 @@ export const useNostrPlan15 = () => {
       ['amount', String(Math.round(opts.amountLanoshis))],
       ['currency', currency],
       ['amount_fiat', amountFiat],
-      ['payment_reference', opts.paymentReference],
-      ['status', 'pending'],
+      ['payment_amount', String(Math.round(opts.paymentAmountLanoshis))],
+      ['payment_from', opts.paymentFrom],
+      ['payment_to', opts.paymentTo],
+      ['payment_txid', opts.paymentTxid],
+      ['status', 'paid'],
     ];
-    const ev = await publish(PLAN15_ACCEPTANCE_KIND, `Buying ${amountLana} LANA from PLAN15 offer.`, tags);
+    const ev = await publish(PLAN15_ACCEPTANCE_KIND, `Buying ${amountLana} unregistered LANA; paid registered LANA on-chain.`, tags);
     await fetchAll();
     return ev;
   }, [publish, fetchAll, priceFor]);
@@ -370,7 +396,8 @@ export const useNostrPlan15 = () => {
       ['status', opts.status || 'confirmed'],
       ['confirmed_at', new Date().toISOString()],
     ];
-    const ev = await publish(PLAN15_PAYOUT_KIND, 'PLAN15 payout executed on-chain after fiat confirmed.', tags);
+    if (acceptance.paymentTxid) tags.push(['payment_txid', acceptance.paymentTxid]);
+    const ev = await publish(PLAN15_PAYOUT_KIND, 'PLAN15 unregistered-LANA delivery after verifying the registered payment.', tags);
     await fetchAll();
     return ev;
   }, [publish, fetchAll]);
@@ -380,7 +407,7 @@ export const useNostrPlan15 = () => {
     members, offers, acceptances, payouts, balances,
     isLoading,
     // params
-    plan15Floor, plan15Price, priceFor,
+    plan15Floor, plan15Price, priceFor, fxFor, getRegisteredPayLanoshis,
     // derived
     getOfferRemaining, getPayoutForAcceptance, getHoldingsLana, getSellableLana, getMemberHoldings, getMemberSellable,
     myMembership, myOffers, myPurchases, incomingAcceptances,

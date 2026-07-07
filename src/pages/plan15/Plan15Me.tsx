@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNostrPlan15, LANOSHIS_PER_LANA } from "@/hooks/useNostrPlan15";
+import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
+import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useTranslation } from "@/i18n/I18nContext";
 import plan15Translations from "@/i18n/modules/plan15";
@@ -16,8 +18,10 @@ import { ScanLine, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Plan15Me() {
+  const { session } = useAuth();
   const { parameters } = useSystemParameters();
   const { t } = useTranslation(plan15Translations);
+  const { wallets: registeredWallets } = useNostrUserWallets(session?.nostrHexId || null);
   const {
     isLoading, myMembership, myOffers, myPurchases, getPayoutForAcceptance,
     publishMembership, publishOffer, getMemberHoldings, getMemberSellable, priceFor,
@@ -27,6 +31,8 @@ export default function Plan15Me() {
   const [wallet, setWallet] = useState("");
   const [isStaker, setIsStaker] = useState(false);
   const [stakerWallet, setStakerWallet] = useState("");
+  const [paymentWallet, setPaymentWallet] = useState("");
+  const [paymentWalletStatus, setPaymentWalletStatus] = useState<WalletRegistrationStatus | "idle" | "checking">("idle");
   const [savingMember, setSavingMember] = useState(false);
 
   // offer form
@@ -44,6 +50,7 @@ export default function Plan15Me() {
       setWallet(myMembership.wallet);
       setIsStaker(myMembership.isStaker);
       setStakerWallet(myMembership.stakerWallet);
+      setPaymentWallet(myMembership.paymentWallet);
     }
   }, [myMembership]);
 
@@ -59,6 +66,17 @@ export default function Plan15Me() {
     return () => clearTimeout(timer);
   }, [wallet]);
 
+  // Debounced check: the payment wallet MUST be a REGISTERED wallet.
+  useEffect(() => {
+    const w = paymentWallet.trim();
+    if (!w) { setPaymentWalletStatus("idle"); return; }
+    setPaymentWalletStatus("checking");
+    const timer = setTimeout(async () => {
+      setPaymentWalletStatus(await checkWalletRegistration(w));
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [paymentWallet]);
+
   const holdings = myMembership ? getMemberHoldings(myMembership) : 0;
   const sellable = myMembership ? getMemberSellable(myMembership) : 0;
 
@@ -67,9 +85,10 @@ export default function Plan15Me() {
     if (walletStatus === "registered") { toast.error(t("me.errRegistered")); return; }
     if (walletStatus !== "unregistered") { toast.error(t("me.errWaitCheck")); return; }
     if (isStaker && !stakerWallet) { toast.error(t("me.errStakerWallet")); return; }
+    if (paymentWallet && paymentWalletStatus !== "registered") { toast.error(t("me.paymentWalletBad")); return; }
     setSavingMember(true);
     try {
-      await publishMembership({ plan15Wallet: wallet, isStaker, stakerWallet });
+      await publishMembership({ plan15Wallet: wallet, isStaker, stakerWallet, paymentWallet });
       toast.success(myMembership ? t("me.membershipUpdated") : t("me.joined"));
     } catch (e: any) {
       toast.error(e?.message || t("me.error"));
@@ -81,6 +100,7 @@ export default function Plan15Me() {
   const saveOffer = async () => {
     const lana = parseFloat(offerLana);
     if (!myMembership) { toast.error(t("me.errJoinFirst")); return; }
+    if (!myMembership.paymentWallet) { toast.error(t("me.errPaymentWallet")); return; }
     if (walletStatus === "registered") { toast.error(t("me.errWalletRegisteredOffer")); return; }
     if (!lana || lana <= 0) { toast.error(t("followers.errAmount")); return; }
     if (lana > sellable) { toast.error(t("me.errTooMuchFloor", { amount: sellable })); return; }
@@ -155,6 +175,38 @@ export default function Plan15Me() {
               </div>
             </div>
           )}
+          <div>
+            <Label>{t("me.paymentWalletLabel")}</Label>
+            {registeredWallets.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2 mt-1">
+                {registeredWallets.map(w => (
+                  <Button
+                    key={w.walletId}
+                    type="button"
+                    size="sm"
+                    variant={paymentWallet === w.walletId ? "default" : "outline"}
+                    onClick={() => setPaymentWallet(w.walletId)}
+                    className="font-mono text-xs"
+                  >
+                    {w.walletId.slice(0, 8)}…{w.walletType ? ` · ${w.walletType}` : ""}
+                  </Button>
+                ))}
+              </div>
+            )}
+            {registeredWallets.length === 0 && (
+              <p className="text-xs text-muted-foreground mb-1 mt-1">{t("me.noRegisteredWallets")}</p>
+            )}
+            <Input value={paymentWallet} onChange={e => setPaymentWallet(e.target.value)} placeholder="L..." />
+            {paymentWalletStatus === "checking" && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {t("me.checking")}</p>
+            )}
+            {paymentWalletStatus === "registered" && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-green-600 dark:text-green-400"><CheckCircle2 className="h-3 w-3" /> {t("followers.payWalletOk")}</p>
+            )}
+            {paymentWalletStatus === "unregistered" && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" /> {t("me.paymentWalletBad")}</p>
+            )}
+          </div>
           <Button onClick={saveMembership} disabled={savingMember || walletStatus !== "unregistered"}>
             {savingMember ? t("me.saving") : (myMembership ? t("me.update") : t("me.joinBtn"))}
           </Button>

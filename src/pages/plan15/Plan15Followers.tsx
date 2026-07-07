@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNostrPlan15, Plan15Offer, LANOSHIS_PER_LANA } from "@/hooks/useNostrPlan15";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
+import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useTranslation } from "@/i18n/I18nContext";
 import plan15Translations from "@/i18n/modules/plan15";
 import { checkWalletRegistration, WalletRegistrationStatus } from "@/lib/walletRegistration";
+import { convertWifToIds } from "@/lib/crypto";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,17 +25,21 @@ const fmtLana = (lanoshis: number) =>
 
 export default function Plan15Followers() {
   const { session } = useAuth();
+  const { parameters } = useSystemParameters();
   const { t } = useTranslation(plan15Translations);
-  const { members, offers, isLoading, getOfferRemaining, getMemberHoldings, priceFor, publishAcceptance } = useNostrPlan15();
+  const { members, offers, isLoading, getOfferRemaining, getMemberHoldings, priceFor, getRegisteredPayLanoshis, publishAcceptance } = useNostrPlan15();
   const pubkeys = useMemo(() => members.map(m => m.pubkey), [members]);
   const { profiles } = useNostrProfilesCacheBulk(pubkeys);
+  const { wallets: registeredWallets } = useNostrUserWallets(session?.nostrHexId || null);
 
   const [dialogOffer, setDialogOffer] = useState<Plan15Offer | null>(null);
   const [buyLana, setBuyLana] = useState("");
-  const [buyerWallet, setBuyerWallet] = useState("");
-  const [paymentRef, setPaymentRef] = useState("");
+  const [buyerWallet, setBuyerWallet] = useState("");   // UNREGISTERED receiving wallet
+  const [payingWallet, setPayingWallet] = useState(""); // REGISTERED paying wallet
+  const [wif, setWif] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [buyerWalletStatus, setBuyerWalletStatus] = useState<WalletRegistrationStatus | "idle" | "checking">("idle");
+  const [payingWalletStatus, setPayingWalletStatus] = useState<WalletRegistrationStatus | "idle" | "checking">("idle");
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const nameFor = (pk: string) => {
@@ -39,49 +47,94 @@ export default function Plan15Followers() {
     return p?.display_name || p?.full_name || pk.slice(0, 8) + "…";
   };
 
+  const sellerMembership = dialogOffer ? members.find(m => m.pubkey === dialogOffer.seller) : null;
+  const sellerPaymentWallet = sellerMembership?.paymentWallet || "";
+
   const openBuy = (offer: Plan15Offer) => {
     setDialogOffer(offer);
     setBuyLana("");
-    setBuyerWallet(""); // leave empty — the buyer enters their own UNREGISTERED receiving wallet
-    setPaymentRef("");
+    setBuyerWallet("");
+    setPayingWallet("");
+    setWif("");
     setBuyerWalletStatus("idle");
+    setPayingWalletStatus("idle");
   };
 
-  // The buyer's receiving wallet must also be UNREGISTERED (it receives unregistered LANA).
+  // Receiving wallet must be UNREGISTERED (it receives unregistered LANA).
   useEffect(() => {
     const w = buyerWallet.trim();
     if (!dialogOffer || !w) { setBuyerWalletStatus("idle"); return; }
     setBuyerWalletStatus("checking");
-    const timer = setTimeout(async () => {
-      setBuyerWalletStatus(await checkWalletRegistration(w));
-    }, 600);
+    const timer = setTimeout(async () => setBuyerWalletStatus(await checkWalletRegistration(w)), 600);
     return () => clearTimeout(timer);
   }, [buyerWallet, dialogOffer]);
 
+  // Paying wallet must be REGISTERED (payment is registered LANA).
+  useEffect(() => {
+    const w = payingWallet.trim();
+    if (!dialogOffer || !w) { setPayingWalletStatus("idle"); return; }
+    setPayingWalletStatus("checking");
+    const timer = setTimeout(async () => setPayingWalletStatus(await checkWalletRegistration(w)), 600);
+    return () => clearTimeout(timer);
+  }, [payingWallet, dialogOffer]);
+
+  const amountLanoshis = Math.round((parseFloat(buyLana || "0") || 0) * LANOSHIS_PER_LANA);
   const remainingLana = dialogOffer ? getOfferRemaining(dialogOffer) / LANOSHIS_PER_LANA : 0;
   const price = dialogOffer ? priceFor(dialogOffer.currency) : 0;
   const fiat = (parseFloat(buyLana || "0") * price).toFixed(2);
+  const payLanoshis = dialogOffer ? getRegisteredPayLanoshis(amountLanoshis, dialogOffer.currency) : 0;
+  const payLana = payLanoshis / LANOSHIS_PER_LANA;
 
   const submitBuy = async () => {
     if (!dialogOffer) return;
     const lana = parseFloat(buyLana);
     if (!lana || lana <= 0) { toast.error(t("followers.errAmount")); return; }
     if (lana > remainingLana) { toast.error(t("followers.errTooMuch")); return; }
+    if (!sellerPaymentWallet) { toast.error(t("followers.sellerNoPayment")); return; }
     if (!buyerWallet) { toast.error(t("followers.errAddr")); return; }
     if (buyerWalletStatus === "registered") { toast.error(t("followers.errBuyerRegistered")); return; }
     if (buyerWalletStatus !== "unregistered") { toast.error(t("me.errWaitCheck")); return; }
+    if (!payingWallet || payingWalletStatus !== "registered") { toast.error(t("followers.errPayWalletReg")); return; }
+    if (!wif.trim()) { toast.error(t("followers.errWif")); return; }
+    if (payLanoshis <= 0) { toast.error(t("followers.errAmount")); return; }
+
     setSubmitting(true);
     try {
+      // Validate the WIF matches the paying (registered) wallet
+      const ids = await convertWifToIds(wif.trim());
+      const match =
+        ids.walletIdCompressed === payingWallet ||
+        ids.walletIdUncompressed === payingWallet ||
+        ids.walletId === payingWallet;
+      if (!match) { toast.error(t("followers.errWifMismatch")); setSubmitting(false); return; }
+
+      // Leg 1: send REGISTERED LANA on-chain to the seller's payment_wallet
+      const { data, error } = await supabase.functions.invoke("send-lana-transaction", {
+        body: {
+          senderAddress: payingWallet,
+          recipientAddress: sellerPaymentWallet,
+          amount: payLana,
+          privateKey: wif.trim(),
+          electrumServers: parameters?.electrumServers || [],
+          userPubkey: session?.nostrHexId,
+        },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || t("followers.errPayFailed"));
+
       await publishAcceptance({
         offer: dialogOffer,
         buyerWallet,
-        amountLanoshis: Math.round(lana * LANOSHIS_PER_LANA),
-        paymentReference: paymentRef,
+        amountLanoshis,
+        paymentFrom: payingWallet,
+        paymentTo: sellerPaymentWallet,
+        paymentAmountLanoshis: payLanoshis,
+        paymentTxid: data.txHash,
       });
       toast.success(t("followers.accepted"));
       setDialogOffer(null);
     } catch (e: any) {
-      toast.error(e?.message || t("followers.errPublish"));
+      toast.error(e?.message || t("followers.errPayFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -100,6 +153,13 @@ export default function Plan15Followers() {
       </Card>
     );
   }
+
+  const canSubmit =
+    !!sellerPaymentWallet &&
+    buyerWalletStatus === "unregistered" &&
+    payingWalletStatus === "registered" &&
+    !!wif.trim() &&
+    payLanoshis > 0;
 
   return (
     <div className="space-y-4">
@@ -163,7 +223,7 @@ export default function Plan15Followers() {
       })}
 
       <Dialog open={!!dialogOffer} onOpenChange={(o) => !o && setDialogOffer(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{t("followers.dialogTitle")}</DialogTitle></DialogHeader>
           {dialogOffer && (
             <div className="space-y-3">
@@ -174,10 +234,21 @@ export default function Plan15Followers() {
                   currency: dialogOffer.currency,
                 })}
               </p>
+
+              {!sellerPaymentWallet && (
+                <p className="text-sm text-red-600 dark:text-red-400">{t("followers.sellerNoPayment")}</p>
+              )}
+
               <div>
                 <Label>{t("followers.amountLabel")}</Label>
                 <Input value={buyLana} onChange={e => setBuyLana(e.target.value)} inputMode="decimal" placeholder="100" />
               </div>
+
+              <div className="rounded-md bg-muted/50 p-2 text-sm">
+                <div>{t("followers.youPayRegistered")} <span className="font-semibold">{payLana.toLocaleString("en-US", { maximumFractionDigits: 8 })} LANA</span></div>
+                <div className="text-xs text-muted-foreground">≈ {fiat} {dialogOffer.currency}</div>
+              </div>
+
               <div>
                 <Label>{t("followers.receivingAddr")}</Label>
                 <div className="flex gap-2">
@@ -199,18 +270,47 @@ export default function Plan15Followers() {
                   <p className="mt-1 flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400"><XCircle className="h-3 w-3" /> {t("me.checkError")}</p>
                 )}
               </div>
+
               <div>
-                <Label>{t("followers.paymentRef")}</Label>
-                <Input value={paymentRef} onChange={e => setPaymentRef(e.target.value)} />
+                <Label>{t("followers.payingWallet")}</Label>
+                {registeredWallets.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2 mt-1">
+                    {registeredWallets.map(w => (
+                      <Button
+                        key={w.walletId}
+                        type="button"
+                        size="sm"
+                        variant={payingWallet === w.walletId ? "default" : "outline"}
+                        onClick={() => setPayingWallet(w.walletId)}
+                        className="font-mono text-xs"
+                      >
+                        {w.walletId.slice(0, 8)}…{w.walletType ? ` · ${w.walletType}` : ""}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+                <Input value={payingWallet} onChange={e => setPayingWallet(e.target.value)} placeholder="L..." />
+                {payingWalletStatus === "checking" && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {t("me.checking")}</p>
+                )}
+                {payingWalletStatus === "registered" && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-green-600 dark:text-green-400"><CheckCircle2 className="h-3 w-3" /> {t("followers.payWalletOk")}</p>
+                )}
+                {payingWalletStatus === "unregistered" && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" /> {t("followers.payWalletBad")}</p>
+                )}
               </div>
-              <p className="text-sm">{t("followers.toPay")} <span className="font-semibold">{fiat} {dialogOffer.currency}</span></p>
-              <p className="text-xs text-muted-foreground">{t("followers.fiatNote")}</p>
+
+              <div>
+                <Label>{t("followers.wifLabel")}</Label>
+                <Input type="password" value={wif} onChange={e => setWif(e.target.value)} placeholder="WIF" />
+              </div>
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOffer(null)}>{t("followers.cancel")}</Button>
-            <Button onClick={submitBuy} disabled={submitting || buyerWalletStatus !== "unregistered"}>
-              {submitting ? t("followers.publishing") : t("followers.acceptOffer")}
+            <Button onClick={submitBuy} disabled={submitting || !canSubmit}>
+              {submitting ? t("followers.paying") : t("followers.acceptOffer")}
             </Button>
           </DialogFooter>
         </DialogContent>
