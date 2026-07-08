@@ -29,7 +29,7 @@ export default function Plan15Me() {
   const eligibleWallets = registeredWallets.filter(w => PAYMENT_WALLET_TYPES.includes(w.walletType));
   const {
     isLoading, myMembership, myOffers, myPurchases, getPayoutForAcceptance,
-    publishMembership, publishOffer, getMemberHoldings, getMemberSellable, priceFor,
+    publishMembership, publishOffer, getMemberHoldings, getMemberSellable, getOfferRemaining, priceFor,
   } = useNostrPlan15();
 
   // membership form
@@ -239,12 +239,23 @@ export default function Plan15Me() {
             <Card>
               <CardHeader><CardTitle className="text-base">{t("me.myOffers")}</CardTitle></CardHeader>
               <CardContent className="space-y-2 text-sm">
-                {myOffers.map(o => (
-                  <div key={o.address} className="flex items-center justify-between rounded-md border p-2">
-                    <span>{(o.amount / LANOSHIS_PER_LANA).toLocaleString("en-US", { maximumFractionDigits: 8 })} LANA</span>
-                    <Badge variant={o.status === "active" ? "default" : "secondary"}>{o.status}</Badge>
-                  </div>
-                ))}
+                {myOffers.map(o => {
+                  const remaining = getOfferRemaining(o);
+                  const used = Math.max(0, o.amount - remaining);
+                  return (
+                    <div key={o.address} className="rounded-md border p-2 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{(o.amount / LANOSHIS_PER_LANA).toLocaleString("en-US", { maximumFractionDigits: 8 })} LANA</span>
+                        <Badge variant={o.status === "active" ? "default" : "secondary"}>{o.status}</Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {t("me.offerUsed")} <span className="font-medium text-foreground">{(used / LANOSHIS_PER_LANA).toLocaleString("en-US", { maximumFractionDigits: 8 })} LANA</span>
+                        {" · "}
+                        {t("me.offerRemaining")} <span className="font-medium text-foreground">{(remaining / LANOSHIS_PER_LANA).toLocaleString("en-US", { maximumFractionDigits: 8 })} LANA</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           )}
