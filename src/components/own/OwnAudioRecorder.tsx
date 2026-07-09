@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, Square, Send, X, Play, Pause, RotateCcw, Loader2 } from "lucide-react";
+import { Mic, Square, Send, X, Play, Pause, RotateCcw, Loader2, Download } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
+import { saveRecording, loadPendingRecording, deletePendingRecording, downloadBlob } from "@/lib/ownRecordingStore";
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -48,6 +49,27 @@ export default function OwnAudioRecorder({
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const wentBackgroundRef = useRef(false);
   const isRecordingRef = useRef(false);
+  const cancelRef = useRef(false); // set by Cancel so the async onstop skips persist/preview
+
+  // Restore a pending (un-sent) recording after a reload / navigation, so a recording is
+  // never lost even if the upload failed or the page was reloaded mid-send.
+  useEffect(() => {
+    if (!senderPubkey || !processEventId) return;
+    let alive = true;
+    loadPendingRecording(senderPubkey, processEventId).then((rec) => {
+      // Don't clobber a live recording or a freshly-recorded blob.
+      if (!alive || !rec || audioBlobRef.current || isRecordingRef.current) return;
+      audioBlobRef.current = rec.blob;
+      if (rec.durationSec && rec.durationSec > 0) {
+        recordingTimeRef.current = rec.durationSec;
+        setRecordingTime(rec.durationSec);
+      }
+      setAudioPreview(URL.createObjectURL(rec.blob)); // fresh URL — stored URL strings die on reload
+      toast.info("Restored your unsent recording — tap Send to try again.");
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [senderPubkey, processEventId]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -165,10 +187,22 @@ export default function OwnAudioRecorder({
       };
 
       mediaRecorder.onstop = () => {
+        // Cancelled → discard the take entirely (no persist, no preview).
+        if (cancelRef.current) {
+          cancelRef.current = false;
+          audioChunksRef.current = [];
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+          }
+          releaseWakeLock();
+          return;
+        }
         const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
         audioBlobRef.current = audioBlob;
         const audioUrl = URL.createObjectURL(audioBlob);
         setAudioPreview(audioUrl);
+        // Persist immediately so the recording survives a failed upload / reload / navigation.
+        void saveRecording(senderPubkey, processEventId, audioBlob, { durationSec: recordingTimeRef.current });
 
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
@@ -296,74 +330,53 @@ export default function OwnAudioRecorder({
         attempt: retryCount + 1,
       });
 
-      // Run upload and speech-to-text transcription in parallel
       const audioBlob = audioBlobRef.current;
-      const cleanMime = mimeType.split(';')[0];
 
-      const [uploadResult, sttResult] = await Promise.allSettled([
-        // Upload to storage
-        ownSupabase.storage
-          .from("dm-audio")
-          .upload(filePath, audioBlob, {
-            contentType: mimeType,
-            cacheControl: "3600",
-            upsert: false,
-          }),
-        // Transcribe via Groq Whisper. Bounded by its OWN timeout (25s) so a slow/hung
-        // transcription can never stall the parallel send — the audio is sent without a
-        // transcript if STT is slow. (STT is optional; the upload result gates success.)
-        (async () => {
-          const sttController = new AbortController();
-          const sttTimeout = setTimeout(() => sttController.abort(), 25_000);
-          try {
-            const file = new File([audioBlob], `recording.${extension}`, { type: cleanMime });
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('language', 'sl');
-            const res = await fetch(`${API_URL}/api/voice/stt`, {
-              method: 'POST',
-              body: formData,
-              signal: sttController.signal,
-            });
-            if (!res.ok) throw new Error(`STT ${res.status}`);
-            const data = await res.json();
-            return data.text?.trim() || '';
-          } catch (err) {
-            console.warn('🔇 STT transcription failed/timed out (audio will be sent without transcript):', err);
-            return '';
-          } finally {
-            clearTimeout(sttTimeout);
-          }
-        })(),
-      ]);
+      // 1) Upload to storage FIRST, alone. ownSupabase.upload uses XHR + retry + a stall
+      //    watchdog, so only ~5MB crosses the wire once — no concurrent STT upload (that
+      //    second ~5MB POST is what overloaded weak mobile links → "Load failed").
+      const uploadRes = await ownSupabase.storage
+        .from("dm-audio")
+        .upload(filePath, audioBlob, { contentType: mimeType, cacheControl: "3600", upsert: false });
 
-      // Check upload result
-      if (uploadResult.status === 'rejected') {
-        console.error("Upload error:", uploadResult.reason);
+      if (uploadRes.error) {
+        console.error("Upload error:", uploadRes.error);
+        const errMsg = uploadRes.error?.message || uploadRes.error?.error || "Upload failed";
         setUploadFailed(true);
-        setFailReason('Upload failed (network) — tap retry');
-        setRetryCount(prev => prev + 1);
-        toast.error("Upload failed — tap retry");
-        return;
-      }
-      const uploadData = uploadResult.value;
-      if (uploadData.error) {
-        console.error("Upload error:", uploadData.error);
-        setUploadFailed(true);
-        const errMsg = uploadData.error?.message || uploadData.error?.error || "Upload failed";
         setFailReason(`Upload: ${errMsg}`);
         setRetryCount(prev => prev + 1);
         toast.error(`${errMsg} — tap retry`);
-        return;
+        return; // recording preserved (audioBlobRef + IndexedDB) → Retry / Download
       }
 
-      // Extract transcript (empty string if STT failed — graceful degradation)
-      const transcript = sttResult.status === 'fulfilled' ? (sttResult.value || '') : '';
+      // 2) Transcribe from the ALREADY-uploaded file (server reads it from disk — NO second
+      //    upload). Optional: empty transcript on any failure/timeout so it never blocks the send.
+      let transcript = '';
+      try {
+        const sttController = new AbortController();
+        const sttTimeout = setTimeout(() => sttController.abort(), 25_000);
+        try {
+          const res = await fetch(`${API_URL}/api/voice/stt-path`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bucket: 'dm-audio', path: filePath, language: 'sl' }),
+            signal: sttController.signal,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            transcript = data.text?.trim() || '';
+          }
+        } finally {
+          clearTimeout(sttTimeout);
+        }
+      } catch (err) {
+        console.warn('🔇 STT (by path) failed/timed out — sending without transcript:', err);
+      }
       if (transcript) {
         console.log('📝 Transcript:', transcript.substring(0, 100) + (transcript.length > 100 ? '...' : ''));
       }
 
-      // Build message: audio:path|dur:seconds|transcript:text
+      // 3) Build message: audio:path|dur:seconds|transcript:text, then publish to relays.
       const durValue = recordingTimeRef.current > 0 ? recordingTimeRef.current : recordingTime;
       const durSuffix = durValue > 0 ? `|dur:${durValue}` : '';
       const transcriptSuffix = transcript ? `|transcript:${transcript}` : '';
@@ -379,7 +392,7 @@ export default function OwnAudioRecorder({
         return;
       }
 
-      // Success — cleanup
+      // Success — clears the persisted recording (inside handleDiscardPreview) + cleanup.
       handleDiscardPreview();
       toast.success("Recording sent");
     } catch (error) {
@@ -395,6 +408,7 @@ export default function OwnAudioRecorder({
   };
 
   const handleCancel = () => {
+    cancelRef.current = true; // make the async onstop skip persist/preview
     stopRecording();
     releaseWakeLock();
     setRecordingTime(0);
@@ -403,6 +417,9 @@ export default function OwnAudioRecorder({
   };
 
   const handleDiscardPreview = () => {
+    // Clear the persisted copy ONLY here — this runs on confirmed send AND explicit discard,
+    // never on unmount/reload, so a reload keeps the recording for restore.
+    void deletePendingRecording(senderPubkey, processEventId);
     if (audioPreview) {
       URL.revokeObjectURL(audioPreview);
     }
@@ -423,6 +440,16 @@ export default function OwnAudioRecorder({
 
   const handleRetry = async () => {
     await uploadAudio();
+  };
+
+  // Last-resort escape hatch: save the recording to the device so it's never lost even if
+  // the upload keeps failing or storage (private mode) is unavailable.
+  const handleDownload = () => {
+    const blob = audioBlobRef.current;
+    if (!blob) return;
+    const mime = blob.type || 'audio/mp4';
+    const ext = mime.includes('webm') ? 'webm' : mime.includes('mpeg') ? 'mp3' : mime.includes('aac') ? 'aac' : 'm4a';
+    downloadBlob(blob, `voice-${Date.now()}.${ext}`);
   };
 
   // Audio preview playback controls
@@ -547,15 +574,27 @@ export default function OwnAudioRecorder({
             Discard
           </Button>
           {uploadFailed && !isUploading ? (
-            <Button
-              size="sm"
-              onClick={handleRetry}
-              variant="destructive"
-              className="h-8 gap-1"
-            >
-              <RotateCcw className="h-4 w-4" />
-              Retry
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDownload}
+                className="h-8 gap-1"
+                title="Save the recording to your device"
+              >
+                <Download className="h-4 w-4" />
+                Download
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleRetry}
+                variant="destructive"
+                className="h-8 gap-1"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Retry
+              </Button>
+            </>
           ) : (
             <Button
               size="sm"

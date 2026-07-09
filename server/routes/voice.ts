@@ -1,8 +1,18 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { getDb } from '../db/connection';
 
 const router = Router();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// Same uploads root as server/routes/storage.ts (server/uploads). Used by /stt-path to
+// transcribe an ALREADY-uploaded file from disk instead of re-uploading its bytes.
+const UPLOADS_DIR = path.resolve(__dirname, '../uploads');
+const STT_ALLOWED_BUCKETS = ['dm-audio'];
 
 // Reuse same memory storage pattern as STT/ITT in functions.ts
 const audioUpload = multer({
@@ -29,80 +39,119 @@ function buildMultipart(fields: { name: string; value: string }[], file: { name:
   return { body: Buffer.concat(parts), boundary };
 }
 
+// Core: transcribe an audio Buffer via Groq Whisper (OpenAI-compatible). Shared by
+// the multipart /stt route and the by-path /stt-path route.
+async function transcribeWithGroq(data: Buffer, filename: string, cleanMime: string, language: string): Promise<string> {
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  if (!GROQ_API_KEY) throw new Error('GROQ_API_KEY not configured');
+  const startTime = Date.now();
+
+  const { body, boundary } = buildMultipart(
+    [
+      { name: 'model', value: 'whisper-large-v3-turbo' },
+      { name: 'language', value: language },
+      { name: 'response_format', value: 'json' },
+    ],
+    { name: 'file', filename, contentType: cleanMime, data },
+  );
+
+  const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${GROQ_API_KEY}`,
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+    },
+    body,
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error(`🎙 Groq STT error ${response.status}: ${errText.slice(0, 300)}`);
+    throw new Error(`Groq STT error ${response.status}: ${errText.slice(0, 200)}`);
+  }
+
+  const json = await response.json();
+  const text = (json.text || '').trim();
+  console.log(`🎙 Voice STT [${language}]: "${text.slice(0, 80)}..." (${Date.now() - startTime}ms)`);
+
+  // Log usage (Groq whisper: ~$0.04/hour audio, negligible per request)
+  try {
+    const db = getDb();
+    const durationSec = data.length / 16000; // rough estimate: 16KB/s
+    const costUsd = (durationSec / 3600) * 0.04;
+    const costLana = costUsd * 270;
+    db.prepare(`
+      INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
+      VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)
+    `).run('voice-stt', 'groq-whisper-large-v3-turbo', 0, 0, 0, costUsd, costLana);
+  } catch (err) {
+    console.error('Failed to log Voice STT usage:', err);
+  }
+
+  return text;
+}
+
+function mimeForExt(ext: string): string {
+  switch (ext.toLowerCase()) {
+    case '.mp4':
+    case '.m4a': return 'audio/mp4';
+    case '.mp3':
+    case '.mpeg': return 'audio/mpeg';
+    case '.aac': return 'audio/aac';
+    case '.wav': return 'audio/wav';
+    default: return 'audio/webm';
+  }
+}
+
 // =============================================
-// POST /api/voice/stt — Speech-to-Text via Groq Whisper API
+// POST /api/voice/stt — Speech-to-Text via Groq Whisper API (multipart file upload)
 // =============================================
 router.post('/stt', audioUpload.single('file'), async (req: Request, res: Response) => {
   try {
-    const GROQ_API_KEY = process.env.GROQ_API_KEY;
-    if (!GROQ_API_KEY) {
-      return res.status(500).json({ error: 'GROQ_API_KEY not configured' });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'No audio file provided' });
-    }
-
+    if (!req.file) return res.status(400).json({ error: 'No audio file provided' });
     const language = req.body?.language || 'sl';
-    const startTime = Date.now();
     const cleanMime = (req.file.mimetype || 'audio/webm').split(';')[0];
-
     console.log(`🎙 Voice STT received: ${req.file.originalname}, size=${req.file.size} bytes, mime=${cleanMime}`);
-
-    // Build multipart body for Groq Whisper API (OpenAI-compatible)
-    const { body, boundary } = buildMultipart(
-      [
-        { name: 'model', value: 'whisper-large-v3-turbo' },
-        { name: 'language', value: language },
-        { name: 'response_format', value: 'json' },
-      ],
-      {
-        name: 'file',
-        filename: req.file.originalname || 'audio.webm',
-        contentType: cleanMime,
-        data: req.file.buffer,
-      }
-    );
-
-    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      },
-      body,
-      signal: AbortSignal.timeout(30000), // 30s timeout
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error(`🎙 Groq STT error ${response.status}: ${errText.slice(0, 300)}`);
-      throw new Error(`Groq STT error ${response.status}: ${errText.slice(0, 200)}`);
-    }
-
-    const data = await response.json();
-    const text = data.text || '';
-    const elapsed = Date.now() - startTime;
-
-    console.log(`🎙 Voice STT [${language}]: "${text.slice(0, 80)}..." (${elapsed}ms)`);
-
-    // Log usage (Groq whisper: ~$0.04/hour audio, negligible per request)
-    try {
-      const db = getDb();
-      const durationSec = req.file.size / 16000; // rough estimate: 16KB/s for webm
-      const costUsd = (durationSec / 3600) * 0.04;
-      const costLana = costUsd * 270;
-      db.prepare(`
-        INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
-        VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)
-      `).run('voice-stt', 'groq-whisper-large-v3-turbo', 0, 0, 0, costUsd, costLana);
-    } catch (err) {
-      console.error('Failed to log Voice STT usage:', err);
-    }
-
-    return res.json({ text: text.trim() });
+    const text = await transcribeWithGroq(req.file.buffer, req.file.originalname || 'audio.webm', cleanMime, language);
+    return res.json({ text });
   } catch (error: any) {
     console.error('Voice STT error:', error.message);
+    return res.status(500).json({ error: error.message || 'Speech-to-text failed' });
+  }
+});
+
+// =============================================
+// POST /api/voice/stt-path — Speech-to-Text for an ALREADY-uploaded file.
+// The recorder uploads the audio to storage first, then calls this with {bucket,path}.
+// Reading the file from disk avoids a second ~5MB upload of the same bytes (which, run
+// concurrently with the storage upload, was overloading weak mobile links -> "Load failed").
+// =============================================
+router.post('/stt-path', async (req: Request, res: Response) => {
+  try {
+    const bucket = String(req.body?.bucket || '');
+    const rawPath = String(req.body?.path || '');
+    const language = req.body?.language || 'sl';
+
+    if (!STT_ALLOWED_BUCKETS.includes(bucket)) return res.status(400).json({ error: 'Invalid bucket' });
+    if (!rawPath) return res.status(400).json({ error: 'No path provided' });
+
+    // Sanitize exactly like storage.ts and confirm the resolved path stays inside the bucket dir.
+    const safePath = rawPath.replace(/\.\./g, '').replace(/^\//, '');
+    const bucketDir = path.join(UPLOADS_DIR, bucket);
+    const filePath = path.join(bucketDir, safePath);
+    if (!path.resolve(filePath).startsWith(path.resolve(bucketDir) + path.sep)) {
+      return res.status(400).json({ error: 'Invalid path' });
+    }
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+
+    const data = fs.readFileSync(filePath);
+    const cleanMime = mimeForExt(path.extname(filePath));
+    console.log(`🎙 Voice STT-path: ${bucket}/${safePath}, size=${data.length} bytes, mime=${cleanMime}`);
+    const text = await transcribeWithGroq(data, path.basename(filePath), cleanMime, language);
+    return res.json({ text });
+  } catch (error: any) {
+    console.error('Voice STT-path error:', error.message);
     return res.status(500).json({ error: error.message || 'Speech-to-text failed' });
   }
 });
