@@ -212,6 +212,7 @@ const foodCorner = {
   'supplier.stat.unconfirmed': 'Unconfirmed',
   'supplier.directNode': 'Direct / no point',
   'supplier.ordersCount': '{count} orders',
+  'supplier.perBuyer.toggle': 'Per customer ({count})',
   'supplier.empty.noOrders': 'There are no orders for your offers yet.',
   'supplier.footer': 'Each status change publishes a newer KIND 36602 with the same "d" as the order, so relays and buyers see the latest confirmed status.',
 } as const;
@@ -425,6 +426,7 @@ const translations: TranslationDict<FoodCornerKey> = {
     'supplier.stat.unconfirmed': 'Nepotrjena',
     'supplier.directNode': 'Direktno / brez točke',
     'supplier.ordersCount': '{count} naročil',
+    'supplier.perBuyer.toggle': 'Po strankah ({count})',
     'supplier.empty.noOrders': 'Trenutno še ni naročil za tvoje ponudbe.',
     'supplier.footer': 'Vsaka sprememba statusa objavi novejši KIND 36602 z istim "d" kot naročilo, zato relayi in kupci vidijo zadnji potrjeni status.',
   },

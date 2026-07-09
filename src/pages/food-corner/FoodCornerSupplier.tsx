@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Clock, Loader2, MapPin, Printer, RefreshCw, Truck } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Loader2, MapPin, Printer, RefreshCw, Truck, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFoodCornerData } from "@/hooks/useFoodCornerData";
 import { useFoodCornerPublisher } from "@/hooks/useFoodCornerPublisher";
+import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { useTranslation } from "@/i18n/I18nContext";
 import foodCornerTranslations, { FoodCornerKey } from "@/i18n/modules/foodCorner";
 import {
@@ -65,6 +66,16 @@ export default function FoodCornerSupplier() {
   // amount to the Točka Obilja, reduced if short.
   const [deliveredTotals, setDeliveredTotals] = useState<Record<string, Record<string, string>>>({});
 
+  // Which points have the per-buyer breakdown expanded (read-only, so the supplier can
+  // pack each customer's order correctly if they pack per buyer).
+  const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
+  const toggleDetails = (nodeRef: string) =>
+    setExpandedDetails((prev) => {
+      const next = new Set(prev);
+      next.has(nodeRef) ? next.delete(nodeRef) : next.add(nodeRef);
+      return next;
+    });
+
   // Live clock so the order-cutoff countdown updates every second.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -110,6 +121,15 @@ export default function FoodCornerSupplier() {
       }),
     [supplierOrders, week],
   );
+
+  // Buyer display names for the per-buyer breakdown (public Nostr profiles).
+  const buyerPubkeys = useMemo(
+    () => Array.from(new Set(ordersInWeek.map((o) => o.buyerPubkey))),
+    [ordersInWeek],
+  );
+  const { profiles: buyerProfiles } = useNostrProfilesCacheBulk(buyerPubkeys);
+  const buyerName = (pk: string) =>
+    buyerProfiles.get(pk)?.display_name || buyerProfiles.get(pk)?.full_name || `${pk.slice(0, 12)}…`;
 
   // Group by Točka Obilja, then aggregate quantities per product (the supplier
   // needs the totals to bring); keep the orders so a status can be published per
@@ -473,6 +493,55 @@ export default function FoodCornerSupplier() {
                       </div>
                     );
                   })()}
+
+                  {/* Per-buyer breakdown (READ-ONLY) — expand to pack each customer's order
+                      correctly. The supplier still delivers the aggregate totals above; this
+                      is only visibility of who ordered what. */}
+                  {group.orders.length > 0 && (
+                    <div className="space-y-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 text-muted-foreground px-1 h-8"
+                        onClick={() => toggleDetails(group.nodeRef)}
+                      >
+                        {expandedDetails.has(group.nodeRef) ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                        <Users className="h-4 w-4" />
+                        {t("supplier.perBuyer.toggle", { count: group.orders.length })}
+                      </Button>
+                      {expandedDetails.has(group.nodeRef) && (
+                        <div className="space-y-2 rounded-md border p-2">
+                          {group.orders.map((order, oi) => (
+                            <div key={`${order.eventId}-${oi}`} className="rounded-md bg-muted/40 p-3 space-y-1.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold text-sm truncate">{buyerName(order.buyerPubkey)}</span>
+                                <span className="text-xs text-muted-foreground shrink-0">
+                                  {formatFoodMoney(order.total, order.currency)}
+                                </span>
+                              </div>
+                              <div className="space-y-0.5">
+                                {order.items.map((item, ii) => (
+                                  <div key={`${order.eventId}-${ii}`} className="flex items-center justify-between gap-2 text-sm">
+                                    <span className="text-muted-foreground truncate">
+                                      {item.listing?.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`}
+                                    </span>
+                                    <span className="font-medium tabular-nums shrink-0">
+                                      {item.qty} {item.unit}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
