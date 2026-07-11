@@ -10,6 +10,7 @@ import {
   XCircle,
   Wallet,
   AlertCircle,
+  Info,
   Banknote,
   ArrowLeft,
   ShieldCheck,
@@ -27,6 +28,7 @@ import { useNostrPaymentScore } from "@/hooks/useNostrPaymentScore";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { supabase } from "@/integrations/supabase/client";
 import { convertWifToIds } from "@/lib/crypto";
+import { useLang } from "@/i18n/I18nContext";
 import { toast } from "sonner";
 
 const MIN_RATING = 10;
@@ -57,6 +59,51 @@ const SCHEME_LABELS: Record<string, string> = {
   "US.ACH": "US ACH",
 };
 
+// Payout-order notice shown (and must be agreed to) before starting a sale. SL for
+// Slovenian users, EN for everyone else.
+const PAYOUT_NOTICE = {
+  sl: {
+    orderTitle: "Vrstni red izplačil",
+    orderIntro:
+      "Izplačila v sistemu potekajo po vnaprej določenem vrstnem redu, ki zagotavlja stabilnost in naravno ravnovesje celotnega ekosistema.",
+    seqTitle: "Zaporedje izplačil:",
+    seq: [
+      "investitorji,",
+      "crowdfunding projekti,",
+      "projekti brezpogojnih posojil (Unconditional Loan),",
+      "Lana8Wonder Spliti in premije iz potrošnje,",
+    ],
+    seqAfter: "nato sledi naslednji Split (ko je vse poplačano).",
+    p1: "Prosimo, da ne pričakujete izplačil mimo tega vrstnega reda — to je naravni ritem sistema, ki omogoča, da deluje predvidljivo, transparentno in dolgoročno stabilno.",
+    p2: "Če ste prejeli Lane, jih najprej porabite pri nakupih v trgovinah in pri vključenih ponudnikih — Lana je potrošniški ekosistem in njena največja vrednost je v kroženju med uporabniki. Če jih pred naslednjim Splitom ne uspete porabiti, jih prodajte na trgu, da se izognete morebitni zamrznitvi sredstev ob izvedbi Splita.",
+    transTitle: "Transparentnost izplačil",
+    trans:
+      "Vsa izplačila so popolnoma transparentna. Trenutni vrstni red izplačil in status vašega zahtevka lahko kadarkoli spremljate na portalu lana.discount, kjer je jasno prikazano, na katerem mestu v čakalni vrsti se trenutno nahaja vaše izplačilo.",
+    agree: "Prebral/-a sem in se strinjam z vrstnim redom in pogoji izplačil.",
+    continue: "Se strinjam in nadaljujem",
+  },
+  en: {
+    orderTitle: "Payment Order",
+    orderIntro:
+      "Payments within the system follow a predefined order designed to ensure the stability and natural balance of the entire ecosystem.",
+    seqTitle: "The payment sequence is as follows:",
+    seq: [
+      "Investors",
+      "Crowdfunding projects",
+      "Unconditional Loan projects",
+      "Lana8Wonder Splits and retail incentives",
+    ],
+    seqAfter: "Once all obligations have been fulfilled, the next Split takes place.",
+    p1: "Please do not expect payments outside of this sequence. Following this order allows the system to operate predictably, transparently, and sustainably over the long term.",
+    p2: "If you have received LANA, we encourage you to spend it first at participating merchants and service providers. LANA is designed as a consumer-driven ecosystem, and its greatest value comes from circulating throughout the economy. If you are unable to spend your LANA before the next Split, you may sell it on the market to avoid the possibility of your funds being temporarily frozen during the Split process.",
+    transTitle: "Payment Transparency",
+    trans:
+      "All payments are fully transparent. You can monitor the current payment queue and the status of your payment at any time on lana.discount, where you can clearly see your current position in the payment queue.",
+    agree: "I have read and agree to the payment order and terms.",
+    continue: "I agree and continue",
+  },
+} as const;
+
 function formatFiat(amount: number, currency: string): string {
   const sym = CURRENCY_SYMBOLS[currency] || "";
   return `${sym}${amount.toFixed(2)}`;
@@ -70,6 +117,8 @@ export default function DiscountSell() {
   const { profile } = useNostrProfile();
   const { score: paymentScore, isLoading: scoreLoading } = useNostrPaymentScore(session?.nostrHexId);
   const { status: lana8WonderStatus, isLoading: l8wLoading } = useNostrLana8Wonder();
+  const uiLang = useLang();
+  const notice = PAYOUT_NOTICE[uiLang === "sl" ? "sl" : "en"];
 
   // Rating check
   const userRating = paymentScore ? parseFloat(paymentScore.score) : null;
@@ -94,6 +143,10 @@ export default function DiscountSell() {
 
   // 5-step flow
   const [step, setStep] = useState(1);
+
+  // Payout-order consent gate — the user must read the notice and agree before step 1.
+  const [consented, setConsented] = useState(false);
+  const [agreeChecked, setAgreeChecked] = useState(false);
 
   // Step 1: Select Wallet
   const [selectedWallet, setSelectedWallet] = useState("");
@@ -519,8 +572,70 @@ export default function DiscountSell() {
           {/* Steps only shown when rating is OK */}
           {!ratingBlocked && (
           <>
+          {/* ============ PAYOUT-ORDER NOTICE + CONSENT (before starting) ============ */}
+          {!consented && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border-2 border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-5 sm:p-6 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Info className="h-5 w-5 text-amber-600 shrink-0" />
+                  <h2 className="text-lg font-bold text-amber-800 dark:text-amber-300">{notice.orderTitle}</h2>
+                </div>
+                <p className="text-sm text-foreground/90 leading-relaxed">{notice.orderIntro}</p>
+                <div>
+                  <p className="text-sm font-medium mb-1">{notice.seqTitle}</p>
+                  <ol className="list-decimal list-inside space-y-0.5 text-sm text-foreground/90">
+                    {notice.seq.map((s, i) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ol>
+                  <p className="text-sm text-foreground/90 mt-1">{notice.seqAfter}</p>
+                </div>
+                <p className="text-sm text-foreground/90 leading-relaxed">{notice.p1}</p>
+                <p className="text-sm text-foreground/90 leading-relaxed">{notice.p2}</p>
+                <div className="pt-3 border-t border-amber-200 dark:border-amber-800/60 space-y-1">
+                  <h3 className="text-base font-bold text-amber-800 dark:text-amber-300">{notice.transTitle}</h3>
+                  <p className="text-sm text-foreground/90 leading-relaxed">
+                    {(() => {
+                      const parts = notice.trans.split("lana.discount");
+                      return parts.length > 1 ? (
+                        <>
+                          {parts[0]}
+                          <a
+                            href="https://lana.discount"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary font-medium underline"
+                          >
+                            lana.discount
+                          </a>
+                          {parts.slice(1).join("lana.discount")}
+                        </>
+                      ) : (
+                        notice.trans
+                      );
+                    })()}
+                  </p>
+                </div>
+              </div>
+
+              <label className="flex items-start gap-3 rounded-xl border p-4 cursor-pointer hover:bg-muted/40">
+                <input
+                  type="checkbox"
+                  checked={agreeChecked}
+                  onChange={(e) => setAgreeChecked(e.target.checked)}
+                  className="mt-0.5 h-5 w-5 shrink-0 accent-primary"
+                />
+                <span className="text-sm font-medium">{notice.agree}</span>
+              </label>
+
+              <Button className="w-full h-12 text-base" disabled={!agreeChecked} onClick={() => setConsented(true)}>
+                {notice.continue}
+              </Button>
+            </div>
+          )}
+
           {/* ============ STEP 1: Select Wallet ============ */}
-          {step === 1 && (
+          {consented && step === 1 && (
             <div className="space-y-6">
               <div className="rounded-2xl border-2 border-border bg-card p-4 sm:p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">
