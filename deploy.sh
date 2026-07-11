@@ -1,44 +1,35 @@
 #!/usr/bin/env bash
-# Safe production deploy for app.mejmosefajn.org
+# Deploy app.mejmosefajn.org THROUGH GIT.
 #
-# IMPORTANT: never rsync --delete over server/, and always exclude server/uploads/.
-# server/uploads/ is gitignored and lives ONLY on the production server (user
-# avatars, project images, post images, DM audio). A `--delete` sync from a dev
-# checkout would wipe it. This script avoids that class of mistake.
+# Pushing to `main` triggers GitHub Actions (.github/workflows/deploy.yml),
+# which SSHes to the VPS, fast-forwards /opt/apps/mejmosefajn to origin/main,
+# rebuilds the Docker image and restarts the container.
+#
+# This REPLACES the old direct-rsync deploy. That version copied the local
+# working tree straight onto the production box, bypassing git — which is why
+# the server tree kept drifting out of sync with the repo. Git is now the single
+# source of truth: nothing reaches production that isn't committed and pushed.
+#
+# server/uploads/ (user avatars, images, DM audio) lives ONLY on the server and
+# is gitignored, so a git-based deploy can never touch it.
 
 set -euo pipefail
 
-REMOTE="root@app.mejmosefajn.org"
-REMOTE_DIR="/opt/apps/mejmosefajn"
-SSH_OPTS="-o StrictHostKeyChecking=accept-new"
+BRANCH="main"
 
-echo "==> Type-checking (fails the deploy on TS errors)"
+# 1) Refuse to deploy uncommitted work — it would silently NOT ship.
+if [ -n "$(git status --porcelain)" ]; then
+  echo "✗ Uncommitted changes present. Commit them first — only committed code deploys:"
+  git status --short
+  exit 1
+fi
+
+# 2) Local type-check gate: fail here rather than after a broken image is built.
+echo "==> Type-checking"
 npm run typecheck
 
-echo "==> Building frontend"
-npm run build
+# 3) Push → GitHub Actions runs the deploy on the VPS.
+echo "==> Pushing $BRANCH -> triggers GitHub Actions deploy"
+git push origin "$BRANCH"
 
-echo "==> Syncing src/ (safe: --delete OK, no uploads here)"
-rsync -az --delete --exclude='.env' -e "ssh $SSH_OPTS" src/ "$REMOTE:$REMOTE_DIR/src/"
-
-echo "==> Syncing dist/ (safe: --delete OK)"
-rsync -az --delete -e "ssh $SSH_OPTS" dist/ "$REMOTE:$REMOTE_DIR/dist/"
-
-# Root config files the Docker image build COPYs + uses (Dockerfile). These live
-# outside src/, so they must be synced too or config changes (e.g. vite chunking)
-# won't take effect in the baked image build.
-echo "==> Syncing root build config"
-rsync -az -e "ssh $SSH_OPTS" \
-  vite.config.ts package.json package-lock.json index.html \
-  tsconfig.json tsconfig.app.json tsconfig.node.json \
-  tailwind.config.ts postcss.config.js components.json \
-  "$REMOTE:$REMOTE_DIR/"
-
-echo "==> Syncing server/ (NO --delete, EXCLUDE uploads — protects user files)"
-rsync -az --exclude='uploads/' --exclude='uploads/**' --exclude='.env' \
-  -e "ssh $SSH_OPTS" server/ "$REMOTE:$REMOTE_DIR/server/"
-
-echo "==> Rebuilding container"
-ssh $SSH_OPTS "$REMOTE" "cd $REMOTE_DIR && docker compose -f docker-compose.prod.yml up -d --build"
-
-echo "==> Done."
+echo "==> Pushed. Follow the deploy with:  gh run watch"

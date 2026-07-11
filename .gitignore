@@ -36,3 +36,6 @@ server/uploads/
 .env.*
 !.env.example
 data/
+
+# Claude Code local session data (not app code)
+.claude/
