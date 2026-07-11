@@ -57,15 +57,15 @@ export default function ConversationList({ conversations, selectedId, onSelect }
             </div>
 
             <div className="space-y-1 text-xs md:text-sm text-muted-foreground">
-              <p className="truncate"><span className="font-medium">Initiator:</span> {conv.initiator}</p>
+              <p className="break-words"><span className="font-medium">Initiator:</span> {conv.initiator}</p>
               {conv.facilitator && (
-                <p className="truncate"><span className="font-medium">Facilitator:</span> {conv.facilitator}</p>
+                <p className="break-words"><span className="font-medium">Facilitator:</span> {conv.facilitator}</p>
               )}
               {conv.participants.length > 0 && (
-                <p className="truncate"><span className="font-medium">Participants:</span> {conv.participants.join(', ')}</p>
+                <p className="break-words"><span className="font-medium">Participants:</span> {conv.participants.join(', ')}</p>
               )}
               {conv.guests.length > 0 && (
-                <p className="truncate"><span className="font-medium">Guests:</span> {conv.guests.join(', ')}</p>
+                <p className="break-words"><span className="font-medium">Guests:</span> {conv.guests.join(', ')}</p>
               )}
             </div>
 
