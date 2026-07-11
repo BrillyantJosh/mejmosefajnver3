@@ -119,6 +119,12 @@ export default function DiscountSell() {
   const { status: lana8WonderStatus, isLoading: l8wLoading } = useNostrLana8Wonder();
   const uiLang = useLang();
   const notice = PAYOUT_NOTICE[uiLang === "sl" ? "sl" : "en"];
+  const isSl = uiLang === "sl";
+  // LanaPays.Us wallets are not sold through this module — they are sold directly on lana.discount.
+  const lanaPaysSellNotice = isSl
+    ? "LanaPays.Us sredstva se prodajo neposredno na lana.discount — prodaja prek te aplikacije ni na voljo."
+    : "LanaPays.Us funds are sold directly on lana.discount — selling through this app is not available.";
+  const lanaPaysSellCta = isSl ? "Prodaj na lana.discount" : "Sell on lana.discount";
 
   // Rating check
   const userRating = paymentScore ? parseFloat(paymentScore.score) : null;
@@ -648,6 +654,80 @@ export default function DiscountSell() {
                       const shortAddr =
                         w.walletId.slice(0, 10) + "..." + w.walletId.slice(-6);
                       const isFrozen = !!w.freezeStatus;
+                      const isLanaPays = w.walletType === "LanaPays.Us";
+
+                      const cardBody = (
+                        <div className="space-y-2">
+                          {/* Top row: wallet address + frozen badge */}
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono text-xs sm:text-sm font-medium text-foreground truncate">
+                              {shortAddr}
+                            </span>
+                            {isFrozen && (
+                              <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-1.5 py-0.5 rounded flex-shrink-0">
+                                Frozen
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Middle row: type + note */}
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                            <span>{w.walletType}</span>
+                            {w.note && (
+                              <span className="truncate max-w-[200px]">{w.note}</span>
+                            )}
+                          </div>
+
+                          {/* Bottom row: balance */}
+                          <div>
+                            {balancesLoading &&
+                            balances[w.walletId] === undefined ? (
+                              <div className="h-4 w-24 animate-pulse bg-muted rounded" />
+                            ) : balances[w.walletId] !== undefined ? (
+                              <span className="font-mono text-sm font-bold text-foreground">
+                                {balances[w.walletId].toLocaleString(
+                                  undefined,
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  }
+                                )}
+                                <span className="text-xs text-muted-foreground font-normal ml-1">
+                                  LANA
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                ---
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+
+                      // LanaPays.Us: sold directly on lana.discount — NOT sellable through this module.
+                      if (isLanaPays) {
+                        return (
+                          <div
+                            key={w.walletId}
+                            className={`w-full rounded-xl border-2 border-border bg-muted/20 px-3 sm:px-5 py-3 sm:py-4 space-y-3 ${isFrozen ? "opacity-60" : ""}`}
+                          >
+                            {cardBody}
+                            <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-2">
+                              <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                                {lanaPaysSellNotice}
+                              </p>
+                              <Button size="sm" variant="outline" asChild className="gap-1.5 w-full sm:w-auto">
+                                <a href="https://lana.discount" target="_blank" rel="noopener noreferrer">
+                                  <ExternalLink className="h-4 w-4" />
+                                  {lanaPaysSellCta}
+                                </a>
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      }
+
                       return (
                         <button
                           key={w.walletId}
@@ -658,52 +738,7 @@ export default function DiscountSell() {
                               : "border-border hover:border-muted-foreground/30"
                           } ${isFrozen ? "opacity-60" : ""}`}
                         >
-                          <div className="space-y-2">
-                            {/* Top row: wallet address + frozen badge */}
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="font-mono text-xs sm:text-sm font-medium text-foreground truncate">
-                                {shortAddr}
-                              </span>
-                              {isFrozen && (
-                                <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-1.5 py-0.5 rounded flex-shrink-0">
-                                  Frozen
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Middle row: type + note */}
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                              <span>{w.walletType}</span>
-                              {w.note && (
-                                <span className="truncate max-w-[200px]">{w.note}</span>
-                              )}
-                            </div>
-
-                            {/* Bottom row: balance */}
-                            <div>
-                              {balancesLoading &&
-                              balances[w.walletId] === undefined ? (
-                                <div className="h-4 w-24 animate-pulse bg-muted rounded" />
-                              ) : balances[w.walletId] !== undefined ? (
-                                <span className="font-mono text-sm font-bold text-foreground">
-                                  {balances[w.walletId].toLocaleString(
-                                    undefined,
-                                    {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    }
-                                  )}
-                                  <span className="text-xs text-muted-foreground font-normal ml-1">
-                                    LANA
-                                  </span>
-                                </span>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">
-                                  ---
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                          {cardBody}
                         </button>
                       );
                     })}
