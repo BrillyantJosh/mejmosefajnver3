@@ -180,6 +180,7 @@ export default function ChatView({
   const [visibleCount, setVisibleCount] = useState(MESSAGES_PER_PAGE);
   // The message currently being replied to (null = not replying)
   const [replyingTo, setReplyingTo] = useState<{ id: string; sender: string; snippet: string } | null>(null);
+  const [recorderActive, setRecorderActive] = useState(false); // recording/preview → give the recorder the full input row
 
   // Short preview of a message for the "replying to" bar (operates on the
   // already-formatted message: media is known from its type).
@@ -471,24 +472,27 @@ export default function ChatView({
               </Button>
             </div>
           )}
-          {/* Audio recorder + Image upload (+ Exit, always visible here on mobile) */}
+          {/* Audio recorder + Image upload (+ Exit). While recording/previewing the
+              recorder takes the whole row (image/Exit hidden) so its wide UI doesn't
+              overflow and break the mobile layout. */}
           <div className="flex items-center gap-2">
             {processEventId && senderPubkey && onSendAudio && (
               <OwnAudioRecorder
                 processEventId={processEventId}
                 senderPubkey={senderPubkey}
                 onSendAudio={handleSendMedia}
+                onActiveChange={setRecorderActive}
                 compact
               />
             )}
-            {processEventId && senderPubkey && onSendAudio && (
+            {!recorderActive && processEventId && senderPubkey && onSendAudio && (
               <ImageUploadButton
                 processEventId={processEventId}
                 senderPubkey={senderPubkey}
                 onSendImage={handleSendMedia}
               />
             )}
-            {canExit && !isExited && onExit && (
+            {!recorderActive && canExit && !isExited && onExit && (
               <Button
                 variant="outline"
                 size="sm"
@@ -500,7 +504,9 @@ export default function ChatView({
               </Button>
             )}
           </div>
-          {/* Text input row */}
+          {/* Text input row — hidden while recording/previewing audio (the recorder has
+              its own Send/Discard) so the input area isn't crowded on mobile. */}
+          {!recorderActive && (
           <div className="flex items-end gap-2">
             <textarea
               ref={textareaRef}
@@ -532,6 +538,7 @@ export default function ChatView({
               <Send className="w-4 h-4" />
             </Button>
           </div>
+          )}
         </div>
       </Card>
       </>

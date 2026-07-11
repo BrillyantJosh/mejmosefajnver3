@@ -13,6 +13,10 @@ interface OwnAudioRecorderProps {
   senderPubkey: string;
   onSendAudio: (audioPath: string) => Promise<boolean>;
   compact?: boolean;
+  /** Fired when the recorder becomes active (recording or showing a preview) so the
+   *  parent can give it the full input row on mobile instead of cramming it next to
+   *  other controls. */
+  onActiveChange?: (active: boolean) => void;
 }
 
 const MAX_RECORDING_SECONDS = 300; // 5 minutes
@@ -22,7 +26,8 @@ export default function OwnAudioRecorder({
   processEventId,
   senderPubkey,
   onSendAudio,
-  compact = false
+  compact = false,
+  onActiveChange,
 }: OwnAudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isStarting, setIsStarting] = useState(false); // mic tapped, awaiting permission/setup — instant button feedback
@@ -50,6 +55,13 @@ export default function OwnAudioRecorder({
   const wentBackgroundRef = useRef(false);
   const isRecordingRef = useRef(false);
   const cancelRef = useRef(false); // set by Cancel so the async onstop skips persist/preview
+
+  // Report "active" (recording or previewing) to the parent so it can give the recorder
+  // the full input row on mobile (otherwise the wide recording/preview UI overflows next
+  // to the image + Exit buttons and breaks the layout).
+  useEffect(() => {
+    onActiveChange?.(isRecording || !!audioPreview);
+  }, [isRecording, audioPreview, onActiveChange]);
 
   // Restore a pending (un-sent) recording after a reload / navigation, so a recording is
   // never lost even if the upload failed or the page was reloaded mid-send.
