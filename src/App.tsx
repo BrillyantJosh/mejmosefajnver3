@@ -87,6 +87,7 @@ const CreateProject = lazy(() => import("./pages/100millionideas/CreateProject")
 const MyProjects = lazy(() => import("./pages/100millionideas/MyProjects"));
 const EditProject = lazy(() => import("./pages/100millionideas/EditProject"));
 const BatchFunding = lazy(() => import("./pages/100millionideas/BatchFunding"));
+const Eligibility = lazy(() => import("./pages/100millionideas/Eligibility"));
 const LanaEventsLayout = lazy(() => import("./pages/events/LanaEventsLayout"));
 const OnlineEvents = lazy(() => import("./pages/events/OnlineEvents"));
 const LiveEvents = lazy(() => import("./pages/events/LiveEvents"));
@@ -292,6 +293,7 @@ const App = () => (
         <Route path="/100millionideas" element={<MillionIdeasLayout />}>
           <Route index element={<Navigate to="/100millionideas/projects" replace />} />
           <Route path="projects" element={<Projects />} />
+          <Route path="eligibility" element={<Eligibility />} />
           <Route path="project/:projectId" element={<ProjectDetail />} />
           <Route path="donate/:projectId" element={<DonateToProject />} />
           <Route path="donate-private-key/:projectId" element={<DonatePrivateKey />} />

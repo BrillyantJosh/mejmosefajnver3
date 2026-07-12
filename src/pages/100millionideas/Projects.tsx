@@ -5,8 +5,7 @@ import { Loader2, Layers, ChevronLeft, ChevronRight, Languages, HelpCircle } fro
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EligibilityCriteria, eligibilityContent } from "@/components/100millionideas/EligibilityCriteria";
+import { eligibilityContent } from "@/components/100millionideas/EligibilityCriteria";
 import { useLang, useTranslation } from "@/i18n/I18nContext";
 import millionideasTranslations from "@/i18n/modules/millionideas";
 import { useNavigate } from "react-router-dom";
@@ -35,7 +34,6 @@ const Projects = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const uiLang = useLang();
   const { t } = useTranslation(millionideasTranslations);
-  const [showEligibility, setShowEligibility] = useState(false);
 
   const filterLabels: Record<ProjectFilter, string> = {
     open: t('projects.filterOpen'),
@@ -319,7 +317,7 @@ const Projects = () => {
           </p>
           <button
             type="button"
-            onClick={() => setShowEligibility(true)}
+            onClick={() => navigate('/100millionideas/eligibility')}
             className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline text-left"
           >
             <HelpCircle className="h-4 w-4 shrink-0" />
@@ -484,16 +482,6 @@ const Projects = () => {
           )}
         </>
       )}
-
-      {/* "What kind of projects are eligible for Crowdfunding?" info dialog */}
-      <Dialog open={showEligibility} onOpenChange={setShowEligibility}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{eligibilityContent(uiLang).eligibilityTitle}</DialogTitle>
-          </DialogHeader>
-          <EligibilityCriteria lang={uiLang} />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
