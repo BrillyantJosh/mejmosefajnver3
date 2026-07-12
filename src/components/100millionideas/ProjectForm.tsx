@@ -15,6 +15,8 @@ import { finalizeEvent } from "nostr-tools";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
+import millionideasTranslations from "@/i18n/modules/millionideas";
+import { useTranslation } from "@/i18n/I18nContext";
 
 const PROJECT_TYPES = [
   { value: "Inspiration", label: "Inspiration" },
@@ -66,6 +68,7 @@ interface ProjectFormProps {
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 export default function ProjectForm({ mode, initialData, onSubmitSuccess }: ProjectFormProps) {
+  const { t } = useTranslation(millionideasTranslations);
   const { session } = useAuth();
   const { appSettings } = useAdmin();
   const { parameters: systemParameters } = useSystemParameters();
@@ -87,7 +90,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
   const [whatType, setWhatType] = useState(initialData?.whatType || "");
   const [status, setStatus] = useState<"draft" | "active">(initialData?.status || "draft");
   const [responsibilityStatement, setResponsibilityStatement] = useState(
-    initialData?.responsibilityStatement || "I unconditionally accept full self-responsibility for this project and all related actions in the Lana Reality."
+    initialData?.responsibilityStatement || t("form.responsibilityDefault")
   );
   const [responsibilityAcknowledged, setResponsibilityAcknowledged] = useState(mode === "edit");
 
@@ -207,15 +210,15 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
         body: formData,
       });
 
-      if (!response.ok) throw new Error("Upload failed");
+      if (!response.ok) throw new Error(t("form.err.uploadFailed"));
 
       const result = await response.json();
       return result.data?.publicUrl || `${API_URL}/api/storage/project-images/${fileName}`;
     } catch (error) {
       console.error("Error uploading image:", error);
       toast({
-        title: "Error uploading image",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t("form.toast.imageUploadError"),
+        description: error instanceof Error ? error.message : t("form.toast.unknownError"),
         variant: "destructive",
       });
       return null;
@@ -293,37 +296,37 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
     e.preventDefault();
 
     if (!session?.nostrHexId || !session?.nostrPrivateKey) {
-      toast({ title: "Error", description: "You must be logged in", variant: "destructive" });
+      toast({ title: t("form.toast.error"), description: t("form.toast.mustLogin"), variant: "destructive" });
       return;
     }
 
     // Validation
     if (!title.trim()) {
-      toast({ title: "Error", description: "Title is required", variant: "destructive" });
+      toast({ title: t("form.toast.error"), description: t("form.toast.titleRequired"), variant: "destructive" });
       return;
     }
     if (!shortDesc.trim()) {
-      toast({ title: "Error", description: "Short description is required", variant: "destructive" });
+      toast({ title: t("form.toast.error"), description: t("form.toast.shortDescRequired"), variant: "destructive" });
       return;
     }
     if (!content.trim()) {
-      toast({ title: "Error", description: "Project description is required", variant: "destructive" });
+      toast({ title: t("form.toast.error"), description: t("form.toast.contentRequired"), variant: "destructive" });
       return;
     }
     if (!fiatGoal || parseFloat(fiatGoal) <= 0) {
-      toast({ title: "Error", description: "Funding goal must be greater than 0", variant: "destructive" });
+      toast({ title: t("form.toast.error"), description: t("form.toast.goalPositive"), variant: "destructive" });
       return;
     }
     if (parseFloat(fiatGoal) > maxAllowedAmount) {
-      toast({ title: "Error", description: `Funding goal cannot exceed ${maxAllowedAmount} ${currency}`, variant: "destructive" });
+      toast({ title: t("form.toast.error"), description: t("form.toast.goalExceeds", { max: maxAllowedAmount, currency }), variant: "destructive" });
       return;
     }
     if (!wallet) {
-      toast({ title: "Error", description: "Please select a wallet", variant: "destructive" });
+      toast({ title: t("form.toast.error"), description: t("form.toast.selectWallet"), variant: "destructive" });
       return;
     }
     if (!responsibilityAcknowledged) {
-      toast({ title: "Error", description: "You must acknowledge the responsibility statement", variant: "destructive" });
+      toast({ title: t("form.toast.error"), description: t("form.toast.mustAcknowledge"), variant: "destructive" });
       return;
     }
 
@@ -408,7 +411,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
       );
 
       if (publishError) {
-        throw new Error(publishError.message || "Failed to publish");
+        throw new Error(publishError.message || t("form.err.publishFailed"));
       }
 
       const successCount = publishData?.publishedTo || 0;
@@ -451,16 +454,16 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
       }
 
       toast({
-        title: mode === "create" ? "Project Created" : "Project Updated",
-        description: `Published to ${successCount} relay${successCount !== 1 ? "s" : ""}`,
+        title: mode === "create" ? t("form.toast.projectCreated") : t("form.toast.projectUpdated"),
+        description: `${t("form.toast.publishedTo")} ${successCount} ${t(successCount !== 1 ? "form.toast.relayMany" : "form.toast.relayOne")}`,
       });
 
       onSubmitSuccess();
     } catch (error) {
       console.error("Error publishing project:", error);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to publish project",
+        title: t("form.toast.error"),
+        description: error instanceof Error ? error.message : t("form.toast.publishFailed"),
         variant: "destructive",
       });
     } finally {
@@ -474,10 +477,10 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
       {/* Project Type — first because funding limits depend on it */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Project Type</CardTitle>
+          <CardTitle className="text-lg">{t("form.projectTypeTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <Label htmlFor="projectType">Type *</Label>
+          <Label htmlFor="projectType">{t("form.typeLabel")}</Label>
           <Select value={projectType} onValueChange={setProjectType}>
             <SelectTrigger>
               <SelectValue />
@@ -485,13 +488,13 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
             <SelectContent>
               {enabledProjectTypes.map((pt) => (
                 <SelectItem key={pt.value} value={pt.value}>
-                  {pt.label}
+                  {t(`form.projectType.${pt.value}` as Parameters<typeof t>[0])}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Maximum funding for {projectType === "OnlineEvent" ? "Online Event" : projectType}: {maxAllowedAmount} {currency}
+            {t("form.maxFundingFor", { type: t(`form.projectType.${projectType}` as Parameters<typeof t>[0]), max: maxAllowedAmount, currency })}
           </p>
         </CardContent>
       </Card>
@@ -499,12 +502,12 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
       {/* Funding */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Funding</CardTitle>
+          <CardTitle className="text-lg">{t("form.fundingTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="fiatGoal">Funding Goal *</Label>
+              <Label htmlFor="fiatGoal">{t("form.fundingGoalLabel")}</Label>
               <Input
                 id="fiatGoal"
                 type="number"
@@ -516,11 +519,11 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
                 placeholder="100.00"
               />
               <p className="text-xs text-muted-foreground">
-                Maximum: {maxAllowedAmount} {currency}
+                {t("form.maximum", { max: maxAllowedAmount, currency })}
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="currency">Currency *</Label>
+              <Label htmlFor="currency">{t("form.currencyLabel")}</Label>
               <Select value={currency} onValueChange={setCurrency}>
                 <SelectTrigger>
                   <SelectValue />
@@ -539,11 +542,11 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
           <div className="space-y-2">
             <Label htmlFor="wallet" className="flex items-center gap-2">
               <Wallet className="h-4 w-4" />
-              Project Wallet *
+              {t("form.projectWalletLabel")}
             </Label>
             <Select value={wallet} onValueChange={setWallet}>
               <SelectTrigger>
-                <SelectValue placeholder={walletsLoading ? "Loading wallets..." : "Select wallet"} />
+                <SelectValue placeholder={walletsLoading ? t("form.loadingWallets") : t("form.selectWallet")} />
               </SelectTrigger>
               <SelectContent>
                 {availableWallets.map((w) => (
@@ -566,52 +569,52 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
       {/* Basic Info */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Project Details</CardTitle>
+          <CardTitle className="text-lg">{t("form.projectDetailsTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Title *</Label>
+            <Label htmlFor="title">{t("form.titleLabel")}</Label>
             <Input
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="My Project Title"
+              placeholder={t("form.titlePlaceholder")}
               maxLength={100}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="shortDesc">Short Description *</Label>
+            <Label htmlFor="shortDesc">{t("form.shortDescLabel")}</Label>
             <Input
               id="shortDesc"
               value={shortDesc}
               onChange={(e) => setShortDesc(e.target.value)}
-              placeholder="A brief summary of your project"
+              placeholder={t("form.shortDescPlaceholder")}
               maxLength={200}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="content">Full Description (Markdown) *</Label>
+            <Label htmlFor="content">{t("form.contentLabel")}</Label>
             <Textarea
               id="content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="Describe your project in detail: vision, goals, how funds will be used..."
+              placeholder={t("form.contentPlaceholder")}
               rows={10}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="whatType">What is Project all About?</Label>
+            <Label htmlFor="whatType">{t("form.whatTypeLabel")}</Label>
             <Select value={whatType} onValueChange={setWhatType}>
               <SelectTrigger>
-                <SelectValue placeholder="Select what this project is about..." />
+                <SelectValue placeholder={t("form.whatTypePlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {WHAT_TYPES.map((wt) => (
                   <SelectItem key={wt.value} value={wt.value}>
-                    {wt.label}
+                    {t(`form.whatType.${wt.value}` as Parameters<typeof t>[0])}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -625,7 +628,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <ImagePlus className="h-5 w-5" />
-            Cover Image
+            {t("form.coverImageTitle")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -633,7 +636,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
             <div className="relative">
               <img
                 src={coverPreview || existingCoverUrl}
-                alt="Cover preview"
+                alt={t("form.coverPreviewAlt")}
                 className="w-full h-48 object-cover rounded-lg"
               />
               <Button
@@ -649,7 +652,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
           ) : (
             <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-muted-foreground/25 rounded-lg cursor-pointer hover:border-muted-foreground/50 transition-colors">
               <ImagePlus className="h-8 w-8 text-muted-foreground mb-2" />
-              <span className="text-sm text-muted-foreground">Click to upload cover image</span>
+              <span className="text-sm text-muted-foreground">{t("form.coverUploadHint")}</span>
               <input
                 type="file"
                 accept="image/*"
@@ -664,7 +667,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
       {/* Gallery Images */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Gallery Images</CardTitle>
+          <CardTitle className="text-lg">{t("form.galleryTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
@@ -672,7 +675,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
               <div key={`existing-${index}`} className="relative">
                 <img
                   src={url}
-                  alt={`Gallery ${index + 1}`}
+                  alt={t("form.galleryAlt", { index: index + 1 })}
                   className="w-full h-24 object-cover rounded-lg"
                 />
                 <Button
@@ -690,7 +693,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
               <div key={`new-${index}`} className="relative">
                 <img
                   src={preview}
-                  alt={`New gallery ${index + 1}`}
+                  alt={t("form.galleryNewAlt", { index: index + 1 })}
                   className="w-full h-24 object-cover rounded-lg"
                 />
                 <Button
@@ -707,7 +710,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
           </div>
           <label className="flex items-center gap-2 cursor-pointer text-sm text-primary hover:underline">
             <Plus className="h-4 w-4" />
-            Add gallery images
+            {t("form.addGalleryImages")}
             <input
               type="file"
               accept="image/*"
@@ -724,7 +727,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Video className="h-5 w-5" />
-            Videos
+            {t("form.videosTitle")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -742,7 +745,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
           ))}
           <Button type="button" variant="outline" size="sm" onClick={addVideoUrl} className="gap-2">
             <Plus className="h-4 w-4" />
-            Add Video URL
+            {t("form.addVideoUrl")}
           </Button>
         </CardContent>
       </Card>
@@ -752,7 +755,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Documents
+            {t("form.documentsTitle")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -770,7 +773,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
           ))}
           <Button type="button" variant="outline" size="sm" onClick={addFileUrl} className="gap-2">
             <Plus className="h-4 w-4" />
-            Add Document URL
+            {t("form.addDocumentUrl")}
           </Button>
         </CardContent>
       </Card>
@@ -778,34 +781,34 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
       {/* Status & Responsibility */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Status & Responsibility</CardTitle>
+          <CardTitle className="text-lg">{t("form.statusRespTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <Label>Project Status</Label>
+              <Label>{t("form.projectStatusLabel")}</Label>
               <p className="text-sm text-muted-foreground">
-                {status === "draft" ? "Only visible to you" : "Publicly visible and can receive donations"}
+                {status === "draft" ? t("form.statusDraftHint") : t("form.statusActiveHint")}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Draft</span>
+              <span className="text-sm text-muted-foreground">{t("form.statusDraft")}</span>
               <Switch
                 checked={status === "active"}
                 onCheckedChange={(checked) => setStatus(checked ? "active" : "draft")}
                 disabled={hasDonations}
               />
-              <span className="text-sm text-muted-foreground">Active</span>
+              <span className="text-sm text-muted-foreground">{t("form.statusActive")}</span>
             </div>
           </div>
           {hasDonations && (
             <p className="text-sm text-amber-600">
-              This project has received donations and cannot be reverted to draft.
+              {t("form.hasDonationsWarning")}
             </p>
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="responsibility">Responsibility Statement *</Label>
+            <Label htmlFor="responsibility">{t("form.responsibilityLabel")}</Label>
             <Textarea
               id="responsibility"
               value={responsibilityStatement}
@@ -821,7 +824,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
               onCheckedChange={(checked) => setResponsibilityAcknowledged(checked === true)}
             />
             <label htmlFor="ack" className="text-sm leading-tight cursor-pointer">
-              I acknowledge and accept the responsibility statement above
+              {t("form.acknowledgeLabel")}
             </label>
           </div>
         </CardContent>
@@ -831,12 +834,12 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
       <Button type="submit" className="w-full" disabled={publishing || uploading}>
         {(publishing || uploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         {uploading
-          ? "Uploading images..."
+          ? t("form.uploadingImages")
           : publishing
-          ? "Publishing..."
+          ? t("form.publishing")
           : mode === "create"
-          ? "Create Project"
-          : "Update Project"}
+          ? t("form.createProject")
+          : t("form.updateProject")}
       </Button>
     </form>
   );

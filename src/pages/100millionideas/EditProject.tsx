@@ -4,11 +4,14 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Pencil, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import ProjectForm, { ProjectFormInitialData } from "@/components/100millionideas/ProjectForm";
+import millionideasTranslations from "@/i18n/modules/millionideas";
+import { useTranslation } from "@/i18n/I18nContext";
 
 export default function EditProject() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { session } = useAuth();
+  const { t } = useTranslation(millionideasTranslations);
 
   const [initialData, setInitialData] = useState<ProjectFormInitialData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -26,12 +29,12 @@ export default function EditProject() {
           fetch(`/api/lanacrowd/donations/${encodeURIComponent(projectId)}`),
         ]);
 
-        if (!projRes.ok) throw new Error('Project not found');
+        if (!projRes.ok) throw new Error(t("edit.notFound"));
         const { project: p } = await projRes.json();
 
         // Permission check
         if (p.pubkey !== session.nostrHexId && p.ownerPubkey !== session.nostrHexId) {
-          setError("Project not found or you don't have permission to edit it.");
+          setError(t("edit.noPermission"));
           return;
         }
 
@@ -58,7 +61,7 @@ export default function EditProject() {
         });
       } catch (err) {
         console.error("Error fetching project:", err);
-        setError(err instanceof Error ? err.message : "Failed to load project");
+        setError(err instanceof Error ? err.message : t("edit.loadFailed"));
       } finally {
         setIsLoading(false);
       }
@@ -80,9 +83,9 @@ export default function EditProject() {
       <div className="container mx-auto p-6 max-w-2xl">
         <Button variant="ghost" onClick={() => navigate("/100millionideas/my-projects")} className="mb-4">
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
+          {t("edit.back")}
         </Button>
-        <p className="text-center text-muted-foreground">{error || "Project not found"}</p>
+        <p className="text-center text-muted-foreground">{error || t("edit.notFound")}</p>
       </div>
     );
   }
@@ -98,7 +101,7 @@ export default function EditProject() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <Pencil className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Edit Project</h1>
+        <h1 className="text-2xl font-bold">{t("edit.title")}</h1>
       </div>
 
       <ProjectForm

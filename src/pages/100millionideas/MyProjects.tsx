@@ -11,6 +11,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { SimplePool, finalizeEvent } from "nostr-tools";
 import { toast } from "@/hooks/use-toast";
+import millionideasTranslations from "@/i18n/modules/millionideas";
+import { useTranslation } from "@/i18n/I18nContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +26,7 @@ import {
 
 const MyProjects = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation(millionideasTranslations);
   const { projects, isLoading, refetch } = useMyLanacrowdProjects();
   const { session } = useAuth();
   const { parameters: systemParameters } = useSystemParameters();
@@ -41,8 +44,8 @@ const MyProjects = () => {
 
     if ((project.donationCount || 0) > 0 || (project.totalRaised || 0) > 0) {
       toast({
-        title: "Cannot delete",
-        description: "This project has donations and cannot be deleted.",
+        title: t("myProjects.toastCannotDeleteTitle"),
+        description: t("myProjects.toastCannotDeleteDesc"),
         variant: "destructive",
       });
       return;
@@ -91,15 +94,15 @@ const MyProjects = () => {
       }
 
       toast({
-        title: "Project deleted",
-        description: "The project has been removed.",
+        title: t("myProjects.toastDeletedTitle"),
+        description: t("myProjects.toastDeletedDesc"),
       });
       await refetch();
     } catch (err: any) {
       console.error("Delete project failed:", err);
       toast({
-        title: "Delete failed",
-        description: err.message || "Could not delete project.",
+        title: t("myProjects.toastDeleteFailedTitle"),
+        description: err.message || t("myProjects.toastDeleteFailedDesc"),
         variant: "destructive",
       });
     } finally {
@@ -112,7 +115,7 @@ const MyProjects = () => {
     return (
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">My Projects</h1>
+          <h1 className="text-3xl font-bold">{t("myProjects.title")}</h1>
         </div>
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-32 w-full" />
@@ -124,9 +127,10 @@ const MyProjects = () => {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">My Projects</h1>
+          <h1 className="text-3xl font-bold">{t("myProjects.title")}</h1>
           <p className="text-muted-foreground mt-1">
-            {projects.length} project{projects.length !== 1 ? "s" : ""}
+            {projects.length}{" "}
+            {t(projects.length !== 1 ? "myProjects.projectMany" : "myProjects.projectOne")}
           </p>
         </div>
         <Button
@@ -134,20 +138,20 @@ const MyProjects = () => {
           className="gap-2"
         >
           <PlusCircle className="h-4 w-4" />
-          New Project
+          {t("myProjects.newProject")}
         </Button>
       </div>
 
       {projects.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center space-y-4">
-            <p className="text-muted-foreground">You haven't created any projects yet.</p>
+            <p className="text-muted-foreground">{t("myProjects.emptyText")}</p>
             <Button
               onClick={() => navigate("/100millionideas/create-project")}
               className="gap-2"
             >
               <PlusCircle className="h-4 w-4" />
-              Create Your First Project
+              {t("myProjects.createFirst")}
             </Button>
           </CardContent>
         </Card>
@@ -172,19 +176,18 @@ const MyProjects = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this project?</AlertDialogTitle>
+            <AlertDialogTitle>{t("myProjects.deleteDialogTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
               {confirmDelete && (
                 <>
-                  <span className="font-medium">"{confirmDelete.title}"</span> will be permanently
-                  removed from LanaCrowd and a deletion request will be sent to Nostr relays.
-                  This cannot be undone.
+                  <span className="font-medium">"{confirmDelete.title}"</span>{" "}
+                  {t("myProjects.deleteDialogDesc")}
                 </>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={!!deletingId}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={!!deletingId}>{t("myProjects.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -196,12 +199,12 @@ const MyProjects = () => {
               {deletingId ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  Deleting…
+                  {t("myProjects.deleting")}
                 </>
               ) : (
                 <>
                   <Trash2 className="h-4 w-4 mr-1" />
-                  Delete
+                  {t("myProjects.delete")}
                 </>
               )}
             </AlertDialogAction>
@@ -221,6 +224,7 @@ interface ProjectCardProps {
 
 const ProjectCard = ({ project, isCompleted, isDeleting, onRequestDelete }: ProjectCardProps) => {
   const navigate = useNavigate();
+  const { t } = useTranslation(millionideasTranslations);
 
   const goal = project.fiatGoal || 0;
   const raised = project.totalRaised || 0;
@@ -255,9 +259,9 @@ const ProjectCard = ({ project, isCompleted, isDeleting, onRequestDelete }: Proj
             {(isFullyFunded || isCompleted) && (
               <div className="absolute top-2 left-2">
                 {isCompleted ? (
-                  <Badge className="bg-gray-600 text-white text-xs">Completed</Badge>
+                  <Badge className="bg-gray-600 text-white text-xs">{t("myProjects.statusCompleted")}</Badge>
                 ) : isFullyFunded ? (
-                  <Badge className="bg-green-500 text-white text-xs">Funded ✓</Badge>
+                  <Badge className="bg-green-500 text-white text-xs">{t("myProjects.statusFunded")}</Badge>
                 ) : null}
               </div>
             )}
@@ -272,13 +276,13 @@ const ProjectCard = ({ project, isCompleted, isDeleting, onRequestDelete }: Proj
                   {project.status}
                 </Badge>
                 {isFullyFunded && !isCompleted && (
-                  <Badge className="bg-green-500 text-white">Funded ✓</Badge>
+                  <Badge className="bg-green-500 text-white">{t("myProjects.statusFunded")}</Badge>
                 )}
                 {isCompleted && (
-                  <Badge variant="secondary">Completed</Badge>
+                  <Badge variant="secondary">{t("myProjects.statusCompleted")}</Badge>
                 )}
                 {project.isHidden && (
-                  <Badge variant="destructive">Hidden</Badge>
+                  <Badge variant="destructive">{t("myProjects.statusHidden")}</Badge>
                 )}
               </div>
               <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
@@ -302,7 +306,8 @@ const ProjectCard = ({ project, isCompleted, isDeleting, onRequestDelete }: Proj
               </div>
               <div className="flex justify-between items-center gap-2">
                 <span className="text-xs text-muted-foreground">
-                  {project.donationCount} donation{project.donationCount !== 1 ? "s" : ""}
+                  {project.donationCount}{" "}
+                  {t(project.donationCount !== 1 ? "myProjects.donationMany" : "myProjects.donationOne")}
                 </span>
                 <div className="flex items-center gap-2">
                   {canDelete && (
@@ -312,14 +317,14 @@ const ProjectCard = ({ project, isCompleted, isDeleting, onRequestDelete }: Proj
                       onClick={onRequestDelete}
                       disabled={isDeleting}
                       className="gap-1 text-destructive hover:text-destructive border-destructive/30 hover:border-destructive/60 hover:bg-destructive/5"
-                      title="Delete project (no donations yet)"
+                      title={t("myProjects.deleteTitleAttr")}
                     >
                       {isDeleting ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
                         <Trash2 className="h-3 w-3" />
                       )}
-                      Delete
+                      {t("myProjects.delete")}
                     </Button>
                   )}
                   <Button
@@ -331,10 +336,10 @@ const ProjectCard = ({ project, isCompleted, isDeleting, onRequestDelete }: Proj
                       })
                     }
                     className="gap-1"
-                    title="Duplicate this project — edit and save as a new one"
+                    title={t("myProjects.duplicateTitleAttr")}
                   >
                     <Copy className="h-3 w-3" />
-                    Duplicate
+                    {t("myProjects.duplicate")}
                   </Button>
                   <Button
                     variant="outline"
@@ -343,7 +348,7 @@ const ProjectCard = ({ project, isCompleted, isDeleting, onRequestDelete }: Proj
                     className="gap-1"
                   >
                     <Pencil className="h-3 w-3" />
-                    Edit
+                    {t("myProjects.edit")}
                   </Button>
                 </div>
               </div>

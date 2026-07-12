@@ -6,7 +6,8 @@ import ProjectForm, { ProjectFormInitialData } from "@/components/100millionidea
 import CreateProjectGate from "@/components/100millionideas/CreateProjectGate";
 import { useAdmin } from "@/contexts/AdminContext";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
-import { useLang } from "@/i18n/I18nContext";
+import { useLang, useTranslation } from "@/i18n/I18nContext";
+import millionideasTranslations from "@/i18n/modules/millionideas";
 
 export default function CreateProject() {
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ export default function CreateProject() {
   const { appSettings } = useAdmin();
   const { status: lana8WonderStatus, isLoading: lana8WonderLoading } = useNostrLana8Wonder();
   const lang = useLang();
+  const { t } = useTranslation(millionideasTranslations);
   // Applicants must confirm the basis-for-participation gate before the form opens.
   const [agreed, setAgreed] = useState(false);
 
@@ -71,9 +73,9 @@ export default function CreateProject() {
           <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
             <Ban className="h-8 w-8 text-muted-foreground" />
           </div>
-          <h2 className="text-lg font-semibold">Creating new projects is currently disabled</h2>
+          <h2 className="text-lg font-semibold">{t("create.disabledTitle")}</h2>
           <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-            The administrator has temporarily disabled new project creation. You can still browse and edit your existing projects.
+            {t("create.disabledDesc")}
           </p>
           <Button
             variant="outline"
@@ -81,7 +83,7 @@ export default function CreateProject() {
             onClick={() => navigate("/100millionideas/projects")}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Projects
+            {t("create.backToProjects")}
           </Button>
         </div>
       </div>
@@ -110,16 +112,14 @@ export default function CreateProject() {
           <div className="h-16 w-16 rounded-full bg-amber-500/10 flex items-center justify-center mb-4">
             <Sparkles className="h-8 w-8 text-amber-500" />
           </div>
-          <h2 className="text-lg font-semibold">Lana8Wonder plan required</h2>
+          <h2 className="text-lg font-semibold">{t("create.planRequiredTitle")}</h2>
           <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-            Creating crowdfunding projects on LanaCrowd is reserved for members
-            with an active Lana8Wonder plan. Activate your plan first and then
-            return here to publish your project.
+            {t("create.planRequiredDesc")}
           </p>
           <div className="flex flex-col sm:flex-row gap-2 mt-6">
             <Button onClick={() => navigate("/lana8wonder")} className="gap-2">
               <Sparkles className="h-4 w-4" />
-              Open Lana8Wonder
+              {t("create.openLana8Wonder")}
             </Button>
             <Button
               variant="outline"
@@ -127,7 +127,7 @@ export default function CreateProject() {
               className="gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to Projects
+              {t("create.backToProjects")}
             </Button>
           </div>
         </div>
@@ -161,7 +161,7 @@ export default function CreateProject() {
         ) : (
           <PlusCircle className="h-6 w-6 text-primary" />
         )}
-        <h1 className="text-2xl font-bold">{duplicateFromId ? "Duplicate Project" : "Create Project"}</h1>
+        <h1 className="text-2xl font-bold">{duplicateFromId ? t("create.headingDuplicate") : t("create.headingCreate")}</h1>
       </div>
 
       {agreed ? (

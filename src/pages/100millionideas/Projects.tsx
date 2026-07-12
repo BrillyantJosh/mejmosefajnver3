@@ -7,7 +7,8 @@ import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EligibilityCriteria, eligibilityContent } from "@/components/100millionideas/EligibilityCriteria";
-import { useLang } from "@/i18n/I18nContext";
+import { useLang, useTranslation } from "@/i18n/I18nContext";
+import millionideasTranslations from "@/i18n/modules/millionideas";
 import { useNavigate } from "react-router-dom";
 import { useAdmin } from "@/contexts/AdminContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,13 +24,7 @@ const hexToBytes = (hex: string): Uint8Array => {
   return bytes;
 };
 
-const FILTER_LABELS: Record<ProjectFilter, string> = {
-  open: 'Open',
-  funded: 'Funded',
-  completed: 'Completed',
-  all: 'All',
-  hidden: 'Hidden',
-};
+const FILTER_ORDER: ProjectFilter[] = ['open', 'funded', 'completed', 'all', 'hidden'];
 
 const Projects = () => {
   const navigate = useNavigate();
@@ -39,7 +34,16 @@ const Projects = () => {
   const [page, setPage] = useState(1);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const uiLang = useLang();
+  const { t } = useTranslation(millionideasTranslations);
   const [showEligibility, setShowEligibility] = useState(false);
+
+  const filterLabels: Record<ProjectFilter, string> = {
+    open: t('projects.filterOpen'),
+    funded: t('projects.filterFunded'),
+    completed: t('projects.filterCompleted'),
+    all: t('projects.filterAll'),
+    hidden: t('projects.filterHidden'),
+  };
 
   // Server-side filtered + paginated — reads from SQLite cache.
   // viewerPubkey lets the API include the viewer's own pending submissions
@@ -116,8 +120,8 @@ const Projects = () => {
     } catch (err) {
       console.error('Translation error:', err);
       toast({
-        title: 'Translation failed',
-        description: 'Could not translate projects. Try again.',
+        title: t('projects.toast.translateFailedTitle'),
+        description: t('projects.toast.translateFailedDesc'),
         variant: 'destructive',
       });
     } finally {
@@ -193,12 +197,12 @@ const Projects = () => {
       await patchAdmin(dTag, { is_approved: nowApproved });
       await refetch();
       toast({
-        title: nowApproved ? "Project Approved" : "Project set to Pending",
-        description: nowApproved ? "Users can now donate" : "Donations paused until approved",
+        title: nowApproved ? t('projects.toast.approvedTitle') : t('projects.toast.pendingTitle'),
+        description: nowApproved ? t('projects.toast.approvedDesc') : t('projects.toast.pendingDesc'),
       });
     } catch (err) {
       console.error(err);
-      toast({ title: "Error", description: "Failed to update approval", variant: "destructive" });
+      toast({ title: t('projects.toast.errorTitle'), description: t('projects.toast.approvalFailed'), variant: "destructive" });
     } finally {
       setActionLoading(null);
     }
@@ -228,12 +232,12 @@ const Projects = () => {
       await patchAdmin(dTag, { is_hidden: nowHidden });
       await refetch();
       toast({
-        title: nowHidden ? "Project Hidden" : "Project Visible",
-        description: nowHidden ? "Hidden from public view" : "Visible again",
+        title: nowHidden ? t('projects.toast.hiddenTitle') : t('projects.toast.visibleTitle'),
+        description: nowHidden ? t('projects.toast.hiddenDesc') : t('projects.toast.visibleDesc'),
       });
     } catch (err) {
       console.error(err);
-      toast({ title: "Error", description: "Failed to update visibility", variant: "destructive" });
+      toast({ title: t('projects.toast.errorTitle'), description: t('projects.toast.visibilityFailed'), variant: "destructive" });
     } finally {
       setActionLoading(null);
     }
@@ -249,8 +253,12 @@ const Projects = () => {
       const raised = p?.totalRaised || 0;
       if (goal > 0 && raised < goal * 0.99) {
         toast({
-          title: "Cannot complete project",
-          description: `Raised €${raised.toFixed(0)} of €${goal.toFixed(0)} (${Math.round((raised / goal) * 100)}%). Project must be fully funded first.`,
+          title: t('projects.toast.cannotCompleteTitle'),
+          description: t('projects.toast.cannotCompleteDesc', {
+            raised: raised.toFixed(0),
+            goal: goal.toFixed(0),
+            percent: Math.round((raised / goal) * 100),
+          }),
           variant: "destructive",
         });
         return;
@@ -279,12 +287,12 @@ const Projects = () => {
       });
       await refetch();
       toast({
-        title: nowCompleted ? "Project Completed" : "Completion Removed",
-        description: nowCompleted ? "Marked completed and recorded on Nostr" : "Completion status removed",
+        title: nowCompleted ? t('projects.toast.completedTitle') : t('projects.toast.completionRemovedTitle'),
+        description: nowCompleted ? t('projects.toast.completedDesc') : t('projects.toast.completionRemovedDesc'),
       });
     } catch (err) {
       console.error(err);
-      toast({ title: "Error", description: "Failed to update project status", variant: "destructive" });
+      toast({ title: t('projects.toast.errorTitle'), description: t('projects.toast.statusFailed'), variant: "destructive" });
     } finally {
       setActionLoading(null);
     }
@@ -296,18 +304,18 @@ const Projects = () => {
         {/* Title + Batch Funding on one row; description gets full width below so
             it doesn't wrap awkwardly on narrow phones. */}
         <div className="flex items-start justify-between gap-3">
-          <h1 className="text-2xl sm:text-3xl font-bold">Projects</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold">{t('projects.title')}</h1>
           <Button
             onClick={() => navigate('/100millionideas/batch-funding')}
             className="bg-green-600 hover:bg-green-700 text-white shrink-0"
           >
             <Layers className="h-4 w-4 mr-2" />
-            Batch Funding
+            {t('projects.batchFunding')}
           </Button>
         </div>
         <div>
           <p className="text-muted-foreground">
-            Browse and discover innovative projects on LanaCrowd
+            {t('projects.subtitle')}
           </p>
           <button
             type="button"
@@ -319,7 +327,7 @@ const Projects = () => {
           </button>
           {!isLoading && (
             <p className="text-sm text-muted-foreground mt-1">
-              {total} project{total !== 1 ? 's' : ''}
+              {total} {t(total !== 1 ? 'projects.projectMany' : 'projects.projectOne')}
             </p>
           )}
         </div>
@@ -335,18 +343,18 @@ const Projects = () => {
                   €{summary.totalRaised.toFixed(0)}
                 </span>
                 <span className="text-sm text-muted-foreground ml-2">
-                  raised of €{summary.totalGoal.toFixed(0)} goal
+                  {t('projects.raisedOfGoal', { goal: summary.totalGoal.toFixed(0) })}
                 </span>
               </div>
               <div className="text-sm font-semibold">
-                {summary.percentFunded.toFixed(1)}% funded
+                {t('projects.percentFunded', { percent: summary.percentFunded.toFixed(1) })}
               </div>
             </div>
             <Progress value={Math.min(summary.percentFunded, 100)} className="h-2" />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{summary.totalProjects} {FILTER_LABELS[filter].toLowerCase()} projects</span>
+              <span>{t('projects.filterProjectsCount', { count: summary.totalProjects, label: filterLabels[filter].toLowerCase() })}</span>
               <span className="font-medium">
-                Still needs: <span className="text-foreground">€{summary.remaining.toFixed(0)}</span>
+                {t('projects.stillNeeds')} <span className="text-foreground">€{summary.remaining.toFixed(0)}</span>
               </span>
             </div>
           </CardContent>
@@ -356,7 +364,7 @@ const Projects = () => {
       {/* Filter Tabs + Translation toggle */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-          {(Object.keys(FILTER_LABELS) as ProjectFilter[])
+          {FILTER_ORDER
             .filter(f => f !== 'hidden' || is100MAdmin)
             .map(f => (
             <button
@@ -368,7 +376,7 @@ const Projects = () => {
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
-              {FILTER_LABELS[f]}
+              {filterLabels[f]}
             </button>
           ))}
         </div>
@@ -386,7 +394,7 @@ const Projects = () => {
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Original
+            {t('projects.original')}
           </button>
           <button
             type="button"
@@ -420,12 +428,12 @@ const Projects = () => {
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-muted-foreground">Loading projects...</span>
+          <span className="ml-2 text-muted-foreground">{t('projects.loading')}</span>
         </div>
       ) : projects.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">No projects found for this filter.</p>
-          <p className="text-sm text-muted-foreground mt-2">Try selecting a different filter.</p>
+          <p className="text-muted-foreground">{t('projects.emptyTitle')}</p>
+          <p className="text-sm text-muted-foreground mt-2">{t('projects.emptyHint')}</p>
         </div>
       ) : (
         <>
@@ -458,10 +466,10 @@ const Projects = () => {
                 disabled={page <= 1}
               >
                 <ChevronLeft className="h-4 w-4" />
-                Prev
+                {t('projects.prev')}
               </Button>
               <span className="text-sm text-muted-foreground">
-                Page {page} of {totalPages}
+                {t('projects.pageOf', { page, totalPages })}
               </span>
               <Button
                 variant="outline"
@@ -469,7 +477,7 @@ const Projects = () => {
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
               >
-                Next
+                {t('projects.next')}
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>

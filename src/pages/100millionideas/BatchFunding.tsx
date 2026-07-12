@@ -16,6 +16,8 @@ import { useToast } from "@/hooks/use-toast";
 import { convertWifToIds } from "@/lib/crypto";
 import { QRScanner } from "@/components/QRScanner";
 import { finalizeEvent } from "nostr-tools";
+import millionideasTranslations from "@/i18n/modules/millionideas";
+import { useTranslation } from "@/i18n/I18nContext";
 
 type BatchStep = 'select' | 'confirm' | 'processing' | 'result';
 
@@ -50,6 +52,7 @@ interface ProjectRowProps {
 }
 
 const ProjectRow = ({ entry, index, exchangeRate, onAmountChange }: ProjectRowProps) => {
+  const { t } = useTranslation(millionideasTranslations);
   // Donation stats come from SQLite-backed project (precomputed JOIN)
   const totalRaised = entry.project.totalRaised ?? 0;
   const donationCount = entry.project.donationCount ?? 0;
@@ -99,13 +102,13 @@ const ProjectRow = ({ entry, index, exchangeRate, onAmountChange }: ProjectRowPr
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-sm truncate">{entry.project.title}</p>
         <span className="text-xs text-muted-foreground">
-          {totalRaised.toFixed(2)} {currency} raised · {donationCount} backers
+          {t('batch.raisedBackers', { amount: totalRaised.toFixed(2), currency, count: donationCount })}
         </span>
         {isFullyFunded ? (
-          <p className="text-xs font-semibold text-green-600">✓ Fully Funded</p>
+          <p className="text-xs font-semibold text-green-600">{t('batch.fullyFundedCheck')}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Remaining: {remainingFiat.toFixed(2)} {currency} (max {grossMax.toFixed(2)} LANA incl. 10% fee)
+            {t('batch.remaining', { amount: remainingFiat.toFixed(2), currency, max: grossMax.toFixed(2) })}
           </p>
         )}
       </div>
@@ -114,7 +117,7 @@ const ProjectRow = ({ entry, index, exchangeRate, onAmountChange }: ProjectRowPr
       <div className="w-40 flex-shrink-0">
         {isFullyFunded ? (
           <div className="text-center">
-            <span className="text-xs font-semibold text-green-600 bg-green-500/10 px-2 py-1 rounded">Fully Funded</span>
+            <span className="text-xs font-semibold text-green-600 bg-green-500/10 px-2 py-1 rounded">{t('batch.fullyFunded')}</span>
           </div>
         ) : (
           <>
@@ -158,6 +161,7 @@ const BatchFunding = () => {
   const { session } = useAuth();
   const { toast } = useToast();
   const { parameters } = useSystemParameters();
+  const { t } = useTranslation(millionideasTranslations);
   // Open filter already excludes hidden/completed/funded/draft at the server.
   // Batch funding only shows approved projects to non-admins — but include the
   // viewer's pubkey so creators always see their own (otherwise consistent with /projects).
@@ -268,14 +272,14 @@ const BatchFunding = () => {
         const matchesCompressed = result.walletIdCompressed === selectedWalletId;
         const matchesUncompressed = result.walletIdUncompressed === selectedWalletId;
         if (!matchesCompressed && !matchesUncompressed) {
-          setValidationError("Private key does not match the selected wallet");
+          setValidationError(t('batch.keyMismatch'));
           setIsValid(false);
         } else {
           setValidationError("");
           setIsValid(true);
         }
       } catch (error) {
-        setValidationError("Invalid private key format");
+        setValidationError(t('batch.invalidKeyFormat'));
         setIsValid(false);
       } finally {
         setIsValidating(false);
@@ -304,11 +308,11 @@ const BatchFunding = () => {
 
     setIsProcessing(true);
     setStep('processing');
-    setProcessingStatus("Preparing transaction...");
+    setProcessingStatus(t('batch.statusPreparing'));
 
     try {
       // Step 1: Get service name and mentor settings
-      setProcessingStatus("Fetching mentor settings...");
+      setProcessingStatus(t('batch.statusFetchingMentor'));
       const [{ data: appNameData }, { data: mentorSettingData }] = await Promise.all([
         supabase.from('app_settings').select('value').eq('key', 'app_name').single(),
         supabase.from('app_settings').select('value').eq('key', 'mentor_100million_ideas').maybeSingle()
@@ -323,7 +327,7 @@ const BatchFunding = () => {
       const hasMentorSplit = !!mentorWallet;
 
       // Step 2: Build recipients array
-      setProcessingStatus("Building transaction outputs...");
+      setProcessingStatus(t('batch.statusBuildingOutputs'));
       const recipients: { address: string; amount: number }[] = [];
       let totalMentorLanoshis = 0;
 
@@ -342,7 +346,7 @@ const BatchFunding = () => {
       }
 
       // Step 3: Call send-batch-lana-transaction
-      setProcessingStatus(`Sending transaction with ${recipients.length} outputs...`);
+      setProcessingStatus(t('batch.statusSending', { count: recipients.length }));
       const { data: txData, error: txError } = await supabase.functions.invoke('send-batch-lana-transaction', {
         body: {
           senderAddress: selectedWalletId,
@@ -353,15 +357,15 @@ const BatchFunding = () => {
       });
 
       if (txError || !txData?.success) {
-        throw new Error(txData?.error || 'Batch transaction failed');
+        throw new Error(txData?.error || t('batch.errorBatchFailed'));
       }
 
       const txHash = txData.txHash;
       const txFee = txData.fee;
 
       toast({
-        title: "Transaction Successful",
-        description: "Publishing donation records to Nostr...",
+        title: t('batch.toastTxSuccessTitle'),
+        description: t('batch.toastTxSuccessDesc'),
       });
 
       // Step 4: Create KIND 60200 events per project
@@ -375,7 +379,7 @@ const BatchFunding = () => {
         const projectLanoshis = totalLanoshis - mentorLanoshis;
         const projectFiat = parseFloat(entry.lanaAmount) * exchangeRate;
 
-        setProcessingStatus(`Publishing events ${i * 2 + 1}/${fundedEntries.length * 2}...`);
+        setProcessingStatus(t('batch.statusPublishingEvents', { current: i * 2 + 1, total: fundedEntries.length * 2 }));
 
         // Event 1: Project donation (90% or 100%)
         const projectEventTemplate = {
@@ -415,7 +419,7 @@ const BatchFunding = () => {
 
         // Event 2: Mentor fee — only if mentor split is active
         if (hasMentorSplit && mentorLanoshis > 0 && mentorHexId) {
-          setProcessingStatus(`Publishing events ${i * 2 + 2}/${fundedEntries.length * 2}...`);
+          setProcessingStatus(t('batch.statusPublishingEvents', { current: i * 2 + 2, total: fundedEntries.length * 2 }));
 
           const mentorEventTemplate = {
             kind: 60200,
@@ -474,7 +478,7 @@ const BatchFunding = () => {
       setResult({
         success: false,
         entries: [],
-        error: error instanceof Error ? error.message : "Batch funding failed"
+        error: error instanceof Error ? error.message : t('batch.errorBatchFundingFailed')
       });
       setStep('result');
     } finally {
@@ -502,11 +506,11 @@ const BatchFunding = () => {
             className="gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Projects
+            {t('batch.backToProjects')}
           </Button>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Layers className="h-4 w-4" />
-            Batch Funding
+            {t('batch.batchFunding')}
           </div>
         </div>
       </div>
@@ -516,29 +520,29 @@ const BatchFunding = () => {
         {step === 'select' && (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold">Batch Funding</h1>
+              <h1 className="text-3xl font-bold">{t('batch.batchFunding')}</h1>
               <p className="text-muted-foreground mt-2">
-                Fund multiple projects in a single transaction
+                {t('batch.selectSubtitle')}
               </p>
             </div>
 
             {/* Wallet Selector */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Your Wallet (FROM) *</CardTitle>
+                <CardTitle className="text-lg">{t('batch.walletFromTitle')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {!wallets || wallets.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No wallets found. Please register a wallet first.
+                    {t('batch.noWallets')}
                   </p>
                 ) : (
                   <>
                     <div>
-                      <Label htmlFor="wallet-select">Select wallet</Label>
+                      <Label htmlFor="wallet-select">{t('batch.selectWallet')}</Label>
                       <Select value={selectedWalletId} onValueChange={setSelectedWalletId}>
                         <SelectTrigger id="wallet-select">
-                          <SelectValue placeholder="Select wallet" />
+                          <SelectValue placeholder={t('batch.selectWallet')} />
                         </SelectTrigger>
                         <SelectContent>
                           {wallets
@@ -563,23 +567,23 @@ const BatchFunding = () => {
                       <div className="bg-muted p-4 rounded-md space-y-2">
                         <div className="flex items-center gap-2">
                           <Wallet className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-semibold">Wallet Balance</span>
+                          <span className="font-semibold">{t('batch.walletBalance')}</span>
                         </div>
                         <p className="text-sm">
-                          <span className="text-muted-foreground">Address:</span>{' '}
+                          <span className="text-muted-foreground">{t('batch.addressLabel')}</span>{' '}
                           <span className="font-mono text-xs">
                             {selectedWalletId.substring(0, 10)}...{selectedWalletId.substring(selectedWalletId.length - 8)}
                           </span>
                         </p>
                         <p className="text-sm">
-                          <span className="text-muted-foreground">Balance:</span>{' '}
+                          <span className="text-muted-foreground">{t('batch.balanceLabel')}</span>{' '}
                           {loadingBalances ? (
                             <Loader2 className="h-3 w-3 animate-spin inline" />
                           ) : (
                             <span className="font-semibold">
                               {walletBalances[selectedWalletId] !== undefined
                                 ? `${walletBalances[selectedWalletId].toFixed(2)} LANA`
-                                : 'Loading...'}
+                                : t('batch.loading')}
                             </span>
                           )}
                         </p>
@@ -593,11 +597,11 @@ const BatchFunding = () => {
             {/* Project List with Amount Inputs */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Enter Amounts per Project</CardTitle>
+                <CardTitle className="text-lg">{t('batch.enterAmounts')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {entries.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No active projects with wallet addresses found.</p>
+                  <p className="text-sm text-muted-foreground">{t('batch.noActiveProjects')}</p>
                 ) : (
                   entries.map((entry, index) => (
                     <ProjectRow
@@ -617,34 +621,34 @@ const BatchFunding = () => {
               <Card className="border-green-500/20 bg-green-500/5">
                 <CardContent className="p-4 space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Projects to fund:</span>
+                    <span className="text-muted-foreground">{t('batch.projectsToFund')}</span>
                     <span className="font-semibold">{fundedEntries.length}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Total LANA:</span>
+                    <span className="text-muted-foreground">{t('batch.totalLana')}</span>
                     <span className="font-semibold">{totalLana.toFixed(2)} LANA</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Total Fiat:</span>
+                    <span className="text-muted-foreground">{t('batch.totalFiat')}</span>
                     <span className="font-semibold">{totalFiat.toFixed(2)} EUR</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Mentor fee (10%):</span>
+                    <span className="text-muted-foreground">{t('batch.mentorFeeLabel')}</span>
                     <span className="font-semibold">{mentorFee.toFixed(2)} LANA</span>
                   </div>
                   <div className="border-t pt-2 mt-2">
                     {selectedWalletId ? (
                       hasSufficientBalance ? (
                         <p className="text-sm text-green-500 flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4" /> Sufficient balance
+                          <CheckCircle className="h-4 w-4" /> {t('batch.sufficientBalance')}
                         </p>
                       ) : (
                         <p className="text-sm text-destructive flex items-center gap-2">
-                          <AlertCircle className="h-4 w-4" /> Insufficient balance (Available: {selectedWalletBalance.toFixed(2)} LANA)
+                          <AlertCircle className="h-4 w-4" /> {t('batch.insufficientBalance', { amount: selectedWalletBalance.toFixed(2) })}
                         </p>
                       )
                     ) : (
-                      <p className="text-sm text-muted-foreground">Select a wallet to continue</p>
+                      <p className="text-sm text-muted-foreground">{t('batch.selectWalletToContinue')}</p>
                     )}
                   </div>
                 </CardContent>
@@ -657,7 +661,7 @@ const BatchFunding = () => {
               disabled={!selectedWalletId || fundedEntries.length === 0 || !hasSufficientBalance || loadingBalances}
               className="w-full bg-green-500 hover:bg-green-600 text-white h-12 disabled:opacity-50"
             >
-              Continue ({fundedEntries.length} project{fundedEntries.length !== 1 ? 's' : ''} · {totalLana.toFixed(2)} LANA)
+              {t('batch.continueBtn', { count: fundedEntries.length, projects: t(fundedEntries.length === 1 ? 'batch.projectOne' : 'batch.projectMany'), lana: totalLana.toFixed(2) })}
             </Button>
           </div>
         )}
@@ -666,16 +670,16 @@ const BatchFunding = () => {
         {step === 'confirm' && (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold">Confirm Batch Funding</h1>
+              <h1 className="text-3xl font-bold">{t('batch.confirmTitle')}</h1>
               <p className="text-muted-foreground mt-2">
-                Enter your private key to authorize the transaction
+                {t('batch.confirmSubtitle')}
               </p>
             </div>
 
             {/* Summary Card */}
             <Card className="border-green-500/20 bg-green-500/5">
               <CardHeader>
-                <CardTitle className="text-lg">Batch Summary</CardTitle>
+                <CardTitle className="text-lg">{t('batch.batchSummary')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 {fundedEntries.map(entry => {
@@ -691,11 +695,11 @@ const BatchFunding = () => {
                   );
                 })}
                 <div className="border-t pt-2 mt-2 flex justify-between font-bold">
-                  <span>Total</span>
+                  <span>{t('batch.total')}</span>
                   <span>{totalLana.toFixed(2)} LANA ({totalFiat.toFixed(2)} EUR)</span>
                 </div>
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Mentor fee (10%)</span>
+                  <span>{t('batch.mentorFeeShort')}</span>
                   <span>{mentorFee.toFixed(2)} LANA</span>
                 </div>
               </CardContent>
@@ -704,7 +708,7 @@ const BatchFunding = () => {
             {/* Wallet Info */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">From Wallet</CardTitle>
+                <CardTitle className="text-lg">{t('batch.fromWallet')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="bg-muted p-3 rounded-md">
@@ -716,11 +720,11 @@ const BatchFunding = () => {
             {/* Private Key Input */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Private Key (WIF Format) *</CardTitle>
+                <CardTitle className="text-lg">{t('batch.privateKeyTitle')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="private-key">Enter your wallet's private key</Label>
+                  <Label htmlFor="private-key">{t('batch.privateKeyLabel')}</Label>
                   <div className="flex gap-2 mt-2">
                     <div className="relative flex-1">
                       <Input
@@ -745,13 +749,13 @@ const BatchFunding = () => {
                       variant="outline"
                       size="icon"
                       onClick={() => setShowScanner(true)}
-                      title="Scan QR Code"
+                      title={t('batch.scanQr')}
                     >
                       <ScanLine className="h-4 w-4" />
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Your private key is never stored and is only used to sign this transaction
+                    {t('batch.privateKeyHint')}
                   </p>
                 </div>
 
@@ -765,7 +769,7 @@ const BatchFunding = () => {
                 {isValid && (
                   <div className="flex items-center gap-2 text-sm text-green-600 bg-green-500/10 p-3 rounded-md">
                     <CheckCircle className="h-4 w-4" />
-                    <span>Private key verified successfully</span>
+                    <span>{t('batch.privateKeyVerified')}</span>
                   </div>
                 )}
               </CardContent>
@@ -778,19 +782,19 @@ const BatchFunding = () => {
                 onClick={() => { setStep('select'); setPrivateKey(""); setIsValid(false); setValidationError(""); }}
                 className="flex-1 h-12"
               >
-                Back
+                {t('batch.back')}
               </Button>
               <Button
                 onClick={handleExecuteBatch}
                 disabled={!isValid || isValidating}
                 className="flex-1 bg-green-500 hover:bg-green-600 text-white h-12 disabled:opacity-50"
               >
-                Execute Batch Funding
+                {t('batch.executeBatch')}
               </Button>
             </div>
 
             <p className="text-xs text-center text-muted-foreground">
-              Your private key is handled securely and never transmitted to our servers
+              {t('batch.privateKeySecure')}
             </p>
           </div>
         )}
@@ -800,10 +804,10 @@ const BatchFunding = () => {
           <div className="space-y-6">
             <div className="text-center py-12">
               <Loader2 className="h-12 w-12 animate-spin text-green-500 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold">Processing Batch Funding</h2>
+              <h2 className="text-2xl font-bold">{t('batch.processingTitle')}</h2>
               <p className="text-muted-foreground mt-2">{processingStatus}</p>
               <p className="text-xs text-muted-foreground mt-4">
-                Please do not close this page
+                {t('batch.doNotClose')}
               </p>
             </div>
           </div>
@@ -816,20 +820,20 @@ const BatchFunding = () => {
               <>
                 <div className="text-center">
                   <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-                  <h1 className="text-3xl font-bold text-green-600">Batch Funding Successful!</h1>
+                  <h1 className="text-3xl font-bold text-green-600">{t('batch.successTitle')}</h1>
                   <p className="text-muted-foreground mt-2">
-                    {result.entries.length} project{result.entries.length !== 1 ? 's' : ''} funded in a single transaction
+                    {t('batch.resultSubtitle', { count: result.entries.length, projects: t(result.entries.length === 1 ? 'batch.projectOne' : 'batch.projectMany') })}
                   </p>
                 </div>
 
                 {/* Transaction Details */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Transaction Details</CardTitle>
+                    <CardTitle className="text-lg">{t('batch.txDetails')}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">TX Hash:</span>
+                      <span className="text-muted-foreground">{t('batch.txHash')}</span>
                       <a
                         href={`https://chainz.cryptoid.info/lana/tx.dws?${result.txHash}`}
                         target="_blank"
@@ -841,25 +845,25 @@ const BatchFunding = () => {
                       </a>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total Sent:</span>
+                      <span className="text-muted-foreground">{t('batch.totalSent')}</span>
                       <span className="font-semibold">{result.totalLana?.toFixed(2)} LANA</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total Fiat:</span>
+                      <span className="text-muted-foreground">{t('batch.totalFiat')}</span>
                       <span className="font-semibold">{result.totalFiat?.toFixed(2)} EUR</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Network Fee:</span>
+                      <span className="text-muted-foreground">{t('batch.networkFee')}</span>
                       <span>{result.fee?.toFixed(8)} LANA</span>
                     </div>
                     {result.mentorTotal && result.mentorTotal > 0 && (
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Mentor Fee (10%):</span>
+                        <span className="text-muted-foreground">{t('batch.mentorFeeResultLabel')}</span>
                         <span>{result.mentorTotal.toFixed(2)} LANA</span>
                       </div>
                     )}
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Events Published:</span>
+                      <span className="text-muted-foreground">{t('batch.eventsPublished')}</span>
                       <span>{result.eventsPublished}</span>
                     </div>
                   </CardContent>
@@ -868,7 +872,7 @@ const BatchFunding = () => {
                 {/* Per-Project Breakdown */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Funded Projects</CardTitle>
+                    <CardTitle className="text-lg">{t('batch.fundedProjects')}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {result.entries.map((entry, i) => (
@@ -886,14 +890,14 @@ const BatchFunding = () => {
                   onClick={() => navigate('/100millionideas/projects')}
                   className="w-full bg-green-500 hover:bg-green-600 text-white h-12"
                 >
-                  Back to Projects
+                  {t('batch.backToProjects')}
                 </Button>
               </>
             ) : (
               <>
                 <div className="text-center">
                   <AlertCircle className="h-16 w-16 text-destructive mx-auto mb-4" />
-                  <h1 className="text-3xl font-bold text-destructive">Batch Funding Failed</h1>
+                  <h1 className="text-3xl font-bold text-destructive">{t('batch.failedTitle')}</h1>
                   <p className="text-muted-foreground mt-2">{result.error}</p>
                 </div>
 
@@ -903,7 +907,7 @@ const BatchFunding = () => {
                     onClick={() => navigate('/100millionideas/projects')}
                     className="flex-1 h-12"
                   >
-                    Back to Projects
+                    {t('batch.backToProjects')}
                   </Button>
                   <Button
                     onClick={() => {
@@ -915,7 +919,7 @@ const BatchFunding = () => {
                     }}
                     className="flex-1 bg-green-500 hover:bg-green-600 text-white h-12"
                   >
-                    Try Again
+                    {t('batch.tryAgain')}
                   </Button>
                 </div>
               </>

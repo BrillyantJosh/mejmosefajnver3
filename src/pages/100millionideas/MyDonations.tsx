@@ -6,8 +6,11 @@ import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExternalLink } from "lucide-react";
 import { format } from "date-fns";
+import millionideasTranslations from "@/i18n/modules/millionideas";
+import { useTranslation } from "@/i18n/I18nContext";
 
 const MyDonations = () => {
+  const { t } = useTranslation(millionideasTranslations);
   const { donations, isLoading } = useNostrReceivedDonations();
 
   // Build project-id → title map from server SQLite (server-first architecture).
@@ -43,7 +46,7 @@ const MyDonations = () => {
     if (projectTitleMap[projectDTag]) return projectTitleMap[projectDTag];
     // Friendlier fallback than "Unknown Project"
     return projectDTag.startsWith('project:')
-      ? `Project ${projectDTag.slice(8, 16)}…`
+      ? t("myDonations.projectFallback", { id: projectDTag.slice(8, 16) })
       : projectDTag.slice(0, 24);
   };
 
@@ -54,9 +57,9 @@ const MyDonations = () => {
     return (
       <div className="container mx-auto p-6 space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Received Donations</h1>
+          <h1 className="text-3xl font-bold">{t("myDonations.title")}</h1>
           <p className="text-muted-foreground mt-2">
-            Donations received for your projects
+            {t("myDonations.subtitle")}
           </p>
         </div>
         <Skeleton className="h-32 w-full" />
@@ -68,29 +71,29 @@ const MyDonations = () => {
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Received Donations</h1>
+        <h1 className="text-3xl font-bold">{t("myDonations.title")}</h1>
         <p className="text-muted-foreground mt-2">
-          Donations received for your projects
+          {t("myDonations.subtitle")}
         </p>
       </div>
 
       {/* Summary Section */}
       <Card>
         <CardHeader>
-          <CardTitle>Summary</CardTitle>
+          <CardTitle>{t("myDonations.summary")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Total Received</p>
+              <p className="text-sm text-muted-foreground mb-1">{t("myDonations.totalReceived")}</p>
               <p className="text-3xl font-bold">{totalReceived.toFixed(2)} {currency}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Total Donations</p>
+              <p className="text-sm text-muted-foreground mb-1">{t("myDonations.totalDonations")}</p>
               <p className="text-3xl font-bold">{totalDonations}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Supported Projects</p>
+              <p className="text-sm text-muted-foreground mb-1">{t("myDonations.supportedProjects")}</p>
               <p className="text-3xl font-bold">{supportedProjects}</p>
             </div>
           </div>
@@ -101,7 +104,7 @@ const MyDonations = () => {
       {donations.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">No donations received yet.</p>
+            <p className="text-muted-foreground">{t("myDonations.empty")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -125,6 +128,7 @@ interface DonationCardProps {
 }
 
 const DonationCard = ({ donation, projectTitle }: DonationCardProps) => {
+  const { t } = useTranslation(millionideasTranslations);
   const { profile } = useNostrProfileCache(donation.supporterPubkey);
   const amountLana = (parseFloat(donation.amountLanoshis) / 100000000).toFixed(2);
 
@@ -139,7 +143,7 @@ const DonationCard = ({ donation, projectTitle }: DonationCardProps) => {
             </div>
 
             <p className="text-sm text-muted-foreground mb-2">
-              From: {profile?.display_name || profile?.full_name || donation.supporterPubkey.slice(0, 16) + '...'}
+              {t("myDonations.from", { name: profile?.display_name || profile?.full_name || donation.supporterPubkey.slice(0, 16) + '...' })}
             </p>
 
             {donation.content && (
@@ -154,7 +158,7 @@ const DonationCard = ({ donation, projectTitle }: DonationCardProps) => {
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-primary hover:underline"
               >
-                View TX <ExternalLink className="h-3 w-3" />
+                {t("myDonations.viewTx")} <ExternalLink className="h-3 w-3" />
               </a>
             </div>
           </div>

@@ -19,6 +19,8 @@ import { format } from "date-fns";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { LanacrowdProject } from "@/hooks/useLanacrowdProjects";
 import { useNavigate } from "react-router-dom";
+import millionideasTranslations from "@/i18n/modules/millionideas";
+import { useTranslation } from "@/i18n/I18nContext";
 
 interface ProjectCardProps {
   project: LanacrowdProject;
@@ -34,14 +36,6 @@ interface ProjectCardProps {
   actionLoading?: string | null;
 }
 
-// Map what_type enum values to readable labels
-const WHAT_TYPE_LABELS: Record<string, string> = {
-  'IamAllowingMyself': 'I am Allowing Myself',
-  'EmbraceEnough': 'Embracing Enough',
-  'DigitalBeing': 'Digital Being',
-  'ProductOrService': 'Product Or Service',
-};
-
 const ProjectCard = ({
   project,
   isModuleAdmin,
@@ -55,6 +49,14 @@ const ProjectCard = ({
   onToggleApproved,
   actionLoading,
 }: ProjectCardProps) => {
+  const { t } = useTranslation(millionideasTranslations);
+  // Map what_type enum values to readable (translated) labels
+  const WHAT_TYPE_LABELS: Record<string, string> = {
+    'IamAllowingMyself': t('card.whatTypeAllowing'),
+    'EmbraceEnough': t('card.whatTypeEnough'),
+    'DigitalBeing': t('card.whatTypeDigitalBeing'),
+    'ProductOrService': t('card.whatTypeProduct'),
+  };
   const { profile } = useNostrProfileCache(project.ownerPubkey);
   // Donation stats come directly from the SQLite-backed project (no extra relay query needed)
   const totalRaised = project.totalRaised ?? 0;
@@ -127,7 +129,7 @@ const ProjectCard = ({
               <div className="absolute inset-0 bg-green-600/20 flex items-center justify-center">
                 <Badge className="bg-green-600 text-white text-lg px-4 py-1.5 gap-2">
                   <Trophy className="h-5 w-5" />
-                  Completed
+                  {t('card.completed')}
                 </Badge>
               </div>
             )}
@@ -144,23 +146,23 @@ const ProjectCard = ({
               {isCompleted && !project.coverImage && (
                 <Badge className="bg-green-600 text-white gap-1">
                   <Trophy className="h-3 w-3" />
-                  Completed
+                  {t('card.completed')}
                 </Badge>
               )}
               {isHidden && (
                 <Badge variant="outline" className="border-orange-300 text-orange-600 gap-1">
                   <EyeOff className="h-3 w-3" />
-                  Hidden
+                  {t('card.hidden')}
                 </Badge>
               )}
               {!isApproved && (
                 <Badge className="bg-amber-500 text-white gap-1">
                   <Clock className="h-3 w-3" />
-                  Pending Approval
+                  {t('card.pendingApproval')}
                 </Badge>
               )}
               {isFullyFunded && (
-                <Badge className="bg-green-500 text-white">Funded ✓</Badge>
+                <Badge className="bg-green-500 text-white">{t('card.fundedBadge')}</Badge>
               )}
             </div>
           </div>
@@ -190,7 +192,7 @@ const ProjectCard = ({
           <div className="flex items-center gap-3 pt-2">
             <UserAvatar pubkey={project.ownerPubkey} picture={profile?.picture} name={profile?.display_name || profile?.full_name} className="h-10 w-10" />
             <div>
-              <p className="text-xs text-muted-foreground">Project Initiator</p>
+              <p className="text-xs text-muted-foreground">{t('card.projectInitiator')}</p>
               <p className="font-medium">
                 {profile?.display_name || profile?.full_name || `${project.ownerPubkey.slice(0, 8)}...`}
               </p>
@@ -204,7 +206,7 @@ const ProjectCard = ({
               <span className="text-lg text-muted-foreground ml-1">{project.currency}</span>
             </div>
             <div className="text-right text-sm text-muted-foreground">
-              goal: {goalAmount.toFixed(0)} {project.currency}
+              {t('card.goalLabel')} {goalAmount.toFixed(0)} {project.currency}
             </div>
           </div>
 
@@ -216,9 +218,9 @@ const ProjectCard = ({
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1">
                 <Users className="h-4 w-4" />
-                <span>{backers} {backers === 1 ? 'backer' : 'backers'}</span>
+                <span>{backers} {t(backers === 1 ? 'card.backerOne' : 'card.backerMany')}</span>
               </div>
-              <span>{fundedPercentage}% funded</span>
+              <span>{t('card.percentFunded', { percent: fundedPercentage })}</span>
             </div>
             {project.nostrCreatedAt > 0 && (
               <div className="flex items-center gap-1">
@@ -235,7 +237,7 @@ const ProjectCard = ({
             disabled={isFullyFunded || !isApproved}
           >
             <Heart className="h-4 w-4 mr-2" />
-            {isFullyFunded ? 'Fully Funded' : !isApproved ? 'Pending Approval' : 'Support Project'}
+            {isFullyFunded ? t('card.fullyFunded') : !isApproved ? t('card.pendingApproval') : t('card.supportBtn')}
           </Button>
 
           {/* Admin Controls */}
@@ -258,7 +260,7 @@ const ProjectCard = ({
                 ) : (
                   <EyeOff className="h-3.5 w-3.5" />
                 )}
-                {isHidden ? "Show" : "Hide"}
+                {isHidden ? t('card.show') : t('card.hide')}
               </Button>
               <Button
                 variant={isCompleted ? "default" : "outline"}
@@ -272,7 +274,7 @@ const ProjectCard = ({
                 ) : (
                   <Trophy className="h-3.5 w-3.5" />
                 )}
-                {isCompleted ? "Completed ✓" : "Complete"}
+                {isCompleted ? t('card.completedCheck') : t('card.complete')}
               </Button>
               <Button
                 variant={isApproved ? "default" : "outline"}
@@ -291,7 +293,7 @@ const ProjectCard = ({
                 ) : (
                   <Clock className="h-3.5 w-3.5" />
                 )}
-                {isApproved ? "Approved ✓" : "Approve"}
+                {isApproved ? t('card.approvedCheck') : t('card.approve')}
               </Button>
             </div>
           )}
@@ -302,24 +304,24 @@ const ProjectCard = ({
       <Dialog open={completionDialogOpen} onOpenChange={setCompletionDialogOpen}>
         <DialogContent onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
-            <DialogTitle>Mark Project as Completed</DialogTitle>
+            <DialogTitle>{t('card.dialogTitle')}</DialogTitle>
             <DialogDescription>
-              Explain why "{project.title}" is considered successfully completed. This comment will be published as a permanent Nostr record (KIND 60201).
+              {t('card.dialogDesc', { title: project.title })}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-2">
-            <Label htmlFor="completion-comment">Completion Comment *</Label>
+            <Label htmlFor="completion-comment">{t('card.commentLabel')}</Label>
             <Textarea
               id="completion-comment"
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="All milestones achieved, funds used as planned..."
+              placeholder={t('card.commentPlaceholder')}
               rows={4}
             />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCompletionDialogOpen(false)}>
-              Cancel
+              {t('card.cancel')}
             </Button>
             <Button
               className="bg-green-600 hover:bg-green-700 text-white gap-1"
@@ -327,7 +329,7 @@ const ProjectCard = ({
               disabled={!comment.trim()}
             >
               <Trophy className="h-4 w-4" />
-              Confirm Completion
+              {t('card.confirmCompletion')}
             </Button>
           </DialogFooter>
         </DialogContent>

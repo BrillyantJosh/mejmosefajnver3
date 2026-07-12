@@ -13,6 +13,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
+import millionideasTranslations from "@/i18n/modules/millionideas";
+import { useTranslation } from "@/i18n/I18nContext";
 
 const DonatePrivateKey = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -22,7 +24,8 @@ const DonatePrivateKey = () => {
   const { project, isLoading: projectsLoading } = useLanacrowdProject(projectId);
   const { parameters } = useSystemParameters();
   const { session } = useAuth();
-  
+  const { t } = useTranslation(millionideasTranslations);
+
   const [privateKey, setPrivateKey] = useState<string>("");
   const [isValidating, setIsValidating] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -69,7 +72,7 @@ const DonatePrivateKey = () => {
         const matchesUncompressed = result.walletIdUncompressed === selectedWalletId;
 
         if (!matchesCompressed && !matchesUncompressed) {
-          setValidationError("Private key does not match the selected wallet");
+          setValidationError(t("donateKey.errKeyMismatch"));
           setIsValid(false);
           setCompressedWalletId("");
         } else {
@@ -79,7 +82,7 @@ const DonatePrivateKey = () => {
           setCompressedWalletId(matchesCompressed ? result.walletIdCompressed : result.walletIdUncompressed);
         }
       } catch (error) {
-        setValidationError("Invalid private key format");
+        setValidationError(t("donateKey.errKeyFormat"));
         setIsValid(false);
       } finally {
         setIsValidating(false);
@@ -96,8 +99,8 @@ const DonatePrivateKey = () => {
     // Check if user is logged in
     if (!session?.nostrHexId || !session?.nostrPrivateKey) {
       toast({
-        title: "Error",
-        description: "You must be logged in to donate",
+        title: t("donateKey.toastErrorTitle"),
+        description: t("donateKey.toastLoginRequired"),
         variant: "destructive"
       });
       return;
@@ -107,8 +110,8 @@ const DonatePrivateKey = () => {
     
     try {
       toast({
-        title: "Processing Donation",
-        description: "Creating transaction...",
+        title: t("donateKey.toastProcessingTitle"),
+        description: t("donateKey.toastProcessingDesc"),
       });
 
       // Step 1: Get service name and mentor hex ID from app_settings
@@ -149,15 +152,15 @@ const DonatePrivateKey = () => {
       });
 
       if (txError || !txData?.success) {
-        throw new Error(txData?.error || 'Transaction failed');
+        throw new Error(txData?.error || t("donateKey.errTxFailed"));
       }
 
       const txHash = txData.txHash;
       const txFee = txData.fee;
 
       toast({
-        title: "Transaction Successful",
-        description: "Creating donation record...",
+        title: t("donateKey.toastTxSuccessTitle"),
+        description: t("donateKey.toastTxSuccessDesc"),
       });
 
       // Step 4: Create KIND 60200 events
@@ -191,15 +194,15 @@ const DonatePrivateKey = () => {
           ["type", "donation"],
           ["timestamp_paid", nowTs.toString()]
         ],
-        content: message || `Supporting ${project.title} with ${amount} ${project.currency}`
+        content: message || t("donateKey.defaultDonationMessage", { title: project.title, amount: amount, currency: project.currency })
       };
 
       // Sign the project donation event
       const signedProjectEvent = finalizeEvent(projectEventTemplate, hexToBytes(session.nostrPrivateKey));
 
       toast({
-        title: "Broadcasting Events",
-        description: "Publishing to Nostr relays...",
+        title: t("donateKey.toastBroadcastTitle"),
+        description: t("donateKey.toastBroadcastDesc"),
       });
 
       // Publish project donation event
@@ -277,7 +280,7 @@ const DonatePrivateKey = () => {
       
       const params = new URLSearchParams({
         success: "false",
-        error: error instanceof Error ? error.message : "Donation failed",
+        error: error instanceof Error ? error.message : t("donateKey.errDonationFailed"),
         projectId: projectId || "",
         projectTitle: project?.title || "",
         amount: amount.toString(),
@@ -310,7 +313,7 @@ const DonatePrivateKey = () => {
   if (!project) {
     return (
       <div className="container mx-auto p-6">
-        <p className="text-center text-muted-foreground">Project not found</p>
+        <p className="text-center text-muted-foreground">{t("donateKey.projectNotFound")}</p>
       </div>
     );
   }
@@ -328,7 +331,7 @@ const DonatePrivateKey = () => {
             className="gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back
+            {t("donateKey.back")}
           </Button>
         </div>
       </div>
@@ -337,28 +340,28 @@ const DonatePrivateKey = () => {
       <div className="container mx-auto p-6 max-w-2xl">
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">Enter Private Key</h1>
+            <h1 className="text-3xl font-bold">{t("donateKey.title")}</h1>
             <p className="text-muted-foreground mt-2">
-              Enter the private key for your selected wallet to complete the donation
+              {t("donateKey.subtitle")}
             </p>
           </div>
 
           {/* Donation Summary */}
           <Card className="border-green-500/20 bg-green-500/5">
             <CardHeader>
-              <CardTitle className="text-lg">Donation Summary</CardTitle>
+              <CardTitle className="text-lg">{t("donateKey.summaryTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Project:</span>
+                <span className="text-muted-foreground">{t("donateKey.projectLabel")}</span>
                 <span className="font-semibold">{project.title}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Amount:</span>
+                <span className="text-muted-foreground">{t("donateKey.amountLabel")}</span>
                 <span className="font-semibold">{amount} {project.currency}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">LANA Amount:</span>
+                <span className="text-muted-foreground">{t("donateKey.lanaAmountLabel")}</span>
                 <span className="font-semibold">{lanaAmount.toFixed(2)} LANA</span>
               </div>
             </CardContent>
@@ -367,14 +370,14 @@ const DonatePrivateKey = () => {
           {/* Wallet Info */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">From Wallet</CardTitle>
+              <CardTitle className="text-lg">{t("donateKey.fromWalletTitle")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="bg-muted p-3 rounded-md">
                 <p className="font-mono text-sm break-all">{selectedWalletId}</p>
               </div>
               <p className="text-sm text-muted-foreground mt-2">
-                You need to provide the private key for this wallet
+                {t("donateKey.fromWalletHint")}
               </p>
             </CardContent>
           </Card>
@@ -382,11 +385,11 @@ const DonatePrivateKey = () => {
           {/* Private Key Input */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Private Key (WIF Format) *</CardTitle>
+              <CardTitle className="text-lg">{t("donateKey.privateKeyTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="private-key">Enter your wallet's private key</Label>
+                <Label htmlFor="private-key">{t("donateKey.privateKeyInputLabel")}</Label>
                 <div className="flex gap-2 mt-2">
                   <div className="relative flex-1">
                     <Input
@@ -411,13 +414,13 @@ const DonatePrivateKey = () => {
                     variant="outline"
                     size="icon"
                     onClick={() => setShowScanner(true)}
-                    title="Scan QR Code"
+                    title={t("donateKey.scanQrTitle")}
                   >
                     <ScanLine className="h-4 w-4" />
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Your private key is never stored and is only used to sign this transaction
+                  {t("donateKey.privateKeyNote")}
                 </p>
               </div>
 
@@ -431,7 +434,7 @@ const DonatePrivateKey = () => {
               {isValid && (
                 <div className="flex items-center gap-2 text-sm text-green-600 bg-green-500/10 p-3 rounded-md">
                   <CheckCircle className="h-4 w-4" />
-                  <span>Private key verified successfully</span>
+                  <span>{t("donateKey.keyVerified")}</span>
                 </div>
               )}
             </CardContent>
@@ -443,11 +446,11 @@ const DonatePrivateKey = () => {
             disabled={!isValid || isValidating}
             className="w-full bg-green-500 hover:bg-green-600 text-white h-12 disabled:opacity-50"
           >
-            Continue with Donation
+            {t("donateKey.continueBtn")}
           </Button>
 
           <p className="text-xs text-center text-muted-foreground">
-            🔒 Your private key is handled securely and never transmitted to our servers
+            🔒 {t("donateKey.securityFooter")}
           </p>
         </div>
       </div>

@@ -12,6 +12,8 @@ import { ArrowLeft, Users, Target, Wallet, ExternalLink, Trophy, Languages } fro
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
+import millionideasTranslations from "@/i18n/modules/millionideas";
+import { useTranslation } from "@/i18n/I18nContext";
 
 const getYoutubeEmbedUrl = (url: string): string => {
   try {
@@ -41,6 +43,7 @@ type TranslatedFields = Partial<Pick<NonNullable<ReturnType<typeof useLanacrowdP
   'title' | 'shortDesc' | 'content' | 'responsibilityStatement' | 'completionComment'>>;
 
 const ProjectDetail = () => {
+  const { t } = useTranslation(millionideasTranslations);
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { project, donations, totalRaised, isLoading: projectsLoading } = useLanacrowdProject(projectId);
@@ -107,8 +110,8 @@ const ProjectDetail = () => {
     } catch (err) {
       console.error('Translation error:', err);
       toast({
-        title: 'Translation failed',
-        description: 'Could not translate this project. Try again.',
+        title: t('detail.toastTranslateFailedTitle'),
+        description: t('detail.toastTranslateFailedDesc'),
         variant: 'destructive',
       });
     } finally {
@@ -138,7 +141,7 @@ const ProjectDetail = () => {
   if (isHidden && !is100MAdmin) {
     return (
       <div className="container mx-auto p-6">
-        <p className="text-center text-muted-foreground">Project not found</p>
+        <p className="text-center text-muted-foreground">{t('detail.notFound')}</p>
       </div>
     );
   }
@@ -146,7 +149,7 @@ const ProjectDetail = () => {
   if (!project) {
     return (
       <div className="container mx-auto p-6">
-        <p className="text-center text-muted-foreground">Project not found</p>
+        <p className="text-center text-muted-foreground">{t('detail.notFound')}</p>
       </div>
     );
   }
@@ -166,7 +169,7 @@ const ProjectDetail = () => {
             className="gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back
+            {t('detail.back')}
           </Button>
         </div>
       </div>
@@ -190,7 +193,7 @@ const ProjectDetail = () => {
         {isCompleted && (
           <Badge className="absolute top-4 left-4 bg-green-600 text-white text-sm px-3 py-1 gap-1.5">
             <Trophy className="h-4 w-4" />
-            Completed
+            {t('detail.completed')}
           </Badge>
         )}
       </div>
@@ -213,7 +216,7 @@ const ProjectDetail = () => {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Original
+              {t('detail.original')}
             </button>
             <button
               type="button"
@@ -249,7 +252,7 @@ const ProjectDetail = () => {
           <h1 className="text-3xl font-bold mb-2">{tr('title', project.title)}</h1>
           <p className="text-muted-foreground whitespace-pre-wrap">{tr('shortDesc', project.shortDesc)}</p>
           <p className="text-sm text-muted-foreground mt-2">
-            Published {project.nostrCreatedAt ? format(new Date(project.nostrCreatedAt * 1000), 'dd/MM/yyyy') : '—'}
+            {t('detail.published')} {project.nostrCreatedAt ? format(new Date(project.nostrCreatedAt * 1000), 'dd/MM/yyyy') : '—'}
           </p>
         </div>
 
@@ -260,7 +263,7 @@ const ProjectDetail = () => {
               <Trophy className="h-6 w-6 text-green-600 shrink-0 mt-0.5" />
               <div>
                 <h2 className="text-xl font-semibold text-green-600 mb-1">
-                  Project Completed
+                  {t('detail.projectCompleted')}
                 </h2>
                 {completionComment && (
                   <p className="text-muted-foreground italic whitespace-pre-wrap">
@@ -277,12 +280,12 @@ const ProjectDetail = () => {
           <div className="flex items-start gap-4">
             <Users className="h-5 w-5 mt-1 text-muted-foreground" />
             <div className="flex-1">
-              <h2 className="text-xl font-semibold mb-4">Project Initiator</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('detail.projectInitiator')}</h2>
               <div className="flex items-start gap-4">
                 <UserAvatar pubkey={project.ownerPubkey} picture={ownerProfile?.picture} name={ownerProfile?.display_name || ownerProfile?.full_name} className="h-12 w-12" />
                 <div className="flex-1">
                   <h3 className="font-semibold">
-                    {ownerProfile?.display_name || ownerProfile?.full_name || 'Anonymous'}
+                    {ownerProfile?.display_name || ownerProfile?.full_name || t('detail.anonymous')}
                   </h3>
                   {ownerProfile?.about && (
                     <p className="text-sm text-muted-foreground mt-2">{ownerProfile.about}</p>
@@ -299,7 +302,7 @@ const ProjectDetail = () => {
             <div className="text-green-500 text-xl">○</div>
             <div>
               <h2 className="text-xl font-semibold text-green-500 mb-2">
-                Statement of Responsibility
+                {t('detail.statementOfResponsibility')}
               </h2>
               <p className="text-muted-foreground italic whitespace-pre-wrap">
                 "{tr('responsibilityStatement', project.responsibilityStatement)}"
@@ -310,7 +313,7 @@ const ProjectDetail = () => {
 
         {/* Project Description */}
         <div>
-          <h2 className="text-2xl font-bold mb-4">Project Description</h2>
+          <h2 className="text-2xl font-bold mb-4">{t('detail.projectDescription')}</h2>
           <div className="prose prose-sm max-w-none">
             <p className="whitespace-pre-wrap text-muted-foreground">{tr('content', project.content)}</p>
           </div>
@@ -320,7 +323,7 @@ const ProjectDetail = () => {
         {project.videos.length > 0 && (
           <div>
             <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-              <span>📹</span> Project Video
+              <span>📹</span> {t('detail.projectVideo')}
             </h2>
             <div className="aspect-video bg-muted rounded-lg overflow-hidden">
               <iframe
@@ -336,7 +339,7 @@ const ProjectDetail = () => {
         {/* Project Gallery */}
         {project.galleryImages.length > 0 && (
           <div>
-            <h2 className="text-2xl font-bold mb-4">Project Gallery</h2>
+            <h2 className="text-2xl font-bold mb-4">{t('detail.projectGallery')}</h2>
             <div className="grid grid-cols-2 gap-4">
               {project.galleryImages.map((image, index) => (
                 <img
@@ -355,7 +358,7 @@ const ProjectDetail = () => {
           <div>
             <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
               <Users className="h-6 w-6" />
-              Project Participants
+              {t('detail.projectParticipants')}
             </h2>
             <div className="space-y-4">
               {project.participants.map((pubkey) => (
@@ -367,8 +370,8 @@ const ProjectDetail = () => {
 
         {/* Project Type */}
         <div>
-          <h3 className="font-semibold mb-2">Project Type</h3>
-          <Badge variant="secondary">{project.projectType || 'Not specified'}</Badge>
+          <h3 className="font-semibold mb-2">{t('detail.projectType')}</h3>
+          <Badge variant="secondary">{project.projectType || t('detail.notSpecified')}</Badge>
         </div>
 
         {/* Funding Goal */}
@@ -376,12 +379,12 @@ const ProjectDetail = () => {
           <div className="flex items-start gap-4 mb-6">
             <Target className="h-5 w-5 mt-1 text-muted-foreground" />
             <div className="flex-1">
-              <h2 className="text-2xl font-bold mb-4">Funding Goal</h2>
+              <h2 className="text-2xl font-bold mb-4">{t('detail.fundingGoal')}</h2>
               
               {isFullyFunded && (
                 <div className="mb-4 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
                   <p className="text-green-600 dark:text-green-400 font-semibold text-center">
-                    🎉 Project Successfully Funded!
+                    🎉 {t('detail.successfullyFunded')}
                   </p>
                 </div>
               )}
@@ -393,17 +396,17 @@ const ProjectDetail = () => {
                       {totalRaised.toFixed(2)} {project.currency}
                     </span>
                     <span className="text-muted-foreground">
-                      of {fundingGoal.toFixed(2)} {project.currency}
+                      {t('detail.of')} {fundingGoal.toFixed(2)} {project.currency}
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {percentageFunded.toFixed(1)}% funded
+                    {t('detail.percentFunded', { pct: percentageFunded.toFixed(1) })}
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Wallet className="h-4 w-4" />
-                  <span>Project Wallet</span>
+                  <span>{t('detail.projectWallet')}</span>
                 </div>
                 <p className="font-mono text-sm break-all bg-muted p-2 rounded">
                   {project.wallet}
@@ -417,17 +420,17 @@ const ProjectDetail = () => {
             onClick={() => navigate(`/100millionideas/donate/${projectId}`)}
             disabled={isFullyFunded}
           >
-            {isFullyFunded ? 'Project Fully Funded' : 'Donate with LANA'}
+            {isFullyFunded ? t('detail.fullyFunded') : t('detail.donateWithLana')}
           </Button>
         </Card>
 
         {/* Donations Received */}
         <div>
           <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-            💰 Donations Received
+            💰 {t('detail.donationsReceived')}
           </h2>
           {donations.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No donations yet</p>
+            <p className="text-center text-muted-foreground py-8">{t('detail.noDonations')}</p>
           ) : (
             <div className="space-y-4">
               {donations.map((donation) => (
@@ -442,6 +445,7 @@ const ProjectDetail = () => {
 };
 
 const ParticipantCard = ({ pubkey }: { pubkey: string }) => {
+  const { t } = useTranslation(millionideasTranslations);
   const { profile } = useNostrProfileCache(pubkey);
 
   return (
@@ -449,7 +453,7 @@ const ParticipantCard = ({ pubkey }: { pubkey: string }) => {
       <UserAvatar pubkey={pubkey} picture={profile?.picture} name={profile?.display_name || profile?.full_name} />
       <div>
         <p className="font-semibold">
-          {profile?.display_name || profile?.full_name || 'Anonymous'}
+          {profile?.display_name || profile?.full_name || t('detail.anonymous')}
         </p>
       </div>
     </div>
@@ -457,6 +461,7 @@ const ParticipantCard = ({ pubkey }: { pubkey: string }) => {
 };
 
 const DonationItem = ({ donation }: { donation: any }) => {
+  const { t } = useTranslation(millionideasTranslations);
   const { profile } = useNostrProfileCache(donation.supporterPubkey);
 
   return (
@@ -467,7 +472,7 @@ const DonationItem = ({ donation }: { donation: any }) => {
           <div className="flex justify-between items-start mb-2">
             <div>
               <p className="font-semibold">
-                {profile?.display_name || profile?.full_name || 'Anonymous'}
+                {profile?.display_name || profile?.full_name || t('detail.anonymous')}
               </p>
               <p className="text-sm text-muted-foreground">
                 {format(new Date(donation.nostrCreatedAt * 1000), 'dd MMM yyyy, HH:mm')}
@@ -488,7 +493,7 @@ const DonationItem = ({ donation }: { donation: any }) => {
             rel="noopener noreferrer"
             className="text-xs text-primary hover:underline flex items-center gap-1"
           >
-            View transaction <ExternalLink className="h-3 w-3" />
+            {t('detail.viewTransaction')} <ExternalLink className="h-3 w-3" />
           </a>
         </div>
       </div>

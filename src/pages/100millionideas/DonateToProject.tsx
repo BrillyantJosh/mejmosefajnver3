@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Wallet, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import millionideasTranslations from "@/i18n/modules/millionideas";
+import { useTranslation } from "@/i18n/I18nContext";
 
 interface WalletBalance {
   wallet_id: string;
@@ -24,6 +26,7 @@ const DonateToProject = () => {
   const navigate = useNavigate();
   const { session } = useAuth();
   const { toast } = useToast();
+  const { t } = useTranslation(millionideasTranslations);
   const { parameters } = useSystemParameters();
   const { project, isLoading: projectsLoading } = useLanacrowdProject(projectId);
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
@@ -51,8 +54,8 @@ const DonateToProject = () => {
       if (electrumServers.length === 0) {
         console.error('No Electrum servers available');
         toast({
-          title: "Error",
-          description: "No Electrum servers configured",
+          title: t("donate.errorTitle"),
+          description: t("donate.noElectrum"),
           variant: "destructive"
         });
         return;
@@ -77,8 +80,8 @@ const DonateToProject = () => {
     } catch (error) {
       console.error('Error fetching wallet balances:', error);
       toast({
-        title: "Error",
-        description: "Failed to fetch wallet balances",
+        title: t("donate.errorTitle"),
+        description: t("donate.fetchBalancesFailed"),
         variant: "destructive"
       });
     } finally {
@@ -116,8 +119,8 @@ const DonateToProject = () => {
   const handleDonate = async () => {
     if (!selectedWalletId || !lanaAmount || !project) {
       toast({
-        title: "Missing information",
-        description: "Please select a wallet and enter an amount",
+        title: t("donate.missingInfoTitle"),
+        description: t("donate.missingInfoDesc"),
         variant: "destructive"
       });
       return;
@@ -145,7 +148,7 @@ const DonateToProject = () => {
   if (!project) {
     return (
       <div className="container mx-auto p-6">
-        <p className="text-center text-muted-foreground">Project not found</p>
+        <p className="text-center text-muted-foreground">{t("donate.projectNotFound")}</p>
       </div>
     );
   }
@@ -163,7 +166,7 @@ const DonateToProject = () => {
             className="gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back
+            {t("donate.back")}
           </Button>
         </div>
       </div>
@@ -172,23 +175,23 @@ const DonateToProject = () => {
       <div className="container mx-auto p-6 max-w-2xl">
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold">Donate with LANA</h1>
+            <h1 className="text-3xl font-bold">{t("donate.title")}</h1>
             <p className="text-muted-foreground mt-2">
-              Support: {project.title}
+              {t("donate.support", { title: project.title })}
             </p>
           </div>
 
           {/* Project Wallet (TO) */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Project Wallet (TO)</CardTitle>
+              <CardTitle className="text-lg">{t("donate.projectWalletTo")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="bg-muted p-3 rounded-md">
                 <p className="font-mono text-sm break-all">{project.wallet}</p>
               </div>
               <p className="text-sm text-muted-foreground mt-2">
-                Funds will be sent to this wallet
+                {t("donate.fundsSentHere")}
               </p>
             </CardContent>
           </Card>
@@ -196,20 +199,20 @@ const DonateToProject = () => {
           {/* Your Wallet (FROM) */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Your Wallet (FROM) *</CardTitle>
+              <CardTitle className="text-lg">{t("donate.yourWalletFrom")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {!wallets || wallets.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No wallets found. Please register a wallet first.
+                  {t("donate.noWallets")}
                 </p>
               ) : (
                 <>
                   <div>
-                    <Label htmlFor="wallet-select">Select wallet</Label>
+                    <Label htmlFor="wallet-select">{t("donate.selectWallet")}</Label>
                     <Select value={selectedWalletId} onValueChange={setSelectedWalletId}>
                       <SelectTrigger id="wallet-select">
-                        <SelectValue placeholder="Select wallet" />
+                        <SelectValue placeholder={t("donate.selectWallet")} />
                       </SelectTrigger>
                       <SelectContent>
                         {wallets
@@ -229,7 +232,7 @@ const DonateToProject = () => {
                       </SelectContent>
                     </Select>
                     <p className="text-sm text-muted-foreground mt-2">
-                      Select the wallet to send funds from
+                      {t("donate.selectWalletHint")}
                     </p>
                   </div>
 
@@ -237,32 +240,32 @@ const DonateToProject = () => {
                     <div className="bg-muted p-4 rounded-md space-y-2">
                       <div className="flex items-center gap-2">
                         <Wallet className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-semibold">Wallet Details</span>
+                        <span className="font-semibold">{t("donate.walletDetails")}</span>
                       </div>
                       <div className="space-y-1 text-sm">
                         <p>
-                          <span className="text-muted-foreground">ID:</span>{' '}
+                          <span className="text-muted-foreground">{t("donate.idLabel")}</span>{' '}
                           <span className="font-mono">
                             {selectedWallet.walletId.substring(0, 10)}...{selectedWallet.walletId.substring(selectedWallet.walletId.length - 8)}
                           </span>
                         </p>
                         <p>
-                          <span className="text-muted-foreground">Type:</span> {selectedWallet.walletType}
+                          <span className="text-muted-foreground">{t("donate.typeLabel")}</span> {selectedWallet.walletType}
                         </p>
                         {selectedWallet.note && (
                           <p>
-                            <span className="text-muted-foreground">Note:</span> {selectedWallet.note}
+                            <span className="text-muted-foreground">{t("donate.noteLabel")}</span> {selectedWallet.note}
                           </p>
                         )}
                         <p>
-                          <span className="text-muted-foreground">Balance:</span>{' '}
+                          <span className="text-muted-foreground">{t("donate.balanceLabel")}</span>{' '}
                           {loadingBalances ? (
                             <Loader2 className="h-3 w-3 animate-spin inline" />
                           ) : (
                             <span className="font-semibold">
                               {walletBalances[selectedWallet.walletId] !== undefined
                                 ? `${formatBalance(walletBalances[selectedWallet.walletId])} LANA`
-                                : 'Loading...'}
+                                : t("donate.loading")}
                             </span>
                           )}
                         </p>
@@ -277,7 +280,7 @@ const DonateToProject = () => {
           {/* Donation Amount */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Donation Amount (LANA) *</CardTitle>
+              <CardTitle className="text-lg">{t("donate.donationAmount")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -295,14 +298,14 @@ const DonateToProject = () => {
               {parsedLanaAmount > 0 && (
                 <div className="bg-muted p-4 rounded-md space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Amount in {project.currency}:</span>
+                    <span className="text-sm text-muted-foreground">{t("donate.amountIn", { currency: project.currency || 'EUR' })}</span>
                     <span className="text-lg font-bold">
                       {fiatAmount.toFixed(2)} {project.currency}
                     </span>
                   </div>
                   {parameters?.exchangeRates?.[project.currency || 'EUR'] && (
                     <p className="text-xs text-muted-foreground">
-                      Exchange rate: 1 LANA = {(parameters.exchangeRates[project.currency || 'EUR'] || parameters.exchangeRates.EUR || 0).toFixed(6)} {project.currency}
+                      {t("donate.exchangeRate", { rate: (parameters.exchangeRates[project.currency || 'EUR'] || parameters.exchangeRates.EUR || 0).toFixed(6), currency: project.currency || 'EUR' })}
                     </p>
                   )}
                   
@@ -311,11 +314,11 @@ const DonateToProject = () => {
                     <div className="pt-2 border-t">
                       {hasSufficientBalance ? (
                         <p className="text-sm text-green-500 flex items-center gap-2">
-                          ✓ Sufficient balance available
+                          {t("donate.sufficientBalance")}
                         </p>
                       ) : (
                         <p className="text-sm text-destructive flex items-center gap-2">
-                          ✗ Insufficient balance (Available: {selectedWalletBalance.toFixed(2)} LANA)
+                          {t("donate.insufficientAvailable", { amount: selectedWalletBalance.toFixed(2) })}
                         </p>
                       )}
                     </div>
@@ -328,13 +331,13 @@ const DonateToProject = () => {
           {/* Message */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Message (Optional)</CardTitle>
+              <CardTitle className="text-lg">{t("donate.messageOptional")}</CardTitle>
             </CardHeader>
             <CardContent>
               <Textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Leave a message for the project creator"
+                placeholder={t("donate.messagePlaceholder")}
                 rows={4}
               />
             </CardContent>
@@ -345,27 +348,27 @@ const DonateToProject = () => {
             onClick={handleDonate}
             disabled={!canDonate}
             className="w-full bg-green-500 hover:bg-green-600 text-white h-12 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={!hasSufficientBalance && selectedWalletId && parsedLanaAmount > 0 ? "Insufficient balance" : ""}
+            title={!hasSufficientBalance && selectedWalletId && parsedLanaAmount > 0 ? t("donate.insufficientTitle") : ""}
           >
-            {parsedLanaAmount > 0 
-              ? `Donate ${parsedLanaAmount.toFixed(2)} LANA (${fiatAmount.toFixed(2)} ${project.currency})`
-              : `Donate`
+            {parsedLanaAmount > 0
+              ? t("donate.donateAmount", { lana: parsedLanaAmount.toFixed(2), fiat: fiatAmount.toFixed(2), currency: project.currency || 'EUR' })
+              : t("donate.donateBtn")
             }
           </Button>
           
           {!selectedWalletId && (
             <p className="text-sm text-center text-muted-foreground">
-              Please select a wallet to continue
+              {t("donate.pleaseSelectWallet")}
             </p>
           )}
           {selectedWalletId && parsedLanaAmount === 0 && (
             <p className="text-sm text-center text-muted-foreground">
-              Please enter an amount to donate
+              {t("donate.pleaseEnterAmount")}
             </p>
           )}
           {!hasSufficientBalance && selectedWalletId && parsedLanaAmount > 0 && (
             <p className="text-sm text-center text-destructive">
-              Insufficient balance in selected wallet
+              {t("donate.insufficientInWallet")}
             </p>
           )}
         </div>

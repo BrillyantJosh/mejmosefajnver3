@@ -2,27 +2,30 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { FolderKanban, Heart, PlusCircle, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAdmin } from "@/contexts/AdminContext";
+import millionideasTranslations from "@/i18n/modules/millionideas";
+import { useTranslation } from "@/i18n/I18nContext";
 
 const MillionIdeasLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { appSettings } = useAdmin();
+  const { t } = useTranslation(millionideasTranslations);
 
   const navItems = [
     {
       path: "/100millionideas/projects",
       icon: FolderKanban,
-      label: "Projects",
+      label: t("layout.projects"),
     },
     {
       path: "/100millionideas/my-projects",
       icon: FolderOpen,
-      label: "My Projects",
+      label: t("layout.myProjects"),
     },
     {
       path: "/100millionideas/my-donations",
       icon: Heart,
-      label: "Received Donations",
+      label: t("layout.receivedDonations"),
     },
   ];
 
@@ -62,7 +65,7 @@ const MillionIdeasLayout = () => {
               className="flex flex-col items-center gap-1 h-auto py-2 px-4 text-muted-foreground hover:text-primary"
             >
               <PlusCircle className="h-5 w-5" />
-              <span className="text-xs">Create</span>
+              <span className="text-xs">{t("layout.create")}</span>
             </Button>
           )}
         </div>

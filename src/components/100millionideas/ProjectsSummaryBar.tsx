@@ -2,6 +2,8 @@ import { ProjectData } from "@/hooks/useNostrProjects";
 import { AllProjectsDonationSummary } from "@/hooks/useNostrAllProjectDonations";
 import { Target, TrendingUp, Loader2 } from "lucide-react";
 import { useMemo } from "react";
+import millionideasTranslations from "@/i18n/modules/millionideas";
+import { useTranslation } from "@/i18n/I18nContext";
 
 interface ProjectsSummaryBarProps {
   projects: ProjectData[];
@@ -10,6 +12,8 @@ interface ProjectsSummaryBarProps {
 }
 
 const ProjectsSummaryBar = ({ projects, donationSummary, isLoading = false }: ProjectsSummaryBarProps) => {
+  const { t } = useTranslation(millionideasTranslations);
+
   const totalGoal = useMemo(() => {
     return projects.reduce((sum, project) => {
       const goal = parseFloat(project.fiatGoal);
@@ -41,7 +45,7 @@ const ProjectsSummaryBar = ({ projects, donationSummary, isLoading = false }: Pr
       <div className="bg-primary/10 rounded-lg p-4 mb-6">
         <div className="flex items-center justify-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Loading summary...</span>
+          <span>{t("summary.loading")}</span>
         </div>
       </div>
     );
@@ -56,7 +60,7 @@ const ProjectsSummaryBar = ({ projects, donationSummary, isLoading = false }: Pr
             <Target className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Total Goal</p>
+            <p className="text-sm text-muted-foreground">{t("summary.totalGoal")}</p>
             <p className="text-xl font-bold text-foreground">
               €{formatAmount(totalGoal)}
             </p>
@@ -73,7 +77,7 @@ const ProjectsSummaryBar = ({ projects, donationSummary, isLoading = false }: Pr
               />
             </div>
             <p className="text-xs text-muted-foreground text-center mt-1">
-              {progressPercentage.toFixed(1)}% reached
+              {t("summary.reached", { percent: progressPercentage.toFixed(1) })}
             </p>
           </div>
         </div>
@@ -84,7 +88,7 @@ const ProjectsSummaryBar = ({ projects, donationSummary, isLoading = false }: Pr
             <TrendingUp className="h-5 w-5 text-accent" />
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Total Raised</p>
+            <p className="text-sm text-muted-foreground">{t("summary.totalRaised")}</p>
             <p className="text-xl font-bold text-foreground">
               €{formatAmount(totalRaised)}
             </p>
@@ -101,7 +105,7 @@ const ProjectsSummaryBar = ({ projects, donationSummary, isLoading = false }: Pr
           />
         </div>
         <p className="text-xs text-muted-foreground text-center mt-1">
-          {progressPercentage.toFixed(1)}% reached
+          {t("summary.reached", { percent: progressPercentage.toFixed(1) })}
         </p>
       </div>
     </div>
