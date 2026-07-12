@@ -1,10 +1,13 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLanacrowdProjects, ProjectFilter } from "@/hooks/useLanacrowdProjects";
 import ProjectCard from "@/components/100millionideas/ProjectCard";
-import { Loader2, Layers, ChevronLeft, ChevronRight, Languages } from "lucide-react";
+import { Loader2, Layers, ChevronLeft, ChevronRight, Languages, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { EligibilityCriteria, eligibilityContent } from "@/components/100millionideas/EligibilityCriteria";
+import { useLang } from "@/i18n/I18nContext";
 import { useNavigate } from "react-router-dom";
 import { useAdmin } from "@/contexts/AdminContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,6 +38,8 @@ const Projects = () => {
   const [filter, setFilter] = useState<ProjectFilter>('open');
   const [page, setPage] = useState(1);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const uiLang = useLang();
+  const [showEligibility, setShowEligibility] = useState(false);
 
   // Server-side filtered + paginated — reads from SQLite cache.
   // viewerPubkey lets the API include the viewer's own pending submissions
@@ -287,25 +292,37 @@ const Projects = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="space-y-3">
+        {/* Title + Batch Funding on one row; description gets full width below so
+            it doesn't wrap awkwardly on narrow phones. */}
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-2xl sm:text-3xl font-bold">Projects</h1>
+          <Button
+            onClick={() => navigate('/100millionideas/batch-funding')}
+            className="bg-green-600 hover:bg-green-700 text-white shrink-0"
+          >
+            <Layers className="h-4 w-4 mr-2" />
+            Batch Funding
+          </Button>
+        </div>
         <div>
-          <h1 className="text-3xl font-bold">Projects</h1>
-          <p className="text-muted-foreground mt-2">
+          <p className="text-muted-foreground">
             Browse and discover innovative projects on LanaCrowd
           </p>
+          <button
+            type="button"
+            onClick={() => setShowEligibility(true)}
+            className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline text-left"
+          >
+            <HelpCircle className="h-4 w-4 shrink-0" />
+            {eligibilityContent(uiLang).eligibilityTitle}
+          </button>
           {!isLoading && (
             <p className="text-sm text-muted-foreground mt-1">
               {total} project{total !== 1 ? 's' : ''}
             </p>
           )}
         </div>
-        <Button
-          onClick={() => navigate('/100millionideas/batch-funding')}
-          className="bg-green-600 hover:bg-green-700 text-white"
-        >
-          <Layers className="h-4 w-4 mr-2" />
-          Batch Funding
-        </Button>
       </div>
 
       {/* Aggregate Funding Bar */}
@@ -459,6 +476,16 @@ const Projects = () => {
           )}
         </>
       )}
+
+      {/* "What kind of projects are eligible for Crowdfunding?" info dialog */}
+      <Dialog open={showEligibility} onOpenChange={setShowEligibility}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{eligibilityContent(uiLang).eligibilityTitle}</DialogTitle>
+          </DialogHeader>
+          <EligibilityCriteria lang={uiLang} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
