@@ -240,11 +240,11 @@ const ProjectCard = ({
 
           {/* Admin Controls */}
           {isModuleAdmin && (
-            <div className="flex gap-2 pt-2 border-t" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-wrap gap-1.5 pt-2 border-t" onClick={(e) => e.stopPropagation()}>
               <Button
                 variant={isHidden ? "default" : "outline"}
                 size="sm"
-                className="flex-1 gap-1"
+                className="flex-1 min-w-[88px] gap-1 whitespace-nowrap text-xs px-2"
                 disabled={isThisLoading}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -263,7 +263,7 @@ const ProjectCard = ({
               <Button
                 variant={isCompleted ? "default" : "outline"}
                 size="sm"
-                className={`flex-1 gap-1 ${isCompleted ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                className={`flex-1 min-w-[88px] gap-1 whitespace-nowrap text-xs px-2 ${isCompleted ? 'bg-green-600 hover:bg-green-700' : ''}`}
                 disabled={isThisLoading}
                 onClick={handleCompleteClick}
               >
@@ -277,7 +277,7 @@ const ProjectCard = ({
               <Button
                 variant={isApproved ? "default" : "outline"}
                 size="sm"
-                className={`flex-1 gap-1 ${isApproved ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'border-amber-300 text-amber-600'}`}
+                className={`flex-1 min-w-[88px] gap-1 whitespace-nowrap text-xs px-2 ${isApproved ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'border-amber-300 text-amber-600'}`}
                 disabled={isThisLoading}
                 onClick={(e) => {
                   e.stopPropagation();
