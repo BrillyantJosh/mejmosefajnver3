@@ -3,14 +3,19 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, PlusCircle, Ban, Sparkles, Loader2, Copy } from "lucide-react";
 import ProjectForm, { ProjectFormInitialData } from "@/components/100millionideas/ProjectForm";
+import CreateProjectGate from "@/components/100millionideas/CreateProjectGate";
 import { useAdmin } from "@/contexts/AdminContext";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
+import { useLang } from "@/i18n/I18nContext";
 
 export default function CreateProject() {
   const navigate = useNavigate();
   const location = useLocation();
   const { appSettings } = useAdmin();
   const { status: lana8WonderStatus, isLoading: lana8WonderLoading } = useNostrLana8Wonder();
+  const lang = useLang();
+  // Applicants must confirm the basis-for-participation gate before the form opens.
+  const [agreed, setAgreed] = useState(false);
 
   // "Duplicate" flow: MyProjects navigates here with a source project id. We fetch that
   // project and pre-fill the form; ProjectForm in create mode always generates a fresh
@@ -159,11 +164,15 @@ export default function CreateProject() {
         <h1 className="text-2xl font-bold">{duplicateFromId ? "Duplicate Project" : "Create Project"}</h1>
       </div>
 
-      <ProjectForm
-        mode="create"
-        initialData={duplicateFromId ? dupData ?? undefined : undefined}
-        onSubmitSuccess={() => navigate("/100millionideas/my-projects")}
-      />
+      {agreed ? (
+        <ProjectForm
+          mode="create"
+          initialData={duplicateFromId ? dupData ?? undefined : undefined}
+          onSubmitSuccess={() => navigate("/100millionideas/my-projects")}
+        />
+      ) : (
+        <CreateProjectGate lang={lang} onAgree={() => setAgreed(true)} />
+      )}
     </div>
   );
 }
