@@ -1,14 +1,62 @@
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, PlusCircle, Ban, Sparkles, Loader2 } from "lucide-react";
-import ProjectForm from "@/components/100millionideas/ProjectForm";
+import { ArrowLeft, PlusCircle, Ban, Sparkles, Loader2, Copy } from "lucide-react";
+import ProjectForm, { ProjectFormInitialData } from "@/components/100millionideas/ProjectForm";
 import { useAdmin } from "@/contexts/AdminContext";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 
 export default function CreateProject() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { appSettings } = useAdmin();
   const { status: lana8WonderStatus, isLoading: lana8WonderLoading } = useNostrLana8Wonder();
+
+  // "Duplicate" flow: MyProjects navigates here with a source project id. We fetch that
+  // project and pre-fill the form; ProjectForm in create mode always generates a fresh
+  // id, so submitting saves a NEW project (the user just tweaks e.g. this month's costs).
+  const duplicateFromId = (location.state as { duplicateFromId?: string } | null)?.duplicateFromId;
+  const [dupData, setDupData] = useState<ProjectFormInitialData | null>(null);
+  const [dupLoading, setDupLoading] = useState<boolean>(!!duplicateFromId);
+
+  useEffect(() => {
+    if (!duplicateFromId) return;
+    let alive = true;
+    setDupLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/lanacrowd/projects/${encodeURIComponent(duplicateFromId)}`);
+        if (!res.ok) throw new Error("Project not found");
+        const { project: p } = await res.json();
+        if (!alive) return;
+        setDupData({
+          dTag: p.id, // ignored in create mode (a fresh id is generated); kept for type completeness
+          title: p.title ? `${p.title} (Copy)` : "",
+          shortDesc: p.shortDesc || "",
+          content: p.content || "",
+          fiatGoal: String(p.fiatGoal || ""),
+          currency: p.currency || "EUR",
+          wallet: p.wallet || "",
+          responsibilityStatement: p.responsibilityStatement || "",
+          projectType: p.projectType || "Inspiration",
+          whatType: p.whatType || "",
+          status: (p.status as "draft" | "active") || "draft",
+          coverImage: p.coverImage,
+          galleryImages: p.galleryImages || [],
+          videoUrls: p.videos || [],
+          fileUrls: p.files || [],
+          hasDonations: false, // a duplicate starts fresh
+        });
+      } catch (e) {
+        console.error("Duplicate load failed:", e);
+      } finally {
+        if (alive) setDupLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [duplicateFromId]);
 
   // Guard: block page when admin has disabled new project creation
   if (appSettings?.new_projects_100millionideas === false) {
@@ -82,6 +130,17 @@ export default function CreateProject() {
     );
   }
 
+  // While a duplicate source loads, show a loader (so the form isn't shown blank first).
+  if (duplicateFromId && dupLoading) {
+    return (
+      <div className="container mx-auto p-6 max-w-2xl pb-24">
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-6 max-w-2xl pb-24">
       <div className="flex items-center gap-3 mb-6">
@@ -92,12 +151,17 @@ export default function CreateProject() {
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <PlusCircle className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold">Create Project</h1>
+        {duplicateFromId ? (
+          <Copy className="h-6 w-6 text-primary" />
+        ) : (
+          <PlusCircle className="h-6 w-6 text-primary" />
+        )}
+        <h1 className="text-2xl font-bold">{duplicateFromId ? "Duplicate Project" : "Create Project"}</h1>
       </div>
 
       <ProjectForm
         mode="create"
+        initialData={duplicateFromId ? dupData ?? undefined : undefined}
         onSubmitSuccess={() => navigate("/100millionideas/my-projects")}
       />
     </div>

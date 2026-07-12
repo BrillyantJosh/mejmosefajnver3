@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PlusCircle, Pencil, ImageOff, Trash2, Loader2 } from "lucide-react";
+import { PlusCircle, Pencil, ImageOff, Trash2, Loader2, Copy } from "lucide-react";
 import { useMyLanacrowdProjects } from "@/hooks/useMyLanacrowdProjects";
 import { LanacrowdProject } from "@/hooks/useLanacrowdProjects";
 import { useAuth } from "@/contexts/AuthContext";
@@ -322,6 +322,20 @@ const ProjectCard = ({ project, isCompleted, isDeleting, onRequestDelete }: Proj
                       Delete
                     </Button>
                   )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      navigate("/100millionideas/create-project", {
+                        state: { duplicateFromId: project.id },
+                      })
+                    }
+                    className="gap-1"
+                    title="Duplicate this project — edit and save as a new one"
+                  >
+                    <Copy className="h-3 w-3" />
+                    Duplicate
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
