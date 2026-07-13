@@ -43,6 +43,16 @@ const Projects = () => {
     hidden: t('projects.filterHidden'),
   };
 
+  // Genitive-plural form used inside the "{count} {label} projektov" sentence
+  // (Slovenian declines the adjective there — "odprtih", not the tab's "Odprti").
+  const filterCountLabels: Record<ProjectFilter, string> = {
+    open: t('projects.countLabelOpen'),
+    funded: t('projects.countLabelFunded'),
+    completed: t('projects.countLabelCompleted'),
+    all: t('projects.countLabelAll'),
+    hidden: t('projects.countLabelHidden'),
+  };
+
   // Server-side filtered + paginated — reads from SQLite cache.
   // viewerPubkey lets the API include the viewer's own pending submissions
   // (so creators can see their own pre-approval projects in the listing).
@@ -350,7 +360,7 @@ const Projects = () => {
             </div>
             <Progress value={Math.min(summary.percentFunded, 100)} className="h-2" />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{t('projects.filterProjectsCount', { count: summary.totalProjects, label: filterLabels[filter].toLowerCase() })}</span>
+              <span>{t('projects.filterProjectsCount', { count: summary.totalProjects, label: filterCountLabels[filter] })}</span>
               <span className="font-medium">
                 {t('projects.stillNeeds')} <span className="text-foreground">€{summary.remaining.toFixed(0)}</span>
               </span>
