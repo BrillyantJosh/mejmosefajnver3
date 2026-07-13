@@ -41,6 +41,26 @@ function isWholeUnit(unit?: string): boolean {
   return WHOLE_UNITS.has((unit || "").trim().toLowerCase());
 }
 
+// Parsed min/max order quantity for a listing, or null when unset/invalid
+// (min_order / max_order are free-text tags the supplier fills in).
+function listingMinOrder(listing: FoodCornerListing): number | null {
+  const n = Number.parseFloat(listing.minOrder);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+function listingMaxOrder(listing: FoodCornerListing): number | null {
+  const n = Number.parseFloat(listing.maxOrder);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+// A positive quantity that falls below the min or above the max is invalid.
+function orderQtyViolation(listing: FoodCornerListing, qty: number): "below" | "above" | null {
+  if (!(Number.isFinite(qty) && qty > 0)) return null;
+  const min = listingMinOrder(listing);
+  const max = listingMaxOrder(listing);
+  if (min !== null && qty < min) return "below";
+  if (max !== null && qty > max) return "above";
+  return null;
+}
+
 // Localized labels for product categories (t tags) and eco labels (eco tags).
 const CAT_LABELS: Record<string, { en: string; sl: string }> = {
   vegetables: { en: "Vegetables", sl: "Zelenjava" },
@@ -230,6 +250,12 @@ export default function FoodCornerOrder() {
     [catalog, quantities],
   );
 
+  // Items whose quantity violates the listing's min/max order — block checkout.
+  const invalidItems = useMemo(
+    () => selectedItems.filter(({ listing, qty }) => orderQtyViolation(listing, qty) !== null),
+    [selectedItems],
+  );
+
   const total = selectedItems.reduce((sum, item) => sum + item.qty * item.listing.price, 0);
   const currency = selectedItems[0]?.listing.priceCurrency || "EUR";
   const myOrders = orders.filter((order) => order.buyerPubkey === session?.nostrHexId);
@@ -352,6 +378,17 @@ export default function FoodCornerOrder() {
     }
     if (selectedItems.length === 0) {
       toast.error(t("order.toast.addItem"));
+      return;
+    }
+    // Enforce each listing's minimum / maximum order quantity.
+    const bad = selectedItems.find(({ listing, qty }) => orderQtyViolation(listing, qty) !== null);
+    if (bad) {
+      const violation = orderQtyViolation(bad.listing, bad.qty);
+      toast.error(
+        violation === "below"
+          ? t("order.toast.belowMin", { title: bad.listing.title, min: bad.listing.minOrder, unit: bad.listing.unit })
+          : t("order.toast.aboveMax", { title: bad.listing.title, max: bad.listing.maxOrder, unit: bad.listing.unit }),
+      );
       return;
     }
 
@@ -640,6 +677,10 @@ export default function FoodCornerOrder() {
               <div className="grid md:grid-cols-2 gap-3">
                 {filteredCatalog.map((listing) => {
                   const image = firstImage(listing);
+                  const minOrder = listingMinOrder(listing);
+                  const maxOrder = listingMaxOrder(listing);
+                  const enteredQty = Number.parseFloat(quantities[listing.ref] || "0");
+                  const qtyViolation = orderQtyViolation(listing, enteredQty);
                   return (
                     <Card key={listing.ref} className="overflow-hidden">
                       {image && (
@@ -662,10 +703,12 @@ export default function FoodCornerOrder() {
                           </p>
                           <Input
                             type="number"
-                            min="0"
+                            min={minOrder !== null ? String(minOrder) : "0"}
+                            max={maxOrder !== null ? String(maxOrder) : undefined}
                             step={isWholeUnit(listing.unit) ? "1" : "0.1"}
                             inputMode={isWholeUnit(listing.unit) ? "numeric" : "decimal"}
                             value={quantities[listing.ref] || ""}
+                            aria-invalid={qtyViolation !== null}
                             onChange={(event) => {
                               let value = event.target.value;
                               // For piece-type units force whole numbers (strip any decimals).
@@ -679,6 +722,15 @@ export default function FoodCornerOrder() {
                             placeholder="0"
                           />
                         </div>
+                        {(minOrder !== null || maxOrder !== null) && (
+                          <p className={`text-xs ${qtyViolation ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                            {minOrder !== null && t("order.minLabel", { qty: listing.minOrder, unit: listing.unit })}
+                            {minOrder !== null && maxOrder !== null && " · "}
+                            {maxOrder !== null && t("order.maxLabel", { qty: listing.maxOrder, unit: listing.unit })}
+                            {qtyViolation === "below" && ` — ${t("order.belowMinWarn")}`}
+                            {qtyViolation === "above" && ` — ${t("order.aboveMaxWarn")}`}
+                          </p>
+                        )}
                         <div className="flex flex-wrap gap-1">
                           {listing.eco.slice(0, 3).map((tag) => (
                             <Badge key={tag} variant="outline" className="text-[10px]">{tagLabel(ECO_LABELS, tag, lang)}</Badge>
@@ -737,7 +789,7 @@ export default function FoodCornerOrder() {
                     />
                   </div>
 
-                  <Button className="w-full gap-2" onClick={placeOrder} disabled={isPublishing || selectedItems.length === 0}>
+                  <Button className="w-full gap-2" onClick={placeOrder} disabled={isPublishing || selectedItems.length === 0 || invalidItems.length > 0}>
                     {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     {t("order.cart.submit")}
                   </Button>
