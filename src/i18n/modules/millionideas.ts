@@ -795,7 +795,7 @@ const translations: TranslationDict<MillionideasKey> = {
     "projects.prev": "Nazaj",
     "projects.projectMany": "projektov",
     "projects.projectOne": "projekt",
-    "projects.raisedOfGoal": "zbrano od cilja €{goal}",
+    "projects.raisedOfGoal": "zbranih od skupno €{goal}",
     "projects.stillNeeds": "Potrebnih še:",
     "projects.subtitle": "Prebrskaj in odkrij inovativne projekte na LanaCrowd",
     "projects.title": "Projekti",
