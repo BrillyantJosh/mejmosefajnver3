@@ -1,5 +1,5 @@
 // Shared OWN ▲ phase label + colour helpers, mirroring selfresponsible.life's
-// ownPhases so the being-assessment Matrix reads the same everywhere.
+// ownPhases. Bilingual: pass lang ('en' | 'sl'), default English.
 
 export const PHASE_ORDER = ['opening', 'reflection', 'alignment', 'change', 'closing', 'resolution'] as const;
 
@@ -7,16 +7,27 @@ export const PHASE_ORDER = ['opening', 'reflection', 'alignment', 'change', 'clo
 export const ASSESSED_PHASES = ['reflection', 'alignment', 'change'] as const;
 export type AssessedPhase = typeof ASSESSED_PHASES[number];
 
-export const getPhaseLabel = (phase: string): string => {
-  const labels: Record<string, string> = {
+const PHASE_LABELS: Record<'en' | 'sl', Record<string, string>> = {
+  en: {
     opening: 'Opening',
     reflection: 'Reflection',
     alignment: 'Alignment',
     change: 'Change',
     closing: 'Closing',
     resolution: 'Resolution',
-  };
-  return labels[phase] || phase || '—';
+  },
+  sl: {
+    opening: 'Odpiranje',
+    reflection: 'Refleksija',
+    alignment: 'Uskladitev',
+    change: 'Sprememba',
+    closing: 'Zaključek',
+    resolution: 'Razrešitev',
+  },
+};
+
+export const getPhaseLabel = (phase: string, lang: 'en' | 'sl' = 'en'): string => {
+  return PHASE_LABELS[lang]?.[phase] || PHASE_LABELS.en[phase] || phase || '—';
 };
 
 export const getPhaseColor = (phase: string): string => {

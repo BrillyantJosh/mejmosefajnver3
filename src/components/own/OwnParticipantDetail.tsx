@@ -7,19 +7,31 @@ import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle } from "lucide-react";
 import { useOwnAssessments, type AssessmentEntry, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES } from "@/lib/ownPhase";
+import { useLang } from "@/i18n/I18nContext";
 
 const short = (pk: string) => (pk ? `${pk.slice(0, 8)}…` : "—");
 
-const Req = ({ status, label }: { status: "done" | "current" | "todo"; label: string }) => {
-  if (status === "done") return (
-    <div className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" /><span className="text-xs">{label} <span className="text-green-600">· opravljeno</span></span></div>
-  );
-  if (status === "current") return (
-    <div className="flex items-center gap-1.5"><CircleDot className="h-3.5 w-3.5 text-amber-500 shrink-0" /><span className="text-xs">{label} <span className="text-amber-600">· v teku</span></span></div>
-  );
-  return (
-    <div className="flex items-center gap-1.5"><Circle className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" /><span className="text-xs text-muted-foreground/60">{label} · še ne</span></div>
-  );
+const TXT = {
+  sl: {
+    back: "Nazaj na klepet",
+    latest: "Zadnje mnenje vsakega bitja",
+    noneLatest: "Nobeno bitje še ni ocenilo tega udeleženca.",
+    timeline: "Časovnica mnenj (najnovejša zgoraj)",
+    noOpinions: "Ni mnenj.", loading: "Nalagam…",
+    reflection: "Refleksija", alignment: "Uskladitev", change: "Sprememba",
+    done: "opravljeno", inProgress: "v teku", notYet: "še ne",
+    met: "izpolnjeno",
+  },
+  en: {
+    back: "Back to chat",
+    latest: "Latest opinion from each being",
+    noneLatest: "No being has assessed this participant yet.",
+    timeline: "Timeline of opinions (newest first)",
+    noOpinions: "No opinions.", loading: "Loading…",
+    reflection: "Reflection", alignment: "Alignment", change: "Change",
+    done: "done", inProgress: "in progress", notYet: "not yet",
+    met: "met",
+  },
 };
 
 interface Props {
@@ -33,6 +45,9 @@ interface Props {
 // The right-side detail (overseer view): one participant's timeline (all 87047
 // opinions over time) + the latest verdict from each being about them.
 export default function OwnParticipantDetail({ caseRoot, participantPubkey, participantName, phase, onBack }: Props) {
+  const en = useLang() === "en";
+  const L = en ? TXT.en : TXT.sl;
+  const lang: "en" | "sl" = en ? "en" : "sl";
   const { entries, states, isLoading } = useOwnAssessments(caseRoot);
   const me = (participantPubkey || "").toLowerCase();
 
@@ -70,25 +85,37 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
     if ((st.currentPhaseEstimate || "").toLowerCase() === ph) return "current";
     return "todo";
   };
+  const Req = ({ status, label }: { status: "done" | "current" | "todo"; label: string }) => {
+    if (status === "done") return (
+      <div className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" /><span className="text-xs">{label} <span className="text-green-600">· {L.done}</span></span></div>
+    );
+    if (status === "current") return (
+      <div className="flex items-center gap-1.5"><CircleDot className="h-3.5 w-3.5 text-amber-500 shrink-0" /><span className="text-xs">{label} <span className="text-amber-600">· {L.inProgress}</span></span></div>
+    );
+    return (
+      <div className="flex items-center gap-1.5"><Circle className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" /><span className="text-xs text-muted-foreground/60">{label} · {L.notYet}</span></div>
+    );
+  };
+  const phaseKeyLabel = (ph: string) => getPhaseLabel(ph, lang);
 
   return (
     <div className="h-full overflow-y-auto space-y-4 px-4 md:px-2">
       <div className="flex items-center justify-between gap-2 sticky top-0 bg-background/95 backdrop-blur py-2 z-10">
         <Button variant="ghost" size="sm" onClick={onBack} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground -ml-2">
-          <ArrowLeft size={16} /><span>Nazaj na klepet</span>
+          <ArrowLeft size={16} /><span>{L.back}</span>
         </Button>
-        {phase && <Badge variant="outline" className={getPhaseColor(phase)}>{getPhaseLabel(phase)}</Badge>}
+        {phase && <Badge variant="outline" className={getPhaseColor(phase)}>{getPhaseLabel(phase, lang)}</Badge>}
       </div>
 
       <h3 className="text-base font-semibold">{participantName}</h3>
 
       {/* Latest verdict from each being */}
       <div className="space-y-2">
-        <h4 className="text-sm font-medium text-muted-foreground">Zadnje mnenje vsakega bitja</h4>
+        <h4 className="text-sm font-medium text-muted-foreground">{L.latest}</h4>
         {isLoading && beings.length === 0 ? (
           <div className="space-y-2">{[0, 1].map((i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}</div>
         ) : beings.length === 0 ? (
-          <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">Nobeno bitje še ni ocenilo tega udeleženca.</CardContent></Card>
+          <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{L.noneLatest}</CardContent></Card>
         ) : (
           <div className="grid gap-2.5 sm:grid-cols-2">
             {beings.map((b) => {
@@ -102,14 +129,14 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                         <Bot className="h-4 w-4 text-orange-500" />{nameOf(b)}
                       </span>
                       {st?.currentPhaseEstimate && (
-                        <Badge variant="outline" className={getPhaseColor(st.currentPhaseEstimate)}>{getPhaseLabel(st.currentPhaseEstimate)}</Badge>
+                        <Badge variant="outline" className={getPhaseColor(st.currentPhaseEstimate)}>{getPhaseLabel(st.currentPhaseEstimate, lang)}</Badge>
                       )}
                     </div>
                     {st && (
                       <div className="space-y-1">
-                        <Req status={reqStatus(st, "reflection")} label="Refleksija" />
-                        <Req status={reqStatus(st, "alignment")} label="Uskladitev" />
-                        <Req status={reqStatus(st, "change")} label="Sprememba" />
+                        <Req status={reqStatus(st, "reflection")} label={L.reflection} />
+                        <Req status={reqStatus(st, "alignment")} label={L.alignment} />
+                        <Req status={reqStatus(st, "change")} label={L.change} />
                       </div>
                     )}
                     {entry?.summary && <p className="text-xs italic text-muted-foreground leading-snug">“{entry.summary}”</p>}
@@ -123,9 +150,9 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
 
       {/* Timeline of opinions */}
       <div className="space-y-2">
-        <h4 className="text-sm font-medium text-muted-foreground">Časovnica mnenj (najnovejša zgoraj)</h4>
+        <h4 className="text-sm font-medium text-muted-foreground">{L.timeline}</h4>
         {myEntries.length === 0 ? (
-          <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{isLoading ? "Nalagam…" : "Ni mnenj."}</CardContent></Card>
+          <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{isLoading ? L.loading : L.noOpinions}</CardContent></Card>
         ) : (
           <div className="space-y-2.5">
             {myEntries.map((e) => (
@@ -135,7 +162,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                     <Bot className="h-4 w-4 text-orange-500" />{nameOf(e.beingPubkey)}
                   </span>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className={getPhaseColor(e.phaseEstimate)}>{getPhaseLabel(e.phaseEstimate)}</Badge>
+                    <Badge variant="outline" className={getPhaseColor(e.phaseEstimate)}>{getPhaseLabel(e.phaseEstimate, lang)}</Badge>
                     <span className="text-[11px] text-muted-foreground">{new Date(e.created_at * 1000).toLocaleString()}</span>
                   </div>
                 </div>
@@ -150,8 +177,8 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                       <div key={ph} className="rounded-md bg-muted/40 border border-border/50 p-2">
                         <div className="flex items-center gap-1.5 text-xs font-medium">
                           {met ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" /> : current ? <CircleDot className="h-3.5 w-3.5 text-amber-500 shrink-0" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />}
-                          {getPhaseLabel(ph)}
-                          <span className="font-normal text-muted-foreground">· {met ? "izpolnjeno" : current ? "v teku" : "še ne"}</span>
+                          {phaseKeyLabel(ph)}
+                          <span className="font-normal text-muted-foreground">· {met ? L.met : current ? L.inProgress : L.notYet}</span>
                         </div>
                         {v.rationale && <p className="text-xs text-muted-foreground mt-1" style={{ paddingLeft: "1.4rem" }}>{v.rationale}</p>}
                       </div>
