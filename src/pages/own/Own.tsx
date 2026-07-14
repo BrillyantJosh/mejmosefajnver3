@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import ConversationList from "@/components/own/ConversationList";
 import ChatView from "@/components/own/ChatView";
+import OwnSelfMatrix from "@/components/own/OwnSelfMatrix";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
 import { useNostrGroupKey } from "@/hooks/useNostrGroupKey";
@@ -530,8 +531,54 @@ export default function Own() {
     );
   }
 
+  // A participant sees their OWN being-assessment matrix beside the chat. The
+  // case root matches the beings' 87047/37045 #e reference (strip the own:
+  // prefix if present — idempotent when processEventId is already the root).
+  const isParticipantView = !!selectedProcessId && selectedProcess?.userRole === 'participant';
+  const caseRoot = selectedProcess?.processEventId
+    ? (selectedProcess.processEventId.startsWith('own:') ? selectedProcess.processEventId.slice(4) : selectedProcess.processEventId)
+    : null;
+
+  const chatViewEl = selectedProcess ? (
+    <ChatView
+      conversationTitle={selectedProcess?.title}
+      conversationStatus={selectedProcess?.status}
+      processEventId={selectedProcess?.processEventId}
+      senderPubkey={session?.nostrHexId}
+      messages={allMessages}
+      phase={selectedProcess?.phase}
+      isExited={isExited}
+      canExit={canExit}
+      onExit={() => selectedProcess && navigate(`/own/exit/${encodeURIComponent(selectedProcess.id)}`)}
+      onReEnter={async () => {
+        const ok = await publishExitEvent('enter', '');
+        if (ok) toast.success('You have re-entered the process');
+        else toast.error('Failed to re-enter the process');
+      }}
+      onBack={() => setSelectedProcessId(undefined)}
+      onSendAudio={async (audioPath: string, replyTo?: string) => {
+        return await sendOwnMessage(audioPath, replyTo);
+      }}
+      onSendMessage={async (text: string, replyTo?: string) => {
+        return await sendOwnMessage(text, replyTo);
+      }}
+      isLoading={keyLoading || messagesLoading}
+      lashedEventIds={lashedEvents}
+      onGiveLash={handleGiveLash}
+      lashingMessageId={lashingMessageId}
+      lashCounts={lashCounts}
+    />
+  ) : null;
+
+  // Fixed single-screen height for the list + the plain (non-participant) chat.
+  // The participant view stacks matrix-over-chat on mobile (page scrolls) and
+  // becomes two side-by-side full-height columns on desktop.
+  const outerHeight = !selectedProcessId || !isParticipantView
+    ? "h-[calc(100dvh-220px)] md:h-[calc(100dvh-210px)]"
+    : "md:h-[calc(100dvh-210px)]";
+
   return (
-    <div className="h-[calc(100dvh-220px)] md:h-[calc(100dvh-210px)]">
+    <div className={outerHeight}>
       {!selectedProcessId ? (
         // Conversation List - full width when no chat selected
         <div className="overflow-y-auto h-full max-w-2xl mx-auto px-4 md:px-0">
@@ -548,37 +595,25 @@ export default function Own() {
             />
           )}
         </div>
+      ) : isParticipantView ? (
+        // Participant: matrix on top (mobile) / left column (desktop) + chat.
+        <div className="flex flex-col md:flex-row md:gap-4 md:h-full">
+          <div className="w-full md:w-[340px] md:shrink-0 md:h-full md:overflow-y-auto mb-4 md:mb-0 px-4 md:px-0">
+            <OwnSelfMatrix
+              caseRoot={caseRoot}
+              participantPubkey={session?.nostrHexId || ''}
+              phase={selectedProcess?.phase}
+            />
+          </div>
+          <div className="w-full md:flex-1 md:min-w-0 h-[calc(100dvh-260px)] md:h-full">
+            {chatViewEl}
+          </div>
+        </div>
       ) : (
-        // Chat View - full width when chat selected
+        // Non-participant (facilitator / initiator / guest) — plain full-width
+        // chat for now; their tailored matrix view comes next.
         <div className="h-full">
-          <ChatView
-            conversationTitle={selectedProcess?.title}
-            conversationStatus={selectedProcess?.status}
-            processEventId={selectedProcess?.processEventId}
-            senderPubkey={session?.nostrHexId}
-            messages={allMessages}
-            phase={selectedProcess?.phase}
-            isExited={isExited}
-            canExit={canExit}
-            onExit={() => selectedProcess && navigate(`/own/exit/${encodeURIComponent(selectedProcess.id)}`)}
-            onReEnter={async () => {
-              const ok = await publishExitEvent('enter', '');
-              if (ok) toast.success('You have re-entered the process');
-              else toast.error('Failed to re-enter the process');
-            }}
-            onBack={() => setSelectedProcessId(undefined)}
-            onSendAudio={async (audioPath: string, replyTo?: string) => {
-              return await sendOwnMessage(audioPath, replyTo);
-            }}
-            onSendMessage={async (text: string, replyTo?: string) => {
-              return await sendOwnMessage(text, replyTo);
-            }}
-            isLoading={keyLoading || messagesLoading}
-            lashedEventIds={lashedEvents}
-            onGiveLash={handleGiveLash}
-            lashingMessageId={lashingMessageId}
-            lashCounts={lashCounts}
-          />
+          {chatViewEl}
         </div>
       )}
     </div>
