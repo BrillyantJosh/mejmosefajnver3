@@ -300,7 +300,7 @@ export default function FoodCornerOrder() {
         hasFulfillment: boolean;
         hasAllocation: boolean;
         statuses: Set<string>;
-        items: Map<string, { title: string; unit: string; qty: number; orderedQty: number }>;
+        items: Map<string, { title: string; unit: string; qty: number; orderedQty: number; removed: boolean }>;
       }
     >();
     for (const order of myOrdersInWeek) {
@@ -339,6 +339,8 @@ export default function FoodCornerOrder() {
             unit: recon.unit,
             qty,
             orderedQty: recon.orderedQty,
+            // A listing whose title no longer resolves = removed from the catalog.
+            removed: !recon.title,
           });
         }
       }
@@ -866,17 +868,33 @@ export default function FoodCornerOrder() {
                               {t("order.myOrders.via", { point: node.name })}
                             </p>
                           )}
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {[...group.items.values()]
-                              .map(
-                                (item) =>
-                                  `${item.qty} ${item.unit} ${item.title}` +
-                                  (item.qty !== item.orderedQty
-                                    ? ` (${t("order.myOrders.orderedShort")} ${item.orderedQty})`
-                                    : ""),
-                              )
-                              .join(" · ")}
-                          </p>
+                          <ul className="mt-2 space-y-1">
+                            {[...group.items.entries()].map(([key, item]) => (
+                              <li
+                                key={key}
+                                className={`text-xs flex items-baseline gap-2 ${
+                                  item.removed ? "line-through text-muted-foreground/60" : "text-muted-foreground"
+                                }`}
+                              >
+                                <span
+                                  className={`tabular-nums shrink-0 ${
+                                    item.removed ? "" : "font-semibold text-foreground"
+                                  }`}
+                                >
+                                  {item.qty} {item.unit}
+                                </span>
+                                <span className="min-w-0">
+                                  {item.title}
+                                  {item.qty !== item.orderedQty && (
+                                    <span className="text-muted-foreground">
+                                      {" "}
+                                      ({t("order.myOrders.orderedShort")} {item.orderedQty})
+                                    </span>
+                                  )}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                         <p className="text-xs text-muted-foreground shrink-0">
                           {new Date(group.createdAt * 1000).toLocaleString(myOrdersLocale)}
