@@ -554,13 +554,12 @@ export default function Own() {
   const caseRoot = selectedProcess?.processEventId
     ? (selectedProcess.processEventId.startsWith('own:') ? selectedProcess.processEventId.slice(4) : selectedProcess.processEventId)
     : null;
-  // The assessed subjects of the process = participants + the initiator (both go
-  // through the arc; the beings assess both).
+  // The overseer matrix lists only the actual PARTICIPANTS of the process. The
+  // initiator appears iff they are ALSO tagged a participant (i.e. they too are
+  // going through the process) — a pure initiator who merely opened the case is
+  // not a subject and is not listed.
   const subjectList = selectedProcess
-    ? Array.from(new Set([
-        ...(selectedProcess.initiator && selectedProcess.initiator !== selectedProcess.facilitator ? [selectedProcess.initiator] : []),
-        ...selectedProcess.participants,
-      ]))
+    ? Array.from(new Set(selectedProcess.participants.filter(Boolean)))
     : [];
   const nameOfPk = (pk: string) => profiles.get(pk)?.display_name || profiles.get(pk)?.full_name || pk.slice(0, 8);
 
