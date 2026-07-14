@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,9 @@ export default function WalletConsolidate() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isValidatingKey, setIsValidatingKey] = useState(false);
   const [isKeyValid, setIsKeyValid] = useState<boolean | null>(null);
+  // Synchronous lock of batch ids currently being submitted — guards against a
+  // double-tap firing two transactions before React re-renders the disabled button.
+  const processingBatchesRef = useRef<Set<number>>(new Set());
 
   const electrumServers = parameters?.electrumServers || [];
 
@@ -191,6 +194,13 @@ export default function WalletConsolidate() {
       toast.error("This batch's value is below the network fee — consolidate a funded batch first.");
       return;
     }
+    // Re-entry guard: the button's `disabled` prop only takes effect on the next
+    // render, so a fast double-tap can reach here twice before it greys out — and
+    // the second call would spend the same UTXOs, which the Edge Function rejects
+    // with a non-2xx ("Consolidation failed"). A ref updates synchronously and is
+    // shared across renders, so the duplicate call bails out immediately.
+    if (batch.isProcessing || batch.isCompleted || processingBatchesRef.current.has(batchId)) return;
+    processingBatchesRef.current.add(batchId);
 
     setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, isProcessing: true } : b)));
     try {
@@ -221,6 +231,10 @@ export default function WalletConsolidate() {
       console.error(`Batch ${batchId} consolidation error:`, err);
       setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, isProcessing: false } : b)));
       toast.error(err instanceof Error ? `Consolidation failed: ${err.message}` : "Consolidation failed");
+    } finally {
+      // Release the lock so a failed batch can be retried (a completed one stays
+      // disabled via isCompleted; a successful one won't be re-run anyway).
+      processingBatchesRef.current.delete(batchId);
     }
   };
 
