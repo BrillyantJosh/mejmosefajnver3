@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,14 @@ const PhaseRow = ({ status, label }: { status: "done" | "current" | "todo"; labe
 
 export default function Matrix() {
   const { processes, isLoading: loadingProcs } = useAllOwnProcesses();
-  const [selectedCaseRoot, setSelectedCaseRoot] = useState<string | null>(null);
+  // Deep-link: /own/matrix?process=<caseRoot> opens that process directly (from
+  // a participant's "Analiziraj druge udeležence" card). Read once as the
+  // initial selection so the back button still returns to the full list.
+  const [searchParams] = useSearchParams();
+  const [selectedCaseRoot, setSelectedCaseRoot] = useState<string | null>(() => {
+    const p = searchParams.get("process");
+    return p ? p.toLowerCase() : null;
+  });
 
   const selected = useMemo(
     () => processes.find((r) => r.caseEventId === selectedCaseRoot) || null,

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bot, CheckCircle2, CircleDot, Circle, Telescope } from "lucide-react";
+import { Bot, CheckCircle2, CircleDot, Circle, Telescope, Grid3x3, ChevronRight } from "lucide-react";
 import { useOwnAssessments, type AssessmentEntry, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor } from "@/lib/ownPhase";
@@ -28,12 +28,14 @@ interface Props {
   participantPubkey: string;
   /** Official process phase (facilitator-set), for header context. */
   phase?: string;
+  /** If set, renders an "analyze the other participants" card (→ full matrix). */
+  onAnalyzeOthers?: () => void;
 }
 
 // A single participant's slice of the being-assessment matrix: where THEY are,
 // and only the LATEST opinion from each being about them. Shown to the
 // participant inside their own process chat.
-export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase }: Props) {
+export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase, onAnalyzeOthers }: Props) {
   const { entries, states, isLoading } = useOwnAssessments(caseRoot);
   const me = (participantPubkey || "").toLowerCase();
 
@@ -121,6 +123,19 @@ export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase }: Pr
             );
           })}
         </div>
+      )}
+
+      {onAnalyzeOthers && (
+        <button
+          onClick={onAnalyzeOthers}
+          className="w-full flex items-center justify-between gap-2 rounded-lg border border-orange-500/40 bg-orange-500/[0.06] hover:bg-orange-500/10 hover:border-orange-500/60 transition-colors p-3 text-left"
+        >
+          <span className="text-sm font-medium inline-flex items-center gap-2">
+            <Grid3x3 className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0" />
+            Analiziraj druge udeležence
+          </span>
+          <ChevronRight className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0" />
+        </button>
       )}
     </div>
   );

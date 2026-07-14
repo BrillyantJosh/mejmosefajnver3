@@ -629,6 +629,7 @@ export default function Own() {
               caseRoot={caseRoot}
               participantPubkey={session?.nostrHexId || ''}
               phase={selectedProcess?.phase}
+              onAnalyzeOthers={caseRoot ? () => navigate(`/own/matrix?process=${encodeURIComponent(caseRoot)}`) : undefined}
             />
           </div>
           <div className="w-full md:flex-1 md:min-w-0 h-[calc(100dvh-260px)] md:h-full">
