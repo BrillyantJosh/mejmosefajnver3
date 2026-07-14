@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import ConversationList from "@/components/own/ConversationList";
 import ChatView from "@/components/own/ChatView";
 import OwnSelfMatrix from "@/components/own/OwnSelfMatrix";
+import OwnFullMatrix from "@/components/own/OwnFullMatrix";
+import OwnParticipantDetail from "@/components/own/OwnParticipantDetail";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
 import { useNostrGroupKey } from "@/hooks/useNostrGroupKey";
@@ -46,6 +48,10 @@ export default function Own() {
   const { parameters } = useSystemParameters();
   const navigate = useNavigate();
   const [selectedProcessId, setSelectedProcessId] = useState<string>();
+  // Overseer (facilitator/guest) view: which participant's detail is open on the
+  // right (null = show the chat). Reset whenever the process changes.
+  const [matrixParticipant, setMatrixParticipant] = useState<string | null>(null);
+  useEffect(() => { setMatrixParticipant(null); }, [selectedProcessId]);
   
   // LASH state
   const [lashedEvents, setLashedEvents] = useState<Set<string>>(new Set());
@@ -541,9 +547,22 @@ export default function Own() {
   // idempotent when processEventId is already the root).
   const isSubjectView = !!selectedProcessId
     && (selectedProcess?.userRole === 'participant' || selectedProcess?.userRole === 'initiator');
+  // Overseers (facilitator / guest) get the WHOLE participant×being matrix on
+  // the left + a per-participant timeline on the right.
+  const isOverseerView = !!selectedProcessId
+    && (selectedProcess?.userRole === 'facilitator' || selectedProcess?.userRole === 'guest');
   const caseRoot = selectedProcess?.processEventId
     ? (selectedProcess.processEventId.startsWith('own:') ? selectedProcess.processEventId.slice(4) : selectedProcess.processEventId)
     : null;
+  // The assessed subjects of the process = participants + the initiator (both go
+  // through the arc; the beings assess both).
+  const subjectList = selectedProcess
+    ? Array.from(new Set([
+        ...(selectedProcess.initiator && selectedProcess.initiator !== selectedProcess.facilitator ? [selectedProcess.initiator] : []),
+        ...selectedProcess.participants,
+      ]))
+    : [];
+  const nameOfPk = (pk: string) => profiles.get(pk)?.display_name || profiles.get(pk)?.full_name || pk.slice(0, 8);
 
   const chatViewEl = selectedProcess ? (
     <ChatView
@@ -579,7 +598,8 @@ export default function Own() {
   // Fixed single-screen height for the list + the plain (non-participant) chat.
   // The participant view stacks matrix-over-chat on mobile (page scrolls) and
   // becomes two side-by-side full-height columns on desktop.
-  const outerHeight = !selectedProcessId || !isSubjectView
+  const twoColView = isSubjectView || isOverseerView;
+  const outerHeight = !selectedProcessId || !twoColView
     ? "h-[calc(100dvh-220px)] md:h-[calc(100dvh-210px)]"
     : "md:h-[calc(100dvh-210px)]";
 
@@ -616,9 +636,35 @@ export default function Own() {
             {chatViewEl}
           </div>
         </div>
+      ) : isOverseerView ? (
+        // Facilitator / guest: full participant×being matrix on the left; the
+        // right shows the chat, or a chosen participant's timeline via "Več".
+        <div className="flex flex-col md:flex-row md:gap-4 md:h-full">
+          <div className="w-full md:w-[360px] md:shrink-0 md:h-full md:overflow-y-auto mb-4 md:mb-0 px-4 md:px-0">
+            <OwnFullMatrix
+              caseRoot={caseRoot}
+              participants={subjectList}
+              phase={selectedProcess?.phase}
+              selectedParticipant={matrixParticipant}
+              onSelect={setMatrixParticipant}
+            />
+          </div>
+          <div className="w-full md:flex-1 md:min-w-0 h-[calc(100dvh-260px)] md:h-full">
+            {matrixParticipant ? (
+              <OwnParticipantDetail
+                caseRoot={caseRoot}
+                participantPubkey={matrixParticipant}
+                participantName={nameOfPk(matrixParticipant)}
+                phase={selectedProcess?.phase}
+                onBack={() => setMatrixParticipant(null)}
+              />
+            ) : (
+              chatViewEl
+            )}
+          </div>
+        </div>
       ) : (
-        // Facilitator / guest (not assessed) — plain full-width chat for now;
-        // their tailored views come next.
+        // Fallback — plain full-width chat (all known roles are handled above).
         <div className="h-full">
           {chatViewEl}
         </div>
