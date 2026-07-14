@@ -531,10 +531,16 @@ export default function Own() {
     );
   }
 
-  // A participant sees their OWN being-assessment matrix beside the chat. The
-  // case root matches the beings' 87047/37045 #e reference (strip the own:
-  // prefix if present — idempotent when processEventId is already the root).
-  const isParticipantView = !!selectedProcessId && selectedProcess?.userRole === 'participant';
+  // Assessed SUBJECTS (participants AND the initiator — both go through the
+  // reflection→alignment→change arc, so the beings assess both) see their OWN
+  // matrix beside the chat. NOTE: useNostrOpenProcesses resolves role by
+  // priority (initiator before participant), so someone who is both is tagged
+  // 'initiator' — hence we must accept both here. The facilitator/guests are
+  // not assessed; their tailored views come next. The case root matches the
+  // beings' 87047/37045 #e reference (strip the own: prefix if present —
+  // idempotent when processEventId is already the root).
+  const isSubjectView = !!selectedProcessId
+    && (selectedProcess?.userRole === 'participant' || selectedProcess?.userRole === 'initiator');
   const caseRoot = selectedProcess?.processEventId
     ? (selectedProcess.processEventId.startsWith('own:') ? selectedProcess.processEventId.slice(4) : selectedProcess.processEventId)
     : null;
@@ -573,7 +579,7 @@ export default function Own() {
   // Fixed single-screen height for the list + the plain (non-participant) chat.
   // The participant view stacks matrix-over-chat on mobile (page scrolls) and
   // becomes two side-by-side full-height columns on desktop.
-  const outerHeight = !selectedProcessId || !isParticipantView
+  const outerHeight = !selectedProcessId || !isSubjectView
     ? "h-[calc(100dvh-220px)] md:h-[calc(100dvh-210px)]"
     : "md:h-[calc(100dvh-210px)]";
 
@@ -595,8 +601,9 @@ export default function Own() {
             />
           )}
         </div>
-      ) : isParticipantView ? (
-        // Participant: matrix on top (mobile) / left column (desktop) + chat.
+      ) : isSubjectView ? (
+        // Assessed subject (participant / initiator): matrix on top (mobile) /
+        // left column (desktop) + chat.
         <div className="flex flex-col md:flex-row md:gap-4 md:h-full">
           <div className="w-full md:w-[340px] md:shrink-0 md:h-full md:overflow-y-auto mb-4 md:mb-0 px-4 md:px-0">
             <OwnSelfMatrix
@@ -610,8 +617,8 @@ export default function Own() {
           </div>
         </div>
       ) : (
-        // Non-participant (facilitator / initiator / guest) — plain full-width
-        // chat for now; their tailored matrix view comes next.
+        // Facilitator / guest (not assessed) — plain full-width chat for now;
+        // their tailored views come next.
         <div className="h-full">
           {chatViewEl}
         </div>
