@@ -1036,6 +1036,7 @@ export default function DiscountSell() {
                     <div className="flex gap-2">
                       <input
                         type="number"
+                        translate="no"
                         value={lanaAmount}
                         onChange={(e) => {
                           setLanaAmount(e.target.value);
@@ -1074,7 +1075,7 @@ export default function DiscountSell() {
 
                   {/* Payout Breakdown */}
                   {parsedLana > 0 && exchangeRate > 0 && (
-                    <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-3 sm:p-5 space-y-3">
+                    <div translate="no" className="rounded-xl border-2 border-primary/20 bg-primary/5 p-3 sm:p-5 space-y-3">
                       <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">
                         Payout Breakdown
                       </h3>
@@ -1193,7 +1194,7 @@ export default function DiscountSell() {
                 </h2>
 
                 {/* Summary */}
-                <div className="rounded-xl bg-muted/30 p-3 sm:p-4 space-y-2 text-sm mb-6">
+                <div translate="no" className="rounded-xl bg-muted/30 p-3 sm:p-4 space-y-2 text-sm mb-6">
                   <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground flex-shrink-0">From Wallet</span>
                     <span className="font-mono text-foreground text-xs sm:text-sm truncate">
@@ -1337,7 +1338,7 @@ export default function DiscountSell() {
                       be processed after blockchain confirmation.
                     </p>
 
-                    <div className="rounded-xl bg-white/50 dark:bg-background/50 border border-green-200 dark:border-green-800 p-4 space-y-2 text-sm text-left max-w-md mx-auto">
+                    <div translate="no" className="rounded-xl bg-white/50 dark:bg-background/50 border border-green-200 dark:border-green-800 p-4 space-y-2 text-sm text-left max-w-md mx-auto">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">
                           Amount Sold

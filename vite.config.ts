@@ -6,7 +6,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import fs from "fs";
 
 // VERSION: 2.4 - reliable auto-update (version.json self-heal + foreground check)
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.4.1';
 // Unique per build — baked into the client AND written to dist/version.json (NOT
 // service-worker-cached), so a stale client can detect a new deploy and hard-refresh.
 const BUILD_ID = String(Date.now());
