@@ -28,7 +28,8 @@ import { useNostrPaymentScore } from "@/hooks/useNostrPaymentScore";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { supabase } from "@/integrations/supabase/client";
 import { convertWifToIds } from "@/lib/crypto";
-import { useLang } from "@/i18n/I18nContext";
+import { useLang, useTranslation } from "@/i18n/I18nContext";
+import discountTranslations from "@/i18n/modules/discount";
 import { toast } from "sonner";
 
 const MIN_RATING = 10;
@@ -118,6 +119,7 @@ export default function DiscountSell() {
   const { score: paymentScore, isLoading: scoreLoading } = useNostrPaymentScore(session?.nostrHexId);
   const { status: lana8WonderStatus, isLoading: l8wLoading } = useNostrLana8Wonder();
   const uiLang = useLang();
+  const { t } = useTranslation(discountTranslations);
   const notice = PAYOUT_NOTICE[uiLang === "sl" ? "sl" : "en"];
   const isSl = uiLang === "sl";
   // LanaPays.Us wallets are not sold through this module — they are sold directly on lana.discount.
@@ -367,7 +369,7 @@ export default function DiscountSell() {
 
   const executeSell = async () => {
     if (!session?.lanaPrivateKey || !session?.nostrHexId) {
-      toast.error("Authentication required");
+      toast.error(t("sell.toast.authRequired"));
       return;
     }
 
@@ -400,11 +402,11 @@ export default function DiscountSell() {
         });
 
       if (txError) {
-        throw new Error(txError.message || "Failed to send LANA transaction");
+        throw new Error(txError.message || t("sell.error.sendFailed"));
       }
 
       if (!txData?.success) {
-        throw new Error(txData?.error || "Transaction failed");
+        throw new Error(txData?.error || t("sell.error.txFailed"));
       }
 
       const txHash = txData.txid || txData.txHash;
@@ -433,12 +435,9 @@ export default function DiscountSell() {
           lanaAmount: parsedLana,
           netFiat,
           currency: selectedCurrency,
-          error:
-            "Transaction sent but sale registration failed. Contact support.",
+          error: t("sell.error.saleRegFailed"),
         });
-        toast.warning(
-          "LANA sent successfully, but sale registration had an issue."
-        );
+        toast.warning(t("sell.toast.saleRegIssue"));
       } else {
         setTxResult({
           success: true,
@@ -448,15 +447,15 @@ export default function DiscountSell() {
           netFiat,
           currency: selectedCurrency,
         });
-        toast.success("LANA sold successfully!");
+        toast.success(t("sell.toast.soldSuccess"));
       }
     } catch (error) {
       console.error("Sell error:", error);
       setTxResult({
         success: false,
-        error: error instanceof Error ? error.message : "Sale failed",
+        error: error instanceof Error ? error.message : t("sell.error.saleFailed"),
       });
-      toast.error("Sale failed");
+      toast.error(t("sell.error.saleFailed"));
     } finally {
       setExecuting(false);
       setStep(5);
@@ -484,13 +483,13 @@ export default function DiscountSell() {
       {/* Header */}
       <div className="mb-2">
         <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
-          Sell LanaCoin
+          {t("sell.pageTitle")}
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Sell your registered LanaCoins and receive a cash payout.
+          {t("sell.pageSubtitle")}
         </p>
         <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-xs text-blue-700 dark:text-blue-400 mt-2">
-          <strong>Payout timing:</strong> Funds are paid out as consumer spending generates revenue. This may take from a few days up to the next Split cycle. An exact timeframe cannot be guaranteed in advance.
+          <strong>{t("sell.payoutTiming.label")}</strong> {t("sell.payoutTiming.text")}
         </div>
       </div>
 
@@ -546,9 +545,9 @@ export default function DiscountSell() {
               <CheckCircle className="h-5 w-5 text-green-600 shrink-0" />
               <span className="text-sm text-green-700 dark:text-green-400">
                 {userRating !== null ? (
-                  <>Payment Rating: <strong>{userRating}/10</strong> — Selling enabled</>
+                  <>{t("sell.rating.label")} <strong>{userRating}/10</strong> {t("sell.rating.enabledSuffix")}</>
                 ) : (
-                  <><strong>Lana8Wonder member</strong> — Selling enabled (no rating yet)</>
+                  <><strong>{t("sell.rating.l8wMember")}</strong> {t("sell.rating.enabledNoRating")}</>
                 )}
               </span>
             </div>
@@ -558,18 +557,18 @@ export default function DiscountSell() {
                 <div className="mx-auto w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center">
                   <XCircle className="h-8 w-8 text-red-500" />
                 </div>
-                <h2 className="text-xl font-bold text-red-700 dark:text-red-400">Selling Not Available</h2>
+                <h2 className="text-xl font-bold text-red-700 dark:text-red-400">{t("sell.rating.blockedTitle")}</h2>
                 <p className="text-sm text-red-600 dark:text-red-400 max-w-md mx-auto leading-relaxed">
-                  Selling registered LanaCoins is only available to users who have no open obligations. Please settle any outstanding payments to unlock this feature.
+                  {t("sell.rating.blockedText")}
                 </p>
                 {userRating !== null ? (
                   <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-100 dark:bg-red-900/40">
                     <span className="text-sm font-medium text-red-700 dark:text-red-400">
-                      Your current rating: {userRating}/10
+                      {t("sell.rating.current", { rating: userRating })}
                     </span>
                   </div>
                 ) : (
-                  <p className="text-xs text-red-500/70">No payment rating and no active Lana8Wonder plan found for your account.</p>
+                  <p className="text-xs text-red-500/70">{t("sell.rating.noneFound")}</p>
                 )}
               </div>
             </div>
@@ -645,7 +644,7 @@ export default function DiscountSell() {
             <div className="space-y-6">
               <div className="rounded-2xl border-2 border-border bg-card p-4 sm:p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">
-                  Select Wallet to Sell From
+                  {t("sell.step1.title")}
                 </h2>
 
                 {availableWallets.length > 0 ? (
@@ -665,7 +664,7 @@ export default function DiscountSell() {
                             </span>
                             {isFrozen && (
                               <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-1.5 py-0.5 rounded flex-shrink-0">
-                                Frozen
+                                {t("sell.wallet.frozen")}
                               </span>
                             )}
                           </div>
@@ -746,11 +745,10 @@ export default function DiscountSell() {
                 ) : (
                   <div className="rounded-lg border border-amber-200 bg-amber-50/50 dark:bg-amber-950/30 dark:border-amber-800 p-4 text-center">
                     <p className="text-sm text-amber-700 dark:text-amber-400 font-medium mb-1">
-                      No registered wallets found
+                      {t("sell.wallet.noneTitle")}
                     </p>
                     <p className="text-xs text-amber-600 dark:text-amber-500">
-                      No wallets are registered for your account. Please contact
-                      support.
+                      {t("sell.wallet.noneText")}
                     </p>
                   </div>
                 )}
@@ -760,11 +758,11 @@ export default function DiscountSell() {
               {selectedCurrency && (
                 <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-muted-foreground">Payout Currency</p>
+                    <p className="text-xs text-muted-foreground">{t("sell.payoutCurrency")}</p>
                     <p className="text-sm font-semibold">{selectedCurrency}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Exchange Rate</p>
+                    <p className="text-xs text-muted-foreground">{t("sell.exchangeRate")}</p>
                     <p className="text-sm font-mono">1 LANA = {parameters?.exchangeRates?.[selectedCurrency] || '...'} {selectedCurrency}</p>
                   </div>
                 </div>
@@ -777,11 +775,10 @@ export default function DiscountSell() {
                     <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
                     <div className="space-y-2">
                       <p className="text-sm font-semibold text-red-700 dark:text-red-400">
-                        Wallet Consolidation Required
+                        {t("sell.utxo.title")}
                       </p>
                       <p className="text-xs text-red-600 dark:text-red-500">
-                        This wallet has <strong>{utxoCount} UTXOs</strong> which exceeds the maximum of {MAX_UTXOS} inputs per transaction.
-                        You must consolidate your wallet before you can sell LANA.
+                        {t("sell.utxo.has")} <strong>{t("sell.utxo.count", { count: utxoCount })}</strong> {t("sell.utxo.exceeds", { max: MAX_UTXOS })}
                       </p>
                       <a
                         href="https://youtu.be/dWniYXwdWqk"
@@ -790,7 +787,7 @@ export default function DiscountSell() {
                         className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:underline"
                       >
                         <ExternalLink className="h-3 w-3" />
-                        Watch: How to consolidate your wallet
+                        {t("sell.utxo.watch")}
                       </a>
                     </div>
                   </div>
@@ -799,7 +796,7 @@ export default function DiscountSell() {
 
               {selectedWallet && utxoLoading && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Checking wallet UTXOs...
+                  <Loader2 className="h-3 w-3 animate-spin" /> {t("sell.utxo.checking")}
                 </p>
               )}
 
@@ -812,14 +809,14 @@ export default function DiscountSell() {
                       <Banknote className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
                       <div className="space-y-2">
                         <p className="text-sm font-bold text-red-700 dark:text-red-400">
-                          Currency Mismatch
+                          {t("sell.mismatch.title")}
                         </p>
                         <p className="text-xs text-red-600 dark:text-red-500">
-                          You selected <strong>{selectedCurrency}</strong> as your payout currency, but you don't have a payment method configured for {selectedCurrency}.
+                          {t("sell.mismatch.youSelected")} <strong>{selectedCurrency}</strong> {t("sell.mismatch.noPmConfigured", { currency: selectedCurrency })}
                         </p>
                         {availableMethods.length > 0 && (
                           <div className="text-xs text-red-600 dark:text-red-500">
-                            <p className="font-medium">Your available payment methods:</p>
+                            <p className="font-medium">{t("sell.mismatch.availableMethods")}</p>
                             <ul className="list-disc pl-4 mt-1 space-y-0.5">
                               {availableMethods.map((pm: any, i: number) => (
                                 <li key={i}>
@@ -832,11 +829,11 @@ export default function DiscountSell() {
                           </div>
                         )}
                         <p className="text-xs text-red-600 dark:text-red-500">
-                          Please either select a currency that matches your payment method, or{' '}
+                          {t("sell.mismatch.pleaseSelect")}{' '}
                           <a href="/profile" className="font-medium underline hover:text-red-800 dark:hover:text-red-300">
-                            update your profile
+                            {t("sell.mismatch.updateProfile")}
                           </a>{' '}
-                          to add a payment method for {selectedCurrency}.
+                          {t("sell.mismatch.toAddPm", { currency: selectedCurrency })}
                         </p>
                       </div>
                     </div>
@@ -854,7 +851,7 @@ export default function DiscountSell() {
                       : "bg-muted-foreground/30 cursor-not-allowed"
                   }`}
                 >
-                  Next
+                  {t("sell.next")}
                 </button>
               </div>
             </div>
@@ -865,7 +862,7 @@ export default function DiscountSell() {
             <div className="space-y-6">
               <div className="rounded-2xl border-2 border-border bg-card p-4 sm:p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">
-                  Select Payout Currency
+                  {t("sell.step2.title")}
                 </h2>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
@@ -898,7 +895,7 @@ export default function DiscountSell() {
                 {selectedCurrency && (
                   <div className="border-t border-border pt-4">
                     <h3 className="text-sm font-semibold text-foreground mb-2">
-                      Your Payout Account
+                      {t("sell.step2.payoutAccount")}
                     </h3>
                     {(() => {
                       const info = getPayoutInfo();
@@ -907,14 +904,14 @@ export default function DiscountSell() {
                         return (
                           <div className="rounded-lg border-2 border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4 space-y-2">
                             <p className="text-sm text-red-700 dark:text-red-400 font-bold">
-                              Currency Mismatch
+                              {t("sell.mismatch.title")}
                             </p>
                             <p className="text-xs text-red-600 dark:text-red-500">
-                              You selected <strong>{selectedCurrency}</strong> but your profile has no payment method for this currency.
+                              {t("sell.mismatch.youSelected")} <strong>{selectedCurrency}</strong> {t("sell.mismatch2.noPmForCurrency")}
                             </p>
                             {availableMethods.length > 0 && (
                               <div className="text-xs text-red-600 dark:text-red-500">
-                                <p className="font-medium">Your payment methods support:</p>
+                                <p className="font-medium">{t("sell.mismatch2.support")}</p>
                                 <div className="flex flex-wrap gap-1 mt-1">
                                   {availableMethods.map((pm: any, i: number) => (
                                     <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 font-medium">
@@ -925,9 +922,9 @@ export default function DiscountSell() {
                               </div>
                             )}
                             <p className="text-xs text-red-600 dark:text-red-500">
-                              Select a matching currency above, or{' '}
-                              <a href="/profile" className="font-medium underline">update your profile</a>{' '}
-                              to add a {selectedCurrency} payment method.
+                              {t("sell.mismatch2.selectAbove")}{' '}
+                              <a href="/profile" className="font-medium underline">{t("sell.mismatch.updateProfile")}</a>{' '}
+                              {t("sell.mismatch2.toAddPm", { currency: selectedCurrency })}
                             </p>
                           </div>
                         );
@@ -942,7 +939,7 @@ export default function DiscountSell() {
                               </span>
                               {pm.verified && (
                                 <span className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 px-1.5 py-0.5 rounded font-bold">
-                                  VERIFIED
+                                  {t("sell.pm.verified")}
                                 </span>
                               )}
                             </div>
@@ -974,7 +971,7 @@ export default function DiscountSell() {
                           {bank.bankAccount && (
                             <div className="text-xs">
                               <span className="text-muted-foreground">
-                                Account:
+                                {t("sell.pm.account")}
                               </span>{" "}
                               <span className="font-mono">
                                 {bank.bankAccount}
@@ -984,7 +981,7 @@ export default function DiscountSell() {
                           {bank.bankSWIFT && (
                             <div className="text-xs">
                               <span className="text-muted-foreground">
-                                SWIFT:
+                                {t("sell.pm.swift")}
                               </span>{" "}
                               <span className="font-mono">
                                 {bank.bankSWIFT}
@@ -1003,7 +1000,7 @@ export default function DiscountSell() {
                   onClick={() => setStep(1)}
                   className="rounded-xl border border-border px-4 sm:px-6 py-2.5 sm:py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Back
+                  {t("sell.back")}
                 </button>
                 <button
                   onClick={() => setStep(3)}
@@ -1014,7 +1011,7 @@ export default function DiscountSell() {
                       : "bg-muted-foreground/30 cursor-not-allowed"
                   }`}
                 >
-                  Next
+                  {t("sell.next")}
                 </button>
               </div>
             </div>
@@ -1025,13 +1022,13 @@ export default function DiscountSell() {
             <div className="space-y-6">
               <div className="rounded-2xl border-2 border-border bg-card p-4 sm:p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">
-                  Enter LANA Amount
+                  {t("sell.step3.title")}
                 </h2>
 
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1.5">
-                      Amount (LANA)
+                      {t("sell.step3.amountLabel")}
                     </label>
                     <div className="flex gap-2">
                       <input
@@ -1042,7 +1039,7 @@ export default function DiscountSell() {
                           setLanaAmount(e.target.value);
                           setIsEmptyWallet(false);
                         }}
-                        placeholder="e.g. 100000"
+                        placeholder={t("sell.step3.amountPlaceholder")}
                         min="1"
                         className="flex-1 rounded-lg border border-border bg-background px-4 py-3 text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
                       />
@@ -1062,13 +1059,13 @@ export default function DiscountSell() {
                           }}
                           className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors"
                         >
-                          Max
+                          {t("sell.step3.max")}
                         </button>
                       )}
                     </div>
                     {walletBalance > 0 && (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Available: {walletBalance.toLocaleString()} LANA
+                        {t("sell.available")}: {walletBalance.toLocaleString()} LANA
                       </p>
                     )}
                   </div>
@@ -1077,13 +1074,13 @@ export default function DiscountSell() {
                   {parsedLana > 0 && exchangeRate > 0 && (
                     <div translate="no" className="rounded-xl border-2 border-primary/20 bg-primary/5 p-3 sm:p-5 space-y-3">
                       <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">
-                        Payout Breakdown
+                        {t("sell.breakdown.title")}
                       </h3>
 
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">
-                            LANA Amount
+                            {t("sell.breakdown.lanaAmount")}
                           </span>
                           <span className="font-mono font-bold text-foreground">
                             {parsedLana.toLocaleString()} LANA
@@ -1091,7 +1088,7 @@ export default function DiscountSell() {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">
-                            Exchange Rate
+                            {t("sell.exchangeRate")}
                           </span>
                           <span className="font-mono text-foreground">
                             1 LANA = {exchangeRate} {selectedCurrency}
@@ -1099,21 +1096,21 @@ export default function DiscountSell() {
                         </div>
                         <div className="border-t border-border/50 pt-2 flex justify-between">
                           <span className="text-muted-foreground">
-                            Gross Value
+                            {t("sell.breakdown.grossValue")}
                           </span>
                           <span className="font-mono text-foreground">
                             {formatFiat(grossFiat, selectedCurrency)}
                           </span>
                         </div>
                         <div className="flex justify-between text-red-600">
-                          <span>Commission ({COMMISSION_PERCENT}%)</span>
+                          <span>{t("sell.breakdown.commission")} ({COMMISSION_PERCENT}%)</span>
                           <span className="font-mono">
                             -{formatFiat(commissionFiat, selectedCurrency)}
                           </span>
                         </div>
                         <div className="border-t-2 border-primary/30 pt-2 flex justify-between">
                           <span className="font-bold text-foreground">
-                            Your Payout
+                            {t("sell.breakdown.yourPayout")}
                           </span>
                           <span className="font-mono font-bold text-base sm:text-lg text-primary whitespace-nowrap">
                             {formatFiat(netFiat, selectedCurrency)}{" "}
@@ -1124,7 +1121,7 @@ export default function DiscountSell() {
 
                       <div className="text-xs text-muted-foreground pt-1 space-y-0.5">
                         <div>
-                          From:{" "}
+                          {t("sell.breakdown.from")}:{" "}
                           <span className="font-mono font-medium text-foreground">
                             {selectedWallet.slice(0, 12)}...
                             {selectedWallet.slice(-8)}
@@ -1141,7 +1138,7 @@ export default function DiscountSell() {
                           })()}
                         </div>
                         <div>
-                          To buyback:{" "}
+                          {t("sell.breakdown.toBuyback")}:{" "}
                           <span className="font-mono">
                             {BUYBACK_WALLET.slice(0, 12)}...
                             {BUYBACK_WALLET.slice(-8)}
@@ -1158,7 +1155,7 @@ export default function DiscountSell() {
                 <div className="rounded-xl border-2 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4 flex items-start gap-3">
                   <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
                   <p className="text-sm text-red-700 dark:text-red-400">
-                    Minimum sell value is <strong>{CURRENCY_SYMBOLS[selectedCurrency] || ''}{minSellFiat} {selectedCurrency}</strong>
+                    {t("sell.minimum.text")} <strong>{CURRENCY_SYMBOLS[selectedCurrency] || ''}{minSellFiat} {selectedCurrency}</strong>
                   </p>
                 </div>
               )}
@@ -1168,7 +1165,7 @@ export default function DiscountSell() {
                   onClick={() => setStep(1)}
                   className="rounded-xl border border-border px-4 sm:px-6 py-2.5 sm:py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Back
+                  {t("sell.back")}
                 </button>
                 <button
                   onClick={() => setStep(4)}
@@ -1179,7 +1176,7 @@ export default function DiscountSell() {
                       : "bg-muted-foreground/30 cursor-not-allowed"
                   }`}
                 >
-                  Proceed to Confirm
+                  {t("sell.step3.proceed")}
                 </button>
               </div>
             </div>
@@ -1190,34 +1187,34 @@ export default function DiscountSell() {
             <div className="space-y-6">
               <div className="rounded-2xl border-2 border-border bg-card p-4 sm:p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">
-                  Confirm Transaction
+                  {t("sell.step4.title")}
                 </h2>
 
                 {/* Summary */}
                 <div translate="no" className="rounded-xl bg-muted/30 p-3 sm:p-4 space-y-2 text-sm mb-6">
                   <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground flex-shrink-0">From Wallet</span>
+                    <span className="text-muted-foreground flex-shrink-0">{t("sell.summary.fromWallet")}</span>
                     <span className="font-mono text-foreground text-xs sm:text-sm truncate">
                       {selectedWallet.slice(0, 8)}...{selectedWallet.slice(-6)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground flex-shrink-0">
-                      To Buyback
+                      {t("sell.summary.toBuyback")}
                     </span>
                     <span className="font-mono text-foreground text-xs sm:text-sm truncate">
                       {BUYBACK_WALLET.slice(0, 8)}...{BUYBACK_WALLET.slice(-6)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Amount</span>
+                    <span className="text-muted-foreground">{t("sell.summary.amount")}</span>
                     <span className="font-mono font-bold text-foreground whitespace-nowrap">
                       {parsedLana.toLocaleString()} LANA
                     </span>
                   </div>
                   <div className="border-t border-border pt-2 flex justify-between gap-2">
                     <span className="font-bold text-foreground">
-                      Your Payout
+                      {t("sell.breakdown.yourPayout")}
                     </span>
                     <span className="font-mono font-bold text-primary whitespace-nowrap">
                       {formatFiat(netFiat, selectedCurrency)} {selectedCurrency}
@@ -1227,13 +1224,13 @@ export default function DiscountSell() {
 
                 {/* WIF Private Key Input */}
                 <div className="space-y-3">
-                  <label className="text-sm font-medium text-foreground">WIF Private Key</label>
+                  <label className="text-sm font-medium text-foreground">{t("sell.wif.label")}</label>
                   <div className="flex gap-2">
                     <input
                       type="password"
                       value={privateKey}
                       onChange={(e) => setPrivateKey(e.target.value.trim())}
-                      placeholder="Enter or scan your WIF private key"
+                      placeholder={t("sell.wif.placeholder")}
                       className={`flex-1 rounded-xl border-2 px-4 py-3 font-mono text-sm bg-background transition-colors focus:outline-none focus:ring-2 ${
                         privateKeyValid === true
                           ? 'border-green-500 focus:ring-green-500/30'
@@ -1246,29 +1243,29 @@ export default function DiscountSell() {
                       type="button"
                       onClick={() => setIsScannerOpen(true)}
                       className="shrink-0 rounded-xl border-2 border-border px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      title="Scan QR Code"
+                      title={t("sell.wif.scanTitle")}
                     >
                       <QrCode className="h-5 w-5" />
                     </button>
                   </div>
                   {validatingKey && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Validating key...
+                      <Loader2 className="h-3 w-3 animate-spin" /> {t("sell.wif.validating")}
                     </p>
                   )}
                   {privateKeyValid === true && (
                     <p className="text-xs text-green-600 flex items-center gap-1">
-                      <CheckCircle className="h-3 w-3" /> Private key matches the selected wallet
+                      <CheckCircle className="h-3 w-3" /> {t("sell.wif.matches")}
                     </p>
                   )}
                   {privateKeyValid === false && (
                     <p className="text-xs text-red-500 flex items-center gap-1">
-                      <XCircle className="h-3 w-3" /> Private key does not match the selected wallet
+                      <XCircle className="h-3 w-3" /> {t("sell.wif.noMatch")}
                     </p>
                   )}
                   {privateKeyValid === null && privateKey === '' && (
                     <p className="text-xs text-muted-foreground">
-                      Your private key is used only to sign this transaction. It is never stored.
+                      {t("sell.wif.notStored")}
                     </p>
                   )}
                 </div>
@@ -1279,7 +1276,7 @@ export default function DiscountSell() {
                   onClick={() => setStep(3)}
                   className="rounded-xl border border-border px-4 sm:px-6 py-2.5 sm:py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Back
+                  {t("sell.back")}
                 </button>
                 <button
                   onClick={executeSell}
@@ -1293,10 +1290,10 @@ export default function DiscountSell() {
                   {executing ? (
                     <span className="flex items-center gap-2">
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      Sending Transaction...
+                      {t("sell.step4.sending")}
                     </span>
                   ) : (
-                    "Confirm & Send"
+                    t("sell.step4.confirmSend")
                   )}
                 </button>
               </div>
@@ -1331,17 +1328,16 @@ export default function DiscountSell() {
                       </svg>
                     </div>
                     <h2 className="text-2xl font-bold text-foreground mb-2">
-                      Transaction Broadcast!
+                      {t("sell.result.broadcastTitle")}
                     </h2>
                     <p className="text-muted-foreground mb-6">
-                      Your LanaCoins have been sent to the network. Payout will
-                      be processed after blockchain confirmation.
+                      {t("sell.result.broadcastText")}
                     </p>
 
                     <div translate="no" className="rounded-xl bg-white/50 dark:bg-background/50 border border-green-200 dark:border-green-800 p-4 space-y-2 text-sm text-left max-w-md mx-auto">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">
-                          Amount Sold
+                          {t("sell.result.amountSold")}
                         </span>
                         <span className="font-mono font-bold">
                           {txResult.lanaAmount?.toLocaleString()} LANA
@@ -1349,7 +1345,7 @@ export default function DiscountSell() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">
-                          Your Payout
+                          {t("sell.breakdown.yourPayout")}
                         </span>
                         <span className="font-mono font-bold text-primary">
                           {txResult.currency &&
@@ -1363,11 +1359,11 @@ export default function DiscountSell() {
                       {txResult.txHash && (
                         <div className="border-t border-green-200 dark:border-green-800 pt-2">
                           <span className="text-muted-foreground text-xs">
-                            TX Hash
+                            {t("sell.result.txHash")}
                           </span>
                           <div
                             className="font-mono text-xs text-foreground break-all mt-0.5 select-all cursor-pointer"
-                            title="Click to copy"
+                            title={t("sell.result.copyTitle")}
                           >
                             {txResult.txHash}
                           </div>
@@ -1376,7 +1372,7 @@ export default function DiscountSell() {
                       {txResult.transactionId && (
                         <div className="border-t border-green-200 dark:border-green-800 pt-2">
                           <span className="text-muted-foreground text-xs">
-                            Transaction ID
+                            {t("sell.result.transactionId")}
                           </span>
                           <div className="font-mono text-xs text-foreground break-all mt-0.5">
                             {txResult.transactionId}
@@ -1410,7 +1406,7 @@ export default function DiscountSell() {
                       </svg>
                     </div>
                     <h2 className="text-2xl font-bold text-foreground mb-2">
-                      Transaction Failed
+                      {t("sell.result.failedTitle")}
                     </h2>
                     <p className="text-red-600 mb-4">{txResult.error}</p>
                   </>
@@ -1423,7 +1419,7 @@ export default function DiscountSell() {
                     onClick={handleReset}
                     className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
                   >
-                    Sell More
+                    {t("sell.result.sellMore")}
                   </button>
                 ) : (
                   <>
@@ -1431,7 +1427,7 @@ export default function DiscountSell() {
                       onClick={handleReset}
                       className="rounded-xl border border-border px-4 sm:px-6 py-2.5 sm:py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      Back
+                      {t("sell.back")}
                     </button>
                     <button
                       onClick={() => {
@@ -1440,7 +1436,7 @@ export default function DiscountSell() {
                       }}
                       className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
                     >
-                      Try Again
+                      {t("sell.result.tryAgain")}
                     </button>
                   </>
                 )}
@@ -1457,10 +1453,10 @@ export default function DiscountSell() {
         onClose={() => setIsScannerOpen(false)}
         onScan={(decoded) => {
           setPrivateKey(decoded.trim());
-          toast.success("QR code scanned successfully");
+          toast.success(t("sell.scanner.success"));
         }}
-        title="Scan WIF Private Key"
-        description="Point your camera at the QR code containing your WIF private key."
+        title={t("sell.scanner.title")}
+        description={t("sell.scanner.description")}
       />
     </div>
   );

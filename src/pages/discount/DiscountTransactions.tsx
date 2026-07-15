@@ -22,6 +22,8 @@ import {
   FiatPayout,
 } from "@/hooks/useDiscountTransactions";
 import { formatLana } from "@/lib/currencyConversion";
+import { useTranslation } from "@/i18n/I18nContext";
+import discountTranslations from "@/i18n/modules/discount";
 
 const EXPLORER_URL = "https://chainz.cryptoid.info/lana/tx.dws?";
 
@@ -53,6 +55,7 @@ function TransactionCard({
   payouts: FiatPayout[];
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useTranslation(discountTranslations);
 
   const isPaid = tx.status === "paid";
   // External payouts don't track paidFiat, so a "paid" status is the source of truth
@@ -118,15 +121,15 @@ function TransactionCard({
             <div className="flex items-center gap-1.5 shrink-0">
               {isFullyPaid ? (
                 <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs">
-                  Paid
+                  {t("tx.badgePaid")}
                 </Badge>
               ) : isPartial ? (
                 <Badge className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs">
-                  Partial paid
+                  {t("tx.badgePartial")}
                 </Badge>
               ) : (
                 <Badge className="bg-muted text-muted-foreground text-xs">
-                  Completed
+                  {t("tx.badgeCompleted")}
                 </Badge>
               )}
               <Badge variant="outline" className="text-xs">
@@ -147,47 +150,47 @@ function TransactionCard({
             {/* FIAT breakdown */}
             <div className="p-2 sm:p-3 bg-muted rounded-lg space-y-1">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Gross</span>
+                <span className="text-muted-foreground">{t("tx.gross")}</span>
                 <span>{formatFiat(tx.grossFiat, tx.currency)}</span>
               </div>
               <div className="flex justify-between text-destructive">
-                <span>Commission ({tx.commissionPercent}%)</span>
+                <span>{t("tx.commission", { percent: tx.commissionPercent })}</span>
                 <span>-{formatFiat(tx.commissionFiat, tx.currency)}</span>
               </div>
               <div className="flex justify-between font-bold border-t pt-1">
-                <span>Net Payout</span>
+                <span>{t("tx.netPayout")}</span>
                 <span>{formatFiat(tx.netFiat, tx.currency)}</span>
               </div>
               {tx.paidFiat > 0 && tx.paidFiat < tx.netFiat && (
                 <div className="flex justify-between text-green-600">
-                  <span>Paid so far</span>
+                  <span>{t("tx.paidSoFar")}</span>
                   <span>{formatFiat(tx.paidFiat, tx.currency)}</span>
                 </div>
               )}
             </div>
 
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Exchange Rate</span>
+              <span className="text-muted-foreground">{t("tx.exchangeRate")}</span>
               <span>
                 1 LANA = {formatFiat(tx.exchangeRate, tx.currency)}
               </span>
             </div>
 
             <div className="flex justify-between">
-              <span className="text-muted-foreground">LANA (lanoshis)</span>
+              <span className="text-muted-foreground">{t("tx.lanaLanoshis")}</span>
               <span className="font-mono text-xs">
                 {tx.lanaAmount.toLocaleString()}
               </span>
             </div>
 
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Split</span>
+              <span className="text-muted-foreground">{t("tx.split")}</span>
               <span>{tx.split}</span>
             </div>
 
             {/* TX Hash */}
             <div>
-              <span className="text-muted-foreground">TX Hash</span>
+              <span className="text-muted-foreground">{t("tx.txHash")}</span>
               <div className="flex items-center gap-2 mt-1">
                 <p className="font-mono text-xs break-all bg-muted p-2 rounded flex-1">
                   {tx.txHash}
@@ -205,13 +208,13 @@ function TransactionCard({
 
             {/* Wallet addresses */}
             <div className="space-y-1">
-              <span className="text-muted-foreground">Sender</span>
+              <span className="text-muted-foreground">{t("tx.sender")}</span>
               <p className="font-mono text-xs break-all bg-muted p-1.5 rounded">
                 {tx.senderWallet}
               </p>
             </div>
             <div className="space-y-1">
-              <span className="text-muted-foreground">Buyback Wallet</span>
+              <span className="text-muted-foreground">{t("tx.buybackWallet")}</span>
               <p className="font-mono text-xs break-all bg-muted p-1.5 rounded">
                 {tx.buybackWallet}
               </p>
@@ -222,7 +225,7 @@ function TransactionCard({
               <div className="flex items-center gap-2 text-green-600">
                 <ShieldCheck className="h-4 w-4" />
                 <span className="text-xs">
-                  RPC Verified ({tx.rpcConfirmations} confirmations)
+                  {t("tx.rpcVerified", { count: tx.rpcConfirmations })}
                 </span>
               </div>
             )}
@@ -233,7 +236,7 @@ function TransactionCard({
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Banknote className="h-4 w-4" />
                   <span className="font-medium">
-                    Payouts ({txPayouts.length})
+                    {t("tx.payouts", { count: txPayouts.length })}
                   </span>
                 </div>
                 {txPayouts.map((payout) => (
@@ -242,29 +245,29 @@ function TransactionCard({
                     className="p-2 bg-green-50 dark:bg-green-950/20 rounded-lg space-y-1 text-xs"
                   >
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Amount</span>
+                      <span className="text-muted-foreground">{t("tx.amount")}</span>
                       <span className="font-bold">
                         {formatFiat(payout.amount, payout.currency)}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Paid At</span>
-                      <span>{payout.paidAt || "N/A"}</span>
+                      <span className="text-muted-foreground">{t("tx.paidAt")}</span>
+                      <span>{payout.paidAt || t("tx.na")}</span>
                     </div>
                     {payout.paidToAccount && (
                       <div className="flex justify-between gap-2 min-w-0">
-                        <span className="text-muted-foreground flex-shrink-0">Account</span>
+                        <span className="text-muted-foreground flex-shrink-0">{t("tx.account")}</span>
                         <span className="font-mono truncate">{payout.paidToAccount}</span>
                       </div>
                     )}
                     {payout.reference && (
                       <div className="flex justify-between gap-2 min-w-0">
-                        <span className="text-muted-foreground flex-shrink-0">Reference</span>
+                        <span className="text-muted-foreground flex-shrink-0">{t("tx.reference")}</span>
                         <span className="truncate">{payout.reference}</span>
                       </div>
                     )}
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Remaining</span>
+                      <span className="text-muted-foreground">{t("tx.remaining")}</span>
                       <span>
                         {formatFiat(payout.remaining, payout.currency)}
                       </span>
@@ -287,7 +290,7 @@ function TransactionCard({
             )}
 
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Transaction ID</span>
+              <span className="text-muted-foreground">{t("tx.transactionId")}</span>
               <span className="font-mono text-xs">
                 {tx.id.length > 16 ? tx.id.slice(0, 8) + "..." : tx.id}
               </span>
@@ -302,6 +305,7 @@ function TransactionCard({
 export default function DiscountTransactions() {
   const { transactions, payouts, loading, error, refetch } =
     useDiscountTransactions();
+  const { t } = useTranslation(discountTranslations);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -335,10 +339,10 @@ export default function DiscountTransactions() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
             <Receipt className="h-5 w-5 sm:h-6 sm:w-6" />
-            Transactions
+            {t("tx.title")}
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Lana.Discount buyback history & payouts
+            {t("tx.subtitle")}
           </p>
         </div>
         <Button
@@ -350,7 +354,7 @@ export default function DiscountTransactions() {
           <RefreshCw
             className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`}
           />
-          <span className="hidden sm:inline">Refresh</span>
+          <span className="hidden sm:inline">{t("tx.refresh")}</span>
         </Button>
       </div>
 
@@ -363,7 +367,7 @@ export default function DiscountTransactions() {
                 {stats.count}
               </p>
               <p className="text-[0.65rem] sm:text-xs text-muted-foreground">
-                Transactions
+                {t("tx.statTransactions")}
               </p>
             </div>
             <div className="p-2 sm:p-3 bg-muted rounded-lg text-center">
@@ -371,7 +375,7 @@ export default function DiscountTransactions() {
                 {formatLana(stats.totalLana)}
               </p>
               <p className="text-[0.65rem] sm:text-xs text-muted-foreground">
-                LANA Sold
+                {t("tx.statLanaSold")}
               </p>
             </div>
             <div className="p-2 sm:p-3 bg-green-50 dark:bg-green-950/30 rounded-lg text-center">
@@ -379,7 +383,7 @@ export default function DiscountTransactions() {
                 {formatFiat(stats.totalPaid, stats.currency)}
               </p>
               <p className="text-[0.65rem] sm:text-xs text-muted-foreground">
-                Paid Out
+                {t("tx.statPaidOut")}
               </p>
             </div>
             <div className="p-2 sm:p-3 bg-muted rounded-lg text-center">
@@ -387,7 +391,7 @@ export default function DiscountTransactions() {
                 {formatFiat(stats.remaining, stats.currency)}
               </p>
               <p className="text-[0.65rem] sm:text-xs text-muted-foreground">
-                Remaining
+                {t("tx.remaining")}
               </p>
             </div>
           </div>
@@ -400,7 +404,7 @@ export default function DiscountTransactions() {
           <CardContent className="py-6 text-center">
             <p className="text-destructive">{error}</p>
             <Button variant="link" className="mt-2" onClick={refetch}>
-              Try again
+              {t("tx.tryAgain")}
             </Button>
           </CardContent>
         </Card>
@@ -411,16 +415,16 @@ export default function DiscountTransactions() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           <span className="ml-2 text-muted-foreground">
-            Loading transactions...
+            {t("tx.loading")}
           </span>
         </div>
       ) : transactions.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <Inbox className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">No buyback transactions yet</p>
+            <p className="text-muted-foreground">{t("tx.emptyTitle")}</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Sell LANA through Lana.Discount to see transactions here
+              {t("tx.emptyDesc")}
             </p>
           </CardContent>
         </Card>
