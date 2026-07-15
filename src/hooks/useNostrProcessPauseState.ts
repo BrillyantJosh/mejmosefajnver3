@@ -142,3 +142,105 @@ export const useNostrProcessPauseState = (
 
   return { pauseEvents, isLocked, lockedUntil: isLocked ? lockedUntil : null, pauseNote, isLoading };
 };
+
+export interface ProcessPauseStatus {
+  isLocked: boolean;
+  lockedUntil: number | null; // unix seconds (only when locked)
+}
+
+/**
+ * Bulk variant for the process LIST: with ONE relay subscription, resolves the
+ * current pause state of many processes at once. Returns a Map keyed by each
+ * process's `processEventId`. Spoof-protected per process (only that process's
+ * facilitator's 87056 events count) and time-aware (auto-clears when `until`
+ * passes, checked on a 30s tick).
+ */
+export const useNostrProcessPauseStatesBulk = (
+  processes: { processEventId: string; facilitator: string }[],
+): Map<string, ProcessPauseStatus> => {
+  const { parameters } = useSystemParameters();
+  const [byProcess, setByProcess] = useState<Map<string, ProcessPauseEvent[]>>(new Map());
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  const eventIds = processes.map((p) => p.processEventId).filter(Boolean);
+  const eventIdsKey = [...eventIds].sort().join(',');
+  const facilitatorKey = processes
+    .map((p) => `${p.processEventId}:${p.facilitator}`)
+    .filter(Boolean)
+    .sort()
+    .join('|');
+
+  useEffect(() => {
+    if (eventIds.length === 0) {
+      setByProcess(new Map());
+      return;
+    }
+    const relays = parameters?.relays || [];
+    if (relays.length === 0) return;
+
+    setByProcess(new Map());
+    const pool = new SimplePool();
+
+    const sub = pool.subscribeMany(
+      relays,
+      { kinds: [PROCESS_PAUSE_KIND], '#e': eventIds, limit: 2000 } as any,
+      {
+        onevent(event: Event) {
+          const actionTag = event.tags.find((t) => t[0] === 'action')?.[1];
+          if (actionTag !== 'pause' && actionTag !== 'resume') return;
+          const eTag = event.tags.find((t) => t[0] === 'e')?.[1];
+          if (!eTag) return;
+          const untilRaw = event.tags.find((t) => t[0] === 'until')?.[1];
+          const until = untilRaw ? Number.parseInt(untilRaw, 10) : null;
+          const parsed: ProcessPauseEvent = {
+            id: event.id,
+            authorPubkey: event.pubkey,
+            action: actionTag,
+            until: Number.isFinite(until as number) ? (until as number) : null,
+            note: event.content || '',
+            createdAt: event.created_at,
+          };
+          setByProcess((prev) => {
+            const list = prev.get(eTag) || [];
+            if (list.some((e) => e.id === parsed.id)) return prev;
+            const next = new Map(prev);
+            next.set(
+              eTag,
+              [...list, parsed].sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1)),
+            );
+            return next;
+          });
+        },
+        oneose() {},
+      },
+    );
+
+    return () => {
+      sub.close();
+      pool.close(relays);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventIdsKey, parameters?.relays]);
+
+  // 30s tick so an expired lock clears from the list without a reload.
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  return useMemo(() => {
+    const map = new Map<string, ProcessPauseStatus>();
+    for (const p of processes) {
+      if (!p.processEventId) continue;
+      const list = (byProcess.get(p.processEventId) || []).filter(
+        (e) => p.facilitator && e.authorPubkey === p.facilitator,
+      );
+      const latest = list.length > 0 ? list[list.length - 1] : null;
+      const lockedUntil = latest?.action === 'pause' ? latest.until : null;
+      const isLocked = !!lockedUntil && lockedUntil * 1000 > nowMs;
+      map.set(p.processEventId, { isLocked, lockedUntil: isLocked ? lockedUntil : null });
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [byProcess, facilitatorKey, nowMs]);
+};

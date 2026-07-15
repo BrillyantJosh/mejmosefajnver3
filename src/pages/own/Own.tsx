@@ -10,7 +10,7 @@ import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
 import { useNostrGroupKey } from "@/hooks/useNostrGroupKey";
 import { useNostrGroupMessages } from "@/hooks/useNostrGroupMessages";
 import { useNostrProcessExitState, PROCESS_EXIT_KIND } from "@/hooks/useNostrProcessExitState";
-import { useNostrProcessPauseState, PROCESS_PAUSE_KIND } from "@/hooks/useNostrProcessPauseState";
+import { useNostrProcessPauseState, useNostrProcessPauseStatesBulk, PROCESS_PAUSE_KIND } from "@/hooks/useNostrProcessPauseState";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { useLang } from "@/i18n/I18nContext";
 import { finalizeEvent, nip44 } from "nostr-tools";
@@ -210,13 +210,19 @@ export default function Own() {
     }
   }, [session, profiles, lashedEvents, addLash, giveLash, incrementUnpaidCount]);
 
+  // Pause state for EVERY listed process (one relay subscription), so the list
+  // cards can show a "paused until …" notice without opening each process.
+  const pauseStatuses = useNostrProcessPauseStatesBulk(
+    processes.map(p => ({ processEventId: p.processEventId, facilitator: p.facilitator }))
+  );
+
   // Format conversations for display
   const conversations = processes.map(process => ({
     id: process.id,
     title: process.title,
     initiator: profiles.get(process.initiator)?.full_name || process.initiator.slice(0, 8),
     facilitator: profiles.get(process.facilitator)?.full_name || process.facilitator.slice(0, 8),
-    participants: process.participants.map(p => 
+    participants: process.participants.map(p =>
       profiles.get(p)?.full_name || p.slice(0, 8)
     ),
     guests: process.guests.map(g =>
@@ -224,7 +230,8 @@ export default function Own() {
     ),
     status: process.phase,
     phase: process.phase,
-    lastActivity: new Date(process.openedAt * 1000).toLocaleDateString()
+    lastActivity: new Date(process.openedAt * 1000).toLocaleDateString(),
+    pausedUntil: pauseStatuses.get(process.processEventId)?.lockedUntil ?? null,
   }));
 
   // Send OWN message (text or audio). replyTo = event id of the message being
