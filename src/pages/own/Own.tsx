@@ -10,7 +10,9 @@ import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
 import { useNostrGroupKey } from "@/hooks/useNostrGroupKey";
 import { useNostrGroupMessages } from "@/hooks/useNostrGroupMessages";
 import { useNostrProcessExitState, PROCESS_EXIT_KIND } from "@/hooks/useNostrProcessExitState";
+import { useNostrProcessPauseState, PROCESS_PAUSE_KIND } from "@/hooks/useNostrProcessPauseState";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
+import { useLang } from "@/i18n/I18nContext";
 import { finalizeEvent, nip44 } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "sonner";
@@ -97,6 +99,15 @@ export default function Own() {
   );
   // Participants and the initiator may exit (not the facilitator or guest)
   const canExit = selectedProcess?.userRole === 'participant' || selectedProcess?.userRole === 'initiator';
+
+  // Facilitator pause / reopen (KIND 87056) state for the selected process
+  const { pauseEvents, isLocked, lockedUntil, isLoading: pauseLoading } = useNostrProcessPauseState(
+    selectedProcess?.processEventId || null,
+    selectedProcess?.facilitator || null
+  );
+  // Only the facilitator may pause / reopen the process
+  const canPause = selectedProcess?.userRole === 'facilitator';
+  const en = useLang() === 'en';
 
   // Get message IDs for LASH counts from Supabase
   const messageIds = messages.map(m => m.id);
@@ -226,6 +237,17 @@ export default function Own() {
 
     if (!parameters?.relays || parameters.relays.length === 0) {
       toast.error("No relays configured");
+      return false;
+    }
+
+    // Fail closed while the process is paused (or while the pause state is still
+    // resolving) so a stale-UI send can't slip a message through the silence.
+    if (isLocked) {
+      toast.error(en ? 'The process is paused — you cannot post' : 'Proces je v premoru — objavljanje ni mogoče');
+      return false;
+    }
+    if (pauseLoading) {
+      toast.error(en ? 'One moment — checking the process state…' : 'Trenutek — preverjam stanje procesa …');
       return false;
     }
 
@@ -368,6 +390,43 @@ export default function Own() {
       return true;
     } catch (error) {
       console.error('❌ Error publishing exit/enter event:', error);
+      return false;
+    }
+  };
+
+  // Publish a KIND 87056 pause/reopen event (signed by the facilitator, public).
+  // 'pause' carries an `until` unix timestamp after which the process auto-reopens;
+  // 'resume' reopens early. Unencrypted so every participant can read the lock.
+  const publishPauseEvent = async (action: 'pause' | 'resume', until: number, note = ''): Promise<boolean> => {
+    if (!session?.nostrPrivateKey || !session?.nostrHexId || !selectedProcess) {
+      toast.error("Missing authentication");
+      return false;
+    }
+    try {
+      const tags: string[][] = [
+        ['e', selectedProcess.processEventId, '', 'process'],
+        ['a', `37044:${selectedProcess.initiator}:${selectedProcess.id}`],
+        ['action', action],
+        ['client', 'lana-own'],
+      ];
+      if (action === 'pause') tags.push(['until', String(until)]);
+      if (selectedProcess.initiator) tags.push(['p', selectedProcess.initiator, '', 'initiator']);
+      if (selectedProcess.facilitator) tags.push(['p', selectedProcess.facilitator, '', 'facilitator']);
+
+      const signedEvent = finalizeEvent({
+        kind: PROCESS_PAUSE_KIND,
+        created_at: Math.floor(Date.now() / 1000),
+        tags,
+        content: note.trim(),
+      }, hexToBytes(session.nostrPrivateKey));
+
+      await supabase.functions.invoke('publish-dm-event', { body: { event: signedEvent } });
+      supabase.functions
+        .invoke('queue-relay-event', { body: { signedEvent, userPubkey: session.nostrHexId } })
+        .catch(() => {});
+      return true;
+    } catch (error) {
+      console.error('❌ Error publishing pause/reopen event:', error);
       return false;
     }
   };
@@ -527,7 +586,25 @@ export default function Own() {
       _sortTs: ev.createdAt,
     };
   });
-  const allMessages = [...realMessages, ...systemMessages].sort((a, b) => a._sortTs - b._sortTs);
+  // "Facilitator paused / reopened the process" system lines from KIND 87056.
+  const pauseSystemMessages = pauseEvents.map(ev => {
+    const when = ev.until ? new Date(ev.until * 1000).toLocaleString() : '';
+    const text = ev.action === 'pause'
+      ? (en ? `The facilitator paused the process — closed until ${when}` : `Fasilitator je dal premor — proces zaprt do ${when}`)
+      : (en ? 'The facilitator reopened the process' : 'Fasilitator je znova odprl proces');
+    return {
+      id: ev.id,
+      sender: '',
+      senderPubkey: ev.authorPubkey,
+      role: '',
+      timestamp: new Date(ev.createdAt * 1000).toLocaleString(),
+      type: 'system' as const,
+      systemText: text,
+      isCurrentUser: false,
+      _sortTs: ev.createdAt,
+    };
+  });
+  const allMessages = [...realMessages, ...systemMessages, ...pauseSystemMessages].sort((a, b) => a._sortTs - b._sortTs);
 
   if (processesLoading) {
     return (
@@ -578,6 +655,19 @@ export default function Own() {
         const ok = await publishExitEvent('enter', '');
         if (ok) toast.success('You have re-entered the process');
         else toast.error('Failed to re-enter the process');
+      }}
+      isLocked={isLocked}
+      lockedUntil={lockedUntil || undefined}
+      canPause={canPause}
+      onPause={async (until: number, note: string) => {
+        const ok = await publishPauseEvent('pause', until, note);
+        if (ok) toast.success(en ? 'Process paused' : 'Proces v premoru');
+        else toast.error(en ? 'Failed to pause the process' : 'Premor ni uspel');
+      }}
+      onReopen={async () => {
+        const ok = await publishPauseEvent('resume', 0);
+        if (ok) toast.success(en ? 'Process reopened' : 'Proces znova odprt');
+        else toast.error(en ? 'Failed to reopen the process' : 'Odpiranje ni uspelo');
       }}
       onBack={() => setSelectedProcessId(undefined)}
       onSendAudio={async (audioPath: string, replyTo?: string) => {

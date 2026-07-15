@@ -3,10 +3,12 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, Send, MessageCircle, History, ImagePlus, Camera, Loader2, LogOut, X } from "lucide-react";
+import { ArrowLeft, Send, MessageCircle, History, ImagePlus, Camera, Loader2, LogOut, X, Pause, Lock } from "lucide-react";
 import ChatMessage from "./ChatMessage";
 import OwnAudioRecorder from "./OwnAudioRecorder";
+import PauseProcessDialog from "./PauseProcessDialog";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
+import { useLang } from "@/i18n/I18nContext";
 import { toast } from "sonner";
 
 const MESSAGES_PER_PAGE = 20;
@@ -147,6 +149,12 @@ interface ChatViewProps {
   canExit?: boolean;
   onExit?: () => void;
   onReEnter?: () => Promise<void>;
+  // Facilitator pause / reopen props
+  isLocked?: boolean;
+  lockedUntil?: number; // unix seconds
+  canPause?: boolean;
+  onPause?: (until: number, note: string) => Promise<void>;
+  onReopen?: () => Promise<void>;
   // LASH props
   lashedEventIds?: Set<string>;
   onGiveLash?: (messageId: string, recipientPubkey: string) => Promise<void>;
@@ -169,14 +177,22 @@ export default function ChatView({
   canExit = false,
   onExit,
   onReEnter,
+  isLocked = false,
+  lockedUntil,
+  canPause = false,
+  onPause,
+  onReopen,
   lashedEventIds = new Set(),
   onGiveLash,
   lashingMessageId,
   lashCounts = new Map()
 }: ChatViewProps) {
+  const en = useLang() === 'en';
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isReEntering, setIsReEntering] = useState(false);
+  const [isReopening, setIsReopening] = useState(false);
+  const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(MESSAGES_PER_PAGE);
   // The message currently being replied to (null = not replying)
   const [replyingTo, setReplyingTo] = useState<{ id: string; sender: string; snippet: string } | null>(null);
@@ -206,6 +222,16 @@ export default function ChatView({
       await onReEnter();
     } finally {
       setIsReEntering(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    if (!onReopen) return;
+    setIsReopening(true);
+    try {
+      await onReopen();
+    } finally {
+      setIsReopening(false);
     }
   };
 
@@ -358,6 +384,12 @@ export default function ChatView({
               >
                 {currentPhase.emoji} {currentPhase.label}
               </Badge>
+              {isLocked && (
+                <Badge className="text-xs shrink-0 gap-1 bg-amber-100 text-amber-700 border border-amber-300 dark:bg-amber-950 dark:text-amber-300">
+                  <Lock className="w-3 h-3" />
+                  {en ? 'Paused' : 'V premoru'}
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -451,7 +483,33 @@ export default function ChatView({
         </div>
       </ScrollArea>
 
-      {/* Input */}
+      {/* Input — while the facilitator has the process paused, the whole composer
+          (text + audio + image) is replaced by a notice, so NObody can post; the
+          messages above stay readable. The facilitator additionally gets Reopen. */}
+      {isLocked ? (
+        <Card className="p-4 sticky bottom-0">
+          <div className="flex flex-col items-center text-center gap-2">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <Lock className="h-5 w-5" />
+              <span className="font-semibold">{en ? 'Process paused' : 'Proces v premoru'}</span>
+            </div>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              {en
+                ? `The facilitator paused the process. No one can post — you can still read. It reopens${lockedUntil ? ' on ' + new Date(lockedUntil * 1000).toLocaleString() : ' soon'}.`
+                : `Fasilitator je dal premor. Nihče ne more objavljati — lahko pa še vedno bereš. Proces se znova odpre${lockedUntil ? ' ' + new Date(lockedUntil * 1000).toLocaleString() : ' kmalu'}.`}
+            </p>
+            {canPause && onReopen && (
+              <Button onClick={handleReopen} disabled={isReopening} size="sm" className="mt-1">
+                {isReopening ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{en ? 'Reopening…' : 'Odpiram…'}</>
+                ) : (
+                  en ? 'Reopen now' : 'Znova odpri zdaj'
+                )}
+              </Button>
+            )}
+          </div>
+        </Card>
+      ) : (
       <Card className="p-2 md:p-4 sticky bottom-0">
         <div className="flex flex-col gap-2">
           {/* Replying-to preview */}
@@ -503,6 +561,17 @@ export default function ChatView({
                 Exit
               </Button>
             )}
+            {!recorderActive && canPause && onPause && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPauseDialogOpen(true)}
+                className="shrink-0 whitespace-nowrap px-2 md:px-3 text-amber-600 border-amber-400/50 hover:bg-amber-500/10"
+              >
+                <Pause className="w-4 h-4 mr-1.5" />
+                {en ? 'Pause' : 'Premor'}
+              </Button>
+            )}
           </div>
           {/* Text input row — hidden while recording/previewing audio (the recorder has
               its own Send/Discard) so the input area isn't crowded on mobile. */}
@@ -541,8 +610,16 @@ export default function ChatView({
           )}
         </div>
       </Card>
+      )}
       </>
       )}
+
+      <PauseProcessDialog
+        open={pauseDialogOpen}
+        onOpenChange={setPauseDialogOpen}
+        onConfirm={async (until, note) => { if (onPause) await onPause(until, note); }}
+        en={en}
+      />
     </div>
   );
 }
