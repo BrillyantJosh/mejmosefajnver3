@@ -325,6 +325,11 @@ const Projects = () => {
           <p className="text-muted-foreground">
             {t('projects.subtitle')}
           </p>
+          {!isLoading && (
+            <p className="text-sm text-muted-foreground mt-1.5">
+              {total} {t(total !== 1 ? 'projects.projectMany' : 'projects.projectOne')}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => navigate('/100millionideas/eligibility')}
@@ -333,11 +338,16 @@ const Projects = () => {
             <HelpCircle className="h-4 w-4 shrink-0" />
             {eligibilityContent(uiLang).eligibilityTitle}
           </button>
-          {!isLoading && (
-            <p className="text-sm text-muted-foreground mt-1">
-              {total} {t(total !== 1 ? 'projects.projectMany' : 'projects.projectOne')}
-            </p>
-          )}
+          <p className="mt-2 text-sm text-muted-foreground">
+            {t('projects.haveIdea')}{' '}
+            <button
+              type="button"
+              onClick={() => navigate('/events/online')}
+              className="font-medium text-primary hover:underline"
+            >
+              {t('projects.joinEvent')}
+            </button>
+          </p>
         </div>
       </div>
 
