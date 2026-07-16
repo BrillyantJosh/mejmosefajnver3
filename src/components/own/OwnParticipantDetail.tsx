@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,6 +37,8 @@ const TXT = {
     compSteps: ["odg", "spr", "opr", "zab"],
     emTitle: "Čustva", emDepth: "Globina vstopa", emHeavy: "Težka", emLight: "Svetla", emSwing: "nihaj",
     emVuln: "ranljivost", emEmbody: "utelešenost", emPeak: "vrh",
+    tabOpinions: "Mnenja", tabGrievances: "Očitki", tabEmotions: "Čustva",
+    noGriev: "Ni zabeleženih očitkov za to osebo.", noEmotions: "Bitja še niso zaznala čustev pri tej osebi.",
   },
   en: {
     back: "Back to chat",
@@ -58,6 +61,8 @@ const TXT = {
     compSteps: ["resp", "acc", "apo", "own"],
     emTitle: "Emotions", emDepth: "Depth of entry", emHeavy: "Heavy", emLight: "Light", emSwing: "swing",
     emVuln: "vulnerability", emEmbody: "embodiment", emPeak: "peak",
+    tabOpinions: "Opinions", tabGrievances: "Grievances", tabEmotions: "Emotions",
+    noGriev: "No grievances recorded for this person.", noEmotions: "No emotions detected for this person yet.",
   },
 };
 
@@ -253,260 +258,281 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
 
       <h3 className="text-base font-semibold">{participantName}</h3>
 
-      {/* Latest verdict from each being */}
-      <div className="space-y-2">
-        <h4 className="text-sm font-medium text-muted-foreground">{L.latest}</h4>
-        {isLoading && beings.length === 0 ? (
-          <div className="space-y-2">{[0, 1].map((i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}</div>
-        ) : beings.length === 0 ? (
-          <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{L.noneLatest}</CardContent></Card>
-        ) : (
-          <div className="grid gap-2.5 sm:grid-cols-2">
-            {beings.map((b) => {
-              const st = stateOf(b);
-              const entry = latestEntryByBeing.get(b);
-              return (
-                <Card key={b} className="border-orange-500/25 bg-orange-500/[0.04]">
-                  <CardContent className="p-3 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium inline-flex items-center gap-1.5">
-                        <Bot className="h-4 w-4 text-orange-500" />{nameOf(b)}
-                      </span>
-                      {st?.currentPhaseEstimate && (
-                        <Badge variant="outline" className={getPhaseColor(st.currentPhaseEstimate)}>{getPhaseLabel(st.currentPhaseEstimate, lang)}</Badge>
-                      )}
-                    </div>
-                    {st && (
-                      <div className="space-y-1">
-                        <Req status={reqStatus(st, "reflection")} label={L.reflection} />
-                        <Req status={reqStatus(st, "alignment")} label={L.alignment} />
-                        <Req status={reqStatus(st, "change")} label={L.change} />
-                      </div>
-                    )}
-                    {entry?.summary && <p className="text-xs italic text-muted-foreground leading-snug">“{entry.summary}”</p>}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {/* Trije zavihki — kot na strani Matrix: Mnenja / Očitki / Čustva */}
+      <Tabs defaultValue="opinions" className="space-y-3">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsTrigger value="opinions">{L.tabOpinions}</TabsTrigger>
+          <TabsTrigger value="grievances">{L.tabGrievances}</TabsTrigger>
+          <TabsTrigger value="emotions">{L.tabEmotions}</TabsTrigger>
+        </TabsList>
 
-      {/* Grievances involving this participant — per being, omitted when empty */}
-      {grievByBeing.length > 0 && (
+        <TabsContent value="opinions" className="space-y-4">
+        {/* Latest verdict from each being */}
         <div className="space-y-2">
-          <h4 className="text-sm font-medium text-muted-foreground">{L.grievTitle}</h4>
-          <p className="text-[11px] text-muted-foreground leading-snug">{L.grievLegend}</p>
-          <div className="space-y-2.5">
-            {grievByBeing.map(({ being, given, received }) => (
-              <Card key={being} className="border-orange-500/25 bg-orange-500/[0.04]">
-                <CardContent className="p-3 space-y-2">
-                  <span className="text-sm font-medium inline-flex items-center gap-1.5">
-                    <Bot className="h-4 w-4 text-orange-500" />{nameOf(being)}
-                  </span>
-                  {given.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{L.grievGiven}</div>
-                      {given.map((g) => (
-                        <div key={g.id} className="rounded-md bg-muted/40 border border-border/50 p-2 space-y-0.5">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <span className="text-xs font-medium">→ {nameOf(g.toPubkey)}</span>
-                            <GrievStatus g={g} side="given" />
-                          </div>
-                          {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
+          <h4 className="text-sm font-medium text-muted-foreground">{L.latest}</h4>
+          {isLoading && beings.length === 0 ? (
+            <div className="space-y-2">{[0, 1].map((i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}</div>
+          ) : beings.length === 0 ? (
+            <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{L.noneLatest}</CardContent></Card>
+          ) : (
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {beings.map((b) => {
+                const st = stateOf(b);
+                const entry = latestEntryByBeing.get(b);
+                return (
+                  <Card key={b} className="border-orange-500/25 bg-orange-500/[0.04]">
+                    <CardContent className="p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium inline-flex items-center gap-1.5">
+                          <Bot className="h-4 w-4 text-orange-500" />{nameOf(b)}
+                        </span>
+                        {st?.currentPhaseEstimate && (
+                          <Badge variant="outline" className={getPhaseColor(st.currentPhaseEstimate)}>{getPhaseLabel(st.currentPhaseEstimate, lang)}</Badge>
+                        )}
+                      </div>
+                      {st && (
+                        <div className="space-y-1">
+                          <Req status={reqStatus(st, "reflection")} label={L.reflection} />
+                          <Req status={reqStatus(st, "alignment")} label={L.alignment} />
+                          <Req status={reqStatus(st, "change")} label={L.change} />
                         </div>
-                      ))}
-                    </div>
-                  )}
-                  {received.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{L.grievReceived}</div>
-                      {received.map((g) => (
-                        <div key={g.id} className="rounded-md bg-muted/40 border border-border/50 p-2 space-y-0.5">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <span className="text-xs font-medium">← {nameOf(g.fromPubkey)}</span>
-                            <GrievStatus g={g} side="received" />
-                          </div>
-                          {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* ── Primerjava bitij za to osebo (⚠ = razhajanje) ── */}
-          {grievCompare && (
-            <Card className="border-orange-500/25 bg-orange-500/[0.04]">
-              <CardContent className="p-3 space-y-2">
-                <div className="text-sm font-medium">{L.compTitle}</div>
-                <p className="text-[11px] text-muted-foreground">{L.compIntro}</p>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-border/60 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        <th className="text-left p-1.5 font-medium">{L.grievTitle}</th>
-                        {grievCompare.beings.map((b) => (
-                          <th key={b} className="text-left p-1.5 font-medium whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3 text-orange-500" />{nameOf(b)}</span>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {grievCompare.rows.map((row) => (
-                        <tr key={`${row.from}|${row.to}`} className="border-b border-border/40 align-top">
-                          <td className="p-1.5 min-w-[8rem]">
-                            <div className="font-medium">{nameOf(row.from)} → {nameOf(row.to)}</div>
-                            <div className="mt-0.5 space-x-1.5">
-                              {row.missing && <span className="text-[10px] text-amber-600">⚠ {L.compMissing}</span>}
-                              {row.countDiff && <span className="text-[10px] text-amber-600">⚠ {L.compCountDiff}</span>}
-                              {Object.keys(row.stepDisagree).length > 0 && <span className="text-[10px] text-amber-600">⚠ {L.compStepDiff}</span>}
-                            </div>
-                          </td>
-                          {row.cells.map((c) => (
-                            <td key={c.being} className="p-1.5 whitespace-nowrap">
-                              {c.n === 0 ? (
-                                <span className="text-amber-600/80">{L.compNone}</span>
-                              ) : (
-                                <div>
-                                  <div className="font-medium">{c.n} {L.compCount}</div>
-                                  <div className="text-muted-foreground mt-0.5 space-x-1.5">
-                                    {(["resp", "acc", "apo", "own"] as const).map((s, i) => (
-                                      <span key={s} className={row.stepDisagree[s] ? "text-amber-600 font-semibold" : c.counts[s] === c.n ? "text-green-600" : undefined}>
-                                        {L.compSteps[i]} {c.counts[s]}/{c.n}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+                      )}
+                      {entry?.summary && <p className="text-xs italic text-muted-foreground leading-snug">“{entry.summary}”</p>}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           )}
         </div>
-      )}
 
-      {/* ── Čustva (Steber 3): paleta per bitje za to osebo ── */}
-      {myPalettes.length > 0 && (
+        {/* Timeline of opinions */}
         <div className="space-y-2">
-          <h4 className="text-sm font-medium text-muted-foreground">{L.emTitle}</h4>
-          <div className="space-y-2.5">
-            {myPalettes.map((pal) => {
-              const byKey = new Map(pal.emotions.map((e) => [e.key, e]));
-              const lang2 = en ? "en" : "sl";
-              const modeIcon = (m: string) => (m === "expressed" ? "🔥" : m === "held" ? "🤐" : "💬");
-              const Chip = ({ k, heavy }: { k: string; heavy: boolean }) => {
-                const hit = byKey.get(k);
-                const label = EMOTION_LABELS[k]?.[lang2] || k;
-                if (!hit) return <span className="inline-flex items-center rounded-full border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground/40">{label}</span>;
-                const alpha = 0.15 + 0.55 * hit.peakIntensity;
-                return (
-                  <span
-                    title={`${label} · ${L.emPeak} ${hit.peakIntensity.toFixed(2)} · ${hit.mode}${hit.evidence ? ` — ${hit.evidence}` : ""}`}
-                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${heavy ? "border-red-500/50 text-red-700 dark:text-red-400" : "border-green-500/50 text-green-700 dark:text-green-400"}`}
-                    style={{ backgroundColor: heavy ? `rgba(239,68,68,${alpha * 0.25})` : `rgba(34,197,94,${alpha * 0.25})` }}
-                  >
-                    {modeIcon(hit.mode)} {label} <span className="opacity-70">{Math.round(hit.peakIntensity * 100)}</span>
-                  </span>
-                );
-              };
-              return (
-                <Card key={pal.beingPubkey} className="border-orange-500/25 bg-orange-500/[0.04]">
+          <h4 className="text-sm font-medium text-muted-foreground">{L.timeline}</h4>
+          {myEntries.length === 0 ? (
+            <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{isLoading ? L.loading : L.noOpinions}</CardContent></Card>
+          ) : (
+            <div className="space-y-2.5">
+              {myEntries.map((e) => (
+                <div key={e.id} className="rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                    <span className="text-sm font-semibold inline-flex items-center gap-1.5">
+                      <Bot className="h-4 w-4 text-orange-500" />{nameOf(e.beingPubkey)}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={getPhaseColor(e.phaseEstimate)}>{getPhaseLabel(e.phaseEstimate, lang)}</Badge>
+                      <span className="text-[11px] text-muted-foreground">{new Date(e.created_at * 1000).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  {e.summary && <p className="text-sm mb-2 italic">“{e.summary}”</p>}
+                  <div className="space-y-1.5">
+                    {ASSESSED_PHASES.map((ph) => {
+                      const v = (e.phases as any)?.[ph];
+                      if (!v) return null;
+                      const met = !!v.requirement_met;
+                      const current = String(e.phaseEstimate || "").toLowerCase() === ph;
+                      return (
+                        <div key={ph} className="rounded-md bg-muted/40 border border-border/50 p-2">
+                          <div className="flex items-center gap-1.5 text-xs font-medium">
+                            {met ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" /> : current ? <CircleDot className="h-3.5 w-3.5 text-amber-500 shrink-0" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />}
+                            {phaseKeyLabel(ph)}
+                            <span className="font-normal text-muted-foreground">· {met ? L.met : current ? L.inProgress : L.notYet}</span>
+                          </div>
+                          {v.rationale && <p className="text-xs text-muted-foreground mt-1" style={{ paddingLeft: "1.4rem" }}>{v.rationale}</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* ↳ Smer (Steber 2): guidance nested under this exact assessment */}
+                  {(guidanceByAssessment.get(e.id) || []).map((g) => (
+                    <div key={g.id} className="mt-2 ml-4 rounded-md border border-orange-500/25 bg-orange-500/[0.03] p-2.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-xs font-semibold">↳ {en ? "Direction" : "Smer"} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
+                        <span className="text-[10px] text-muted-foreground">{new Date(g.created_at * 1000).toLocaleString()}</span>
+                      </div>
+                      {g.guidance && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{g.guidance}</p>}
+                      {g.nextStep && <p className="text-xs mt-1">→ {g.nextStep}</p>}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        </TabsContent>
+
+        <TabsContent value="grievances" className="space-y-4">
+          {grievByBeing.length === 0 && (
+            <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{L.noGriev}</CardContent></Card>
+          )}
+        {/* Grievances involving this participant — per being, omitted when empty */}
+        {grievByBeing.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-muted-foreground">{L.grievTitle}</h4>
+            <p className="text-[11px] text-muted-foreground leading-snug">{L.grievLegend}</p>
+            <div className="space-y-2.5">
+              {grievByBeing.map(({ being, given, received }) => (
+                <Card key={being} className="border-orange-500/25 bg-orange-500/[0.04]">
                   <CardContent className="p-3 space-y-2">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-sm font-medium inline-flex items-center gap-1.5">
-                        <Bot className="h-4 w-4 text-orange-500" />{nameOf(pal.beingPubkey)}
-                      </span>
-                      <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                        <span>{L.emVuln} {Math.round(pal.depth.vulnerability * 100)}%</span>
-                        <span>{L.emEmbody} {Math.round(pal.depth.embodiment * 100)}%</span>
-                        {pal.depth.swing && <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0">🎢 {L.emSwing}</Badge>}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
-                        <span>{L.emHeavy}</span>
-                        <span className="font-semibold normal-case text-foreground">{L.emDepth}: {pal.depth.score}/100</span>
-                        <span>{L.emLight}</span>
+                    <span className="text-sm font-medium inline-flex items-center gap-1.5">
+                      <Bot className="h-4 w-4 text-orange-500" />{nameOf(being)}
+                    </span>
+                    {given.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{L.grievGiven}</div>
+                        {given.map((g) => (
+                          <div key={g.id} className="rounded-md bg-muted/40 border border-border/50 p-2 space-y-0.5">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-xs font-medium">→ {nameOf(g.toPubkey)}</span>
+                              <GrievStatus g={g} side="given" />
+                            </div>
+                            {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
+                          </div>
+                        ))}
                       </div>
-                      <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
-                        <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-foreground border-2 border-background shadow" style={{ left: `calc(${pal.depth.score}% - 7px)` }} />
+                    )}
+                    {received.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{L.grievReceived}</div>
+                        {received.map((g) => (
+                          <div key={g.id} className="rounded-md bg-muted/40 border border-border/50 p-2 space-y-0.5">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-xs font-medium">← {nameOf(g.fromPubkey)}</span>
+                              <GrievStatus g={g} side="received" />
+                            </div>
+                            {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap gap-1">{HEAVY_EMOTIONS.map((k) => <Chip key={k} k={k} heavy />)}</div>
-                      <div className="flex flex-wrap gap-1">{LIGHT_EMOTIONS.map((k) => <Chip key={k} k={k} heavy={false} />)}</div>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
+              ))}
+            </div>
 
-      {/* Timeline of opinions */}
-      <div className="space-y-2">
-        <h4 className="text-sm font-medium text-muted-foreground">{L.timeline}</h4>
-        {myEntries.length === 0 ? (
-          <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{isLoading ? L.loading : L.noOpinions}</CardContent></Card>
-        ) : (
-          <div className="space-y-2.5">
-            {myEntries.map((e) => (
-              <div key={e.id} className="rounded-lg border border-border p-3">
-                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                  <span className="text-sm font-semibold inline-flex items-center gap-1.5">
-                    <Bot className="h-4 w-4 text-orange-500" />{nameOf(e.beingPubkey)}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className={getPhaseColor(e.phaseEstimate)}>{getPhaseLabel(e.phaseEstimate, lang)}</Badge>
-                    <span className="text-[11px] text-muted-foreground">{new Date(e.created_at * 1000).toLocaleString()}</span>
+            {/* ── Primerjava bitij za to osebo (⚠ = razhajanje) ── */}
+            {grievCompare && (
+              <Card className="border-orange-500/25 bg-orange-500/[0.04]">
+                <CardContent className="p-3 space-y-2">
+                  <div className="text-sm font-medium">{L.compTitle}</div>
+                  <p className="text-[11px] text-muted-foreground">{L.compIntro}</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-border/60 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          <th className="text-left p-1.5 font-medium">{L.grievTitle}</th>
+                          {grievCompare.beings.map((b) => (
+                            <th key={b} className="text-left p-1.5 font-medium whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3 text-orange-500" />{nameOf(b)}</span>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {grievCompare.rows.map((row) => (
+                          <tr key={`${row.from}|${row.to}`} className="border-b border-border/40 align-top">
+                            <td className="p-1.5 min-w-[8rem]">
+                              <div className="font-medium">{nameOf(row.from)} → {nameOf(row.to)}</div>
+                              <div className="mt-0.5 space-x-1.5">
+                                {row.missing && <span className="text-[10px] text-amber-600">⚠ {L.compMissing}</span>}
+                                {row.countDiff && <span className="text-[10px] text-amber-600">⚠ {L.compCountDiff}</span>}
+                                {Object.keys(row.stepDisagree).length > 0 && <span className="text-[10px] text-amber-600">⚠ {L.compStepDiff}</span>}
+                              </div>
+                            </td>
+                            {row.cells.map((c) => (
+                              <td key={c.being} className="p-1.5 whitespace-nowrap">
+                                {c.n === 0 ? (
+                                  <span className="text-amber-600/80">{L.compNone}</span>
+                                ) : (
+                                  <div>
+                                    <div className="font-medium">{c.n} {L.compCount}</div>
+                                    <div className="text-muted-foreground mt-0.5 space-x-1.5">
+                                      {(["resp", "acc", "apo", "own"] as const).map((s, i) => (
+                                        <span key={s} className={row.stepDisagree[s] ? "text-amber-600 font-semibold" : c.counts[s] === c.n ? "text-green-600" : undefined}>
+                                          {L.compSteps[i]} {c.counts[s]}/{c.n}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </div>
-                {e.summary && <p className="text-sm mb-2 italic">“{e.summary}”</p>}
-                <div className="space-y-1.5">
-                  {ASSESSED_PHASES.map((ph) => {
-                    const v = (e.phases as any)?.[ph];
-                    if (!v) return null;
-                    const met = !!v.requirement_met;
-                    const current = String(e.phaseEstimate || "").toLowerCase() === ph;
-                    return (
-                      <div key={ph} className="rounded-md bg-muted/40 border border-border/50 p-2">
-                        <div className="flex items-center gap-1.5 text-xs font-medium">
-                          {met ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" /> : current ? <CircleDot className="h-3.5 w-3.5 text-amber-500 shrink-0" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />}
-                          {phaseKeyLabel(ph)}
-                          <span className="font-normal text-muted-foreground">· {met ? L.met : current ? L.inProgress : L.notYet}</span>
-                        </div>
-                        {v.rationale && <p className="text-xs text-muted-foreground mt-1" style={{ paddingLeft: "1.4rem" }}>{v.rationale}</p>}
-                      </div>
-                    );
-                  })}
-                </div>
-                {/* ↳ Smer (Steber 2): guidance nested under this exact assessment */}
-                {(guidanceByAssessment.get(e.id) || []).map((g) => (
-                  <div key={g.id} className="mt-2 ml-4 rounded-md border border-orange-500/25 bg-orange-500/[0.03] p-2.5">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-xs font-semibold">↳ {en ? "Direction" : "Smer"} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
-                      <span className="text-[10px] text-muted-foreground">{new Date(g.created_at * 1000).toLocaleString()}</span>
-                    </div>
-                    {g.guidance && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{g.guidance}</p>}
-                    {g.nextStep && <p className="text-xs mt-1">→ {g.nextStep}</p>}
-                  </div>
-                ))}
-              </div>
-            ))}
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
-      </div>
+        </TabsContent>
+
+        <TabsContent value="emotions" className="space-y-4">
+          {myPalettes.length === 0 && (
+            <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{L.noEmotions}</CardContent></Card>
+          )}
+        {/* ── Čustva (Steber 3): paleta per bitje za to osebo ── */}
+        {myPalettes.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-muted-foreground">{L.emTitle}</h4>
+            <div className="space-y-2.5">
+              {myPalettes.map((pal) => {
+                const byKey = new Map(pal.emotions.map((e) => [e.key, e]));
+                const lang2 = en ? "en" : "sl";
+                const modeIcon = (m: string) => (m === "expressed" ? "🔥" : m === "held" ? "🤐" : "💬");
+                const Chip = ({ k, heavy }: { k: string; heavy: boolean }) => {
+                  const hit = byKey.get(k);
+                  const label = EMOTION_LABELS[k]?.[lang2] || k;
+                  if (!hit) return <span className="inline-flex items-center rounded-full border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground/40">{label}</span>;
+                  const alpha = 0.15 + 0.55 * hit.peakIntensity;
+                  return (
+                    <span
+                      title={`${label} · ${L.emPeak} ${hit.peakIntensity.toFixed(2)} · ${hit.mode}${hit.evidence ? ` — ${hit.evidence}` : ""}`}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${heavy ? "border-red-500/50 text-red-700 dark:text-red-400" : "border-green-500/50 text-green-700 dark:text-green-400"}`}
+                      style={{ backgroundColor: heavy ? `rgba(239,68,68,${alpha * 0.25})` : `rgba(34,197,94,${alpha * 0.25})` }}
+                    >
+                      {modeIcon(hit.mode)} {label} <span className="opacity-70">{Math.round(hit.peakIntensity * 100)}</span>
+                    </span>
+                  );
+                };
+                return (
+                  <Card key={pal.beingPubkey} className="border-orange-500/25 bg-orange-500/[0.04]">
+                    <CardContent className="p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-sm font-medium inline-flex items-center gap-1.5">
+                          <Bot className="h-4 w-4 text-orange-500" />{nameOf(pal.beingPubkey)}
+                        </span>
+                        <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                          <span>{L.emVuln} {Math.round(pal.depth.vulnerability * 100)}%</span>
+                          <span>{L.emEmbody} {Math.round(pal.depth.embodiment * 100)}%</span>
+                          {pal.depth.swing && <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0">🎢 {L.emSwing}</Badge>}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                          <span>{L.emHeavy}</span>
+                          <span className="font-semibold normal-case text-foreground">{L.emDepth}: {pal.depth.score}/100</span>
+                          <span>{L.emLight}</span>
+                        </div>
+                        <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
+                          <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-foreground border-2 border-background shadow" style={{ left: `calc(${pal.depth.score}% - 7px)` }} />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap gap-1">{HEAVY_EMOTIONS.map((k) => <Chip key={k} k={k} heavy />)}</div>
+                        <div className="flex flex-wrap gap-1">{LIGHT_EMOTIONS.map((k) => <Chip key={k} k={k} heavy={false} />)}</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
