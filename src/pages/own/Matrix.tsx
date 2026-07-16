@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Users, Telescope } from "lucide-react";
 import { useAllOwnProcesses } from "@/hooks/useAllOwnProcesses";
 import { useOwnAssessments, type PhaseState } from "@/hooks/useOwnAssessments";
+import { useOwnGrievances } from "@/hooks/useOwnGrievances";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES } from "@/lib/ownPhase";
 import { useLang } from "@/i18n/I18nContext";
@@ -34,6 +35,14 @@ const TXT = {
     timelineIntro: "Mnenja bitij skozi čas (najprej najnovejša) — vsako pokaže svojo argumentacijo po fazah za ta proces.",
     allParts: "Vsi udeleženci", allBeings: "Vsa bitja",
     loading: "Nalagam…", on: "o", met: "izpolnjeno", conf: "zaup",
+    tabGrievances: "Očitki",
+    grievIntro: "Očitki, kot jih beleži vsako bitje posebej (javno). Bitja se lahko razhajajo — vsak seznam je pogled enega bitja.",
+    grievNone: "Bitja še niso zabeležila očitkov.",
+    grievEmptyBeing: "Brez zabeleženih očitkov.",
+    grievAccepted: "Sprejeto", grievOpen: "Odprto", grievApologized: "opravičeno",
+    grievLabel: "Očitki", grievAcceptedWord: "sprejeti",
+    rollupOf: "od", rollupAccepted: "sprejetih",
+    tlGriev: "očitki", tlReceived: "prejeti", tlGiven: "dani",
   },
   en: {
     title: "OWN Matrix",
@@ -53,6 +62,14 @@ const TXT = {
     timelineIntro: "The beings' opinions over time (newest first) — each shows its reasoning per phase for this process.",
     allParts: "All participants", allBeings: "All beings",
     loading: "Loading…", on: "on", met: "met", conf: "conf",
+    tabGrievances: "Grievances",
+    grievIntro: "Grievances as each being records them separately (public). Beings may diverge — every list is one being's view.",
+    grievNone: "The beings have not recorded any grievances yet.",
+    grievEmptyBeing: "No grievances recorded.",
+    grievAccepted: "Accepted", grievOpen: "Open", grievApologized: "apologized",
+    grievLabel: "Grievances", grievAcceptedWord: "accepted",
+    rollupOf: "of", rollupAccepted: "accepted",
+    tlGriev: "grievances", tlReceived: "received", tlGiven: "given",
   },
 };
 
@@ -76,6 +93,7 @@ export default function Matrix() {
   );
 
   const { entries, states, isLoading: loadingAssess } = useOwnAssessments(selectedCaseRoot);
+  const { ledgers, isLoading: loadingGriev } = useOwnGrievances(selectedCaseRoot);
 
   const participants = useMemo(() => {
     if (!selected) return [] as string[];
@@ -93,7 +111,20 @@ export default function Matrix() {
     return Array.from(set);
   }, [states, entries]);
 
-  const allPubkeys = useMemo(() => Array.from(new Set([...participants, ...beings])), [participants, beings]);
+  // Include grievance from/to pubkeys so their names resolve in the tab too.
+  const grievPubkeys = useMemo(() => {
+    const set = new Set<string>();
+    ledgers.forEach((l) => {
+      set.add(l.beingPubkey);
+      l.grievances.forEach((g) => { set.add(g.fromPubkey); set.add(g.toPubkey); });
+      Object.keys(l.participants).forEach((pk) => set.add(pk));
+    });
+    return Array.from(set);
+  }, [ledgers]);
+  const allPubkeys = useMemo(
+    () => Array.from(new Set([...participants, ...beings, ...grievPubkeys])),
+    [participants, beings, grievPubkeys],
+  );
   const { profiles } = useNostrProfilesCacheBulk(allPubkeys);
   const nameOf = (pk: string) => {
     const p = profiles.get(pk);
@@ -212,9 +243,10 @@ export default function Matrix() {
       </Card>
 
       <Tabs defaultValue="matrix" className="space-y-4 md:space-y-6">
-        <TabsList className="grid w-full max-w-xs grid-cols-2">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
           <TabsTrigger value="matrix">{L.tabMatrix}</TabsTrigger>
           <TabsTrigger value="timeline">{L.tabTimeline}</TabsTrigger>
+          <TabsTrigger value="grievances">{L.tabGrievances}</TabsTrigger>
         </TabsList>
 
         {/* ── MATRIX ── */}
@@ -263,6 +295,9 @@ export default function Matrix() {
                               <PhaseRow status={phaseStatus(st, "alignment")} label={L.alignment} />
                               <PhaseRow status={phaseStatus(st, "change")} label={L.change} />
                             </div>
+                            {st.grievanceSummary && (
+                              <div className="text-[10px] text-muted-foreground mt-1.5">{L.grievLabel}: {st.grievanceSummary.received_accepted}/{st.grievanceSummary.received} {L.grievAcceptedWord}</div>
+                            )}
                             <div className="text-[10px] text-muted-foreground mt-1.5">{L.confidence} {(st.overallConfidence).toFixed(2)}</div>
                           </td>
                         );
@@ -329,7 +364,73 @@ export default function Matrix() {
                       );
                     })}
                   </div>
+                  {e.grievanceSummary && (
+                    <div className="text-[11px] text-muted-foreground mt-2">
+                      {L.tlGriev}: {L.tlReceived} {e.grievanceSummary.received_accepted}/{e.grievanceSummary.received} {L.grievAcceptedWord} · {L.tlGiven} {e.grievanceSummary.given}
+                    </div>
+                  )}
                 </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── GRIEVANCES ── */}
+        <TabsContent value="grievances" className="space-y-4">
+          <p className="text-xs text-muted-foreground">{L.grievIntro}</p>
+          {ledgers.length === 0 ? (
+            <Card><CardContent className="py-12 text-center text-muted-foreground">{loadingGriev ? L.loading : L.grievNone}</CardContent></Card>
+          ) : (
+            <div className="space-y-3">
+              {ledgers.map((l) => (
+                <Card key={l.beingPubkey} className="border-orange-500/25 bg-orange-500/[0.04]">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm font-semibold inline-flex items-center gap-1.5">
+                        <Bot className="h-4 w-4 text-orange-500" />{nameOf(l.beingPubkey)}
+                      </span>
+                      {l.processPhase && (
+                        <Badge variant="outline" className={getPhaseColor(l.processPhase)}>{getPhaseLabel(l.processPhase, lang)}</Badge>
+                      )}
+                    </div>
+                    {l.grievances.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">{L.grievEmptyBeing}</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {l.grievances.map((g) => (
+                          <div key={g.id} className="rounded-md bg-background/60 border border-border/50 p-2.5 space-y-1">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-xs font-medium">{nameOf(g.fromPubkey)} → {nameOf(g.toPubkey)}</span>
+                              <span className="inline-flex items-center gap-1.5">
+                                {g.apologyNoted && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
+                                    <CheckCircle2 className="h-3 w-3 text-green-500" /> {L.grievApologized}
+                                  </span>
+                                )}
+                                <Badge
+                                  variant="outline"
+                                  className={g.status === "accepted"
+                                    ? "bg-green-500/10 text-green-600 border-green-500/30 text-[10px] py-0"
+                                    : "bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0"}
+                                >
+                                  {g.status === "accepted" ? L.grievAccepted : L.grievOpen}
+                                </Badge>
+                              </span>
+                            </div>
+                            {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {Object.keys(l.participants).length > 0 && (
+                      <div className="text-[11px] text-muted-foreground space-y-0.5 border-t border-border/50 pt-2">
+                        {Object.entries(l.participants).map(([pk, r]) => (
+                          <div key={pk}>{nameOf(pk)}: {r.received_accepted} {L.rollupOf} {r.received} {L.rollupAccepted}</div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               ))}
             </div>
           )}

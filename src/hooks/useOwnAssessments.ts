@@ -13,6 +13,15 @@ const ASSESSMENT_STATE_KIND = 37045;
 
 interface PhaseVerdict { requirement_met: boolean; confidence: number; rationale: string; }
 
+// Additive rollup of the being's grievance ledger (kind 37046) as mirrored on
+// the 87047 entries and 37045 states. Optional — older events don't carry it.
+export interface GrievanceSummary {
+  given: number;
+  received: number;
+  received_accepted: number;
+  apologized: boolean;
+}
+
 export interface AssessmentEntry {
   id: string;
   beingPubkey: string;
@@ -23,6 +32,7 @@ export interface AssessmentEntry {
   phases: { reflection?: PhaseVerdict; alignment?: PhaseVerdict; change?: PhaseVerdict };
   summary: string;
   overallConfidence: number;
+  grievanceSummary?: GrievanceSummary | null;
 }
 
 export interface PhaseState {
@@ -35,6 +45,7 @@ export interface PhaseState {
   alignmentComplete: boolean;
   changeComplete: boolean;
   overallConfidence: number;
+  grievanceSummary?: GrievanceSummary | null;
 }
 
 const tagVal = (ev: Event, name: string, marker?: string): string | undefined => {
@@ -84,6 +95,7 @@ export const useOwnAssessments = (caseRoot: string | null) => {
               phases: body.phases || {},
               summary: body.summary || '',
               overallConfidence: Number(body.overall_confidence) || 0,
+              grievanceSummary: body.grievance_summary ?? null,
             });
           } else {
             const key = `${ev.pubkey.toLowerCase()}:${participant}`;
@@ -102,6 +114,7 @@ export const useOwnAssessments = (caseRoot: string | null) => {
               alignmentComplete: !!(body.alignment_complete ?? body.alignment?.requirement_met),
               changeComplete: !!(body.change_complete ?? body.change?.requirement_met),
               overallConfidence: Number(body.overall_confidence) || 0,
+              grievanceSummary: body.grievance_summary ?? null,
             });
           }
         }

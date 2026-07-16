@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle } from "lucide-react";
 import { useOwnAssessments, type AssessmentEntry, type PhaseState } from "@/hooks/useOwnAssessments";
+import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES } from "@/lib/ownPhase";
 import { useLang } from "@/i18n/I18nContext";
@@ -21,6 +22,9 @@ const TXT = {
     reflection: "Refleksija", alignment: "Uskladitev", change: "Sprememba",
     done: "opravljeno", inProgress: "v teku", notYet: "še ne",
     met: "izpolnjeno",
+    grievTitle: "Očitki",
+    grievGiven: "Dani", grievReceived: "Prejeti",
+    grievAccepted: "Sprejeto", grievOpen: "Odprto", grievApologized: "opravičeno",
   },
   en: {
     back: "Back to chat",
@@ -31,6 +35,9 @@ const TXT = {
     reflection: "Reflection", alignment: "Alignment", change: "Change",
     done: "done", inProgress: "in progress", notYet: "not yet",
     met: "met",
+    grievTitle: "Grievances",
+    grievGiven: "Given", grievReceived: "Received",
+    grievAccepted: "Accepted", grievOpen: "Open", grievApologized: "apologized",
   },
 };
 
@@ -49,6 +56,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
   const L = en ? TXT.en : TXT.sl;
   const lang: "en" | "sl" = en ? "en" : "sl";
   const { entries, states, isLoading } = useOwnAssessments(caseRoot);
+  const { ledgers } = useOwnGrievances(caseRoot);
   const me = (participantPubkey || "").toLowerCase();
 
   const myStates = useMemo(() => states.filter((s) => s.participantPubkey === me), [states, me]);
@@ -72,7 +80,28 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
     return Array.from(set).sort();
   }, [myStates, latestEntryByBeing]);
 
-  const { profiles } = useNostrProfilesCacheBulk(beings);
+  // This participant's grievances per being — kept per being (divergence is by
+  // design), only beings with at least one grievance involving them show up.
+  const grievByBeing = useMemo(() => {
+    const out: { being: string; given: Grievance[]; received: Grievance[] }[] = [];
+    for (const l of ledgers) {
+      const given = l.grievances.filter((g) => g.fromPubkey === me);
+      const received = l.grievances.filter((g) => g.toPubkey === me);
+      if (given.length || received.length) out.push({ being: l.beingPubkey, given, received });
+    }
+    return out;
+  }, [ledgers, me]);
+
+  const profilePubkeys = useMemo(() => {
+    const set = new Set<string>(beings);
+    grievByBeing.forEach(({ being, given, received }) => {
+      set.add(being);
+      given.forEach((g) => set.add(g.toPubkey));
+      received.forEach((g) => set.add(g.fromPubkey));
+    });
+    return Array.from(set);
+  }, [beings, grievByBeing]);
+  const { profiles } = useNostrProfilesCacheBulk(profilePubkeys);
   const nameOf = (pk: string) => {
     const p = profiles.get(pk);
     return p?.display_name || p?.full_name || short(pk);
@@ -97,6 +126,24 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
     );
   };
   const phaseKeyLabel = (ph: string) => getPhaseLabel(ph, lang);
+
+  const GrievStatus = ({ g, showApology }: { g: Grievance; showApology?: boolean }) => (
+    <span className="inline-flex items-center gap-1.5 shrink-0">
+      {showApology && g.apologyNoted && (
+        <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
+          <CheckCircle2 className="h-3 w-3 text-green-500" /> {L.grievApologized}
+        </span>
+      )}
+      <Badge
+        variant="outline"
+        className={g.status === "accepted"
+          ? "bg-green-500/10 text-green-600 border-green-500/30 text-[10px] py-0"
+          : "bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0"}
+      >
+        {g.status === "accepted" ? L.grievAccepted : L.grievOpen}
+      </Badge>
+    </span>
+  );
 
   return (
     <div className="h-full overflow-y-auto space-y-4 px-4 md:px-2">
@@ -147,6 +194,52 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
           </div>
         )}
       </div>
+
+      {/* Grievances involving this participant — per being, omitted when empty */}
+      {grievByBeing.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-muted-foreground">{L.grievTitle}</h4>
+          <div className="space-y-2.5">
+            {grievByBeing.map(({ being, given, received }) => (
+              <Card key={being} className="border-orange-500/25 bg-orange-500/[0.04]">
+                <CardContent className="p-3 space-y-2">
+                  <span className="text-sm font-medium inline-flex items-center gap-1.5">
+                    <Bot className="h-4 w-4 text-orange-500" />{nameOf(being)}
+                  </span>
+                  {given.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{L.grievGiven}</div>
+                      {given.map((g) => (
+                        <div key={g.id} className="rounded-md bg-muted/40 border border-border/50 p-2 space-y-0.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-xs font-medium">→ {nameOf(g.toPubkey)}</span>
+                            <GrievStatus g={g} />
+                          </div>
+                          {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {received.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{L.grievReceived}</div>
+                      {received.map((g) => (
+                        <div key={g.id} className="rounded-md bg-muted/40 border border-border/50 p-2 space-y-0.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-xs font-medium">← {nameOf(g.fromPubkey)}</span>
+                            <GrievStatus g={g} showApology />
+                          </div>
+                          {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Timeline of opinions */}
       <div className="space-y-2">

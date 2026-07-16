@@ -19,6 +19,7 @@ const TXT = {
     more: "Več",
     noAssessment: "Še ni ocene.",
     r: "R", a: "U", c: "S", // Refleksija / Uskladitev / Sprememba
+    grievLabel: "Očitki", grievAcceptedWord: "sprejeti",
   },
   en: {
     title: "Participant matrix",
@@ -27,6 +28,7 @@ const TXT = {
     more: "More",
     noAssessment: "No assessment yet.",
     r: "R", a: "A", c: "C", // Reflection / Alignment / Change
+    grievLabel: "Grievances", grievAcceptedWord: "accepted",
   },
 };
 
@@ -111,16 +113,21 @@ export default function OwnFullMatrix({ caseRoot, participants, phase, selectedP
                   ) : (
                     <div className="space-y-1.5">
                       {beingStates.map(({ b, st }) => (
-                        <div key={b} className="flex items-center justify-between gap-2 flex-wrap">
-                          <span className="text-xs inline-flex items-center gap-1 min-w-0">
-                            <Bot className="h-3.5 w-3.5 text-orange-500 shrink-0" /><span className="truncate">{nameOf(b)}</span>
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 flex-wrap">
-                            <Badge variant="outline" className={`${getPhaseColor(st!.currentPhaseEstimate)} text-[10px] py-0`}>{getPhaseLabel(st!.currentPhaseEstimate, lang)}</Badge>
-                            <Dot status={reqStatus(st!, "reflection")} label={L.r} />
-                            <Dot status={reqStatus(st!, "alignment")} label={L.a} />
-                            <Dot status={reqStatus(st!, "change")} label={L.c} />
-                          </span>
+                        <div key={b}>
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-xs inline-flex items-center gap-1 min-w-0">
+                              <Bot className="h-3.5 w-3.5 text-orange-500 shrink-0" /><span className="truncate">{nameOf(b)}</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              <Badge variant="outline" className={`${getPhaseColor(st!.currentPhaseEstimate)} text-[10px] py-0`}>{getPhaseLabel(st!.currentPhaseEstimate, lang)}</Badge>
+                              <Dot status={reqStatus(st!, "reflection")} label={L.r} />
+                              <Dot status={reqStatus(st!, "alignment")} label={L.a} />
+                              <Dot status={reqStatus(st!, "change")} label={L.c} />
+                            </span>
+                          </div>
+                          {st!.grievanceSummary && (
+                            <div className="text-[10px] text-muted-foreground mt-0.5 pl-5">{L.grievLabel}: {st!.grievanceSummary.received_accepted}/{st!.grievanceSummary.received} {L.grievAcceptedWord}</div>
+                          )}
                         </div>
                       ))}
                     </div>

@@ -18,6 +18,7 @@ const TXT = {
     reflection: "Refleksija", alignment: "Uskladitev", change: "Sprememba",
     done: "opravljeno", inProgress: "v teku", notYet: "še ne",
     analyze: "Analiziraj druge udeležence",
+    grievLabel: "Očitki", grievAcceptedWord: "sprejeti",
   },
   en: {
     title: "Where you are in the process",
@@ -26,6 +27,7 @@ const TXT = {
     reflection: "Reflection", alignment: "Alignment", change: "Change",
     done: "done", inProgress: "in progress", notYet: "not yet",
     analyze: "Analyze the other participants",
+    grievLabel: "Grievances", grievAcceptedWord: "accepted",
   },
 };
 
@@ -122,6 +124,9 @@ export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase, onAn
                       <Req status={reqStatus(st, "reflection")} label={L.reflection} />
                       <Req status={reqStatus(st, "alignment")} label={L.alignment} />
                       <Req status={reqStatus(st, "change")} label={L.change} />
+                      {st.grievanceSummary && (
+                        <div className="text-[10px] text-muted-foreground">{L.grievLabel}: {st.grievanceSummary.received_accepted}/{st.grievanceSummary.received} {L.grievAcceptedWord}</div>
+                      )}
                     </div>
                   )}
                   {entry?.summary && <p className="text-xs italic text-muted-foreground leading-snug">“{entry.summary}”</p>}
