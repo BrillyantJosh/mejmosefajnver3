@@ -11,6 +11,7 @@ import { useAllOwnProcesses } from "@/hooks/useAllOwnProcesses";
 import { useOwnAssessments, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
+import { useOwnEmotions, HEAVY_EMOTIONS, LIGHT_EMOTIONS, EMOTION_LABELS, type EmotionPalette } from "@/hooks/useOwnEmotions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES } from "@/lib/ownPhase";
@@ -66,6 +67,13 @@ const TXT = {
     gvCompAgree: "Ujemanje mejnikov med bitji", gvCompAgreeDesc: "delež korakov (na parih, ki jih beleži več bitij), kjer so vsa bitja enakega mnenja",
     gvCompNeedTwo: "Primerjava potrebuje vsaj dve bitji z evidenco za ta proces.",
     gvStepShort: ["odg", "spr", "opr", "zab"],
+    tabEmotions: "Čustva",
+    emIntro: "Steber 3 — čustvena ocena: koliko si je udeleženec DOVOLIL čustvovati. Vsako bitje vodi svojo paleto (javno, abstraktno) — spodaj je naštetih vseh 26 čustev; obarvana so tista, ki jih je bitje zaznalo.",
+    emLegend: "Globina vstopa (0–100) meri pogum čutenja: intenzivnost + ranljivost (upati si žalost/strah/sram šteje globlje kot oklepna jeza) + utelešenost (govoriti IZ čustva > O čustvu > zadržano) + širina palete. Nihalo: bolj ko si človek dovoli stopiti v težka čustva, bolj ga odbije v svetla — ko se svetlo čustvo prvič pojavi PO vrhu težkega, se prikaže 🎢 nihaj.",
+    emHeavy: "Težka", emLight: "Svetla", emDepth: "Globina vstopa", emSwing: "nihaj",
+    emModeExpressed: "iz čustva", emModeNamed: "o čustvu", emModeHeld: "zadržano",
+    emNone: "Bitja še niso zaznala čustev.", emNoneBeing: "To bitje še ni zaznalo čustev pri tej osebi.",
+    emByBeing: "Globina po bitjih", emVuln: "ranljivost", emEmbody: "utelešenost", emPeak: "vrh",
   },
   en: {
     title: "OWN Matrix",
@@ -114,6 +122,13 @@ const TXT = {
     gvCompAgree: "Milestone agreement between beings", gvCompAgreeDesc: "share of steps (on pairs recorded by more than one being) where all beings hold the same view",
     gvCompNeedTwo: "Comparison needs at least two beings with a ledger for this process.",
     gvStepShort: ["resp", "acc", "apo", "own"],
+    tabEmotions: "Emotions",
+    emIntro: "Pillar 3 — the emotional read: how much the participant ALLOWED themselves to feel. Each being keeps its own palette (public, abstract) — all 26 emotions are listed below; the colored ones were detected by the being.",
+    emLegend: "Depth of entry (0–100) measures the courage of feeling: intensity + vulnerability (daring sadness/fear/shame counts deeper than armored anger) + embodiment (speaking FROM a feeling > ABOUT it > holding it) + breadth of palette. The pendulum: the deeper someone enters the heavy emotions, the further it swings them into the light ones — when a light emotion first appears AFTER a heavy peak, 🎢 swing shows.",
+    emHeavy: "Heavy", emLight: "Light", emDepth: "Depth of entry", emSwing: "swing",
+    emModeExpressed: "from the feeling", emModeNamed: "about the feeling", emModeHeld: "held back",
+    emNone: "The beings have not detected any emotions yet.", emNoneBeing: "This being has not detected emotions for this person yet.",
+    emByBeing: "Depth per being", emVuln: "vulnerability", emEmbody: "embodiment", emPeak: "peak",
   },
 };
 
@@ -139,6 +154,7 @@ export default function Matrix() {
   const { entries, states, isLoading: loadingAssess } = useOwnAssessments(selectedCaseRoot);
   const { ledgers, isLoading: loadingGriev } = useOwnGrievances(selectedCaseRoot);
   const { entries: guidance } = useOwnGuidance(selectedCaseRoot);
+  const { palettes: emotionPalettes, isLoading: loadingEmotions } = useOwnEmotions(selectedCaseRoot);
 
   // Steber 2 nesting: guidance (87048) under the exact assessment (87047) it
   // was based on — join on based_on_state_id; fallback = the nearest OLDER
@@ -360,10 +376,11 @@ export default function Matrix() {
       </Card>
 
       <Tabs defaultValue="matrix" className="space-y-4 md:space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
+        <TabsList className="grid w-full max-w-xl grid-cols-4">
           <TabsTrigger value="matrix">{L.tabMatrix}</TabsTrigger>
           <TabsTrigger value="timeline">{L.tabTimeline}</TabsTrigger>
           <TabsTrigger value="grievances">{L.tabGrievances}</TabsTrigger>
+          <TabsTrigger value="emotions">{L.tabEmotions}</TabsTrigger>
         </TabsList>
 
         {/* ── MATRIX ── */}
@@ -718,6 +735,93 @@ export default function Matrix() {
                           ))}
                         </div>
                       )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── EMOTIONS — Steber 3: koliko si je udeleženec dovolil čutiti ── */}
+        <TabsContent value="emotions" className="space-y-4">
+          <p className="text-xs text-muted-foreground">{L.emIntro}</p>
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">{L.emLegend}</div>
+          {emotionPalettes.length === 0 ? (
+            <Card><CardContent className="py-12 text-center text-muted-foreground">{loadingEmotions ? L.loading : L.emNone}</CardContent></Card>
+          ) : (
+            <div className="space-y-4">
+              {participants.filter((p) => emotionPalettes.some((pal) => pal.participantPubkey === p)).map((p) => {
+                const mine = emotionPalettes.filter((pal) => pal.participantPubkey === p);
+                const label = (key: string) => (EMOTION_LABELS[key] ? EMOTION_LABELS[key][lang] : key);
+                const modeIcon = (m: string) => (m === "expressed" ? "🔥" : m === "held" ? "🤐" : "💬");
+                const modeLabel = (m: string) => (m === "expressed" ? L.emModeExpressed : m === "held" ? L.emModeHeld : L.emModeNamed);
+                return (
+                  <Card key={p}>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm md:text-base flex items-center justify-between flex-wrap gap-2">
+                        <span>{nameOf(p)}</span>
+                        <span className="text-xs font-normal text-muted-foreground">
+                          {L.emByBeing}: {mine.map((pal) => `${nameOf(pal.beingPubkey)} ${pal.depth.score}`).join(" · ")}
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {mine.map((pal) => {
+                        const byKey = new Map(pal.emotions.map((e) => [e.key, e]));
+                        const Chip = ({ k, heavy }: { k: string; heavy: boolean }) => {
+                          const hit = byKey.get(k);
+                          if (!hit) return (
+                            <span className="inline-flex items-center rounded-full border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground/40">{label(k)}</span>
+                          );
+                          const alpha = 0.15 + 0.55 * hit.peakIntensity;
+                          const cls = heavy
+                            ? "border-red-500/50 text-red-700 dark:text-red-400"
+                            : "border-green-500/50 text-green-700 dark:text-green-400";
+                          return (
+                            <span
+                              title={`${label(k)} · ${L.emPeak} ${hit.peakIntensity.toFixed(2)} · ${modeLabel(hit.mode)}${hit.evidence ? ` — ${hit.evidence}` : ""}`}
+                              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${cls}`}
+                              style={{ backgroundColor: heavy ? `rgba(239,68,68,${alpha * 0.25})` : `rgba(34,197,94,${alpha * 0.25})` }}
+                            >
+                              {modeIcon(hit.mode)} {label(k)} <span className="opacity-70">{Math.round(hit.peakIntensity * 100)}</span>
+                            </span>
+                          );
+                        };
+                        return (
+                          <div key={pal.beingPubkey} className="rounded-lg border border-orange-500/25 bg-orange-500/[0.04] p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-sm font-semibold inline-flex items-center gap-1.5">
+                                <Bot className="h-4 w-4 text-orange-500" />{nameOf(pal.beingPubkey)}
+                              </span>
+                              <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                <span>{L.emVuln} {Math.round(pal.depth.vulnerability * 100)}%</span>
+                                <span>{L.emEmbody} {Math.round(pal.depth.embodiment * 100)}%</span>
+                                {pal.depth.swing && <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0">🎢 {L.emSwing}</Badge>}
+                              </span>
+                            </div>
+                            {/* Globina vstopa: dvopolni trak težka ↔ svetla */}
+                            <div>
+                              <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                                <span>{L.emHeavy}</span>
+                                <span className="font-semibold normal-case text-foreground">{L.emDepth}: {pal.depth.score}/100</span>
+                                <span>{L.emLight}</span>
+                              </div>
+                              <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
+                                <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-foreground border-2 border-background shadow" style={{ left: `calc(${pal.depth.score}% - 7px)` }} />
+                              </div>
+                            </div>
+                            {pal.emotions.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">{L.emNoneBeing}</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                <div className="flex flex-wrap gap-1">{HEAVY_EMOTIONS.map((k) => <Chip key={k} k={k} heavy />)}</div>
+                                <div className="flex flex-wrap gap-1">{LIGHT_EMOTIONS.map((k) => <Chip key={k} k={k} heavy={false} />)}</div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </CardContent>
                   </Card>
                 );
