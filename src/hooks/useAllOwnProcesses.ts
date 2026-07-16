@@ -28,8 +28,10 @@ const parse = (ev: Event): OwnProcessRecord => {
   // Mirrors being3's own-matrix.js caseEventId derivation so the #e assessment
   // filter matches exactly what the beings published against.
   const caseEventId = dTag.startsWith('own:') ? dTag.slice(4) : (tag('e') || ev.id);
+  // Lowercase every pubkey read from tags — assessment lookups key on
+  // lowercased hex, so an uppercase p-tag would silently render "—".
   const roleAll = (role: string) =>
-    ev.tags.filter((t) => t[0] === 'p' && (t[2] === role || t[3] === role)).map((t) => t[1]);
+    ev.tags.filter((t) => t[0] === 'p' && (t[2] === role || t[3] === role)).map((t) => (t[1] || '').toLowerCase());
   return {
     caseEventId: caseEventId.toLowerCase(),
     dTag,
@@ -37,7 +39,7 @@ const parse = (ev: Event): OwnProcessRecord => {
     phase: tag('phase') || 'opening',
     status: tag('status') || 'open',
     initiator: roleAll('initiator')[0] || '',
-    facilitator: roleAll('facilitator')[0] || ev.pubkey,
+    facilitator: roleAll('facilitator')[0] || ev.pubkey.toLowerCase(),
     participants: roleAll('participant'),
     guests: roleAll('guest'),
     openedAt: parseInt(tag('opened_at')) || ev.created_at,

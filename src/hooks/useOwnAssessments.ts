@@ -95,9 +95,12 @@ export const useOwnAssessments = (caseRoot: string | null) => {
               created_at: ev.created_at,
               processPhase: tagVal(ev, 'phase') || body.process_phase || '',
               currentPhaseEstimate: body.current_phase_estimate || '',
-              reflectionComplete: !!body.reflection_complete,
-              alignmentComplete: !!body.alignment_complete,
-              changeComplete: !!body.change_complete,
+              // Flat booleans are the primary source; fall back to the nested
+              // verdict objects the publisher also writes, so a state whose
+              // flat fields are missing/renamed never falsely reads "not met".
+              reflectionComplete: !!(body.reflection_complete ?? body.reflection?.requirement_met),
+              alignmentComplete: !!(body.alignment_complete ?? body.alignment?.requirement_met),
+              changeComplete: !!(body.change_complete ?? body.change?.requirement_met),
               overallConfidence: Number(body.overall_confidence) || 0,
             });
           }

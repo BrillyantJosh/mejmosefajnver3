@@ -53,13 +53,16 @@ export default function OwnFullMatrix({ caseRoot, participants, phase, selectedP
   const en = useLang() === "en";
   const L = en ? TXT.en : TXT.sl;
   const lang: "en" | "sl" = en ? "en" : "sl";
-  const { states, isLoading } = useOwnAssessments(caseRoot);
+  const { states, entries, isLoading } = useOwnAssessments(caseRoot);
 
+  // Union of 37045 AND 87047 authors (same as the Matrix page) — a being
+  // whose entries arrived but whose phase-state didn't must still be listed.
   const beings = useMemo(() => {
     const set = new Set<string>();
     states.forEach((s) => set.add(s.beingPubkey));
+    entries.forEach((e) => set.add(e.beingPubkey));
     return Array.from(set).sort();
-  }, [states]);
+  }, [states, entries]);
 
   const { profiles } = useNostrProfilesCacheBulk(useMemo(() => Array.from(new Set([...participants, ...beings])), [participants, beings]));
   const nameOf = (pk: string) => {

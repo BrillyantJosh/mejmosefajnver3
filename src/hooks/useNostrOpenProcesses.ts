@@ -81,17 +81,20 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
 
             // Extract roles - check both index 2 and 3 for compatibility
             const getRole = (tag: string[]) => tag[3] || tag[2];
-            const initiator = event.tags.find(t => t[0] === 'p' && (t[2] === 'initiator' || t[3] === 'initiator'))?.[1] || '';
-            const facilitator = event.tags.find(t => t[0] === 'p' && (t[2] === 'facilitator' || t[3] === 'facilitator'))?.[1] || '';
-            const participants = event.tags.filter(t => t[0] === 'p' && (t[2] === 'participant' || t[3] === 'participant')).map(t => t[1]);
-            const guests = event.tags.filter(t => t[0] === 'p' && (t[2] === 'guest' || t[3] === 'guest')).map(t => t[1]);
+            // Lowercase all pubkeys from tags — downstream assessment lookups
+            // key on lowercased hex, and role checks must be case-insensitive.
+            const initiator = (event.tags.find(t => t[0] === 'p' && (t[2] === 'initiator' || t[3] === 'initiator'))?.[1] || '').toLowerCase();
+            const facilitator = (event.tags.find(t => t[0] === 'p' && (t[2] === 'facilitator' || t[3] === 'facilitator'))?.[1] || '').toLowerCase();
+            const participants = event.tags.filter(t => t[0] === 'p' && (t[2] === 'participant' || t[3] === 'participant')).map(t => (t[1] || '').toLowerCase());
+            const guests = event.tags.filter(t => t[0] === 'p' && (t[2] === 'guest' || t[3] === 'guest')).map(t => (t[1] || '').toLowerCase());
 
             // Check if user is in any role
+            const userPk = (userPubkey || '').toLowerCase();
             let userRole: string | undefined;
-            if (initiator === userPubkey) userRole = 'initiator';
-            else if (facilitator === userPubkey) userRole = 'facilitator';
-            else if (participants.includes(userPubkey)) userRole = 'participant';
-            else if (guests.includes(userPubkey)) userRole = 'guest';
+            if (initiator === userPk) userRole = 'initiator';
+            else if (facilitator === userPk) userRole = 'facilitator';
+            else if (participants.includes(userPk)) userRole = 'participant';
+            else if (guests.includes(userPk)) userRole = 'guest';
 
             return {
               id: dTag,
