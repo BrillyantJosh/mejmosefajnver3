@@ -28,6 +28,11 @@ const TXT = {
     grievAccepted: "Sprejeto", grievOpen: "Odprto", grievApologized: "opravičeno",
     stepResponded: "odgovorjen", stepOwned: "zabloda sprejeta",
     needsResponse: "čaka odgovor", needsOwn: "sprejmi kot svojo zablodo",
+    grievLegend: "Vsak očitek gre skozi štiri korake: prejemnik nanj odgovori (vsak odziv šteje, tudi obramba) in ga brezpogojno sprejme (z opravičilom, če se le da), dajalec pa ga sprejme kot del svoje zablode. Refleksija je zaključena šele, ko je odgovorjeno na vse prejete; uskladitev šele, ko so sprejeti vsi prejeti IN vsi dani vzeti nase.",
+    compTitle: "Primerjava bitij za to osebo",
+    compIntro: "Vsako bitje bere isti pogovor, a ga destilira samostojno — ⚠ pokaže, kje se bitja razhajajo.",
+    compCount: "očitkov", compMissing: "pri kakem bitju manjka", compCountDiff: "razlika v številu", compStepDiff: "nestrinjanje o koraku", compNone: "—",
+    compSteps: ["odg", "spr", "opr", "zab"],
   },
   en: {
     back: "Back to chat",
@@ -43,6 +48,11 @@ const TXT = {
     grievAccepted: "Accepted", grievOpen: "Open", grievApologized: "apologized",
     stepResponded: "responded", stepOwned: "owned as delusion",
     needsResponse: "awaiting response", needsOwn: "own it as your delusion",
+    grievLegend: "Every grievance passes four steps: the receiver responds to it (any reaction counts, defense too) and unconditionally accepts it (apologizing where possible), and the giver accepts it as part of their own delusion. Reflection completes only once every received grievance got a response; alignment only once all received are accepted AND all given are owned.",
+    compTitle: "Being comparison for this person",
+    compIntro: "Every being reads the same conversation but distills it independently — ⚠ marks where the beings diverge.",
+    compCount: "grievance(s)", compMissing: "missing for some being", compCountDiff: "entry-count differs", compStepDiff: "step disagreement", compNone: "—",
+    compSteps: ["resp", "acc", "apo", "own"],
   },
 };
 
@@ -96,6 +106,35 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
       if (given.length || received.length) out.push({ being: l.beingPubkey, given, received });
     }
     return out;
+  }, [ledgers, me]);
+
+  // Primerjava bitij za to osebo: pairs involving them, aligned across every
+  // being's ledger — same divergence logic as the /own/matrix Primerjava.
+  const grievCompare = useMemo(() => {
+    const involved = ledgers.filter((l) => l.grievances.some((g) => g.fromPubkey === me || g.toPubkey === me));
+    if (involved.length < 2) return null;
+    const STEPS = ["resp", "acc", "apo", "own"] as const;
+    const done = (g: Grievance) => ({ resp: g.respondedByTarget, acc: g.status === "accepted", apo: g.apologyNoted, own: g.acceptedByGiver });
+    const pairKeys = new Set<string>();
+    for (const l of involved) for (const g of l.grievances) if (g.fromPubkey === me || g.toPubkey === me) pairKeys.add(`${g.fromPubkey}|${g.toPubkey}`);
+    const rows = [...pairKeys].sort().map((key) => {
+      const [from, to] = key.split("|");
+      const cells = involved.map((l) => {
+        const gs = l.grievances.filter((g) => g.fromPubkey === from && g.toPubkey === to);
+        const counts: Record<(typeof STEPS)[number], number> = { resp: 0, acc: 0, apo: 0, own: 0 };
+        for (const g of gs) { const d = done(g); for (const s of STEPS) if (d[s]) counts[s]++; }
+        return { being: l.beingPubkey, n: gs.length, counts };
+      });
+      const present = cells.filter((c) => c.n > 0);
+      const ns = present.map((c) => c.n);
+      const stepDisagree: Record<string, boolean> = {};
+      for (const s of STEPS) {
+        const verdicts = present.map((c) => c.counts[s] === c.n);
+        if (verdicts.length >= 2 && !verdicts.every((v) => v === verdicts[0])) stepDisagree[s] = true;
+      }
+      return { from, to, cells, countDiff: present.length >= 2 && Math.max(...ns) - Math.min(...ns) > 1, missing: cells.some((c) => c.n === 0) && present.length > 0, stepDisagree };
+    });
+    return { beings: involved.map((l) => l.beingPubkey), rows };
   }, [ledgers, me]);
 
   // Steber 2 nesting: this participant's guidance (87048) under the exact
@@ -246,6 +285,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
       {grievByBeing.length > 0 && (
         <div className="space-y-2">
           <h4 className="text-sm font-medium text-muted-foreground">{L.grievTitle}</h4>
+          <p className="text-[11px] text-muted-foreground leading-snug">{L.grievLegend}</p>
           <div className="space-y-2.5">
             {grievByBeing.map(({ being, given, received }) => (
               <Card key={being} className="border-orange-500/25 bg-orange-500/[0.04]">
@@ -285,6 +325,62 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
               </Card>
             ))}
           </div>
+
+          {/* ── Primerjava bitij za to osebo (⚠ = razhajanje) ── */}
+          {grievCompare && (
+            <Card className="border-orange-500/25 bg-orange-500/[0.04]">
+              <CardContent className="p-3 space-y-2">
+                <div className="text-sm font-medium">{L.compTitle}</div>
+                <p className="text-[11px] text-muted-foreground">{L.compIntro}</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-border/60 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <th className="text-left p-1.5 font-medium">{L.grievTitle}</th>
+                        {grievCompare.beings.map((b) => (
+                          <th key={b} className="text-left p-1.5 font-medium whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3 text-orange-500" />{nameOf(b)}</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {grievCompare.rows.map((row) => (
+                        <tr key={`${row.from}|${row.to}`} className="border-b border-border/40 align-top">
+                          <td className="p-1.5 min-w-[8rem]">
+                            <div className="font-medium">{nameOf(row.from)} → {nameOf(row.to)}</div>
+                            <div className="mt-0.5 space-x-1.5">
+                              {row.missing && <span className="text-[10px] text-amber-600">⚠ {L.compMissing}</span>}
+                              {row.countDiff && <span className="text-[10px] text-amber-600">⚠ {L.compCountDiff}</span>}
+                              {Object.keys(row.stepDisagree).length > 0 && <span className="text-[10px] text-amber-600">⚠ {L.compStepDiff}</span>}
+                            </div>
+                          </td>
+                          {row.cells.map((c) => (
+                            <td key={c.being} className="p-1.5 whitespace-nowrap">
+                              {c.n === 0 ? (
+                                <span className="text-amber-600/80">{L.compNone}</span>
+                              ) : (
+                                <div>
+                                  <div className="font-medium">{c.n} {L.compCount}</div>
+                                  <div className="text-muted-foreground mt-0.5 space-x-1.5">
+                                    {(["resp", "acc", "apo", "own"] as const).map((s, i) => (
+                                      <span key={s} className={row.stepDisagree[s] ? "text-amber-600 font-semibold" : c.counts[s] === c.n ? "text-green-600" : undefined}>
+                                        {L.compSteps[i]} {c.counts[s]}/{c.n}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 

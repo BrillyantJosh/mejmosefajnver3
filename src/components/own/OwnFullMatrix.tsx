@@ -19,7 +19,7 @@ const TXT = {
     more: "Več",
     noAssessment: "Še ni ocene.",
     r: "R", a: "U", c: "S", // Refleksija / Uskladitev / Sprememba
-    grievLabel: "Očitki", grievAcceptedWord: "sprejeti",
+    grievLabel: "Očitki", grievAcceptedWord: "sprejeti", grievResp: "odg", grievOwned: "zab",
   },
   en: {
     title: "Participant matrix",
@@ -28,7 +28,7 @@ const TXT = {
     more: "More",
     noAssessment: "No assessment yet.",
     r: "R", a: "A", c: "C", // Reflection / Alignment / Change
-    grievLabel: "Grievances", grievAcceptedWord: "accepted",
+    grievLabel: "Grievances", grievAcceptedWord: "accepted", grievResp: "resp", grievOwned: "own",
   },
 };
 
@@ -126,7 +126,7 @@ export default function OwnFullMatrix({ caseRoot, participants, phase, selectedP
                             </span>
                           </div>
                           {st!.grievanceSummary && (
-                            <div className="text-[10px] text-muted-foreground mt-0.5 pl-5">{L.grievLabel}: {st!.grievanceSummary.received_accepted}/{st!.grievanceSummary.received} {L.grievAcceptedWord}</div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5 pl-5">{L.grievLabel}: {L.grievResp} {st!.grievanceSummary.received_responded ?? st!.grievanceSummary.received_accepted}/{st!.grievanceSummary.received} · {st!.grievanceSummary.received_accepted}/{st!.grievanceSummary.received} {L.grievAcceptedWord} · {L.grievOwned} {st!.grievanceSummary.given_accepted_by_me ?? 0}/{st!.grievanceSummary.given}</div>
                           )}
                         </div>
                       ))}

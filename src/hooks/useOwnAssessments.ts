@@ -14,10 +14,13 @@ const ASSESSMENT_STATE_KIND = 37045;
 interface PhaseVerdict { requirement_met: boolean; confidence: number; rationale: string; }
 
 // Additive rollup of the being's grievance ledger (kind 37046) as mirrored on
-// the 87047 entries and 37045 states. Optional — older events don't carry it.
+// the 87047 entries and 37045 states. Optional — older events don't carry it,
+// and pre-1.5 bodies lack the responded/owned fields.
 export interface GrievanceSummary {
   given: number;
+  given_accepted_by_me?: number;
   received: number;
+  received_responded?: number;
   received_accepted: number;
   apologized: boolean;
 }
