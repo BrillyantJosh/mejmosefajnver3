@@ -53,6 +53,19 @@ const TXT = {
     gvNeedsResponse: "čaka odgovor", gvNeedsAccept: "čaka sprejetje", gvNeedsApology: "opravičilo manjka", gvNeedsOwn: "sprejmi kot svojo zablodo",
     gvDone: "zaključeno", gvNoneForPerson: "Za to osebo ni zabeleženih očitkov.", gvFrom: "od", gvTo: "za",
     rollupResponded: "odgovorjeni", rollupOwned: "zablode",
+    gvCompare: "Primerjava",
+    gvStepExpl: [
+      ["Odgovorjen", "prejemnik se je na očitek kakorkoli odzval — tudi obramba ali jeza šteje kot odgovor (refleksija je zaključena šele, ko je odgovorjeno na vse prejete)."],
+      ["Sprejet", "prejemnik ga je brezpogojno sprejel — razumel, slišal, brez »ampak«."],
+      ["Opravičen", "prejemnik se je zanj pristno opravičil (kjer se le da)."],
+      ["Zabloda sprejeta", "dajalec je očitek vzel nase kot del svoje lastne zablode/projekcije (uskladitev je zaključena šele, ko so sprejeti vsi prejeti IN vsi dani vzeti nase)."],
+    ] as [string, string][],
+    gvCompIntro: "Isti proces skozi oči vsakega bitja: vrstica = kdo komu očita, stolpec = bitje. Vsako bitje bere ISTI pogovor, a ga destilira samostojno — manjše razlike so normalne, velike (⚠) pomenijo, da bitja dogajanje berejo različno.",
+    gvCompCount: "očitkov", gvCompMissing: "ta par pri tem bitju ni zabeležen", gvCompMissingShort: "pri kakem bitju manjka", gvCompNone: "—",
+    gvCompCountDiff: "razlika v številu zapisov", gvCompStepDiff: "bitja se o tem koraku ne strinjajo",
+    gvCompAgree: "Ujemanje mejnikov med bitji", gvCompAgreeDesc: "delež korakov (na parih, ki jih beleži več bitij), kjer so vsa bitja enakega mnenja",
+    gvCompNeedTwo: "Primerjava potrebuje vsaj dve bitji z evidenco za ta proces.",
+    gvStepShort: ["odg", "spr", "opr", "zab"],
   },
   en: {
     title: "OWN Matrix",
@@ -88,6 +101,19 @@ const TXT = {
     gvNeedsResponse: "awaiting response", gvNeedsAccept: "awaiting acceptance", gvNeedsApology: "apology missing", gvNeedsOwn: "own it as your delusion",
     gvDone: "complete", gvNoneForPerson: "No grievances recorded for this person.", gvFrom: "from", gvTo: "to",
     rollupResponded: "responded", rollupOwned: "owned",
+    gvCompare: "Comparison",
+    gvStepExpl: [
+      ["Responded", "the receiver reacted to the grievance in ANY way — defense or anger counts too (reflection completes only once every received grievance got a response)."],
+      ["Accepted", "the receiver unconditionally accepted it — understood, heard, no \"but\"."],
+      ["Apologized", "the receiver genuinely apologized for it (where possible)."],
+      ["Owned as delusion", "the giver took the grievance back as part of their OWN delusion/projection (alignment completes only once all received are accepted AND all given are owned)."],
+    ] as [string, string][],
+    gvCompIntro: "The same process through each being's eyes: row = who reproaches whom, column = being. Every being reads the SAME conversation but distills it independently — small differences are normal; large ones (⚠) mean the beings read the events differently.",
+    gvCompCount: "grievance(s)", gvCompMissing: "this pair is not recorded by this being", gvCompMissingShort: "missing for some being", gvCompNone: "—",
+    gvCompCountDiff: "entry-count differs", gvCompStepDiff: "beings disagree on this step",
+    gvCompAgree: "Milestone agreement between beings", gvCompAgreeDesc: "share of steps (on pairs recorded by more than one being) where all beings hold the same view",
+    gvCompNeedTwo: "Comparison needs at least two beings with a ledger for this process.",
+    gvStepShort: ["resp", "acc", "apo", "own"],
   },
 };
 
@@ -200,12 +226,50 @@ export default function Matrix() {
   // ── Matrica Očitkov state ──
   const { session } = useAuth();
   const myPubkey = (session?.nostrHexId || "").toLowerCase();
-  const [grievView, setGrievView] = useState<"matrix" | "mine">("matrix");
+  const [grievView, setGrievView] = useState<"matrix" | "mine" | "compare">("matrix");
   // »Zame« defaults to the logged-in user when they are in the process; the
   // overseer picks any participant from the same select.
   const [grievPerson, setGrievPerson] = useState<string>("");
   const grievPersonEffective = grievPerson
     || (participants.includes(myPubkey) ? myPubkey : (participants[0] || ""));
+
+  // ── Primerjava: align every being's ledger by directed pair (from→to).
+  //    Each being distills the SAME transcript independently — this view makes
+  //    the divergence visible: entry-count spread, missing pairs, and steps
+  //    where the beings' "fully done for this pair" verdicts disagree. ──
+  const grievCompare = useMemo(() => {
+    if (ledgers.length < 2) return null;
+    const STEPS = ["resp", "acc", "apo", "own"] as const;
+    const done = (g: Grievance) => ({ resp: g.respondedByTarget, acc: g.status === "accepted", apo: g.apologyNoted, own: g.acceptedByGiver });
+    const pairKeys = new Set<string>();
+    for (const l of ledgers) for (const g of l.grievances) pairKeys.add(`${g.fromPubkey}|${g.toPubkey}`);
+    let agree = 0, total = 0;
+    const rows = [...pairKeys].sort().map((key) => {
+      const [from, to] = key.split("|");
+      const cells = ledgers.map((l) => {
+        const gs = l.grievances.filter((g) => g.fromPubkey === from && g.toPubkey === to);
+        const counts: Record<(typeof STEPS)[number], number> = { resp: 0, acc: 0, apo: 0, own: 0 };
+        for (const g of gs) { const d = done(g); for (const s of STEPS) if (d[s]) counts[s]++; }
+        return { being: l.beingPubkey, n: gs.length, counts };
+      });
+      const present = cells.filter((c) => c.n > 0);
+      const ns = present.map((c) => c.n);
+      const countDiff = present.length >= 2 && Math.max(...ns) - Math.min(...ns) > 1;
+      const missing = cells.some((c) => c.n === 0) && present.length > 0;
+      // per-step: does every recording being reach the same "all entries done" verdict?
+      const stepDisagree: Record<string, boolean> = {};
+      for (const s of STEPS) {
+        const verdicts = present.map((c) => c.counts[s] === c.n);
+        if (verdicts.length >= 2) {
+          total++;
+          if (verdicts.every((v) => v === verdicts[0])) agree++;
+          else stepDisagree[s] = true;
+        }
+      }
+      return { from, to, cells, countDiff, missing, stepDisagree };
+    });
+    return { rows, agreePct: total ? Math.round((100 * agree) / total) : null };
+  }, [ledgers]);
   const timeline = useMemo(
     () => entries
       .filter((e) => (timelineParticipant === "all" || e.participantPubkey === timelineParticipant)
@@ -442,9 +506,15 @@ export default function Matrix() {
         {/* ── GRIEVANCES — Matrica Očitkov ── */}
         <TabsContent value="grievances" className="space-y-4">
           <p className="text-xs text-muted-foreground">{L.grievIntro}</p>
-          <p className="text-xs text-muted-foreground">{L.gvLegend}</p>
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+            <div>{L.gvLegend}</div>
+            {L.gvStepExpl.map(([name, desc]) => (
+              <div key={name} className="pl-1"><CheckCircle2 className="h-3.5 w-3.5 text-green-500 inline mr-1 align-[-2px]" /><strong className="text-foreground">{name}</strong> — {desc}</div>
+            ))}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant={grievView === "matrix" ? "default" : "outline"} onClick={() => setGrievView("matrix")}>{L.gvMatrix}</Button>
+            <Button size="sm" variant={grievView === "compare" ? "default" : "outline"} onClick={() => setGrievView("compare")}>{L.gvCompare}</Button>
             <Button size="sm" variant={grievView === "mine" ? "default" : "outline"} onClick={() => setGrievView("mine")}>{L.gvMine}</Button>
             {grievView === "mine" && (
               <>
@@ -460,6 +530,68 @@ export default function Matrix() {
           </div>
           {ledgers.length === 0 ? (
             <Card><CardContent className="py-12 text-center text-muted-foreground">{loadingGriev ? L.loading : L.grievNone}</CardContent></Card>
+          ) : grievView === "compare" ? (
+            /* ── PRIMERJAVA: isti proces skozi oči vsakega bitja ── */
+            !grievCompare ? (
+              <Card><CardContent className="py-12 text-center text-muted-foreground">{L.gvCompNeedTwo}</CardContent></Card>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">{L.gvCompIntro}</p>
+                {grievCompare.agreePct != null && (
+                  <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm flex flex-wrap items-baseline gap-2">
+                    <span className="font-semibold">{L.gvCompAgree}:</span>
+                    <span className={`font-bold ${grievCompare.agreePct >= 75 ? "text-green-600" : grievCompare.agreePct >= 50 ? "text-amber-600" : "text-red-600"}`}>{grievCompare.agreePct}%</span>
+                    <span className="text-xs text-muted-foreground">({L.gvCompAgreeDesc})</span>
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <th className="text-left p-2 font-medium">{L.grievLabel}</th>
+                        {ledgers.map((l) => (
+                          <th key={l.beingPubkey} className="text-left p-2 font-medium whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1"><Bot className="h-3.5 w-3.5 text-orange-500" />{nameOf(l.beingPubkey)}</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {grievCompare.rows.map((row) => (
+                        <tr key={`${row.from}|${row.to}`} className="border-b border-border/40 align-top">
+                          <td className="p-2 min-w-[10rem]">
+                            <div className="font-medium">{nameOf(row.from)} → {nameOf(row.to)}</div>
+                            <div className="mt-0.5 space-x-2">
+                              {row.missing && <span className="text-[10px] text-amber-600">⚠ {L.gvCompMissingShort}</span>}
+                              {row.countDiff && <span className="text-[10px] text-amber-600">⚠ {L.gvCompCountDiff}</span>}
+                              {Object.keys(row.stepDisagree).length > 0 && <span className="text-[10px] text-amber-600">⚠ {L.gvCompStepDiff}</span>}
+                            </div>
+                          </td>
+                          {row.cells.map((c) => (
+                            <td key={c.being} className="p-2 whitespace-nowrap">
+                              {c.n === 0 ? (
+                                <span className="text-amber-600/80" title={L.gvCompMissing}>{L.gvCompNone}</span>
+                              ) : (
+                                <div>
+                                  <div className="font-medium">{c.n} {L.gvCompCount}</div>
+                                  <div className="text-muted-foreground mt-0.5 space-x-1.5">
+                                    {(["resp", "acc", "apo", "own"] as const).map((s, i) => (
+                                      <span key={s} className={row.stepDisagree[s] ? "text-amber-600 font-semibold" : c.counts[s] === c.n ? "text-green-600" : undefined}>
+                                        {L.gvStepShort[i]} {c.counts[s]}/{c.n}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
           ) : (
             <div className="space-y-3">
               {ledgers.map((l) => {
