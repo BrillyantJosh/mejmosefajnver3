@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle } from "lucide-react";
 import { useOwnAssessments, type AssessmentEntry, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
+import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES } from "@/lib/ownPhase";
 import { useLang } from "@/i18n/I18nContext";
@@ -61,6 +62,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
   const lang: "en" | "sl" = en ? "en" : "sl";
   const { entries, states, isLoading } = useOwnAssessments(caseRoot);
   const { ledgers } = useOwnGrievances(caseRoot);
+  const { entries: guidance } = useOwnGuidance(caseRoot);
   const me = (participantPubkey || "").toLowerCase();
 
   const myStates = useMemo(() => states.filter((s) => s.participantPubkey === me), [states, me]);
@@ -95,6 +97,30 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
     }
     return out;
   }, [ledgers, me]);
+
+  // Steber 2 nesting: this participant's guidance (87048) under the exact
+  // assessment (87047) — join on basedOnStateId, fallback nearest OLDER
+  // assessment by the same being.
+  const guidanceByAssessment = useMemo(() => {
+    const map = new Map<string, GuidanceEntry[]>();
+    const mine = guidance.filter((g) => g.participantPubkey === me);
+    const byId = new Map(myEntries.map((e) => [e.id, e]));
+    for (const g of mine) {
+      let target: AssessmentEntry | null = g.basedOnStateId ? byId.get(g.basedOnStateId) || null : null;
+      if (!target) {
+        for (const e of myEntries) {
+          if (String(e.beingPubkey).toLowerCase() !== g.beingPubkey) continue;
+          if (e.created_at > g.created_at) continue;
+          if (!target || e.created_at > target.created_at) target = e;
+        }
+      }
+      if (!target) continue;
+      if (!map.has(target.id)) map.set(target.id, []);
+      map.get(target.id)!.push(g);
+    }
+    for (const arr of map.values()) arr.sort((a, b) => a.created_at - b.created_at);
+    return map;
+  }, [guidance, myEntries, me]);
 
   const profilePubkeys = useMemo(() => {
     const set = new Set<string>(beings);
@@ -299,6 +325,17 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                     );
                   })}
                 </div>
+                {/* ↳ Smer (Steber 2): guidance nested under this exact assessment */}
+                {(guidanceByAssessment.get(e.id) || []).map((g) => (
+                  <div key={g.id} className="mt-2 ml-4 rounded-md border border-orange-500/25 bg-orange-500/[0.03] p-2.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-xs font-semibold">↳ {en ? "Direction" : "Smer"} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
+                      <span className="text-[10px] text-muted-foreground">{new Date(g.created_at * 1000).toLocaleString()}</span>
+                    </div>
+                    {g.guidance && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{g.guidance}</p>}
+                    {g.nextStep && <p className="text-xs mt-1">→ {g.nextStep}</p>}
+                  </div>
+                ))}
               </div>
             ))}
           </div>

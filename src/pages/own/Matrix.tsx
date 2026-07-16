@@ -10,6 +10,7 @@ import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Users, Telescope } fro
 import { useAllOwnProcesses } from "@/hooks/useAllOwnProcesses";
 import { useOwnAssessments, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
+import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES } from "@/lib/ownPhase";
@@ -43,7 +44,7 @@ const TXT = {
     grievAccepted: "Sprejeto", grievOpen: "Odprto", grievApologized: "opravičeno",
     grievLabel: "Očitki", grievAcceptedWord: "sprejeti",
     rollupOf: "od", rollupAccepted: "sprejetih",
-    tlGriev: "očitki", tlReceived: "prejeti", tlGiven: "dani",
+    tlGriev: "očitki", tlReceived: "prejeti", tlGiven: "dani", tlDirection: "Smer",
     gvMatrix: "Matrica", gvMine: "Zame",
     gvLegend: "Vsak očitek gre skozi štiri korake: prejemnik nanj odgovori in ga brezpogojno sprejme (z opravičilom, če se le da), dajalec pa ga sprejme kot del svoje zablode.",
     colResponded: "Odgovorjen", colAccepted: "Sprejet", colApologized: "Opravičen", colOwned: "Zabloda sprejeta",
@@ -78,7 +79,7 @@ const TXT = {
     grievAccepted: "Accepted", grievOpen: "Open", grievApologized: "apologized",
     grievLabel: "Grievances", grievAcceptedWord: "accepted",
     rollupOf: "of", rollupAccepted: "accepted",
-    tlGriev: "grievances", tlReceived: "received", tlGiven: "given",
+    tlGriev: "grievances", tlReceived: "received", tlGiven: "given", tlDirection: "Direction",
     gvMatrix: "Matrix", gvMine: "For me",
     gvLegend: "Every grievance passes four steps: the receiver responds to it and unconditionally accepts it (apologizing where possible), and the giver accepts it as part of their own delusion.",
     colResponded: "Responded", colAccepted: "Accepted", colApologized: "Apologized", colOwned: "Owned as delusion",
@@ -111,6 +112,31 @@ export default function Matrix() {
 
   const { entries, states, isLoading: loadingAssess } = useOwnAssessments(selectedCaseRoot);
   const { ledgers, isLoading: loadingGriev } = useOwnGrievances(selectedCaseRoot);
+  const { entries: guidance } = useOwnGuidance(selectedCaseRoot);
+
+  // Steber 2 nesting: guidance (87048) under the exact assessment (87047) it
+  // was based on — join on based_on_state_id; fallback = the nearest OLDER
+  // assessment of the same being+participant.
+  const guidanceByAssessment = useMemo(() => {
+    const m = new Map<string, GuidanceEntry[]>();
+    const byId = new Map(entries.map((e) => [e.id, e]));
+    const lower = (v: string) => String(v || "").toLowerCase();
+    for (const g of guidance) {
+      let target = g.basedOnStateId ? byId.get(g.basedOnStateId) || null : null;
+      if (!target) {
+        for (const e of entries) {
+          if (lower(e.beingPubkey) !== g.beingPubkey || lower(e.participantPubkey) !== g.participantPubkey) continue;
+          if (e.created_at > g.created_at) continue;
+          if (!target || e.created_at > target.created_at) target = e;
+        }
+      }
+      if (!target) continue;
+      if (!m.has(target.id)) m.set(target.id, []);
+      m.get(target.id)!.push(g);
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a.created_at - b.created_at);
+    return m;
+  }, [guidance, entries]);
 
   const participants = useMemo(() => {
     if (!selected) return [] as string[];
@@ -396,6 +422,17 @@ export default function Matrix() {
                       {L.tlGriev}: {L.tlReceived} {e.grievanceSummary.received_accepted}/{e.grievanceSummary.received} {L.grievAcceptedWord} · {L.tlGiven} {e.grievanceSummary.given}
                     </div>
                   )}
+                  {/* ↳ Smer (Steber 2): guidance nested under this exact assessment */}
+                  {(guidanceByAssessment.get(e.id) || []).map((g) => (
+                    <div key={g.id} className="mt-2 ml-4 rounded-md border border-orange-500/25 bg-orange-500/[0.03] p-2.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-xs font-semibold">↳ {L.tlDirection} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
+                        <span className="text-[10px] text-muted-foreground">{new Date(g.created_at * 1000).toLocaleString()}</span>
+                      </div>
+                      {g.guidance && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{g.guidance}</p>}
+                      {g.nextStep && <p className="text-xs mt-1">→ {g.nextStep}</p>}
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
