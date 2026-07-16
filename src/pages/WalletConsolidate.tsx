@@ -225,8 +225,14 @@ export default function WalletConsolidate() {
       toast.success(`Batch #${batchId} consolidated! TX: ${data.txid.substring(0, 16)}…`, {
         duration: 6000,
       });
-      // Re-analyse after a short delay so counts refresh (mempool needs a moment)
-      setTimeout(() => runAnalysis(), 4000);
+      // Do NOT auto re-analyze here. runAnalysis() sets isLoading + rebuilds the
+      // whole batch list from scratch, which blanks it into skeletons and wipes
+      // this batch's completed ✓/TX — it looks like the click did nothing and
+      // invites a duplicate press (→ the UTXOs are already spent → "failed").
+      // One consolidation doesn't touch the OTHER batches' UTXOs, so they stay
+      // valid; the user consolidates them directly and re-analyzes manually
+      // (the Re-analyze button / the "Fee too high" hint) for the next dust
+      // round once this tx has confirmed on-chain.
     } catch (err) {
       console.error(`Batch ${batchId} consolidation error:`, err);
       setBatches((prev) => prev.map((b) => (b.id === batchId ? { ...b, isProcessing: false } : b)));
