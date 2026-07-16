@@ -25,6 +25,14 @@ export interface GrievanceSummary {
   apologized: boolean;
 }
 
+// Steber 3 rollup mirrored from the being's 37047 palette.
+export interface EmotionRollup {
+  depth: number;
+  breadth: number;
+  top?: string[];
+  swing?: boolean;
+}
+
 export interface AssessmentEntry {
   id: string;
   beingPubkey: string;
@@ -36,6 +44,7 @@ export interface AssessmentEntry {
   summary: string;
   overallConfidence: number;
   grievanceSummary?: GrievanceSummary | null;
+  emotionSummary?: EmotionRollup | null;
 }
 
 export interface PhaseState {
@@ -49,6 +58,7 @@ export interface PhaseState {
   changeComplete: boolean;
   overallConfidence: number;
   grievanceSummary?: GrievanceSummary | null;
+  emotionSummary?: EmotionRollup | null;
 }
 
 const tagVal = (ev: Event, name: string, marker?: string): string | undefined => {
@@ -99,6 +109,7 @@ export const useOwnAssessments = (caseRoot: string | null) => {
               summary: body.summary || '',
               overallConfidence: Number(body.overall_confidence) || 0,
               grievanceSummary: body.grievance_summary ?? null,
+              emotionSummary: body.emotion_summary ?? null,
             });
           } else {
             const key = `${ev.pubkey.toLowerCase()}:${participant}`;
@@ -118,6 +129,7 @@ export const useOwnAssessments = (caseRoot: string | null) => {
               changeComplete: !!(body.change_complete ?? body.change?.requirement_met),
               overallConfidence: Number(body.overall_confidence) || 0,
               grievanceSummary: body.grievance_summary ?? null,
+              emotionSummary: body.emotion_summary ?? null,
             });
           }
         }

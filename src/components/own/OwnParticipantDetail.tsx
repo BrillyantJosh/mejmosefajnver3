@@ -7,6 +7,7 @@ import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle } from "lucide-react";
 import { useOwnAssessments, type AssessmentEntry, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
+import { useOwnEmotions, HEAVY_EMOTIONS, LIGHT_EMOTIONS, EMOTION_LABELS } from "@/hooks/useOwnEmotions";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES } from "@/lib/ownPhase";
 import { useLang } from "@/i18n/I18nContext";
@@ -33,6 +34,8 @@ const TXT = {
     compIntro: "Vsako bitje bere isti pogovor, a ga destilira samostojno — ⚠ pokaže, kje se bitja razhajajo.",
     compCount: "očitkov", compMissing: "pri kakem bitju manjka", compCountDiff: "razlika v številu", compStepDiff: "nestrinjanje o koraku", compNone: "—",
     compSteps: ["odg", "spr", "opr", "zab"],
+    emTitle: "Čustva", emDepth: "Globina vstopa", emHeavy: "Težka", emLight: "Svetla", emSwing: "nihaj",
+    emVuln: "ranljivost", emEmbody: "utelešenost", emPeak: "vrh",
   },
   en: {
     back: "Back to chat",
@@ -53,6 +56,8 @@ const TXT = {
     compIntro: "Every being reads the same conversation but distills it independently — ⚠ marks where the beings diverge.",
     compCount: "grievance(s)", compMissing: "missing for some being", compCountDiff: "entry-count differs", compStepDiff: "step disagreement", compNone: "—",
     compSteps: ["resp", "acc", "apo", "own"],
+    emTitle: "Emotions", emDepth: "Depth of entry", emHeavy: "Heavy", emLight: "Light", emSwing: "swing",
+    emVuln: "vulnerability", emEmbody: "embodiment", emPeak: "peak",
   },
 };
 
@@ -73,6 +78,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
   const { entries, states, isLoading } = useOwnAssessments(caseRoot);
   const { ledgers } = useOwnGrievances(caseRoot);
   const { entries: guidance } = useOwnGuidance(caseRoot);
+  const { palettes: emotionPalettes } = useOwnEmotions(caseRoot);
   const me = (participantPubkey || "").toLowerCase();
 
   const myStates = useMemo(() => states.filter((s) => s.participantPubkey === me), [states, me]);
@@ -160,6 +166,11 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
     for (const arr of map.values()) arr.sort((a, b) => a.created_at - b.created_at);
     return map;
   }, [guidance, myEntries, me]);
+
+  const myPalettes = useMemo(
+    () => emotionPalettes.filter((pal) => pal.participantPubkey === me).sort((a, b) => a.beingPubkey.localeCompare(b.beingPubkey)),
+    [emotionPalettes, me],
+  );
 
   const profilePubkeys = useMemo(() => {
     const set = new Set<string>(beings);
@@ -381,6 +392,65 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
               </CardContent>
             </Card>
           )}
+        </div>
+      )}
+
+      {/* ── Čustva (Steber 3): paleta per bitje za to osebo ── */}
+      {myPalettes.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-muted-foreground">{L.emTitle}</h4>
+          <div className="space-y-2.5">
+            {myPalettes.map((pal) => {
+              const byKey = new Map(pal.emotions.map((e) => [e.key, e]));
+              const lang2 = en ? "en" : "sl";
+              const modeIcon = (m: string) => (m === "expressed" ? "🔥" : m === "held" ? "🤐" : "💬");
+              const Chip = ({ k, heavy }: { k: string; heavy: boolean }) => {
+                const hit = byKey.get(k);
+                const label = EMOTION_LABELS[k]?.[lang2] || k;
+                if (!hit) return <span className="inline-flex items-center rounded-full border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground/40">{label}</span>;
+                const alpha = 0.15 + 0.55 * hit.peakIntensity;
+                return (
+                  <span
+                    title={`${label} · ${L.emPeak} ${hit.peakIntensity.toFixed(2)} · ${hit.mode}${hit.evidence ? ` — ${hit.evidence}` : ""}`}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${heavy ? "border-red-500/50 text-red-700 dark:text-red-400" : "border-green-500/50 text-green-700 dark:text-green-400"}`}
+                    style={{ backgroundColor: heavy ? `rgba(239,68,68,${alpha * 0.25})` : `rgba(34,197,94,${alpha * 0.25})` }}
+                  >
+                    {modeIcon(hit.mode)} {label} <span className="opacity-70">{Math.round(hit.peakIntensity * 100)}</span>
+                  </span>
+                );
+              };
+              return (
+                <Card key={pal.beingPubkey} className="border-orange-500/25 bg-orange-500/[0.04]">
+                  <CardContent className="p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm font-medium inline-flex items-center gap-1.5">
+                        <Bot className="h-4 w-4 text-orange-500" />{nameOf(pal.beingPubkey)}
+                      </span>
+                      <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <span>{L.emVuln} {Math.round(pal.depth.vulnerability * 100)}%</span>
+                        <span>{L.emEmbody} {Math.round(pal.depth.embodiment * 100)}%</span>
+                        {pal.depth.swing && <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0">🎢 {L.emSwing}</Badge>}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                        <span>{L.emHeavy}</span>
+                        <span className="font-semibold normal-case text-foreground">{L.emDepth}: {pal.depth.score}/100</span>
+                        <span>{L.emLight}</span>
+                      </div>
+                      <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
+                        <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-foreground border-2 border-background shadow" style={{ left: `calc(${pal.depth.score}% - 7px)` }} />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap gap-1">{HEAVY_EMOTIONS.map((k) => <Chip key={k} k={k} heavy />)}</div>
+                      <div className="flex flex-wrap gap-1">{LIGHT_EMOTIONS.map((k) => <Chip key={k} k={k} heavy={false} />)}</div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         </div>
       )}
 

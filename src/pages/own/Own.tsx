@@ -53,7 +53,10 @@ export default function Own() {
   // Overseer (facilitator/guest) view: which participant's detail is open on the
   // right (null = show the chat). Reset whenever the process changes.
   const [matrixParticipant, setMatrixParticipant] = useState<string | null>(null);
-  useEffect(() => { setMatrixParticipant(null); }, [selectedProcessId]);
+  // Subject's own detailed view (Podrobni pogled) replacing the chat pane.
+  const [selfDetail, setSelfDetail] = useState(false);
+  useEffect(() => { setMatrixParticipant(null);
+    setSelfDetail(false); }, [selectedProcessId]);
   
   // LASH state
   const [lashedEvents, setLashedEvents] = useState<Set<string>>(new Set());
@@ -718,8 +721,9 @@ export default function Own() {
           )}
         </div>
       ) : isSubjectView ? (
-        // Assessed subject (participant / initiator): matrix on top (mobile) /
-        // left column (desktop) + chat.
+        // Assessed subject (participant / initiator): the condensed three-
+        // pillar cross-section on the left; the right shows the chat, or the
+        // participant's OWN detailed view via "Podrobni pogled".
         <div className="flex flex-col md:flex-row md:gap-4 md:h-full">
           <div className="w-full md:w-[340px] md:shrink-0 md:h-full md:overflow-y-auto mb-4 md:mb-0 px-4 md:px-0">
             <OwnSelfMatrix
@@ -727,10 +731,21 @@ export default function Own() {
               participantPubkey={session?.nostrHexId || ''}
               phase={selectedProcess?.phase}
               onAnalyzeOthers={caseRoot ? () => navigate(`/own/matrix?process=${encodeURIComponent(caseRoot)}`) : undefined}
+              onOpenDetail={() => setSelfDetail(true)}
             />
           </div>
           <div className="w-full md:flex-1 md:min-w-0 h-[calc(100dvh-260px)] md:h-full">
-            {chatViewEl}
+            {selfDetail && session?.nostrHexId ? (
+              <OwnParticipantDetail
+                caseRoot={caseRoot}
+                participantPubkey={session.nostrHexId}
+                participantName={nameOfPk(session.nostrHexId)}
+                phase={selectedProcess?.phase}
+                onBack={() => setSelfDetail(false)}
+              />
+            ) : (
+              chatViewEl
+            )}
           </div>
         </div>
       ) : isOverseerView ? (
