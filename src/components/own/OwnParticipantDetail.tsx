@@ -25,6 +25,8 @@ const TXT = {
     grievTitle: "Očitki",
     grievGiven: "Dani", grievReceived: "Prejeti",
     grievAccepted: "Sprejeto", grievOpen: "Odprto", grievApologized: "opravičeno",
+    stepResponded: "odgovorjen", stepOwned: "zabloda sprejeta",
+    needsResponse: "čaka odgovor", needsOwn: "sprejmi kot svojo zablodo",
   },
   en: {
     back: "Back to chat",
@@ -38,6 +40,8 @@ const TXT = {
     grievTitle: "Grievances",
     grievGiven: "Given", grievReceived: "Received",
     grievAccepted: "Accepted", grievOpen: "Open", grievApologized: "apologized",
+    stepResponded: "responded", stepOwned: "owned as delusion",
+    needsResponse: "awaiting response", needsOwn: "own it as your delusion",
   },
 };
 
@@ -127,13 +131,30 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
   };
   const phaseKeyLabel = (ph: string) => getPhaseLabel(ph, lang);
 
-  const GrievStatus = ({ g, showApology }: { g: Grievance; showApology?: boolean }) => (
-    <span className="inline-flex items-center gap-1.5 shrink-0">
-      {showApology && g.apologyNoted && (
+  // Steber 1.5: the full four-step life of a grievance, viewed from one side.
+  // received → responded / accepted / apologized matter; given → giver-owned.
+  const GrievStatus = ({ g, side }: { g: Grievance; side: "given" | "received" }) => (
+    <span className="inline-flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+      {side === "received" && !g.respondedByTarget && (
+        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0">{L.needsResponse}</Badge>
+      )}
+      {side === "received" && g.respondedByTarget && g.status !== "accepted" && (
+        <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
+          <CheckCircle2 className="h-3 w-3 text-green-500" /> {L.stepResponded}
+        </span>
+      )}
+      {g.apologyNoted && (
         <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
           <CheckCircle2 className="h-3 w-3 text-green-500" /> {L.grievApologized}
         </span>
       )}
+      {side === "given" && (g.acceptedByGiver ? (
+        <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
+          <CheckCircle2 className="h-3 w-3 text-green-500" /> {L.stepOwned}
+        </span>
+      ) : (
+        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0">{L.needsOwn}</Badge>
+      ))}
       <Badge
         variant="outline"
         className={g.status === "accepted"
@@ -213,7 +234,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                         <div key={g.id} className="rounded-md bg-muted/40 border border-border/50 p-2 space-y-0.5">
                           <div className="flex items-center justify-between gap-2 flex-wrap">
                             <span className="text-xs font-medium">→ {nameOf(g.toPubkey)}</span>
-                            <GrievStatus g={g} />
+                            <GrievStatus g={g} side="given" />
                           </div>
                           {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
                         </div>
@@ -227,7 +248,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                         <div key={g.id} className="rounded-md bg-muted/40 border border-border/50 p-2 space-y-0.5">
                           <div className="flex items-center justify-between gap-2 flex-wrap">
                             <span className="text-xs font-medium">← {nameOf(g.fromPubkey)}</span>
-                            <GrievStatus g={g} showApology />
+                            <GrievStatus g={g} side="received" />
                           </div>
                           {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
                         </div>

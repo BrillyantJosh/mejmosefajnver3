@@ -20,13 +20,21 @@ export interface Grievance {
   status: 'open' | 'accepted';
   acceptedAt: number | null;
   apologyNoted: boolean;
+  // Steber 1.5 — grievances are the axis of all three phases:
+  // reflection completes once the TARGET responded to every received
+  // grievance (any expressed reaction counts); alignment completes once the
+  // GIVER also owns each given grievance as their own delusion.
+  respondedByTarget: boolean;
+  acceptedByGiver: boolean;
   confidence: number;
   lastUpdateAt: number;
 }
 
 export interface GrievanceRollup {
   given: number;
+  given_accepted_by_me: number;
   received: number;
+  received_responded: number;
   received_accepted: number;
   apologized: boolean;
 }
@@ -87,6 +95,10 @@ export const useOwnGrievances = (caseRoot: string | null) => {
                   status: g.status === 'accepted' ? 'accepted' as const : 'open' as const,
                   acceptedAt: g.accepted_at != null ? Number(g.accepted_at) || 0 : null,
                   apologyNoted: !!g.apology_noted,
+                  // Legacy (pre-1.5) bodies lack the flags: accepted ⊃ responded,
+                  // giver-owning never existed before → false.
+                  respondedByTarget: g.responded_by_target ?? (g.status === 'accepted'),
+                  acceptedByGiver: !!g.accepted_by_giver,
                   confidence: Number(g.confidence) || 0,
                   lastUpdateAt: Number(g.last_update_at) || 0,
                 }))
@@ -96,9 +108,16 @@ export const useOwnGrievances = (caseRoot: string | null) => {
           if (body.participants && typeof body.participants === 'object') {
             for (const [pk, r] of Object.entries<any>(body.participants)) {
               if (!r || typeof r !== 'object') continue;
-              participants[pk.toLowerCase()] = {
+              const pkl = pk.toLowerCase();
+              // Legacy rollups lack the 1.5 fields — derive them from the
+              // (already migrated) grievance entries so the matrix never
+              // shows 0/N for an all-accepted legacy ledger.
+              const mine = { given: grievances.filter((g) => g.fromPubkey === pkl), received: grievances.filter((g) => g.toPubkey === pkl) };
+              participants[pkl] = {
                 given: Number(r.given) || 0,
+                given_accepted_by_me: r.given_accepted_by_me != null ? Number(r.given_accepted_by_me) || 0 : mine.given.filter((g) => g.acceptedByGiver).length,
                 received: Number(r.received) || 0,
+                received_responded: r.received_responded != null ? Number(r.received_responded) || 0 : mine.received.filter((g) => g.respondedByTarget).length,
                 received_accepted: Number(r.received_accepted) || 0,
                 apologized: !!r.apologized,
               };

@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Users, Telescope } from "lucide-react";
 import { useAllOwnProcesses } from "@/hooks/useAllOwnProcesses";
 import { useOwnAssessments, type PhaseState } from "@/hooks/useOwnAssessments";
-import { useOwnGrievances } from "@/hooks/useOwnGrievances";
+import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
+import { useAuth } from "@/contexts/AuthContext";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES } from "@/lib/ownPhase";
 import { useLang } from "@/i18n/I18nContext";
@@ -43,6 +44,14 @@ const TXT = {
     grievLabel: "Očitki", grievAcceptedWord: "sprejeti",
     rollupOf: "od", rollupAccepted: "sprejetih",
     tlGriev: "očitki", tlReceived: "prejeti", tlGiven: "dani",
+    gvMatrix: "Matrica", gvMine: "Zame",
+    gvLegend: "Vsak očitek gre skozi štiri korake: prejemnik nanj odgovori in ga brezpogojno sprejme (z opravičilom, če se le da), dajalec pa ga sprejme kot del svoje zablode.",
+    colResponded: "Odgovorjen", colAccepted: "Sprejet", colApologized: "Opravičen", colOwned: "Zabloda sprejeta",
+    gvForPerson: "Pogled za", gvMyReceived: "Name naslovljeni", gvMyReceivedDesc: "odgovori nanje in jih brezpogojno sprejmi",
+    gvMyGiven: "Moji dani očitki", gvMyGivenDesc: "sprejmi jih kot del svoje zablode in se zaveži, da ne bodo več nastajali",
+    gvNeedsResponse: "čaka odgovor", gvNeedsAccept: "čaka sprejetje", gvNeedsApology: "opravičilo manjka", gvNeedsOwn: "sprejmi kot svojo zablodo",
+    gvDone: "zaključeno", gvNoneForPerson: "Za to osebo ni zabeleženih očitkov.", gvFrom: "od", gvTo: "za",
+    rollupResponded: "odgovorjeni", rollupOwned: "zablode",
   },
   en: {
     title: "OWN Matrix",
@@ -70,6 +79,14 @@ const TXT = {
     grievLabel: "Grievances", grievAcceptedWord: "accepted",
     rollupOf: "of", rollupAccepted: "accepted",
     tlGriev: "grievances", tlReceived: "received", tlGiven: "given",
+    gvMatrix: "Matrix", gvMine: "For me",
+    gvLegend: "Every grievance passes four steps: the receiver responds to it and unconditionally accepts it (apologizing where possible), and the giver accepts it as part of their own delusion.",
+    colResponded: "Responded", colAccepted: "Accepted", colApologized: "Apologized", colOwned: "Owned as delusion",
+    gvForPerson: "Viewing for", gvMyReceived: "Addressed to me", gvMyReceivedDesc: "respond to them and accept them unconditionally",
+    gvMyGiven: "Grievances I gave", gvMyGivenDesc: "accept them as part of your own delusion and commit so they stop arising",
+    gvNeedsResponse: "awaiting response", gvNeedsAccept: "awaiting acceptance", gvNeedsApology: "apology missing", gvNeedsOwn: "own it as your delusion",
+    gvDone: "complete", gvNoneForPerson: "No grievances recorded for this person.", gvFrom: "from", gvTo: "to",
+    rollupResponded: "responded", rollupOwned: "owned",
   },
 };
 
@@ -153,6 +170,16 @@ export default function Matrix() {
 
   const [timelineParticipant, setTimelineParticipant] = useState<string>("all");
   const [timelineBeing, setTimelineBeing] = useState<string>("all");
+
+  // ── Matrica Očitkov state ──
+  const { session } = useAuth();
+  const myPubkey = (session?.nostrHexId || "").toLowerCase();
+  const [grievView, setGrievView] = useState<"matrix" | "mine">("matrix");
+  // »Zame« defaults to the logged-in user when they are in the process; the
+  // overseer picks any participant from the same select.
+  const [grievPerson, setGrievPerson] = useState<string>("");
+  const grievPersonEffective = grievPerson
+    || (participants.includes(myPubkey) ? myPubkey : (participants[0] || ""));
   const timeline = useMemo(
     () => entries
       .filter((e) => (timelineParticipant === "all" || e.participantPubkey === timelineParticipant)
@@ -375,63 +402,157 @@ export default function Matrix() {
           )}
         </TabsContent>
 
-        {/* ── GRIEVANCES ── */}
+        {/* ── GRIEVANCES — Matrica Očitkov ── */}
         <TabsContent value="grievances" className="space-y-4">
           <p className="text-xs text-muted-foreground">{L.grievIntro}</p>
+          <p className="text-xs text-muted-foreground">{L.gvLegend}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant={grievView === "matrix" ? "default" : "outline"} onClick={() => setGrievView("matrix")}>{L.gvMatrix}</Button>
+            <Button size="sm" variant={grievView === "mine" ? "default" : "outline"} onClick={() => setGrievView("mine")}>{L.gvMine}</Button>
+            {grievView === "mine" && (
+              <>
+                <span className="text-xs text-muted-foreground ml-1">{L.gvForPerson}</span>
+                <Select value={grievPersonEffective} onValueChange={setGrievPerson}>
+                  <SelectTrigger className="w-auto min-w-[10rem] h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {participants.map((p) => <SelectItem key={p} value={p}>{nameOf(p)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+          </div>
           {ledgers.length === 0 ? (
             <Card><CardContent className="py-12 text-center text-muted-foreground">{loadingGriev ? L.loading : L.grievNone}</CardContent></Card>
           ) : (
             <div className="space-y-3">
-              {ledgers.map((l) => (
-                <Card key={l.beingPubkey} className="border-orange-500/25 bg-orange-500/[0.04]">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-sm font-semibold inline-flex items-center gap-1.5">
-                        <Bot className="h-4 w-4 text-orange-500" />{nameOf(l.beingPubkey)}
-                      </span>
-                      {l.processPhase && (
-                        <Badge variant="outline" className={getPhaseColor(l.processPhase)}>{getPhaseLabel(l.processPhase, lang)}</Badge>
-                      )}
-                    </div>
-                    {l.grievances.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">{L.grievEmptyBeing}</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {l.grievances.map((g) => (
-                          <div key={g.id} className="rounded-md bg-background/60 border border-border/50 p-2.5 space-y-1">
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-xs font-medium">{nameOf(g.fromPubkey)} → {nameOf(g.toPubkey)}</span>
-                              <span className="inline-flex items-center gap-1.5">
-                                {g.apologyNoted && (
-                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
-                                    <CheckCircle2 className="h-3 w-3 text-green-500" /> {L.grievApologized}
-                                  </span>
-                                )}
-                                <Badge
-                                  variant="outline"
-                                  className={g.status === "accepted"
-                                    ? "bg-green-500/10 text-green-600 border-green-500/30 text-[10px] py-0"
-                                    : "bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0"}
-                                >
-                                  {g.status === "accepted" ? L.grievAccepted : L.grievOpen}
-                                </Badge>
-                              </span>
-                            </div>
-                            {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
+              {ledgers.map((l) => {
+                const StepCell = ({ done }: { done: boolean }) => (
+                  <td className="p-2 text-center">
+                    {done
+                      ? <CheckCircle2 className="h-4 w-4 text-green-500 inline" />
+                      : <Circle className="h-4 w-4 text-muted-foreground/30 inline" />}
+                  </td>
+                );
+                const NextStep = ({ g, side }: { g: Grievance; side: "received" | "given" }) => {
+                  let label: string; let done = false;
+                  if (side === "given") {
+                    done = g.acceptedByGiver;
+                    label = done ? L.gvDone : L.gvNeedsOwn;
+                  } else if (!g.respondedByTarget) label = L.gvNeedsResponse;
+                  else if (g.status !== "accepted") label = L.gvNeedsAccept;
+                  else if (!g.apologyNoted) label = L.gvNeedsApology;
+                  else { done = true; label = L.gvDone; }
+                  return (
+                    <Badge variant="outline" className={done
+                      ? "bg-green-500/10 text-green-600 border-green-500/30 text-[10px] py-0 shrink-0"
+                      : "bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0 shrink-0"}>
+                      {label}
+                    </Badge>
+                  );
+                };
+                const mineReceived = l.grievances.filter((g) => g.toPubkey === grievPersonEffective);
+                const mineGiven = l.grievances.filter((g) => g.fromPubkey === grievPersonEffective);
+                return (
+                  <Card key={l.beingPubkey} className="border-orange-500/25 bg-orange-500/[0.04]">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-sm font-semibold inline-flex items-center gap-1.5">
+                          <Bot className="h-4 w-4 text-orange-500" />{nameOf(l.beingPubkey)}
+                        </span>
+                        {l.processPhase && (
+                          <Badge variant="outline" className={getPhaseColor(l.processPhase)}>{getPhaseLabel(l.processPhase, lang)}</Badge>
+                        )}
+                      </div>
+
+                      {grievView === "matrix" ? (
+                        l.grievances.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">{L.grievEmptyBeing}</p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse text-xs">
+                              <thead>
+                                <tr className="border-b border-border/60 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  <th className="text-left p-2 font-medium">{L.grievLabel}</th>
+                                  <th className="p-2 font-medium text-center whitespace-nowrap">{L.colResponded}</th>
+                                  <th className="p-2 font-medium text-center whitespace-nowrap">{L.colAccepted}</th>
+                                  <th className="p-2 font-medium text-center whitespace-nowrap">{L.colApologized}</th>
+                                  <th className="p-2 font-medium text-center whitespace-nowrap">{L.colOwned}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {l.grievances.map((g) => (
+                                  <tr key={g.id} className="border-b border-border/40 align-top">
+                                    <td className="p-2 min-w-[12rem]">
+                                      <div className="font-medium">{nameOf(g.fromPubkey)} → {nameOf(g.toPubkey)}</div>
+                                      {g.summary && <div className="text-muted-foreground leading-snug mt-0.5">{g.summary}</div>}
+                                    </td>
+                                    <StepCell done={g.respondedByTarget} />
+                                    <StepCell done={g.status === "accepted"} />
+                                    <StepCell done={g.apologyNoted} />
+                                    <StepCell done={g.acceptedByGiver} />
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    {Object.keys(l.participants).length > 0 && (
-                      <div className="text-[11px] text-muted-foreground space-y-0.5 border-t border-border/50 pt-2">
-                        {Object.entries(l.participants).map(([pk, r]) => (
-                          <div key={pk}>{nameOf(pk)}: {r.received_accepted} {L.rollupOf} {r.received} {L.rollupAccepted}</div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                        )
+                      ) : (
+                        /* »Zame« — kaj mora izbrana oseba še odgovoriti / sprejeti / vzeti nase */
+                        mineReceived.length === 0 && mineGiven.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">{L.gvNoneForPerson}</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {mineReceived.length > 0 && (
+                              <div>
+                                <div className="text-xs font-semibold">{L.gvMyReceived}</div>
+                                <div className="text-[11px] text-muted-foreground mb-1.5">{L.gvMyReceivedDesc}</div>
+                                <div className="space-y-1.5">
+                                  {mineReceived.map((g) => (
+                                    <div key={g.id} className="rounded-md bg-background/60 border border-border/50 p-2.5 flex items-start justify-between gap-2">
+                                      <div className="text-xs">
+                                        <span className="font-medium">{L.gvFrom} {nameOf(g.fromPubkey)}:</span>{" "}
+                                        <span className="text-muted-foreground">{g.summary}</span>
+                                      </div>
+                                      <NextStep g={g} side="received" />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {mineGiven.length > 0 && (
+                              <div>
+                                <div className="text-xs font-semibold">{L.gvMyGiven}</div>
+                                <div className="text-[11px] text-muted-foreground mb-1.5">{L.gvMyGivenDesc}</div>
+                                <div className="space-y-1.5">
+                                  {mineGiven.map((g) => (
+                                    <div key={g.id} className="rounded-md bg-background/60 border border-border/50 p-2.5 flex items-start justify-between gap-2">
+                                      <div className="text-xs">
+                                        <span className="font-medium">{L.gvTo} {nameOf(g.toPubkey)}:</span>{" "}
+                                        <span className="text-muted-foreground">{g.summary}</span>
+                                      </div>
+                                      <NextStep g={g} side="given" />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      )}
+
+                      {Object.keys(l.participants).length > 0 && (
+                        <div className="text-[11px] text-muted-foreground space-y-0.5 border-t border-border/50 pt-2">
+                          {Object.entries(l.participants).map(([pk, r]) => (
+                            <div key={pk}>
+                              {nameOf(pk)}: {L.rollupResponded} {r.received_responded}/{r.received} · {L.rollupAccepted} {r.received_accepted} {L.rollupOf} {r.received} · {L.rollupOwned} {r.given_accepted_by_me}/{r.given}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>
