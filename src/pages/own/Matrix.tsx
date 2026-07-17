@@ -211,14 +211,27 @@ export default function Matrix() {
     });
     return Array.from(set);
   }, [ledgers]);
+  // Emotion palettes may come from beings that never published an 87047 in
+  // this case (e.g. orro/soulstice on a sister process) — without their
+  // pubkeys in the profile fetch the Čustva tab shows raw hashes.
+  const emotionBeingPubkeys = useMemo(
+    () => Array.from(new Set(emotionPalettes.map((pal) => pal.beingPubkey))),
+    [emotionPalettes],
+  );
   const allPubkeys = useMemo(
-    () => Array.from(new Set([...participants, ...beings, ...grievPubkeys])),
-    [participants, beings, grievPubkeys],
+    () => Array.from(new Set([...participants, ...beings, ...grievPubkeys, ...emotionBeingPubkeys])),
+    [participants, beings, grievPubkeys, emotionBeingPubkeys],
   );
   const { profiles } = useNostrProfilesCacheBulk(allPubkeys);
   const nameOf = (pk: string) => {
     const p = profiles.get(pk);
     return p?.display_name || p?.full_name || short(pk);
+  };
+  // For palette headers: KIND 0 name when resolved, else the body's own
+  // being_name, else the short hash.
+  const beingLabelOf = (pk: string, bodyName?: string) => {
+    const n = nameOf(pk);
+    return n === short(pk) && bodyName ? bodyName : n;
   };
 
   const stateFor = (being: string, participant: string) =>
@@ -767,7 +780,7 @@ export default function Matrix() {
                       <CardTitle className="text-sm md:text-base flex items-center justify-between flex-wrap gap-2">
                         <span>{nameOf(p)}</span>
                         <span className="text-xs font-normal text-muted-foreground">
-                          {L.emByBeing}: {mine.map((pal) => `${nameOf(pal.beingPubkey)} ${pal.depth.score}`).join(" · ")}
+                          {L.emByBeing}: {mine.map((pal) => `${beingLabelOf(pal.beingPubkey, pal.beingName)} ${pal.depth.score}`).join(" · ")}
                         </span>
                       </CardTitle>
                     </CardHeader>
@@ -797,7 +810,7 @@ export default function Matrix() {
                           <div key={pal.beingPubkey} className="rounded-lg border border-orange-500/25 bg-orange-500/[0.04] p-3 space-y-2">
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <span className="text-sm font-semibold inline-flex items-center gap-1.5">
-                                <Bot className="h-4 w-4 text-orange-500" />{nameOf(pal.beingPubkey)}
+                                <Bot className="h-4 w-4 text-orange-500" />{beingLabelOf(pal.beingPubkey, pal.beingName)}
                               </span>
                               <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
                                 <span>{L.emVuln} {Math.round(pal.depth.vulnerability * 100)}%</span>

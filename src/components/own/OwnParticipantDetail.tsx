@@ -187,12 +187,19 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
       given.forEach((g) => set.add(g.toPubkey));
       received.forEach((g) => set.add(g.fromPubkey));
     });
+    // Emotion palettes may come from beings without an 87047 in this case —
+    // include them or the Čustva tab shows raw hashes.
+    emotionPalettes.forEach((pal) => set.add(pal.beingPubkey));
     return Array.from(set);
-  }, [beings, grievByBeing]);
+  }, [beings, grievByBeing, emotionPalettes]);
   const { profiles } = useNostrProfilesCacheBulk(profilePubkeys);
   const nameOf = (pk: string) => {
     const p = profiles.get(pk);
     return p?.display_name || p?.full_name || short(pk);
+  };
+  const beingLabelOf = (pk: string, bodyName?: string) => {
+    const n = nameOf(pk);
+    return n === short(pk) && bodyName ? bodyName : n;
   };
 
   const stateOf = (b: string): PhaseState | null => myStates.find((s) => s.beingPubkey === b) || null;
@@ -505,7 +512,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                     <CardContent className="p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <span className="text-sm font-medium inline-flex items-center gap-1.5">
-                          <Bot className="h-4 w-4 text-orange-500" />{nameOf(pal.beingPubkey)}
+                          <Bot className="h-4 w-4 text-orange-500" />{beingLabelOf(pal.beingPubkey, pal.beingName)}
                         </span>
                         <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
                           <span>{L.emVuln} {Math.round(pal.depth.vulnerability * 100)}%</span>
