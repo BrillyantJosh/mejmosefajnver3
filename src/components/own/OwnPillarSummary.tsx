@@ -30,7 +30,7 @@ export interface PillarAggregate {
   beings: number;
   phases: { key: "reflection" | "alignment" | "change"; met: number }[];
   griev: { anyData: boolean; unresponded: number; unaccepted: number; unowned: number; allDone: boolean };
-  emotion: { count: number; avgDepth: number; swing: boolean; top: string[] };
+  emotion: { count: number; avgDepth: number; avgPolarity: number | null; swing: boolean; top: string[] };
 }
 
 // Aggregate one participant's per-being states into the cross-section.
@@ -53,12 +53,14 @@ export function aggregatePillars(states: PhaseState[]): PillarAggregate {
   }
   const ems = states.map((s) => s.emotionSummary).filter((e): e is NonNullable<typeof e> => !!e && Number(e.depth) > 0);
   const avgDepth = ems.length ? Math.round(ems.reduce((sum, e) => sum + (Number(e.depth) || 0), 0) / ems.length) : 0;
+  const pols = ems.map((e) => (e as { polarity?: number | null }).polarity).filter((v): v is number => typeof v === 'number');
+  const avgPolarity = pols.length ? Math.round(pols.reduce((sum, v) => sum + v, 0) / pols.length) : null;
   const deepest = ems.slice().sort((a, b) => (Number(b.depth) || 0) - (Number(a.depth) || 0))[0];
   return {
     beings,
     phases,
     griev: { anyData, unresponded, unaccepted, unowned, allDone: anyData && !unresponded && !unaccepted && !unowned },
-    emotion: { count: ems.length, avgDepth, swing: ems.some((e) => e.swing === true), top: (deepest?.top || []).slice(0, 3) },
+    emotion: { count: ems.length, avgDepth, avgPolarity, swing: ems.some((e) => e.swing === true), top: (deepest?.top || []).slice(0, 3) },
   };
 }
 
@@ -107,7 +109,7 @@ export default function OwnPillarSummary({ states, lang }: { states: PhaseState[
         <div className="text-[11px] text-muted-foreground flex items-center gap-2 flex-wrap">
           <span>{L.emotions}: <span className="font-semibold text-foreground">{L.depth} {agg.emotion.avgDepth}/100</span></span>
           <span className="relative inline-block h-1.5 w-16 rounded-full align-middle" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
-            <span className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full bg-foreground border border-background" style={{ left: `calc(${agg.emotion.avgDepth}% - 5px)` }} />
+            <span className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full bg-foreground border border-background" style={{ left: `calc(${agg.emotion.avgPolarity ?? 50}% - 5px)` }} />
           </span>
           {agg.emotion.top.length > 0 && <span>{agg.emotion.top.map((k) => EMOTION_LABELS[k]?.[lang] || k).join(", ")}</span>}
           {agg.emotion.swing && <span>🎢 {L.swing}</span>}

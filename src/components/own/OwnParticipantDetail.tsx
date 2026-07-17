@@ -517,7 +517,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                           <span>{L.emLight}</span>
                         </div>
                         <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
-                          <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-foreground border-2 border-background shadow" style={{ left: `calc(${pal.depth.score}% - 7px)` }} />
+                          <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-foreground border-2 border-background shadow" style={{ left: `calc(${pal.depth.polarity ?? 50}% - 7px)` }} />
                         </div>
                       </div>
                       <div className="space-y-1">

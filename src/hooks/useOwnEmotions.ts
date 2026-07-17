@@ -49,12 +49,32 @@ export interface EmotionEntry {
 }
 
 export interface EmotionDepth {
-  score: number;        // 0-100, computed by the being's CODE
+  score: number;        // 0-100, DEPTH of entry — computed by the being's CODE
   breadth: number;      // distinct emotions
   vulnerability: number;
   embodiment: number;
   intensity: number;
   swing: boolean;       // pendulum: a light emotion arrived AFTER a heavy peak
+  polarity: number | null; // 0 = fully heavy … 100 = fully light (WHERE they are now)
+}
+
+// Client-side fallback for palettes published before polarity existed —
+// same formula as being3: current waves (last intensity), peaks as fallback.
+const LIGHT_SET = new Set<string>(LIGHT_EMOTIONS as readonly string[]);
+export function computePolarityFallback(emotions: EmotionEntry[]): number | null {
+  if (!emotions.length) return null;
+  const sum = (pick: (e: EmotionEntry) => number) => {
+    let heavy = 0, light = 0;
+    for (const e of emotions) {
+      const v = Math.max(0, Math.min(1, pick(e)));
+      if (LIGHT_SET.has(e.key)) light += v; else heavy += v;
+    }
+    return { heavy, light };
+  };
+  let { heavy, light } = sum((e) => e.lastIntensity);
+  if (heavy + light === 0) ({ heavy, light } = sum((e) => e.peakIntensity));
+  if (heavy + light === 0) return null;
+  return Math.round((100 * light) / (heavy + light));
 }
 
 export interface EmotionPalette {
@@ -125,6 +145,7 @@ export const useOwnEmotions = (caseRoot: string | null) => {
               embodiment: Number(d.embodiment) || 0,
               intensity: Number(d.intensity) || 0,
               swing: d.swing === true,
+              polarity: typeof d.polarity === 'number' ? Math.max(0, Math.min(100, d.polarity)) : computePolarityFallback(emotions),
             },
           });
         }

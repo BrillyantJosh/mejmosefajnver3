@@ -69,7 +69,7 @@ const TXT = {
     gvStepShort: ["odg", "spr", "opr", "zab"],
     tabEmotions: "Čustva",
     emIntro: "Steber 3 — čustvena ocena: koliko si je udeleženec DOVOLIL čustvovati. Vsako bitje vodi svojo paleto (javno, abstraktno) — spodaj je naštetih vseh 26 čustev; obarvana so tista, ki jih je bitje zaznalo.",
-    emLegend: "Globina vstopa (0–100) meri pogum čutenja: intenzivnost + ranljivost (upati si žalost/strah/sram šteje globlje kot oklepna jeza) + utelešenost (govoriti IZ čustva > O čustvu > zadržano) + širina palete. Nihalo: bolj ko si človek dovoli stopiti v težka čustva, bolj ga odbije v svetla — ko se svetlo čustvo prvič pojavi PO vrhu težkega, se prikaže 🎢 nihaj.",
+    emLegend: "Globina vstopa (0–100, številka) meri pogum čutenja: intenzivnost + ranljivost (upati si žalost/strah/sram šteje globlje kot oklepna jeza) + utelešenost (govoriti IZ čustva > O čustvu > zadržano) + širina palete. KAZALEC na traku kaže drugo mero — POLARNOST: kje med težkimi in svetlimi čustvi je oseba ZDAJ (refleksija vleče levo, uskladitev desno). Nihalo: bolj ko si človek dovoli stopiti v težka, bolj ga odbije v svetla — ko se svetlo čustvo prvič pojavi PO vrhu težkega, se prikaže 🎢 nihaj.",
     emHeavy: "Težka", emLight: "Svetla", emDepth: "Globina vstopa", emSwing: "nihaj",
     emModeExpressed: "iz čustva", emModeNamed: "o čustvu", emModeHeld: "zadržano",
     emNone: "Bitja še niso zaznala čustev.", emNoneBeing: "To bitje še ni zaznalo čustev pri tej osebi.",
@@ -124,7 +124,7 @@ const TXT = {
     gvStepShort: ["resp", "acc", "apo", "own"],
     tabEmotions: "Emotions",
     emIntro: "Pillar 3 — the emotional read: how much the participant ALLOWED themselves to feel. Each being keeps its own palette (public, abstract) — all 26 emotions are listed below; the colored ones were detected by the being.",
-    emLegend: "Depth of entry (0–100) measures the courage of feeling: intensity + vulnerability (daring sadness/fear/shame counts deeper than armored anger) + embodiment (speaking FROM a feeling > ABOUT it > holding it) + breadth of palette. The pendulum: the deeper someone enters the heavy emotions, the further it swings them into the light ones — when a light emotion first appears AFTER a heavy peak, 🎢 swing shows.",
+    emLegend: "Depth of entry (0–100, the number) measures the courage of feeling: intensity + vulnerability (daring sadness/fear/shame counts deeper than armored anger) + embodiment (speaking FROM a feeling > ABOUT it > holding it) + breadth. The MARKER on the bar shows a different measure — POLARITY: where between heavy and light the person is NOW (reflection pulls left, alignment right). The pendulum: the deeper someone enters the heavy emotions, the further it swings them into the light — when a light emotion first appears AFTER a heavy peak, 🎢 swing shows.",
     emHeavy: "Heavy", emLight: "Light", emDepth: "Depth of entry", emSwing: "swing",
     emModeExpressed: "from the feeling", emModeNamed: "about the feeling", emModeHeld: "held back",
     emNone: "The beings have not detected any emotions yet.", emNoneBeing: "This being has not detected emotions for this person yet.",
@@ -808,7 +808,8 @@ export default function Matrix() {
                                 <span>{L.emLight}</span>
                               </div>
                               <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
-                                <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-foreground border-2 border-background shadow" style={{ left: `calc(${pal.depth.score}% - 7px)` }} />
+                                {/* kazalec = POLARNOST (kje na nihalu so ZDAJ), ne globina */}
+                                <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-foreground border-2 border-background shadow" style={{ left: `calc(${pal.depth.polarity ?? 50}% - 7px)` }} />
                               </div>
                             </div>
                             {pal.emotions.length === 0 ? (
