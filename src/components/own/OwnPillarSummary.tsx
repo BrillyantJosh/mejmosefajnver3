@@ -118,6 +118,7 @@ export default function OwnPillarSummary({ states, lang }: { states: PhaseState[
         <div className="text-[11px] text-muted-foreground flex items-center gap-2 flex-wrap">
           <span>{L.emotions}: <span className="font-semibold text-foreground">{L.depth} {agg.emotion.avgDepth}/100</span></span>
           <span className="relative inline-block h-1.5 w-16 rounded-full align-middle" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
+            <span className="absolute top-1/2 -translate-y-1/2 h-2 w-px bg-foreground/40" style={{ left: "50%" }} />
             <span className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full bg-foreground border border-background" style={{ left: `calc(${agg.emotion.avgPolarity ?? 50}% - 5px)` }} />
           </span>
           {agg.emotion.top.length > 0 && <span>{agg.emotion.top.map((k) => EMOTION_LABELS[k]?.[lang] || k).join(", ")}</span>}

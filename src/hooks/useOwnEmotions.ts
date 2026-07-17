@@ -13,15 +13,36 @@ const EMOTION_PALETTE_KIND = 37047;
 
 // The canonical taxonomy — mirrors being3 src/own-emotion-palette.js. The
 // UI lists ALL of these so it is visible which were triggered and which not.
+// pride is ARMOR (Hawkins 175 — below courage) → heavy side.
 export const HEAVY_EMOTIONS = [
   'anger', 'rage', 'sadness', 'hurt', 'fear', 'anxiety', 'shame', 'guilt',
   'disappointment', 'helplessness', 'loneliness', 'resentment', 'contempt',
-  'disgust', 'envy', 'despair',
+  'disgust', 'envy', 'despair', 'pride',
 ] as const;
 export const LIGHT_EMOTIONS = [
-  'relief', 'gratitude', 'joy', 'warmth', 'compassion', 'hope', 'pride',
+  'relief', 'gratitude', 'joy', 'warmth', 'compassion', 'hope',
   'enthusiasm', 'peace', 'connection',
 ] as const;
+
+// Hawkins-calibrated consciousness levels (mirrors being3) — courage = 200.
+export const EMOTION_HAWKINS_LEVELS: Record<string, number> = {
+  shame: 20, guilt: 30, despair: 50, helplessness: 50, loneliness: 60,
+  sadness: 75, hurt: 75, disappointment: 75, fear: 100, anxiety: 100,
+  envy: 125, resentment: 140, anger: 150, rage: 150, disgust: 155,
+  contempt: 175, pride: 175,
+  relief: 250, hope: 310, enthusiasm: 350,
+  compassion: 500, warmth: 500, connection: 500, gratitude: 510,
+  joy: 540, peace: 600,
+};
+export const COURAGE_LEVEL = 200;
+const MODE_W: Record<string, number> = { held: 0.2, named: 0.6, expressed: 1.0 };
+
+export function levelToPolarity(level: number | null): number | null {
+  if (level == null || !Number.isFinite(level)) return null;
+  const L = Math.max(20, Math.min(600, level));
+  const pol = L <= 200 ? 50 * (Math.log(L / 20) / Math.log(10)) : 50 + 50 * (Math.log(L / 200) / Math.log(3));
+  return Math.round(Math.max(0, Math.min(100, pol)));
+}
 export const EMOTION_LABELS: Record<string, { sl: string; en: string }> = {
   anger: { sl: 'jeza', en: 'anger' }, rage: { sl: 'bes', en: 'rage' },
   sadness: { sl: 'žalost', en: 'sadness' }, hurt: { sl: 'prizadetost', en: 'hurt' },
@@ -55,26 +76,28 @@ export interface EmotionDepth {
   embodiment: number;
   intensity: number;
   swing: boolean;       // pendulum: a light emotion arrived AFTER a heavy peak
-  polarity: number | null; // 0 = fully heavy … 100 = fully light (WHERE they are now)
+  polarity: number | null; // 0 … 100, log-mapped Hawkins level — courage(200) = 50
+  level: number | null;    // Hawkins-calibrated consciousness level 20-600
 }
 
-// Client-side fallback for palettes published before polarity existed —
-// same formula as being3: current waves (last intensity), peaks as fallback.
-const LIGHT_SET = new Set<string>(LIGHT_EMOTIONS as readonly string[]);
-export function computePolarityFallback(emotions: EmotionEntry[]): number | null {
-  if (!emotions.length) return null;
-  const sum = (pick: (e: EmotionEntry) => number) => {
-    let heavy = 0, light = 0;
-    for (const e of emotions) {
-      const v = Math.max(0, Math.min(1, pick(e)));
-      if (LIGHT_SET.has(e.key)) light += v; else heavy += v;
+// Client-side fallback for palettes published before level/polarity existed —
+// same Hawkins formula as being3: wave- AND mode-weighted level, log-mapped.
+export function computeLevelFallback(emotions: EmotionEntry[]): number | null {
+  const es = emotions.filter((e) => EMOTION_HAWKINS_LEVELS[e.key] !== undefined);
+  if (!es.length) return null;
+  const weigh = (pick: (e: EmotionEntry) => number) => {
+    let wsum = 0, lsum = 0;
+    for (const e of es) {
+      const w = Math.max(0, Math.min(1, pick(e))) * (MODE_W[e.mode] ?? 0.6);
+      wsum += w; lsum += w * EMOTION_HAWKINS_LEVELS[e.key];
     }
-    return { heavy, light };
+    return wsum > 0 ? lsum / wsum : null;
   };
-  let { heavy, light } = sum((e) => e.lastIntensity);
-  if (heavy + light === 0) ({ heavy, light } = sum((e) => e.peakIntensity));
-  if (heavy + light === 0) return null;
-  return Math.round((100 * light) / (heavy + light));
+  const level = weigh((e) => e.lastIntensity) ?? weigh((e) => e.peakIntensity);
+  return level == null ? null : Math.round(level);
+}
+export function computePolarityFallback(emotions: EmotionEntry[]): number | null {
+  return levelToPolarity(computeLevelFallback(emotions));
 }
 
 export interface JourneyPoint { at: string; polarity: number; depth: number; }
@@ -152,7 +175,11 @@ export const useOwnEmotions = (caseRoot: string | null) => {
               embodiment: Number(d.embodiment) || 0,
               intensity: Number(d.intensity) || 0,
               swing: d.swing === true,
-              polarity: typeof d.polarity === 'number' ? Math.max(0, Math.min(100, d.polarity)) : computePolarityFallback(emotions),
+              // Prefer the published Hawkins level; recompute client-side for
+              // bodies from before the calibration (their stored polarity was
+              // the old binary balance — misleading, e.g. pride counted light).
+              level: typeof d.level === 'number' ? Math.round(d.level) : computeLevelFallback(emotions),
+              polarity: typeof d.level === 'number' ? levelToPolarity(d.level) : computePolarityFallback(emotions),
             },
             journey: (Array.isArray(body.journey) ? body.journey : [])
               .filter((p: any) => p && typeof p.at === 'string' && Number.isFinite(Number(p.polarity)))

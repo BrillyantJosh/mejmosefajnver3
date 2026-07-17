@@ -70,12 +70,13 @@ const TXT = {
     gvStepShort: ["odg", "spr", "opr", "zab"],
     tabEmotions: "Čustva",
     emIntro: "Steber 3 — čustvena ocena: koliko si je udeleženec DOVOLIL čustvovati. Vsako bitje vodi svojo paleto (javno, abstraktno) — spodaj je naštetih vseh 26 čustev; obarvana so tista, ki jih je bitje zaznalo.",
-    emLegend: "Globina vstopa (0–100, številka) meri pogum čutenja: intenzivnost + ranljivost (upati si žalost/strah/sram šteje globlje kot oklepna jeza) + utelešenost (govoriti IZ čustva > O čustvu > zadržano) + širina palete. KAZALEC na traku kaže drugo mero — POLARNOST: kje med težkimi in svetlimi čustvi je oseba ZDAJ (refleksija vleče levo, uskladitev desno). Nihalo: bolj ko si človek dovoli stopiti v težka, bolj ga odbije v svetla — ko se svetlo čustvo prvič pojavi PO vrhu težkega, se prikaže 🎢 nihaj.",
+    emLegend: "Globina vstopa (0–100, številka) meri pogum čutenja: intenzivnost + ranljivost + utelešenost + širina palete. KAZALEC na traku kaže RAVEN ZAVESTI po Hawkinsu (20–600): vsako čustvo nosi svojo raven (sram 20 · krivda 30 · nemoč 50 · žalost 75 · strah 100 · jeza 150 · ponos 175 · ⬥ POGUM 200 = sredina traku ⬥ · olajšanje 250 · upanje 310 · sočutje/toplina 500 · hvaležnost 510 · veselje 540 · mir 600), utežena s trenutnimi valovi IN načinom izraza (utelešeno > govorjeno-o > zadržano). Levo od sredine = sila/odpor (tudi ponos!), desno = moč in samoodgovornost. Nihalo: jeza JE napredek glede na nemoč — Pot gre stopničko za stopničko; 🎢 nihaj, ko se svetlo prvič pojavi PO vrhu težkega.",
     emHeavy: "Težka", emLight: "Svetla", emDepth: "Globina vstopa", emSwing: "nihaj",
     emModeExpressed: "iz čustva", emModeNamed: "o čustvu", emModeHeld: "zadržano",
     emNone: "Bitja še niso zaznala čustev.", emNoneBeing: "To bitje še ni zaznalo čustev pri tej osebi.",
     emByBeing: "Globina po bitjih", emVuln: "ranljivost", emEmbody: "utelešenost", emPeak: "vrh",
     potTitle: "Pot", potWalked: "Pot prehojena ✓", potStuckDark: "zataknjen v temi", potStuckLight: "ostaja v svetlem", potOnWay: "še na poti",
+    emLevel: "raven", emCourage: "prag poguma (200) — levo sila/odpor, desno moč/samoodgovornost",
   },
   en: {
     title: "OWN Matrix",
@@ -126,12 +127,13 @@ const TXT = {
     gvStepShort: ["resp", "acc", "apo", "own"],
     tabEmotions: "Emotions",
     emIntro: "Pillar 3 — the emotional read: how much the participant ALLOWED themselves to feel. Each being keeps its own palette (public, abstract) — all 26 emotions are listed below; the colored ones were detected by the being.",
-    emLegend: "Depth of entry (0–100, the number) measures the courage of feeling: intensity + vulnerability (daring sadness/fear/shame counts deeper than armored anger) + embodiment (speaking FROM a feeling > ABOUT it > holding it) + breadth. The MARKER on the bar shows a different measure — POLARITY: where between heavy and light the person is NOW (reflection pulls left, alignment right). The pendulum: the deeper someone enters the heavy emotions, the further it swings them into the light — when a light emotion first appears AFTER a heavy peak, 🎢 swing shows.",
+    emLegend: "Depth of entry (0–100, the number) measures the courage of feeling: intensity + vulnerability + embodiment + breadth. The MARKER shows the Hawkins CONSCIOUSNESS LEVEL (20–600): every emotion carries its level (shame 20 · guilt 30 · helplessness 50 · sadness 75 · fear 100 · anger 150 · pride 175 · ⬥ COURAGE 200 = the bar midpoint ⬥ · relief 250 · hope 310 · compassion/warmth 500 · gratitude 510 · joy 540 · peace 600), weighted by the current waves AND the expression mode (embodied > talked-about > held). Left of the midpoint = force/resistance (pride included!), right = power and self-responsibility. Anger IS progress from helplessness — the path climbs step by step; 🎢 swing when a light emotion first appears AFTER a heavy peak.",
     emHeavy: "Heavy", emLight: "Light", emDepth: "Depth of entry", emSwing: "swing",
     emModeExpressed: "from the feeling", emModeNamed: "about the feeling", emModeHeld: "held back",
     emNone: "The beings have not detected any emotions yet.", emNoneBeing: "This being has not detected emotions for this person yet.",
     emByBeing: "Depth per being", emVuln: "vulnerability", emEmbody: "embodiment", emPeak: "peak",
     potTitle: "Path", potWalked: "Path walked ✓", potStuckDark: "stuck in the dark", potStuckLight: "remains in the light", potOnWay: "still on the way",
+    emLevel: "level", emCourage: "courage threshold (200) — left force/resistance, right power/self-responsibility",
   },
 };
 
@@ -807,10 +809,12 @@ export default function Matrix() {
                             <div>
                               <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
                                 <span>{L.emHeavy}</span>
-                                <span className="font-semibold normal-case text-foreground">{L.emDepth}: {pal.depth.score}/100</span>
+                                <span className="font-semibold normal-case text-foreground">{L.emDepth}: {pal.depth.score}/100{pal.depth.level != null ? <span className="font-normal text-muted-foreground"> · {L.emLevel} {pal.depth.level}</span> : null}</span>
                                 <span>{L.emLight}</span>
                               </div>
                               <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
+                                {/* prag poguma (Hawkins 200) = točno sredina traku */}
+                                <div title={L.emCourage} className="absolute top-1/2 -translate-y-1/2 h-3 w-0.5 bg-foreground/40" style={{ left: "50%" }} />
                                 {/* kazalec = POLARNOST (kje na nihalu so ZDAJ), ne globina; bleda markerja = max izlet v vsako stran */}
                                 {pal.extremes?.heaviest && pal.extremes?.lightest && (
                                   <div className="absolute top-1/2 -translate-y-1/2 h-0.5 bg-foreground/25" style={{ left: `${pal.extremes.heaviest.polarity}%`, width: `${Math.max(0, pal.extremes.lightest.polarity - pal.extremes.heaviest.polarity)}%` }} />

@@ -516,10 +516,12 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                       <div>
                         <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
                           <span>{L.emHeavy}</span>
-                          <span className="font-semibold normal-case text-foreground">{L.emDepth}: {pal.depth.score}/100</span>
+                          <span className="font-semibold normal-case text-foreground">{L.emDepth}: {pal.depth.score}/100{pal.depth.level != null ? <span className="font-normal text-muted-foreground"> · {en ? "level" : "raven"} {pal.depth.level}</span> : null}</span>
                           <span>{L.emLight}</span>
                         </div>
                         <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
+                          {/* prag poguma (Hawkins 200) = sredina traku */}
+                          <div title={en ? "courage threshold (200)" : "prag poguma (200)"} className="absolute top-1/2 -translate-y-1/2 h-3 w-0.5 bg-foreground/40" style={{ left: "50%" }} />
                           {/* razponska črta + bleda markerja ekstremov (max v vsako stran) */}
                           {pal.extremes?.heaviest && pal.extremes?.lightest && (
                             <div className="absolute top-1/2 -translate-y-1/2 h-0.5 bg-foreground/25" style={{ left: `${pal.extremes.heaviest.polarity}%`, width: `${Math.max(0, pal.extremes.lightest.polarity - pal.extremes.heaviest.polarity)}%` }} />
