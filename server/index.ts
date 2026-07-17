@@ -13,6 +13,7 @@ import lanacrowdRoutes from './routes/lanacrowd';
 import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks } from './routes/sse';
 import functionsRoutes, { retryPendingNostrEvents } from './routes/functions';
 import voiceRoutes from './routes/voice';
+import beingsRoutes from './routes/beings';
 import { processPendingTasks, setSSEHandlers } from './lib/aiTasks';
 import { syncUnregisteredLana } from './lib/unregisteredLana';
 
@@ -272,6 +273,7 @@ app.use('/api/voice', voiceRoutes);
 
 // LanaCrowd (100millionideas) — server-authoritative REST API
 app.use('/api/lanacrowd', lanacrowdRoutes);
+app.use('/api/beings', beingsRoutes);
 
 // =============================================
 // Static Frontend (production)

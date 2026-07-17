@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Bot, Plus, Trash2, Globe, MessageSquare, Users } from "lucide-react";
 import { useMyBeings } from "@/hooks/useMyBeings";
+import { useRegistryBeings } from "@/hooks/useRegistryBeings";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import AddBeingDialog from "@/components/being/AddBeingDialog";
@@ -16,9 +17,26 @@ export default function BeingLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { beings, addBeing, removeBeing } = useMyBeings();
+  const { registryBeings } = useRegistryBeings();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
-  const pubkeys = useMemo(() => beings.map(b => b.nostrHexId), [beings]);
+  // The list is the canonical registry (auto-synced from Lana.is — new beings
+  // appear here on their own) merged with Sožitje (pinned first) and any beings
+  // the user added by hand, deduped by pubkey. Only hand-added beings can be
+  // removed; registry + Sožitje are permanent.
+  const displayBeings = useMemo(() => {
+    const map = new Map<string, { pubkey: string; name?: string; picture?: string | null; about?: string; source: 'default' | 'registry' | 'manual' }>();
+    map.set(SOZITJE_PUBKEY, { pubkey: SOZITJE_PUBKEY, name: 'Sožitje', source: 'default' });
+    for (const b of registryBeings) {
+      if (!map.has(b.pubkey)) map.set(b.pubkey, { pubkey: b.pubkey, name: b.displayName, picture: b.picture, about: b.about, source: 'registry' });
+    }
+    for (const b of beings) {
+      if (!map.has(b.nostrHexId)) map.set(b.nostrHexId, { pubkey: b.nostrHexId, name: b.name, source: 'manual' });
+    }
+    return [...map.values()];
+  }, [registryBeings, beings]);
+
+  const pubkeys = useMemo(() => displayBeings.map(b => b.pubkey), [displayBeings]);
   const { profiles } = useNostrProfilesCacheBulk(pubkeys);
 
   // Detect chat route to build dynamic nav
@@ -62,44 +80,44 @@ export default function BeingLayout() {
 
       {/* Being List */}
       <div className="space-y-3 mb-6">
-        {beings.map((being) => {
-          const profile = profiles.get(being.nostrHexId);
-          const displayName = profile?.display_name || profile?.full_name || being.name || being.nostrHexId.slice(0, 12) + '...';
-          const isSozitje = being.nostrHexId === SOZITJE_PUBKEY;
+        {displayBeings.map((being) => {
+          const profile = profiles.get(being.pubkey);
+          const displayName = profile?.display_name || profile?.full_name || being.name || being.pubkey.slice(0, 12) + '...';
+          const about = profile?.about || being.about;
 
           return (
             <Card
-              key={being.nostrHexId}
+              key={being.pubkey}
               className="cursor-pointer hover:border-primary/50 hover:shadow-md transition-all active:scale-[0.99]"
-              onClick={() => navigate(`/being/chat/${being.nostrHexId}`)}
+              onClick={() => navigate(`/being/chat/${being.pubkey}`)}
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-4">
                   <UserAvatar
-                    pubkey={being.nostrHexId}
-                    picture={profile?.picture}
+                    pubkey={being.pubkey}
+                    picture={profile?.picture || being.picture || undefined}
                     name={displayName}
                     className="h-12 w-12 flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-base truncate">{displayName}</p>
                     <p className="text-xs text-muted-foreground font-mono truncate">
-                      {being.nostrHexId.slice(0, 16)}...
+                      {being.pubkey.slice(0, 16)}...
                     </p>
-                    {profile?.about && (
+                    {about && (
                       <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {profile.about}
+                        {about}
                       </p>
                     )}
                   </div>
-                  {!isSozitje && (
+                  {being.source === 'manual' && (
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive hover:text-destructive flex-shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
-                        removeBeing(being.nostrHexId);
+                        removeBeing(being.pubkey);
                       }}
                     >
                       <Trash2 className="h-4 w-4" />
