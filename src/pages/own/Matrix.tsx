@@ -13,6 +13,7 @@ import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
 import { useOwnEmotions, HEAVY_EMOTIONS, LIGHT_EMOTIONS, EMOTION_LABELS, type EmotionPalette } from "@/hooks/useOwnEmotions";
 import { useAuth } from "@/contexts/AuthContext";
+import EmotionJourneySparkline from "@/components/own/EmotionJourneySparkline";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES } from "@/lib/ownPhase";
 import { useLang } from "@/i18n/I18nContext";
@@ -74,6 +75,7 @@ const TXT = {
     emModeExpressed: "iz čustva", emModeNamed: "o čustvu", emModeHeld: "zadržano",
     emNone: "Bitja še niso zaznala čustev.", emNoneBeing: "To bitje še ni zaznalo čustev pri tej osebi.",
     emByBeing: "Globina po bitjih", emVuln: "ranljivost", emEmbody: "utelešenost", emPeak: "vrh",
+    potTitle: "Pot", potWalked: "Pot prehojena ✓", potStuckDark: "zataknjen v temi", potStuckLight: "ostaja v svetlem", potOnWay: "še na poti",
   },
   en: {
     title: "OWN Matrix",
@@ -129,6 +131,7 @@ const TXT = {
     emModeExpressed: "from the feeling", emModeNamed: "about the feeling", emModeHeld: "held back",
     emNone: "The beings have not detected any emotions yet.", emNoneBeing: "This being has not detected emotions for this person yet.",
     emByBeing: "Depth per being", emVuln: "vulnerability", emEmbody: "embodiment", emPeak: "peak",
+    potTitle: "Path", potWalked: "Path walked ✓", potStuckDark: "stuck in the dark", potStuckLight: "remains in the light", potOnWay: "still on the way",
   },
 };
 
@@ -808,8 +811,25 @@ export default function Matrix() {
                                 <span>{L.emLight}</span>
                               </div>
                               <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
-                                {/* kazalec = POLARNOST (kje na nihalu so ZDAJ), ne globina */}
+                                {/* kazalec = POLARNOST (kje na nihalu so ZDAJ), ne globina; bleda markerja = max izlet v vsako stran */}
+                                {pal.extremes?.heaviest && pal.extremes?.lightest && (
+                                  <div className="absolute top-1/2 -translate-y-1/2 h-0.5 bg-foreground/25" style={{ left: `${pal.extremes.heaviest.polarity}%`, width: `${Math.max(0, pal.extremes.lightest.polarity - pal.extremes.heaviest.polarity)}%` }} />
+                                )}
+                                {pal.extremes?.heaviest && <div title={`min ${pal.extremes.heaviest.polarity}`} className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border-2 border-red-500/80 bg-background" style={{ left: `calc(${pal.extremes.heaviest.polarity}% - 5px)` }} />}
+                                {pal.extremes?.lightest && <div title={`max ${pal.extremes.lightest.polarity}`} className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border-2 border-green-500/80 bg-background" style={{ left: `calc(${pal.extremes.lightest.polarity}% - 5px)` }} />}
                                 <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-foreground border-2 border-background shadow" style={{ left: `calc(${pal.depth.polarity ?? 50}% - 7px)` }} />
+                              </div>
+                              {/* Čustvena Pot: krivulja skozi čas + sodba */}
+                              <div className="mt-2 flex items-end gap-3 flex-wrap">
+                                <EmotionJourneySparkline journey={pal.journey} extremes={pal.extremes} />
+                                {pal.path && (
+                                  <Badge variant="outline" className={pal.path.walked
+                                    ? "bg-green-500/10 text-green-600 border-green-500/30 text-[10px] py-0"
+                                    : pal.path.stuck ? "bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0"
+                                    : "text-muted-foreground border-border text-[10px] py-0"}>
+                                    {L.potTitle}: {pal.path.walked ? L.potWalked : pal.path.stuck === "dark" ? L.potStuckDark : pal.path.stuck === "light" ? L.potStuckLight : L.potOnWay}
+                                  </Badge>
+                                )}
                               </div>
                             </div>
                             {pal.emotions.length === 0 ? (

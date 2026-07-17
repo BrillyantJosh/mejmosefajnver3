@@ -77,6 +77,10 @@ export function computePolarityFallback(emotions: EmotionEntry[]): number | null
   return Math.round((100 * light) / (heavy + light));
 }
 
+export interface JourneyPoint { at: string; polarity: number; depth: number; }
+export interface PathExtremes { heaviest: { polarity: number; at: string } | null; lightest: { polarity: number; at: string } | null; }
+export interface EmotionPathVerdict { walked: boolean; stuck: 'dark' | 'light' | null; amplitude: number; heaviest: number | null; lightest: number | null; }
+
 export interface EmotionPalette {
   beingPubkey: string;
   beingName: string;
@@ -86,6 +90,9 @@ export interface EmotionPalette {
   created_at: number;
   emotions: EmotionEntry[];
   depth: EmotionDepth;
+  journey: JourneyPoint[];
+  extremes: PathExtremes | null;
+  path: EmotionPathVerdict | null;
 }
 
 export const useOwnEmotions = (caseRoot: string | null) => {
@@ -147,6 +154,20 @@ export const useOwnEmotions = (caseRoot: string | null) => {
               swing: d.swing === true,
               polarity: typeof d.polarity === 'number' ? Math.max(0, Math.min(100, d.polarity)) : computePolarityFallback(emotions),
             },
+            journey: (Array.isArray(body.journey) ? body.journey : [])
+              .filter((p: any) => p && typeof p.at === 'string' && Number.isFinite(Number(p.polarity)))
+              .map((p: any) => ({ at: p.at, polarity: Math.max(0, Math.min(100, Math.round(Number(p.polarity)))), depth: Math.max(0, Math.min(100, Math.round(Number(p.depth) || 0))) })),
+            extremes: body.extremes && typeof body.extremes === 'object' ? {
+              heaviest: body.extremes.heaviest && Number.isFinite(Number(body.extremes.heaviest.polarity)) ? { polarity: Math.round(Number(body.extremes.heaviest.polarity)), at: String(body.extremes.heaviest.at || '') } : null,
+              lightest: body.extremes.lightest && Number.isFinite(Number(body.extremes.lightest.polarity)) ? { polarity: Math.round(Number(body.extremes.lightest.polarity)), at: String(body.extremes.lightest.at || '') } : null,
+            } : null,
+            path: body.path && typeof body.path === 'object' ? {
+              walked: body.path.walked === true,
+              stuck: body.path.stuck === 'dark' || body.path.stuck === 'light' ? body.path.stuck : null,
+              amplitude: Number(body.path.amplitude) || 0,
+              heaviest: Number.isFinite(Number(body.path.heaviest)) ? Number(body.path.heaviest) : null,
+              lightest: Number.isFinite(Number(body.path.lightest)) ? Number(body.path.lightest) : null,
+            } : null,
           });
         }
         setPalettes(out.sort((a, b) => a.beingPubkey.localeCompare(b.beingPubkey)));

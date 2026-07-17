@@ -16,6 +16,7 @@ const TXT = {
     griev: "Očitki", grievDone: "zaključeni ✓", grievNone: "ni zabeleženih",
     needResponse: "brez odgovora", needAccept: "nesprejeti", needOwn: "zablode nesprejete",
     emotions: "Čustva", depth: "globina", swing: "nihaj", noEmotions: "še ni zaznanih",
+    potWalked: "Pot prehojena", potStuckDark: "zataknjen v temi", potStuckLight: "ostaja v svetlem", potOnWay: "še na poti", potOf: "bitij",
   },
   en: {
     phases: "Phases", beingsSuffix: "beings",
@@ -23,6 +24,7 @@ const TXT = {
     griev: "Grievances", grievDone: "complete ✓", grievNone: "none recorded",
     needResponse: "unanswered", needAccept: "unaccepted", needOwn: "not owned as delusion",
     emotions: "Emotions", depth: "depth", swing: "swing", noEmotions: "none detected yet",
+    potWalked: "Path walked", potStuckDark: "stuck in the dark", potStuckLight: "remains in the light", potOnWay: "still on the way", potOf: "beings",
   },
 };
 
@@ -30,7 +32,7 @@ export interface PillarAggregate {
   beings: number;
   phases: { key: "reflection" | "alignment" | "change"; met: number }[];
   griev: { anyData: boolean; unresponded: number; unaccepted: number; unowned: number; allDone: boolean };
-  emotion: { count: number; avgDepth: number; avgPolarity: number | null; swing: boolean; top: string[] };
+  emotion: { count: number; avgDepth: number; avgPolarity: number | null; swing: boolean; top: string[]; walkedCount: number; pathCount: number; stuck: 'dark' | 'light' | null };
 }
 
 // Aggregate one participant's per-being states into the cross-section.
@@ -56,11 +58,18 @@ export function aggregatePillars(states: PhaseState[]): PillarAggregate {
   const pols = ems.map((e) => (e as { polarity?: number | null }).polarity).filter((v): v is number => typeof v === 'number');
   const avgPolarity = pols.length ? Math.round(pols.reduce((sum, v) => sum + v, 0) / pols.length) : null;
   const deepest = ems.slice().sort((a, b) => (Number(b.depth) || 0) - (Number(a.depth) || 0))[0];
+  const paths = ems.map((e) => e.path).filter((p): p is NonNullable<typeof p> => !!p);
+  const walkedCount = paths.filter((p) => p.walked).length;
+  const stuckDark = paths.filter((p) => p.stuck === 'dark').length;
+  const stuckLight = paths.filter((p) => p.stuck === 'light').length;
+  const stuck = walkedCount === 0 && paths.length > 0
+    ? (stuckDark > paths.length / 2 ? 'dark' as const : stuckLight > paths.length / 2 ? 'light' as const : null)
+    : null;
   return {
     beings,
     phases,
     griev: { anyData, unresponded, unaccepted, unowned, allDone: anyData && !unresponded && !unaccepted && !unowned },
-    emotion: { count: ems.length, avgDepth, avgPolarity, swing: ems.some((e) => e.swing === true), top: (deepest?.top || []).slice(0, 3) },
+    emotion: { count: ems.length, avgDepth, avgPolarity, swing: ems.some((e) => e.swing === true), top: (deepest?.top || []).slice(0, 3), walkedCount, pathCount: paths.length, stuck },
   };
 }
 
@@ -113,6 +122,13 @@ export default function OwnPillarSummary({ states, lang }: { states: PhaseState[
           </span>
           {agg.emotion.top.length > 0 && <span>{agg.emotion.top.map((k) => EMOTION_LABELS[k]?.[lang] || k).join(", ")}</span>}
           {agg.emotion.swing && <span>🎢 {L.swing}</span>}
+          {agg.emotion.pathCount > 0 && (
+            agg.emotion.walkedCount > 0
+              ? <span className="text-green-600">🛤 {L.potWalked} ({agg.emotion.walkedCount}/{agg.emotion.pathCount} {L.potOf})</span>
+              : agg.emotion.stuck
+                ? <span className="text-amber-700 dark:text-amber-400">🛤 {agg.emotion.stuck === 'dark' ? L.potStuckDark : L.potStuckLight}</span>
+                : <span>🛤 {L.potOnWay}</span>
+          )}
         </div>
       )}
     </div>

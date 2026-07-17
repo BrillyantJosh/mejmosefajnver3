@@ -31,6 +31,8 @@ export interface EmotionRollup {
   breadth: number;
   top?: string[];
   swing?: boolean;
+  polarity?: number | null;
+  path?: { walked: boolean; stuck: 'dark' | 'light' | null; amplitude: number; heaviest: number | null; lightest: number | null } | null;
 }
 
 export interface AssessmentEntry {
