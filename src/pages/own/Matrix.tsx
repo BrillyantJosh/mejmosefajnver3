@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { splitLatestPerBeing } from "@/lib/ownTimeline";
+import GrievanceStepTable from "@/components/own/GrievanceStepTable";
 import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -658,13 +659,6 @@ export default function Matrix() {
           ) : (
             <div className="space-y-3">
               {ledgers.map((l) => {
-                const StepCell = ({ done }: { done: boolean }) => (
-                  <td className="p-2 text-center">
-                    {done
-                      ? <CheckCircle2 className="h-4 w-4 text-green-500 inline" />
-                      : <Circle className="h-4 w-4 text-muted-foreground/30 inline" />}
-                  </td>
-                );
                 const NextStep = ({ g, side }: { g: Grievance; side: "received" | "given" }) => {
                   let label: string; let done = false;
                   if (side === "given") {
@@ -700,33 +694,11 @@ export default function Matrix() {
                         l.grievances.length === 0 ? (
                           <p className="text-xs text-muted-foreground">{L.grievEmptyBeing}</p>
                         ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full border-collapse text-xs">
-                              <thead>
-                                <tr className="border-b border-border/60 text-[10px] uppercase tracking-wide text-muted-foreground">
-                                  <th className="text-left p-2 font-medium">{L.grievLabel}</th>
-                                  <th className="p-2 font-medium text-center whitespace-nowrap">{L.colResponded}</th>
-                                  <th className="p-2 font-medium text-center whitespace-nowrap">{L.colAccepted}</th>
-                                  <th className="p-2 font-medium text-center whitespace-nowrap">{L.colApologized}</th>
-                                  <th className="p-2 font-medium text-center whitespace-nowrap">{L.colOwned}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {l.grievances.map((g) => (
-                                  <tr key={g.id} className="border-b border-border/40 align-top">
-                                    <td className="p-2 min-w-[12rem]">
-                                      <div className="font-medium">{nameOf(g.fromPubkey)} → {nameOf(g.toPubkey)}</div>
-                                      {g.summary && <div className="text-muted-foreground leading-snug mt-0.5">{g.summary}</div>}
-                                    </td>
-                                    <StepCell done={g.respondedByTarget} />
-                                    <StepCell done={g.status === "accepted"} />
-                                    <StepCell done={g.apologyNoted} />
-                                    <StepCell done={g.acceptedByGiver} />
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+                          <GrievanceStepTable
+                            grievances={l.grievances}
+                            nameOf={nameOf}
+                            labels={{ grievances: L.grievLabel, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned }}
+                          />
                         )
                       ) : (
                         /* »Zame« — kaj mora izbrana oseba še odgovoriti / sprejeti / vzeti nase */

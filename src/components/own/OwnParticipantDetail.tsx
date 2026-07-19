@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Archive, ChevronDown } from "lucide-react";
 import { splitLatestPerBeing } from "@/lib/ownTimeline";
+import GrievanceStepTable from "@/components/own/GrievanceStepTable";
 import { useOwnAssessments, type AssessmentEntry, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
@@ -34,6 +35,8 @@ const TXT = {
     stepResponded: "odgovorjen", stepOwned: "zabloda sprejeta",
     needsResponse: "čaka odgovor", needsOwn: "sprejmi kot svojo zablodo",
     grievLegend: "Vsak očitek gre skozi štiri korake: prejemnik nanj odgovori (vsak odziv šteje, tudi obramba) in ga brezpogojno sprejme (z opravičilom, če se le da), dajalec pa ga sprejme kot del svoje zablode. Refleksija je zaključena šele, ko je odgovorjeno na vse prejete; uskladitev šele, ko so sprejeti vsi prejeti IN vsi dani vzeti nase.",
+    colResponded: "Odgovorjen", colAccepted: "Sprejet", colApologized: "Opravičen", colOwned: "Zabloda sprejeta",
+    grievDetail: "Podrobno — kaj še čaka", grievEmptyBeing: "To bitje zate še ni zabeležilo očitkov.",
     compTitle: "Primerjava bitij za to osebo",
     compIntro: "Vsako bitje bere isti pogovor, a ga destilira samostojno — ⚠ pokaže, kje se bitja razhajajo.",
     compCount: "očitkov", compMissing: "pri kakem bitju manjka", compCountDiff: "razlika v številu", compStepDiff: "nestrinjanje o koraku", compNone: "—",
@@ -60,6 +63,8 @@ const TXT = {
     stepResponded: "responded", stepOwned: "owned as delusion",
     needsResponse: "awaiting response", needsOwn: "own it as your delusion",
     grievLegend: "Every grievance passes four steps: the receiver responds to it (any reaction counts, defense too) and unconditionally accepts it (apologizing where possible), and the giver accepts it as part of their own delusion. Reflection completes only once every received grievance got a response; alignment only once all received are accepted AND all given are owned.",
+    colResponded: "Responded", colAccepted: "Accepted", colApologized: "Apologized", colOwned: "Owned as delusion",
+    grievDetail: "Detail — what is still pending", grievEmptyBeing: "This being has recorded no grievances for you yet.",
     compTitle: "Being comparison for this person",
     compIntro: "Every being reads the same conversation but distills it independently — ⚠ marks where the beings diverge.",
     compCount: "grievance(s)", compMissing: "missing for some being", compCountDiff: "entry-count differs", compStepDiff: "step disagreement", compNone: "—",
@@ -403,14 +408,39 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
           {grievByBeing.length === 0 && (
             <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{L.noGriev}</CardContent></Card>
           )}
-        {/* Grievances involving this participant — per being, omitted when empty */}
+        {/* FIRST: the whole list + its state, exactly as the public Matrica —
+            one table per being, both directions, the four milestones. */}
         {grievByBeing.length > 0 && (
           <div className="space-y-2">
             <h4 className="text-sm font-medium text-muted-foreground">{L.grievTitle}</h4>
             <p className="text-[11px] text-muted-foreground leading-snug">{L.grievLegend}</p>
             <div className="space-y-2.5">
               {grievByBeing.map(({ being, given, received }) => (
-                <Card key={being} className="border-orange-500/25 bg-orange-500/[0.04]">
+                <Card key={`t-${being}`} className="border-orange-500/25 bg-orange-500/[0.04]">
+                  <CardContent className="p-3 space-y-2">
+                    <span className="text-sm font-medium inline-flex items-center gap-1.5">
+                      <Bot className="h-4 w-4 text-orange-500" />{nameOf(being)}
+                    </span>
+                    {received.length + given.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">{L.grievEmptyBeing}</p>
+                    ) : (
+                      <GrievanceStepTable
+                        grievances={[...received, ...given]}
+                        nameOf={nameOf}
+                        highlightPubkey={me}
+                        labels={{ grievances: L.grievTitle, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned }}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* BELOW: the detail — what each grievance still waits for. */}
+            <h4 className="text-sm font-medium text-muted-foreground pt-2">{L.grievDetail}</h4>
+            <div className="space-y-2.5">
+              {grievByBeing.map(({ being, given, received }) => (
+                <Card key={being} className="border-border">
                   <CardContent className="p-3 space-y-2">
                     <span className="text-sm font-medium inline-flex items-center gap-1.5">
                       <Bot className="h-4 w-4 text-orange-500" />{nameOf(being)}
