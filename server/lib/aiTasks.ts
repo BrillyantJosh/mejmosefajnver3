@@ -446,8 +446,9 @@ export async function runTriadAI(params: {
   if (knowledgeText) contextMessage += `\n\n=== LANA KNOWLEDGE BASE ===\n${knowledgeText}\n=== END KNOWLEDGE BASE ===`;
 
   const langInstruction = LANGUAGE_INSTRUCTIONS[langCode] || LANGUAGE_INSTRUCTIONS.en;
-  const fastModel = 'gemini-2.0-flash-lite';
-  const smartModel = 'gemini-2.0-flash';
+  // Retired by Google mid-flight — use the floating aliases (see functions.ts).
+  const fastModel = process.env.GEMINI_FAST_MODEL || 'gemini-flash-lite-latest';
+  const smartModel = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 
   let totalUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
 
