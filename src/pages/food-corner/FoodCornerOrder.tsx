@@ -300,7 +300,7 @@ export default function FoodCornerOrder() {
         hasFulfillment: boolean;
         hasAllocation: boolean;
         statuses: Set<string>;
-        items: Map<string, { title: string; unit: string; qty: number; orderedQty: number; removed: boolean }>;
+        items: Map<string, { title: string; unit: string; qty: number; orderedQty: number; removed: boolean; unknown: boolean }>;
       }
     >();
     for (const order of myOrdersInWeek) {
@@ -335,12 +335,16 @@ export default function FoodCornerOrder() {
           ex.orderedQty += recon.orderedQty;
         } else {
           g.items.set(key, {
-            title: recon.title || `${t("supplier.unknownProduct")} (${recon.listingRef.slice(-6)})`,
+            title: recon.title || `${t("order.myOrders.unknownItem")} (${recon.listingRef.slice(-6)})`,
             unit: recon.unit,
             qty,
             orderedQty: recon.orderedQty,
-            // A listing whose title no longer resolves = removed from the catalog.
-            removed: !recon.title,
+            // Strike through ONLY products the supplier positively delisted (we
+            // resolved the listing and it is no longer active). An item we merely
+            // failed to resolve is shown muted as "unknown", NOT as removed —
+            // claiming "removed" for a fetch gap misled buyers.
+            removed: recon.delisted,
+            unknown: !recon.title,
           });
         }
       }
@@ -413,6 +417,9 @@ export default function FoodCornerOrder() {
           listing.unit || "piece",
           listing.price.toFixed(2),
           listing.priceCurrency || "EUR",
+          // Snapshot the product name onto the order so it always shows what was
+          // bought, even if the listing is later delisted or can't be fetched.
+          listing.title || "",
         ]);
         const categoryTags = Array.from(new Set(items.flatMap(({ listing }) => listing.tags))).slice(0, 6);
 
@@ -873,12 +880,16 @@ export default function FoodCornerOrder() {
                               <li
                                 key={key}
                                 className={`text-xs flex items-baseline gap-2 ${
-                                  item.removed ? "line-through text-muted-foreground/60" : "text-muted-foreground"
+                                  item.removed
+                                    ? "line-through text-muted-foreground/60"
+                                    : item.unknown
+                                      ? "italic text-muted-foreground/70"
+                                      : "text-muted-foreground"
                                 }`}
                               >
                                 <span
                                   className={`tabular-nums shrink-0 ${
-                                    item.removed ? "" : "font-semibold text-foreground"
+                                    item.removed || item.unknown ? "" : "font-semibold text-foreground"
                                   }`}
                                 >
                                   {item.qty} {item.unit}

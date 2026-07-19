@@ -140,6 +140,10 @@ export interface FoodCornerOrderItem {
   unit: string;
   unitPrice: number;
   currency: string;
+  // Product name snapshotted onto the order itself, so an order always shows
+  // WHAT was bought even if its listing is later delisted or not fetched.
+  // Absent on orders placed before this was added.
+  title?: string;
   listing?: FoodCornerListing;
 }
 

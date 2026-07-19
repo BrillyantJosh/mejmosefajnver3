@@ -161,7 +161,7 @@ export default function FoodCornerSupplier() {
         const key = `${item.listingRef}__${item.unit}`;
         let product = group.products.find((p) => p.key === key);
         if (!product) {
-          const title = item.listing?.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`;
+          const title = item.listing?.title || item.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`;
           product = { key, listingRef: item.listingRef, title, unit: item.unit, qty: 0 };
           group.products.push(product);
         }
@@ -528,7 +528,7 @@ export default function FoodCornerSupplier() {
                                 {order.items.map((item, ii) => (
                                   <div key={`${order.eventId}-${ii}`} className="flex items-center justify-between gap-2 text-sm">
                                     <span className="text-muted-foreground truncate">
-                                      {item.listing?.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`}
+                                      {item.listing?.title || item.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`}
                                     </span>
                                     <span className="font-medium tabular-nums shrink-0">
                                       {item.qty} {item.unit}

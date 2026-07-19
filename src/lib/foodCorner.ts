@@ -210,6 +210,7 @@ export function parseFoodCornerOrder(event: FoodCornerRawEvent, listingMap: Map<
       unit: tag[3] || "",
       unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
       currency: tag[5] || "EUR",
+      title: tag[6] || undefined, // snapshotted product name (newer orders)
       listing: listingMap.get(listingRef),
     };
   });
@@ -402,6 +403,10 @@ export interface FoodCornerItemRecon {
   currency: string;
   orderedQty: number;
   allocatedQty: number | null; // null = no allocation yet
+  // True only when the listing RESOLVED and the supplier has since delisted it
+  // (status !== 'active') — i.e. we positively know it was withdrawn. An item we
+  // simply couldn't resolve is NOT delisted, it's unknown (title === '').
+  delisted: boolean;
 }
 
 export function reconcileOrderItems(order: FoodCornerOrderWithFulfillment): FoodCornerItemRecon[] {
@@ -415,11 +420,13 @@ export function reconcileOrderItems(order: FoodCornerOrderWithFulfillment): Food
     return {
       listingRef: item.listingRef,
       unit: item.unit,
-      title: item.listing?.title || "",
+      // Prefer the live listing, else the name snapshotted onto the order.
+      title: item.listing?.title || item.title || "",
       unitPrice: a?.unitPrice ?? item.unitPrice,
       currency: a?.currency || item.currency,
       orderedQty: item.qty,
       allocatedQty: a ? a.qty : null,
+      delisted: !!item.listing && item.listing.status !== "active",
     };
   });
 }

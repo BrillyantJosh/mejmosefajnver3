@@ -355,7 +355,7 @@ export default function FoodCornerEcoPoint() {
             productKey: pk,
             listingRef: item.listingRef,
             unit: item.unit,
-            title: item.listing?.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`,
+            title: item.listing?.title || item.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`,
             ordered: 0,
             delivered: 0,
             isShort: false,
@@ -518,10 +518,10 @@ export default function FoodCornerEcoPoint() {
   const producerName = (order: FoodCornerOrderWithFulfillment) =>
     producers.find((p) => p.unitRef === order.sellerRef)?.name || `${order.sellerPubkey.slice(0, 12)}…`;
   const nodeName = (ref: string) => nodes.find((n) => n.ref === ref)?.name || t("ecoPoint.orders.direct");
-  // Product name; deleted listings (gone from relays) fall back to a clear label
-  // instead of a bare ref hash.
-  const itemLabel = (item: { listing?: { title?: string }; listingRef: string }) =>
-    item.listing?.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`;
+  // Product name: prefer the live listing, then the name snapshotted onto the
+  // order itself, and only then a clear label instead of a bare ref hash.
+  const itemLabel = (item: { listing?: { title?: string }; title?: string; listingRef: string }) =>
+    item.listing?.title || item.title || `${t("supplier.unknownProduct")} (${item.listingRef.slice(-6)})`;
 
   // Buyers in the selected cycle (independent of the buyer/seller toggle), used
   // for the printable per-buyer and all-buyers lists.

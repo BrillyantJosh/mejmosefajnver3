@@ -82,21 +82,38 @@ export function useFoodCornerData(): FoodCornerData {
     const pool = new SimplePool();
 
     try {
-      const rawEvents = (await fetchTimeout(
-        pool.querySync(relays, {
-          kinds: [
-            FOOD_CORNER_NODE_KIND,
-            FOOD_CORNER_LISTING_KIND,
-            FOOD_CORNER_BEAUTY_LISTING_KIND,
-            FOOD_CORNER_ORDER_KIND,
-            FOOD_CORNER_FULFILLMENT_KIND,
-            FOOD_CORNER_ALLOCATION_KIND,
-            FOOD_CORNER_DELIVERY_KIND,
-          ],
-          limit: 4000,
-        }),
-        18000,
-      )) as FoodCornerRawEvent[];
+      // Catalog (nodes + listings) and activity (orders + fulfillment/allocation/
+      // delivery) are fetched as SEPARATE queries, each with its own limit.
+      // Sharing one limit across all kinds starved the catalog as activity grew:
+      // relays return newest-first, so older LISTING events fell outside the
+      // budget, their refs no longer resolved, and buyers' order lines rendered
+      // as "removed product" even though nothing had been removed.
+      const [catalogEvents, activityEvents] = (await Promise.all([
+        fetchTimeout(
+          pool.querySync(relays, {
+            kinds: [
+              FOOD_CORNER_NODE_KIND,
+              FOOD_CORNER_LISTING_KIND,
+              FOOD_CORNER_BEAUTY_LISTING_KIND,
+            ],
+            limit: 4000,
+          }),
+          18000,
+        ),
+        fetchTimeout(
+          pool.querySync(relays, {
+            kinds: [
+              FOOD_CORNER_ORDER_KIND,
+              FOOD_CORNER_FULFILLMENT_KIND,
+              FOOD_CORNER_ALLOCATION_KIND,
+              FOOD_CORNER_DELIVERY_KIND,
+            ],
+            limit: 4000,
+          }),
+          18000,
+        ),
+      ])) as [FoodCornerRawEvent[], FoodCornerRawEvent[]];
+      const rawEvents = [...catalogEvents, ...activityEvents];
 
       const parsedNodes = dedupeReplaceable(
         rawEvents
