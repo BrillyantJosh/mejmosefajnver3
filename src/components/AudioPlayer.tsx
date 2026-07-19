@@ -229,7 +229,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
   // Error state — show retry + download buttons
   if (hasError) {
     return (
-      <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg my-1 w-full max-w-full min-w-[280px]">
+      <div className="flex items-center gap-2 p-2 sm:p-3 bg-muted/50 rounded-lg my-1 w-full max-w-full min-w-0">
         <span className="text-xs text-destructive flex-shrink-0">Ni na voljo</span>
         <div className="flex-1" />
         <Button size="sm" variant="ghost" onClick={handleRetry} className="h-7 gap-1 text-xs">
@@ -245,7 +245,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
   }
 
   return (
-    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg my-1 w-full max-w-full min-w-[280px]">
+    <div className="flex items-center gap-1.5 sm:gap-3 p-2 sm:p-3 bg-muted/50 rounded-lg my-1 w-full max-w-full min-w-0 overflow-hidden">
       <Button
         size="sm"
         variant="ghost"
@@ -256,9 +256,9 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
         {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
       </Button>
 
-      <Volume2 className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+      <Volume2 className="hidden sm:block h-5 w-5 text-muted-foreground flex-shrink-0" />
 
-      <div className="flex-1 min-w-[100px] px-2">
+      <div className="flex-1 min-w-[48px] px-1 sm:px-2">
         <Slider
           value={[currentTime]}
           max={duration || 100}
@@ -271,7 +271,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="flex-shrink-0 h-8 px-2 text-xs font-medium min-w-[45px]">
+          <Button variant="ghost" size="sm" className="flex-shrink-0 h-8 px-1.5 sm:px-2 text-[11px] sm:text-xs font-medium min-w-0">
             {playbackRate}x
           </Button>
         </DropdownMenuTrigger>
@@ -284,7 +284,7 @@ export function AudioPlayer({ audioUrl, initialDuration }: AudioPlayerProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <span className="text-xs flex-shrink-0 font-mono whitespace-nowrap min-w-[70px] text-right">
+      <span className="text-[11px] sm:text-xs flex-shrink-0 font-mono whitespace-nowrap text-right tabular-nums">
         <span className="text-muted-foreground">{formatTime(currentTime)} / {formatTime(duration)}</span>
       </span>
 
