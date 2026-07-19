@@ -54,7 +54,9 @@ const TXT = {
     },
     from: "od",
     to: "za",
-    beingsPending: (n: number, m: number) => `${n} od ${m} bitij še čaka na ta korak`,
+    byBeing: "Zaznalo bitje",
+    stillWaiting: "Še čaka pri",
+    alreadyDone: "Že opravljeno pri",
     waiting: "čaka nate",
   },
   en: {
@@ -81,7 +83,9 @@ const TXT = {
     },
     from: "from",
     to: "to",
-    beingsPending: (n: number, m: number) => `${n} of ${m} beings still wait for this step`,
+    byBeing: "Recorded by",
+    stillWaiting: "Still waiting at",
+    alreadyDone: "Already done at",
     waiting: "waits for you",
   },
 };
@@ -100,7 +104,11 @@ function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L }: {
   const items = useMemo(() => mergeTodo(ledgers, me), [ledgers, me]);
   const pubkeys = useMemo(() => {
     const set = new Set<string>([me]);
-    items.forEach(({ g }) => { set.add(g.fromPubkey); set.add(g.toPubkey); });
+    items.forEach(({ g, pending, done }) => {
+      set.add(g.fromPubkey); set.add(g.toPubkey);
+      pending.forEach((x) => set.add(x.beingPubkey));   // the beings, or their names render as hashes
+      done.forEach((b) => set.add(b));
+    });
     return Array.from(set);
   }, [items, me]);
   const { profiles } = useNostrProfilesCacheBulk(pubkeys);
@@ -133,9 +141,12 @@ function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L }: {
           </div>
         ) : (
           <>
-            {items.map(({ key, g, step, pendingBeings, totalBeings }) => {
+            {items.map(({ key, g, step, pending, done, totalBeings }) => {
               const Icon = STEP_ICON[step];
               const mine = String(g.toPubkey).toLowerCase() === me;
+              // Which being asks for what — beings judge independently, so the
+              // same grievance can sit at different steps for each of them.
+              const sameStep = pending.every((x) => x.step === step);
               return (
                 <div key={key} className="rounded-lg border border-border p-3 space-y-1.5">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -148,11 +159,27 @@ function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L }: {
                   </div>
                   {g.summary && <p className="text-sm leading-snug">{g.summary}</p>}
                   <p className="text-xs text-muted-foreground">→ {L.how[step]}</p>
-                  {totalBeings > 1 && (
-                    <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
-                      <Bot className="h-3 w-3 text-orange-500" />{L.beingsPending(pendingBeings, totalBeings)}
+                  <div className="space-y-0.5 pt-0.5">
+                    <p className="text-[11px] text-muted-foreground flex items-start gap-1 flex-wrap">
+                      <Bot className="h-3 w-3 text-orange-500 mt-[3px] shrink-0" />
+                      <span>
+                        <span className="font-medium">{totalBeings > 1 ? L.stillWaiting : L.byBeing}:</span>{" "}
+                        {pending.map((x, i) => (
+                          <span key={x.beingPubkey}>
+                            {i > 0 && ", "}
+                            {nameOf(x.beingPubkey)}
+                            {!sameStep && <span className="opacity-70"> ({L.steps[x.step]})</span>}
+                          </span>
+                        ))}
+                      </span>
                     </p>
-                  )}
+                    {done.length > 0 && (
+                      <p className="text-[11px] text-muted-foreground/80 flex items-start gap-1 flex-wrap">
+                        <CheckCircle2 className="h-3 w-3 text-green-600 mt-[3px] shrink-0" />
+                        <span><span className="font-medium">{L.alreadyDone}:</span> {done.map((b) => nameOf(b)).join(", ")}</span>
+                      </p>
+                    )}
+                  </div>
                 </div>
               );
             })}
