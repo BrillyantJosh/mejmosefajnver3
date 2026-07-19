@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, CheckCircle2, ListChecks, MessageSquare, HeartHandshake, Sparkles, Bot } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ListChecks, MessageSquare, HeartHandshake, Sparkles, Bot, Telescope } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/i18n/I18nContext";
 import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
@@ -39,6 +39,7 @@ const TXT = {
     allDone: "Nič ne čaka nate. Vse, kar je bilo na tebi, je narejeno.",
     caseDone: "V tem procesu nič ne čaka nate.",
     openChat: "Odpri pogovor",
+    openSelf: "Podrobno o sebi — mnenja · očitki · čustva",
     steps: {
       respond: "Odgovori",
       accept: "Sprejmi",
@@ -65,6 +66,7 @@ const TXT = {
     allDone: "Nothing is waiting for you. Everything that was yours is done.",
     caseDone: "Nothing waits for you in this process.",
     openChat: "Open the conversation",
+    openSelf: "My detail — opinions · grievances · emotions",
     steps: {
       respond: "Respond",
       accept: "Accept",
@@ -91,8 +93,8 @@ const STEP_ICON: Record<StepKey, typeof MessageSquare> = {
   own: CheckCircle2,
 };
 
-function CaseTodo({ caseRoot, title, me, onOpen, L }: {
-  caseRoot: string; title: string; me: string; onOpen: () => void; L: typeof TXT.sl;
+function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L }: {
+  caseRoot: string; title: string; me: string; onOpen: () => void; onOpenSelf: () => void; L: typeof TXT.sl;
 }) {
   const { ledgers, isLoading } = useOwnGrievances(caseRoot);
   const items = useMemo(() => mergeTodo(ledgers, me), [ledgers, me]);
@@ -123,7 +125,12 @@ function CaseTodo({ caseRoot, title, me, onOpen, L }: {
         {isLoading && ledgers.length === 0 ? (
           <Skeleton className="h-16 w-full rounded-lg" />
         ) : items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{L.caseDone}</p>
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">{L.caseDone}</p>
+            <Button variant="ghost" size="sm" onClick={onOpenSelf} className="text-orange-700 dark:text-orange-300 hover:text-orange-800 -ml-2">
+              <Telescope className="h-4 w-4 mr-2" />{L.openSelf}
+            </Button>
+          </div>
         ) : (
           <>
             {items.map(({ key, g, step, pendingBeings, totalBeings }) => {
@@ -149,9 +156,14 @@ function CaseTodo({ caseRoot, title, me, onOpen, L }: {
                 </div>
               );
             })}
-            <Button variant="outline" size="sm" onClick={onOpen} className="w-full sm:w-auto">
-              <MessageSquare className="h-4 w-4 mr-2" />{L.openChat}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2 pt-0.5">
+              <Button variant="outline" size="sm" onClick={onOpen} className="w-full sm:w-auto">
+                <MessageSquare className="h-4 w-4 mr-2" />{L.openChat}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onOpenSelf} className="w-full sm:w-auto text-orange-700 dark:text-orange-300 hover:text-orange-800">
+                <Telescope className="h-4 w-4 mr-2" />{L.openSelf}
+              </Button>
+            </div>
           </>
         )}
       </CardContent>
@@ -198,6 +210,7 @@ export default function OwnTodo() {
               title={p.title || p.processEventId.slice(0, 12)}
               me={me}
               onOpen={() => navigate(`/own?process=${encodeURIComponent(p.processEventId)}`)}
+              onOpenSelf={() => navigate(`/own?process=${encodeURIComponent(p.processEventId)}&self=1`)}
               L={L}
             />
           ))}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import ConversationList from "@/components/own/ConversationList";
 import ChatView from "@/components/own/ChatView";
 import OwnSelfMatrix from "@/components/own/OwnSelfMatrix";
@@ -94,6 +94,25 @@ export default function Own() {
 
   // Fetch open processes
   const { processes, isLoading: processesLoading } = useNostrOpenProcesses(session?.nostrHexId || null);
+
+  // Deep link from the TO-DO page (and anywhere else): ?process=<eventId>
+  // selects that process, &self=1 opens the detailed self view (Mnenja ·
+  // Očitki · Čustva) straight away.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const wanted = searchParams.get('process');
+    if (!wanted || processes.length === 0) return;
+    const hit = processes.find((p) => p.processEventId === wanted || p.id === wanted);
+    if (!hit) return;
+    setSelectedProcessId(hit.id);
+    if (searchParams.get('self') === '1') {
+      // the process-change effect resets selfDetail, so open it after that tick
+      setTimeout(() => setSelfDetail(true), 0);
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('process'); next.delete('self');
+    setSearchParams(next, { replace: true });   // consume the deep link once
+  }, [processes, searchParams, setSearchParams]);
 
   // Get selected process
   const selectedProcess = processes.find(p => p.id === selectedProcessId);
