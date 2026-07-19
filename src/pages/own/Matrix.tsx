@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { splitLatestPerBeing } from "@/lib/ownTimeline";
 import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Users, Telescope } from "lucide-react";
+import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Users, Telescope, Archive, ChevronDown } from "lucide-react";
 import { useAllOwnProcesses } from "@/hooks/useAllOwnProcesses";
 import { useOwnAssessments, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
@@ -36,7 +37,8 @@ const TXT = {
     participant: "Udeleženec", confidence: "zaupanje",
     reflection: "Refleksija", alignment: "Uskladitev", change: "Sprememba",
     done: "opravljeno", inProgress: "v teku", notYet: "še ne",
-    timelineIntro: "Mnenja bitij skozi čas (najprej najnovejša) — vsako pokaže svojo argumentacijo po fazah za ta proces.",
+    timelineIntro: "Zadnje mnenje vsakega bitja o vsakem udeležencu — to, kar bitje o njem drži ZDAJ. Starejša mnenja so v arhivu spodaj.",
+    archiveOpen: "Arhiv — starejša mnenja", archiveHide: "Skrij arhiv", archiveNote: "Presežena mnenja, od najnovejšega proti starejšim.",
     allParts: "Vsi udeleženci", allBeings: "Vsa bitja",
     loading: "Nalagam…", on: "o", met: "izpolnjeno", conf: "zaup",
     tabGrievances: "Očitki",
@@ -93,7 +95,8 @@ const TXT = {
     participant: "Participant", confidence: "confidence",
     reflection: "Reflection", alignment: "Alignment", change: "Change",
     done: "done", inProgress: "in progress", notYet: "not yet",
-    timelineIntro: "The beings' opinions over time (newest first) — each shows its reasoning per phase for this process.",
+    timelineIntro: "Each being's LATEST opinion on each participant — what it holds about them NOW. Older opinions live in the archive below.",
+    archiveOpen: "Archive — older opinions", archiveHide: "Hide archive", archiveNote: "Superseded opinions, newest first.",
     allParts: "All participants", allBeings: "All beings",
     loading: "Loading…", on: "on", met: "met", conf: "conf",
     tabGrievances: "Grievances",
@@ -311,6 +314,60 @@ export default function Matrix() {
       .sort((a, b) => b.created_at - a.created_at),
     [entries, timelineParticipant, timelineBeing],
   );
+  // Focus on what each being holds NOW; superseded opinions go to the archive.
+  const { current: timelineCurrent, archive: timelineArchive } = useMemo(() => splitLatestPerBeing(timeline), [timeline]);
+  const [showArchive, setShowArchive] = useState(false);
+
+  // One opinion card — reused by the current list and the archive.
+  const renderTimelineEntry = (e: (typeof timeline)[number]) => (
+    <div key={e.id} className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-4">
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <span className="text-sm font-semibold inline-flex items-center gap-1.5">
+          <Bot className="h-4 w-4 text-orange-500" />{nameOf(e.beingPubkey)}
+          <span className="font-normal text-muted-foreground">{L.on} {nameOf(e.participantPubkey)}</span>
+        </span>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className={getPhaseColor(e.phaseEstimate)}>{getPhaseLabel(e.phaseEstimate, lang)}</Badge>
+          <span className="text-[11px] text-muted-foreground">{new Date(e.created_at * 1000).toLocaleString()}</span>
+        </div>
+      </div>
+      {e.summary && <p className="text-sm mb-3 italic">“{e.summary}”</p>}
+      <div className="space-y-2">
+        {ASSESSED_PHASES.map((ph) => {
+          const v = (e.phases as any)?.[ph];
+          if (!v) return null;
+          const met = !!v.requirement_met;
+          const current = String(e.phaseEstimate || "").toLowerCase() === ph;
+          return (
+            <div key={ph} className="rounded-md bg-background/60 border border-border/50 p-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium">
+                {met ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" /> : current ? <CircleDot className="h-4 w-4 text-amber-500 shrink-0" /> : <Circle className="h-4 w-4 text-muted-foreground/30 shrink-0" />}
+                {getPhaseLabel(ph, lang)}
+                <span className="font-normal text-muted-foreground">· {met ? L.met : current ? L.inProgress : L.notYet} · {L.conf} {(Number(v.confidence) || 0).toFixed(2)}</span>
+              </div>
+              {v.rationale && <p className="text-xs text-muted-foreground mt-1" style={{ paddingLeft: "1.4rem" }}>{v.rationale}</p>}
+            </div>
+          );
+        })}
+      </div>
+      {e.grievanceSummary && (
+        <div className="text-[11px] text-muted-foreground mt-2">
+          {L.tlGriev}: {L.tlReceived} {e.grievanceSummary.received_accepted}/{e.grievanceSummary.received} {L.grievAcceptedWord} · {L.tlGiven} {e.grievanceSummary.given}
+        </div>
+      )}
+      {/* ↳ Smer (Steber 2): guidance nested under this exact assessment */}
+      {(guidanceByAssessment.get(e.id) || []).map((g) => (
+        <div key={g.id} className="mt-2 ml-4 rounded-md border border-orange-500/25 bg-orange-500/[0.03] p-2.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-xs font-semibold">↳ {L.tlDirection} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
+            <span className="text-[10px] text-muted-foreground">{new Date(g.created_at * 1000).toLocaleString()}</span>
+          </div>
+          {g.guidance && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{g.guidance}</p>}
+          {g.nextStep && <p className="text-xs mt-1">→ {g.nextStep}</p>}
+        </div>
+      ))}
+    </div>
+  );
 
   // ── LIST VIEW ──
   if (!selected) {
@@ -485,55 +542,26 @@ export default function Matrix() {
             <Card><CardContent className="py-12 text-center text-muted-foreground">{loadingAssess ? L.loading : L.noAssess}</CardContent></Card>
           ) : (
             <div className="space-y-3">
-              {timeline.map((e) => (
-                <div key={e.id} className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-4">
-                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                    <span className="text-sm font-semibold inline-flex items-center gap-1.5">
-                      <Bot className="h-4 w-4 text-orange-500" />{nameOf(e.beingPubkey)}
-                      <span className="font-normal text-muted-foreground">{L.on} {nameOf(e.participantPubkey)}</span>
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={getPhaseColor(e.phaseEstimate)}>{getPhaseLabel(e.phaseEstimate, lang)}</Badge>
-                      <span className="text-[11px] text-muted-foreground">{new Date(e.created_at * 1000).toLocaleString()}</span>
-                    </div>
-                  </div>
-                  {e.summary && <p className="text-sm mb-3 italic">“{e.summary}”</p>}
-                  <div className="space-y-2">
-                    {ASSESSED_PHASES.map((ph) => {
-                      const v = (e.phases as any)?.[ph];
-                      if (!v) return null;
-                      const met = !!v.requirement_met;
-                      const current = String(e.phaseEstimate || "").toLowerCase() === ph;
-                      return (
-                        <div key={ph} className="rounded-md bg-background/60 border border-border/50 p-2">
-                          <div className="flex items-center gap-1.5 text-xs font-medium">
-                            {met ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" /> : current ? <CircleDot className="h-4 w-4 text-amber-500 shrink-0" /> : <Circle className="h-4 w-4 text-muted-foreground/30 shrink-0" />}
-                            {getPhaseLabel(ph, lang)}
-                            <span className="font-normal text-muted-foreground">· {met ? L.met : current ? L.inProgress : L.notYet} · {L.conf} {(Number(v.confidence) || 0).toFixed(2)}</span>
-                          </div>
-                          {v.rationale && <p className="text-xs text-muted-foreground mt-1" style={{ paddingLeft: "1.4rem" }}>{v.rationale}</p>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {e.grievanceSummary && (
-                    <div className="text-[11px] text-muted-foreground mt-2">
-                      {L.tlGriev}: {L.tlReceived} {e.grievanceSummary.received_accepted}/{e.grievanceSummary.received} {L.grievAcceptedWord} · {L.tlGiven} {e.grievanceSummary.given}
-                    </div>
+              {timelineCurrent.map(renderTimelineEntry)}
+              {timelineArchive.length > 0 && (
+                <div className="space-y-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowArchive((v) => !v)}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2 text-xs text-muted-foreground hover:text-foreground hover:border-orange-500/40 transition-colors"
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                    {showArchive ? L.archiveHide : `${L.archiveOpen} (${timelineArchive.length})`}
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showArchive ? "rotate-180" : ""}`} />
+                  </button>
+                  {showArchive && (
+                    <>
+                      <p className="text-[11px] text-muted-foreground">{L.archiveNote}</p>
+                      <div className="space-y-3 opacity-75">{timelineArchive.map(renderTimelineEntry)}</div>
+                    </>
                   )}
-                  {/* ↳ Smer (Steber 2): guidance nested under this exact assessment */}
-                  {(guidanceByAssessment.get(e.id) || []).map((g) => (
-                    <div key={g.id} className="mt-2 ml-4 rounded-md border border-orange-500/25 bg-orange-500/[0.03] p-2.5">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-xs font-semibold">↳ {L.tlDirection} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
-                        <span className="text-[10px] text-muted-foreground">{new Date(g.created_at * 1000).toLocaleString()}</span>
-                      </div>
-                      {g.guidance && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{g.guidance}</p>}
-                      {g.nextStep && <p className="text-xs mt-1">→ {g.nextStep}</p>}
-                    </div>
-                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </TabsContent>

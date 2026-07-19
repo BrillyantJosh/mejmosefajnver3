@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle } from "lucide-react";
+import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Archive, ChevronDown } from "lucide-react";
+import { splitLatestPerBeing } from "@/lib/ownTimeline";
 import { useOwnAssessments, type AssessmentEntry, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
@@ -21,7 +22,8 @@ const TXT = {
     back: "Nazaj na klepet",
     latest: "Zadnje mnenje vsakega bitja",
     noneLatest: "Nobeno bitje še ni ocenilo tega udeleženca.",
-    timeline: "Časovnica mnenj (najnovejša zgoraj)",
+    timeline: "Zadnje mnenje vsakega bitja",
+    archiveOpen: "Arhiv — starejša mnenja", archiveHide: "Skrij arhiv", archiveNote: "Presežena mnenja, od najnovejšega proti starejšim.",
     noOpinions: "Ni mnenj.", loading: "Nalagam…",
     reflection: "Refleksija", alignment: "Uskladitev", change: "Sprememba",
     done: "opravljeno", inProgress: "v teku", notYet: "še ne",
@@ -46,7 +48,8 @@ const TXT = {
     back: "Back to chat",
     latest: "Latest opinion from each being",
     noneLatest: "No being has assessed this participant yet.",
-    timeline: "Timeline of opinions (newest first)",
+    timeline: "Each being's latest opinion",
+    archiveOpen: "Archive — older opinions", archiveHide: "Hide archive", archiveNote: "Superseded opinions, newest first.",
     noOpinions: "No opinions.", loading: "Loading…",
     reflection: "Reflection", alignment: "Alignment", change: "Change",
     done: "done", inProgress: "in progress", notYet: "not yet",
@@ -94,6 +97,9 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
     () => entries.filter((e) => e.participantPubkey === me).sort((a, b) => b.created_at - a.created_at),
     [entries, me],
   );
+  // Focus: what each being holds NOW; superseded opinions go to the archive.
+  const { current: entriesCurrent, archive: entriesArchive } = useMemo(() => splitLatestPerBeing(myEntries), [myEntries]);
+  const [showArchive, setShowArchive] = useState(false);
   const latestEntryByBeing = useMemo(() => {
     const m = new Map<string, AssessmentEntry>();
     for (const e of entries) {
@@ -201,6 +207,51 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
     const n = nameOf(pk);
     return n === short(pk) && bodyName ? bodyName : n;
   };
+
+  // One opinion card — reused by the current list and the archive.
+  const renderEntry = (e: (typeof myEntries)[number]) => (
+    <div key={e.id} className="rounded-lg border border-border p-3">
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <span className="text-sm font-semibold inline-flex items-center gap-1.5">
+          <Bot className="h-4 w-4 text-orange-500" />{nameOf(e.beingPubkey)}
+        </span>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className={getPhaseColor(e.phaseEstimate)}>{getPhaseLabel(e.phaseEstimate, lang)}</Badge>
+          <span className="text-[11px] text-muted-foreground">{new Date(e.created_at * 1000).toLocaleString()}</span>
+        </div>
+      </div>
+      {e.summary && <p className="text-sm mb-2 italic">“{e.summary}”</p>}
+      <div className="space-y-1.5">
+        {ASSESSED_PHASES.map((ph) => {
+          const v = (e.phases as any)?.[ph];
+          if (!v) return null;
+          const met = !!v.requirement_met;
+          const current = String(e.phaseEstimate || "").toLowerCase() === ph;
+          return (
+            <div key={ph} className="rounded-md bg-muted/40 border border-border/50 p-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium">
+                {met ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" /> : current ? <CircleDot className="h-3.5 w-3.5 text-amber-500 shrink-0" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />}
+                {phaseKeyLabel(ph)}
+                <span className="font-normal text-muted-foreground">· {met ? L.met : current ? L.inProgress : L.notYet}</span>
+              </div>
+              {v.rationale && <p className="text-xs text-muted-foreground mt-1" style={{ paddingLeft: "1.4rem" }}>{v.rationale}</p>}
+            </div>
+          );
+        })}
+      </div>
+      {/* ↳ Smer (Steber 2): guidance nested under this exact assessment */}
+      {(guidanceByAssessment.get(e.id) || []).map((g) => (
+        <div key={g.id} className="mt-2 ml-4 rounded-md border border-orange-500/25 bg-orange-500/[0.03] p-2.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-xs font-semibold">↳ {en ? "Direction" : "Smer"} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
+            <span className="text-[10px] text-muted-foreground">{new Date(g.created_at * 1000).toLocaleString()}</span>
+          </div>
+          {g.guidance && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{g.guidance}</p>}
+          {g.nextStep && <p className="text-xs mt-1">→ {g.nextStep}</p>}
+        </div>
+      ))}
+    </div>
+  );
 
   const stateOf = (b: string): PhaseState | null => myStates.find((s) => s.beingPubkey === b) || null;
   const reqStatus = (st: PhaseState, ph: "reflection" | "alignment" | "change"): "done" | "current" | "todo" => {
@@ -323,49 +374,26 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
             <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{isLoading ? L.loading : L.noOpinions}</CardContent></Card>
           ) : (
             <div className="space-y-2.5">
-              {myEntries.map((e) => (
-                <div key={e.id} className="rounded-lg border border-border p-3">
-                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                    <span className="text-sm font-semibold inline-flex items-center gap-1.5">
-                      <Bot className="h-4 w-4 text-orange-500" />{nameOf(e.beingPubkey)}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={getPhaseColor(e.phaseEstimate)}>{getPhaseLabel(e.phaseEstimate, lang)}</Badge>
-                      <span className="text-[11px] text-muted-foreground">{new Date(e.created_at * 1000).toLocaleString()}</span>
-                    </div>
-                  </div>
-                  {e.summary && <p className="text-sm mb-2 italic">“{e.summary}”</p>}
-                  <div className="space-y-1.5">
-                    {ASSESSED_PHASES.map((ph) => {
-                      const v = (e.phases as any)?.[ph];
-                      if (!v) return null;
-                      const met = !!v.requirement_met;
-                      const current = String(e.phaseEstimate || "").toLowerCase() === ph;
-                      return (
-                        <div key={ph} className="rounded-md bg-muted/40 border border-border/50 p-2">
-                          <div className="flex items-center gap-1.5 text-xs font-medium">
-                            {met ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" /> : current ? <CircleDot className="h-3.5 w-3.5 text-amber-500 shrink-0" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />}
-                            {phaseKeyLabel(ph)}
-                            <span className="font-normal text-muted-foreground">· {met ? L.met : current ? L.inProgress : L.notYet}</span>
-                          </div>
-                          {v.rationale && <p className="text-xs text-muted-foreground mt-1" style={{ paddingLeft: "1.4rem" }}>{v.rationale}</p>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {/* ↳ Smer (Steber 2): guidance nested under this exact assessment */}
-                  {(guidanceByAssessment.get(e.id) || []).map((g) => (
-                    <div key={g.id} className="mt-2 ml-4 rounded-md border border-orange-500/25 bg-orange-500/[0.03] p-2.5">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-xs font-semibold">↳ {en ? "Direction" : "Smer"} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
-                        <span className="text-[10px] text-muted-foreground">{new Date(g.created_at * 1000).toLocaleString()}</span>
-                      </div>
-                      {g.guidance && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{g.guidance}</p>}
-                      {g.nextStep && <p className="text-xs mt-1">→ {g.nextStep}</p>}
-                    </div>
-                  ))}
+              {entriesCurrent.map(renderEntry)}
+              {entriesArchive.length > 0 && (
+                <div className="space-y-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowArchive((v) => !v)}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2 text-xs text-muted-foreground hover:text-foreground hover:border-orange-500/40 transition-colors"
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                    {showArchive ? L.archiveHide : `${L.archiveOpen} (${entriesArchive.length})`}
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showArchive ? "rotate-180" : ""}`} />
+                  </button>
+                  {showArchive && (
+                    <>
+                      <p className="text-[11px] text-muted-foreground">{L.archiveNote}</p>
+                      <div className="space-y-2.5 opacity-75">{entriesArchive.map(renderEntry)}</div>
+                    </>
+                  )}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
