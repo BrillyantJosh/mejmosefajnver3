@@ -113,12 +113,15 @@ export default function PublicEvent() {
           </Button>
         </div>
 
+        {/* Show the WHOLE flyer (object-contain, natural height) — a fixed
+            h-48/h-64 box with object-cover cropped the top and bottom, hiding
+            the names/details people put at the edges of event artwork. */}
         {event.cover && (
-          <div className="relative h-48 md:h-64 w-full overflow-hidden rounded-lg">
-            <img 
-              src={event.cover} 
+          <div className="relative w-full overflow-hidden rounded-lg bg-muted/30">
+            <img
+              src={event.cover}
               alt={event.title}
-              className="h-full w-full object-cover"
+              className="w-full h-auto max-h-[80vh] object-contain mx-auto"
             />
             {status !== 'upcoming' && (
               <Badge 
