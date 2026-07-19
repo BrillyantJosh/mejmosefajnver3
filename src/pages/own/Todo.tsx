@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, CheckCircle2, ListChecks, MessageSquare, HeartHandshake, Sparkles, Bot, Telescope } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ListChecks, MessageSquare, HeartHandshake, Sparkles, Bot, Telescope, Languages } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/i18n/I18nContext";
 import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
@@ -40,6 +40,10 @@ const TXT = {
     caseDone: "V tem procesu nič ne čaka nate.",
     openChat: "Odpri pogovor",
     openSelf: "Podrobno o sebi — mnenja · očitki · čustva",
+    translate: "Prevedi v slovenščino",
+    original: "Pokaži izvirnik",
+    translating: "prevajam …",
+    translateNote: "Bitja povzetke zapišejo v jeziku, v katerem je tekel pogovor — prevod je pomoč pri branju, izvirnik ostane zapis na relayih.",
     steps: {
       respond: "Odgovori",
       accept: "Sprejmi",
@@ -69,6 +73,10 @@ const TXT = {
     caseDone: "Nothing waits for you in this process.",
     openChat: "Open the conversation",
     openSelf: "My detail — opinions · grievances · emotions",
+    translate: "Translate to English",
+    original: "Show the original",
+    translating: "translating …",
+    translateNote: "Beings write the summaries in the language the conversation ran in — the translation is a reading aid; the original stays the record on the relays.",
     steps: {
       respond: "Respond",
       accept: "Accept",
@@ -97,8 +105,9 @@ const STEP_ICON: Record<StepKey, typeof MessageSquare> = {
   own: CheckCircle2,
 };
 
-function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L }: {
-  caseRoot: string; title: string; me: string; onOpen: () => void; onOpenSelf: () => void; L: typeof TXT.sl;
+function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L, lang, translateOn, myPubkey }: {
+  caseRoot: string; title: string; me: string; onOpen: () => void; onOpenSelf: () => void;
+  L: typeof TXT.sl; lang: "sl" | "en"; translateOn: boolean; myPubkey?: string;
 }) {
   const { ledgers, isLoading } = useOwnGrievances(caseRoot);
   const items = useMemo(() => mergeTodo(ledgers, me), [ledgers, me]);
@@ -112,6 +121,39 @@ function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L }: {
     return Array.from(set);
   }, [items, me]);
   const { profiles } = useNostrProfilesCacheBulk(pubkeys);
+
+  // Translation of the grievance texts themselves (the beings write them in the
+  // language the conversation ran in). Cached per row+language, so toggling
+  // back and forth never pays twice; the original is never overwritten.
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translating, setTranslating] = useState(false);
+  useEffect(() => {
+    if (!translateOn) return;
+    const missing = items.filter((it) => it.g.summary && !translations[`${it.key}:${lang}`]);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    setTranslating(true);
+    Promise.allSettled(missing.map((it) =>
+      fetch("/api/functions/translate-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: it.g.summary, targetLanguage: lang, format: "plain", nostrHexId: myPubkey }),
+      })
+        .then((r) => r.json())
+        .then((d) => ({ key: `${it.key}:${lang}`, text: d?.translatedText as string | undefined })),
+    )).then((results) => {
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value?.text) next[r.value.key] = r.value.text;
+      }
+      if (Object.keys(next).length) setTranslations((prev) => ({ ...prev, ...next }));
+      setTranslating(false);
+    });
+    return () => { cancelled = true; };
+  }, [translateOn, lang, items, translations, myPubkey]);
+  const summaryOf = (key: string, original: string) =>
+    (translateOn && translations[`${key}:${lang}`]) || original;
   const nameOf = (pk: string) => {
     const p = profiles.get(pk);
     return p?.full_name || p?.display_name || `${pk.slice(0, 8)}…`;
@@ -122,11 +164,14 @@ function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L }: {
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center justify-between gap-2 flex-wrap">
           <span className="leading-snug">{title}</span>
-          {items.length > 0 && (
-            <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/40">
-              {items.length} · {L.waiting}
-            </Badge>
-          )}
+          <span className="inline-flex items-center gap-2">
+            {translating && <span className="text-[11px] font-normal text-muted-foreground">{L.translating}</span>}
+            {items.length > 0 && (
+              <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/40">
+                {items.length} · {L.waiting}
+              </Badge>
+            )}
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2.5">
@@ -157,7 +202,7 @@ function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L }: {
                       {mine ? `${L.from} ${nameOf(g.fromPubkey)}` : `${L.to} ${nameOf(g.toPubkey)}`}
                     </span>
                   </div>
-                  {g.summary && <p className="text-sm leading-snug">{g.summary}</p>}
+                  {g.summary && <p className="text-sm leading-snug">{summaryOf(key, g.summary)}</p>}
                   <p className="text-xs text-muted-foreground">→ {L.how[step]}</p>
                   <div className="space-y-0.5 pt-0.5">
                     <p className="text-[11px] text-muted-foreground flex items-start gap-1 flex-wrap">
@@ -205,6 +250,7 @@ export default function OwnTodo() {
   const L = en ? TXT.en : TXT.sl;
   const me = (session?.nostrHexId || "").toLowerCase();
   const { processes, isLoading } = useNostrOpenProcesses(session?.nostrHexId || null);
+  const [translateOn, setTranslateOn] = useState(false);
 
   // Only processes this person actually walks (a guest has nothing to do here).
   const mine = useMemo(
@@ -222,6 +268,17 @@ export default function OwnTodo() {
           <ListChecks className="h-5 w-5 text-orange-600 dark:text-orange-400" /> {L.title}
         </h2>
         <p className="text-sm text-muted-foreground mt-1">{L.lead}</p>
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <Button
+            variant={translateOn ? "default" : "outline"}
+            size="sm"
+            onClick={() => setTranslateOn((v) => !v)}
+          >
+            <Languages className="h-4 w-4 mr-2" />
+            {translateOn ? L.original : L.translate}
+          </Button>
+          {translateOn && <span className="text-[11px] text-muted-foreground">{L.translateNote}</span>}
+        </div>
       </div>
 
       {isLoading && processes.length === 0 ? (
@@ -239,6 +296,9 @@ export default function OwnTodo() {
               onOpen={() => navigate(`/own?process=${encodeURIComponent(p.processEventId)}`)}
               onOpenSelf={() => navigate(`/own?process=${encodeURIComponent(p.processEventId)}&self=1`)}
               L={L}
+              lang={en ? "en" : "sl"}
+              translateOn={translateOn}
+              myPubkey={session?.nostrHexId}
             />
           ))}
         </div>

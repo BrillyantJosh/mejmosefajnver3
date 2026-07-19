@@ -21,6 +21,14 @@ const __dirname = path.dirname(__filename);
 
 const router = Router();
 
+// Gemini model names rot: the 2.0 family was retired mid-flight ("This model
+// is no longer available"), which silently broke translation, STT and the
+// advisor. Use the floating -latest aliases (the same ones the beings run on),
+// overridable per deploy.
+const GEMINI_FAST = process.env.GEMINI_FAST_MODEL || 'gemini-flash-lite-latest';
+const GEMINI_SMART = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+
+
 /**
  * Get relays from kind_38888 DB table (no hardcoded fallback)
  */
@@ -560,7 +568,7 @@ router.post('/translate-post', async (req: Request, res: Response) => {
       ? `You are a professional translator. Translate the following text to ${langName}. Return plain text only — DO NOT add any markdown syntax (no **bold**, no _italic_, no asterisks, no underscores around words, no bullet points). Preserve the original meaning and tone. Return ONLY the translated text, nothing else. Do not add any explanation or notes.`
       : `You are a professional translator. Translate the following text to ${langName}. Preserve the original meaning, tone, and formatting (including markdown bold, italic, bullet points). Return ONLY the translated text, nothing else. Do not add any explanation or notes.`;
 
-    const result = await callGemini(GEMINI_API_KEY, 'gemini-2.0-flash-lite', systemPrompt, content);
+    const result = await callGemini(GEMINI_API_KEY, GEMINI_FAST, systemPrompt, content);
 
     // Log usage to ai_usage_logs
     if (nostrHexId || true) {
@@ -641,7 +649,7 @@ router.post('/speech-to-text', sttUpload.single('file'), async (req: Request, re
     const systemPrompt = `Transcribe this audio exactly as spoken. Return ONLY the transcription text — no explanations, no formatting, no quotes. If the audio is unclear or empty, return an empty string. Preserve the original language of the speech.${langHint}`;
 
     // Call Gemini multimodal API with inlineData (audio)
-    const model = 'gemini-2.0-flash';
+    const model = GEMINI_SMART;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
     const response = await fetch(url, {
       method: 'POST',
@@ -724,7 +732,7 @@ router.post('/image-to-text', sttUpload.single('file'), async (req: Request, res
     const prompt = `You are describing an image that a user wants to share in a chat message. Write a concise but vivid description (3-5 sentences) of what's in the image. Write from the perspective of someone telling a friend what's in the picture. Do NOT start with phrases like "Sure", "Of course", "In this image" or "The image shows". Start directly with the description of the content.${langHint}`;
 
     // Call Gemini multimodal API with inlineData (image)
-    const model = 'gemini-2.0-flash';
+    const model = GEMINI_SMART;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
     const response = await fetch(url, {
       method: 'POST',
@@ -1173,7 +1181,7 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
 
     const langInstruction = LANGUAGE_INSTRUCTIONS[langCode] || LANGUAGE_INSTRUCTIONS.en;
     const progressMsgs = PROGRESS_MESSAGES[langCode] || PROGRESS_MESSAGES.en;
-    const smartModel = 'gemini-2.0-flash';
+    const smartModel = GEMINI_SMART;
 
     // Set up SSE streaming
     res.setHeader('Content-Type', 'text/event-stream');
@@ -1220,7 +1228,7 @@ router.post('/ai-advisor', async (req: Request, res: Response) => {
 
     } else {
       // ============== TRIAD MODE: BUILDER → SKEPTIC → MEDIATOR ==============
-      const fastModel = 'gemini-2.0-flash-lite';
+      const fastModel = GEMINI_FAST;
 
       // Step 1: BUILDER
       sendSSE({ choices: [{ delta: { content: '' } }], progress: progressMsgs.builder });
