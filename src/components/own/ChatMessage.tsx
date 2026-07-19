@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLang } from "@/i18n/I18nContext";
 import { Card } from "@/components/ui/card";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { Heart, FileText, ChevronDown, ChevronUp, Reply } from "lucide-react";
@@ -86,6 +87,8 @@ interface ChatMessageProps {
   onReply?: () => void;
   repliedToSender?: string;
   repliedToSnippet?: string;
+  repliedToTranscript?: string;
+  onQuoteClick?: () => void;
 }
 
 export default function ChatMessage({
@@ -106,8 +109,13 @@ export default function ChatMessage({
   lashCount = 0,
   onReply,
   repliedToSender,
-  repliedToSnippet
+  repliedToSnippet,
+  repliedToTranscript,
+  onQuoteClick
 }: ChatMessageProps) {
+  const en = useLang() === 'en';
+  const [quoteTranscriptOpen, setQuoteTranscriptOpen] = useState(false);
+
   // System lines (e.g. "X has exited the process") — centered, no avatar/role/LASH.
   if (type === 'system') {
     return (
@@ -172,15 +180,48 @@ export default function ChatMessage({
     ) : null;
 
   // Quoted block shown at the top of a bubble when this message is a reply.
-  const QuotedReply = () =>
-    (repliedToSender || repliedToSnippet) ? (
+  // Clicking it jumps to the quoted message (a bare "🎤 Voice message" told you
+  // nothing about WHICH recording); a voice quote also offers its transcript
+  // right here, without leaving the reply.
+  const QuotedReply = () => {
+    if (!repliedToSender && !repliedToSnippet) return null;
+    const clickable = !!onQuoteClick;
+    return (
       <div className="mb-1.5 border-l-2 border-primary/50 pl-2 py-0.5 max-w-full">
-        {repliedToSender && (
-          <p className="text-[11px] font-medium text-primary/80 truncate">{repliedToSender}</p>
+        <div
+          role={clickable ? 'button' : undefined}
+          tabIndex={clickable ? 0 : undefined}
+          onClick={onQuoteClick}
+          onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onQuoteClick?.(); } } : undefined}
+          className={clickable ? 'cursor-pointer hover:opacity-80 transition-opacity' : undefined}
+          title={clickable ? (en ? 'Jump to the quoted message' : 'Skoči na citirano sporočilo') : undefined}
+        >
+          {repliedToSender && (
+            <p className="text-[11px] font-medium text-primary/80 truncate">{repliedToSender}</p>
+          )}
+          <p className="text-xs text-muted-foreground/80 truncate">{repliedToSnippet}</p>
+        </div>
+        {repliedToTranscript && (
+          <>
+            <button
+              type="button"
+              onClick={() => setQuoteTranscriptOpen((v) => !v)}
+              className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              <FileText className="h-3 w-3" />
+              {en ? 'Transcript' : 'Transkript'}
+              <ChevronDown className={`h-3 w-3 transition-transform ${quoteTranscriptOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {quoteTranscriptOpen && (
+              <p className="text-[11px] text-muted-foreground/90 whitespace-pre-wrap mt-0.5 max-h-40 overflow-y-auto">
+                {repliedToTranscript}
+              </p>
+            )}
+          </>
         )}
-        <p className="text-xs text-muted-foreground/80 truncate">{repliedToSnippet}</p>
       </div>
-    ) : null;
+    );
+  };
 
   if (type === 'audio' && audioUrl) {
     return (

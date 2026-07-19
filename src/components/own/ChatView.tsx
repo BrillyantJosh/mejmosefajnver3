@@ -131,6 +131,7 @@ interface Message {
   replyTo?: string;
   repliedToSender?: string;
   repliedToSnippet?: string;
+  repliedToTranscript?: string;
 }
 
 interface ChatViewProps {
@@ -251,6 +252,27 @@ export default function ChatView({
   const restoreScrollRef = useRef<{ height: number; top: number } | null>(null);
   const getViewport = () =>
     scrollAreaRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]") ?? null;
+
+  // Clicking a quote jumps to the message it quotes. If that message is older
+  // than the visible window, expand the window first — otherwise the quote is
+  // a dead end ("which recording was this?").
+  const flashMessage = (el: HTMLElement) => {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('ring-2', 'ring-primary/60', 'rounded-lg');
+    setTimeout(() => el.classList.remove('ring-2', 'ring-primary/60', 'rounded-lg'), 1800);
+  };
+  const scrollToMessage = (id?: string) => {
+    if (!id) return;
+    const el = document.getElementById(`m-${id}`);
+    if (el) { flashMessage(el); return; }
+    const idx = messages.findIndex((m) => m.id === id);
+    if (idx < 0) return;                       // not in local history at all
+    setVisibleCount((prev) => Math.max(prev, messages.length - idx + 3));
+    setTimeout(() => {
+      const later = document.getElementById(`m-${id}`);
+      if (later) flashMessage(later);
+    }, 150);
+  };
 
   const handleLoadMore = () => {
     const vp = getViewport();
@@ -449,8 +471,8 @@ export default function ChatView({
                 </div>
               )}
               {visibleMessages.map((msg) => (
+                <div key={msg.id} id={`m-${msg.id}`} className="transition-shadow">
                 <ChatMessage
-                  key={msg.id}
                   sender={msg.sender}
                   timestamp={msg.timestamp}
                   type={msg.type}
@@ -463,6 +485,8 @@ export default function ChatView({
                   messageId={msg.id}
                   repliedToSender={msg.repliedToSender}
                   repliedToSnippet={msg.repliedToSnippet}
+                  repliedToTranscript={msg.repliedToTranscript}
+                  onQuoteClick={msg.replyTo ? () => scrollToMessage(msg.replyTo) : undefined}
                   onReply={
                     msg.type !== 'system'
                       ? () => setReplyingTo({ id: msg.id, sender: msg.sender, snippet: snippetForMessage(msg) })
@@ -477,6 +501,7 @@ export default function ChatView({
                   isLashing={lashingMessageId === msg.id}
                   lashCount={lashCounts.get(msg.id) || 0}
                 />
+                </div>
               ))}
             </>
           )}

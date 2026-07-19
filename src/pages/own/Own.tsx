@@ -38,9 +38,25 @@ const hexToBytes = (hex: string): Uint8Array => {
 
 // Short preview of a message for the "replying to" quote. Detects media from the
 // raw (decrypted) text encoding (audio:/image:); otherwise truncates the text.
+// A quoted voice message says nothing about WHICH recording it was — carry the
+// length so the quote is identifiable at a glance ("🎤 Voice message · 3:21").
+const fmtDur = (sec: number): string => `${Math.floor(sec / 60)}:${Math.floor(sec % 60).toString().padStart(2, '0')}`;
+const audioDurationOf = (rawText: string): number | undefined => {
+  const m = (rawText || '').match(/^audio:[^|]*\|dur:(\d+)/);
+  return m ? parseInt(m[1], 10) : undefined;
+};
+const audioTranscriptOf = (rawText: string): string | undefined => {
+  const i = (rawText || '').indexOf('|transcript:');
+  if (i === -1 || !(rawText || '').startsWith('audio:')) return undefined;
+  const t = rawText.slice(i + '|transcript:'.length).trim();
+  return t || undefined;
+};
 const ownReplySnippet = (rawText: string): string => {
   const t = (rawText || '').trim();
-  if (t.startsWith('audio:')) return '🎤 Voice message';
+  if (t.startsWith('audio:')) {
+    const d = audioDurationOf(t);
+    return d ? `🎤 Voice message · ${fmtDur(d)}` : '🎤 Voice message';
+  }
   if (t.startsWith('image:')) return '🖼 Photo';
   return t.length > 80 ? t.slice(0, 80) + '…' : t;
 };
@@ -577,8 +593,12 @@ export default function Own() {
         raw.replyToSender
         ?? (target ? (profiles.get(target.senderPubkey)?.full_name || target.senderPubkey.slice(0, 8)) : undefined),
       repliedToSnippet:
-        raw.replyToSnippet
-        ?? (target ? ownReplySnippet(target.text) : 'Replied message'),
+        // An older embedded snippet may lack the duration — when the original
+        // is in local history, prefer the freshly built (richer) one.
+        (target ? ownReplySnippet(target.text) : undefined)
+        ?? raw.replyToSnippet
+        ?? 'Replied message',
+      repliedToTranscript: target ? audioTranscriptOf(target.text) : undefined,
     };
   });
   const systemMessages = exitEvents.map(ev => {

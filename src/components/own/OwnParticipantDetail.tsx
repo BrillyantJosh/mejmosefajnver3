@@ -135,35 +135,6 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
     return out;
   }, [ledgers, me]);
 
-  // Primerjava bitij za to osebo: pairs involving them, aligned across every
-  // being's ledger — same divergence logic as the /own/matrix Primerjava.
-  const grievCompare = useMemo(() => {
-    const involved = ledgers.filter((l) => l.grievances.some((g) => g.fromPubkey === me || g.toPubkey === me));
-    if (involved.length < 2) return null;
-    const STEPS = ["resp", "acc", "apo", "own"] as const;
-    const done = (g: Grievance) => ({ resp: g.respondedByTarget, acc: g.status === "accepted", apo: g.apologyNoted, own: g.acceptedByGiver });
-    const pairKeys = new Set<string>();
-    for (const l of involved) for (const g of l.grievances) if (g.fromPubkey === me || g.toPubkey === me) pairKeys.add(`${g.fromPubkey}|${g.toPubkey}`);
-    const rows = [...pairKeys].sort().map((key) => {
-      const [from, to] = key.split("|");
-      const cells = involved.map((l) => {
-        const gs = l.grievances.filter((g) => g.fromPubkey === from && g.toPubkey === to);
-        const counts: Record<(typeof STEPS)[number], number> = { resp: 0, acc: 0, apo: 0, own: 0 };
-        for (const g of gs) { const d = done(g); for (const s of STEPS) if (d[s]) counts[s]++; }
-        return { being: l.beingPubkey, n: gs.length, counts };
-      });
-      const present = cells.filter((c) => c.n > 0);
-      const ns = present.map((c) => c.n);
-      const stepDisagree: Record<string, boolean> = {};
-      for (const s of STEPS) {
-        const verdicts = present.map((c) => c.counts[s] === c.n);
-        if (verdicts.length >= 2 && !verdicts.every((v) => v === verdicts[0])) stepDisagree[s] = true;
-      }
-      return { from, to, cells, countDiff: present.length >= 2 && Math.max(...ns) - Math.min(...ns) > 1, missing: cells.some((c) => c.n === 0) && present.length > 0, stepDisagree };
-    });
-    return { beings: involved.map((l) => l.beingPubkey), rows };
-  }, [ledgers, me]);
-
   // Steber 2 nesting: this participant's guidance (87048) under the exact
   // assessment (87047) — join on basedOnStateId, fallback nearest OLDER
   // assessment by the same being.
@@ -202,16 +173,17 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
 
   const profilePubkeys = useMemo(() => {
     const set = new Set<string>(beings);
+    set.add(me);   // the person being viewed appears in every grievance pair
     grievByBeing.forEach(({ being, given, received }) => {
       set.add(being);
-      given.forEach((g) => set.add(g.toPubkey));
-      received.forEach((g) => set.add(g.fromPubkey));
+      given.forEach((g) => { set.add(g.fromPubkey); set.add(g.toPubkey); });
+      received.forEach((g) => { set.add(g.fromPubkey); set.add(g.toPubkey); });
     });
     // Emotion palettes may come from beings without an 87047 in this case —
     // include them or the Čustva tab shows raw hashes.
     emotionPalettes.forEach((pal) => set.add(pal.beingPubkey));
     return Array.from(set);
-  }, [beings, grievByBeing, emotionPalettes]);
+  }, [beings, grievByBeing, emotionPalettes, me]);
   const { profiles } = useNostrProfilesCacheBulk(profilePubkeys);
   const nameOf = (pk: string) => {
     const p = profiles.get(pk);
@@ -289,38 +261,6 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
 
   // Steber 1.5: the full four-step life of a grievance, viewed from one side.
   // received → responded / accepted / apologized matter; given → giver-owned.
-  const GrievStatus = ({ g, side }: { g: Grievance; side: "given" | "received" }) => (
-    <span className="inline-flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-      {side === "received" && !g.respondedByTarget && (
-        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0">{L.needsResponse}</Badge>
-      )}
-      {side === "received" && g.respondedByTarget && g.status !== "accepted" && (
-        <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
-          <CheckCircle2 className="h-3 w-3 text-green-500" /> {L.stepResponded}
-        </span>
-      )}
-      {g.apologyNoted && (
-        <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
-          <CheckCircle2 className="h-3 w-3 text-green-500" /> {L.grievApologized}
-        </span>
-      )}
-      {side === "given" && (g.acceptedByGiver ? (
-        <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
-          <CheckCircle2 className="h-3 w-3 text-green-500" /> {L.stepOwned}
-        </span>
-      ) : (
-        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0">{L.needsOwn}</Badge>
-      ))}
-      <Badge
-        variant="outline"
-        className={g.status === "accepted"
-          ? "bg-green-500/10 text-green-600 border-green-500/30 text-[10px] py-0"
-          : "bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0"}
-      >
-        {g.status === "accepted" ? L.grievAccepted : L.grievOpen}
-      </Badge>
-    </span>
-  );
 
   return (
     <div className="h-full overflow-y-auto space-y-4 px-4 md:px-2">
@@ -444,104 +384,6 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                 </Card>
               ))}
             </div>
-
-            {/* BELOW: the detail — what each grievance still waits for. */}
-            <h4 className="text-sm font-medium text-muted-foreground pt-2">{L.grievDetail}</h4>
-            <div className="space-y-2.5">
-              {grievByBeing.map(({ being, given, received }) => (
-                <Card key={being} className="border-border">
-                  <CardContent className="p-3 space-y-2">
-                    <span className="text-sm font-medium inline-flex items-center gap-1.5">
-                      <Bot className="h-4 w-4 text-orange-500" />{nameOf(being)}
-                    </span>
-                    {given.length > 0 && (
-                      <div className="space-y-1">
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{L.grievGiven}</div>
-                        {given.map((g) => (
-                          <div key={g.id} className="rounded-md bg-muted/40 border border-border/50 p-2 space-y-0.5">
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-xs font-medium">→ {nameOf(g.toPubkey)}</span>
-                              <GrievStatus g={g} side="given" />
-                            </div>
-                            {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {received.length > 0 && (
-                      <div className="space-y-1">
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{L.grievReceived}</div>
-                        {received.map((g) => (
-                          <div key={g.id} className="rounded-md bg-muted/40 border border-border/50 p-2 space-y-0.5">
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-xs font-medium">← {nameOf(g.fromPubkey)}</span>
-                              <GrievStatus g={g} side="received" />
-                            </div>
-                            {g.summary && <p className="text-xs text-muted-foreground leading-snug">{g.summary}</p>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            {/* ── Primerjava bitij za to osebo (⚠ = razhajanje) ── */}
-            {grievCompare && (
-              <Card className="border-orange-500/25 bg-orange-500/[0.04]">
-                <CardContent className="p-3 space-y-2">
-                  <div className="text-sm font-medium">{L.compTitle}</div>
-                  <p className="text-[11px] text-muted-foreground">{L.compIntro}</p>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b border-border/60 text-[10px] uppercase tracking-wide text-muted-foreground">
-                          <th className="text-left p-1.5 font-medium">{L.grievTitle}</th>
-                          {grievCompare.beings.map((b) => (
-                            <th key={b} className="text-left p-1.5 font-medium whitespace-nowrap">
-                              <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3 text-orange-500" />{nameOf(b)}</span>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {grievCompare.rows.map((row) => (
-                          <tr key={`${row.from}|${row.to}`} className="border-b border-border/40 align-top">
-                            <td className="p-1.5 min-w-[8rem]">
-                              <div className="font-medium">{nameOf(row.from)} → {nameOf(row.to)}</div>
-                              <div className="mt-0.5 space-x-1.5">
-                                {row.missing && <span className="text-[10px] text-amber-600">⚠ {L.compMissing}</span>}
-                                {row.countDiff && <span className="text-[10px] text-amber-600">⚠ {L.compCountDiff}</span>}
-                                {Object.keys(row.stepDisagree).length > 0 && <span className="text-[10px] text-amber-600">⚠ {L.compStepDiff}</span>}
-                              </div>
-                            </td>
-                            {row.cells.map((c) => (
-                              <td key={c.being} className="p-1.5 whitespace-nowrap">
-                                {c.n === 0 ? (
-                                  <span className="text-amber-600/80">{L.compNone}</span>
-                                ) : (
-                                  <div>
-                                    <div className="font-medium">{c.n} {L.compCount}</div>
-                                    <div className="text-muted-foreground mt-0.5 space-x-1.5">
-                                      {(["resp", "acc", "apo", "own"] as const).map((s, i) => (
-                                        <span key={s} className={row.stepDisagree[s] ? "text-amber-600 font-semibold" : c.counts[s] === c.n ? "text-green-600" : undefined}>
-                                          {L.compSteps[i]} {c.counts[s]}/{c.n}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
         )}
         </TabsContent>
