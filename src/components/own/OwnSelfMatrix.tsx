@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Telescope, Grid3x3, ChevronRight, Bot } from "lucide-react";
+import { Telescope, Grid3x3, ChevronRight, Bot, ListChecks } from "lucide-react";
 import { useOwnAssessments, type AssessmentEntry } from "@/hooks/useOwnAssessments";
 import OwnPillarSummary from "@/components/own/OwnPillarSummary";
 import { getPhaseLabel, getPhaseColor } from "@/lib/ownPhase";
@@ -15,6 +15,7 @@ const TXT = {
     none: "Nobeno bitje te še ni ocenilo v tem procesu.",
     detail: "Podrobni pogled — vse skupaj",
     analyze: "Analiziraj druge udeležence",
+    todo: "Kaj moram narediti",
     latestVoice: "Zadnje mnenje",
   },
   en: {
@@ -23,6 +24,7 @@ const TXT = {
     none: "No being has assessed you in this process yet.",
     detail: "Detailed view — everything together",
     analyze: "Analyze the other participants",
+    todo: "What I need to do",
     latestVoice: "Latest opinion",
   },
 };
@@ -32,13 +34,14 @@ interface Props {
   participantPubkey: string;
   phase?: string;
   onAnalyzeOthers?: () => void;
+  onOpenTodo?: () => void;
   onOpenDetail?: () => void;
 }
 
 // The participant's own condensed cross-section (presek): the three pillars
 // AGGREGATED across all beings — not one card per being. The detail button
 // opens the full per-being breakdown (verdicts, grievances, emotions, smer).
-export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase, onAnalyzeOthers, onOpenDetail }: Props) {
+export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase, onAnalyzeOthers, onOpenDetail, onOpenTodo }: Props) {
   const en = useLang() === "en";
   const L = en ? TXT.en : TXT.sl;
   const lang: "en" | "sl" = en ? "en" : "sl";
@@ -82,6 +85,19 @@ export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase, onAn
             )}
           </CardContent>
         </Card>
+      )}
+
+      {onOpenTodo && (
+        <button
+          onClick={onOpenTodo}
+          className="w-full flex items-center justify-between gap-2 rounded-lg border border-amber-500/50 bg-amber-500/[0.08] hover:bg-amber-500/15 hover:border-amber-500/70 transition-colors p-3 text-left"
+        >
+          <span className="text-sm font-medium inline-flex items-center gap-2">
+            <ListChecks className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            {L.todo}
+          </span>
+          <ChevronRight className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+        </button>
       )}
 
       {onOpenDetail && myStates.length > 0 && (

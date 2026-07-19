@@ -58,7 +58,7 @@ export default function OwnFullMatrix({ caseRoot, participants, phase, selectedP
   const { profiles } = useNostrProfilesCacheBulk(useMemo(() => Array.from(new Set(participants)), [participants]));
   const nameOf = (pk: string) => {
     const p = profiles.get(pk);
-    return p?.display_name || p?.full_name || short(pk);
+    return p?.full_name || p?.display_name || short(pk);
   };
 
   return (

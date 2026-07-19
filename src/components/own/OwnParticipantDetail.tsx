@@ -187,7 +187,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
   const { profiles } = useNostrProfilesCacheBulk(profilePubkeys);
   const nameOf = (pk: string) => {
     const p = profiles.get(pk);
-    return p?.display_name || p?.full_name || short(pk);
+    return p?.full_name || p?.display_name || short(pk);
   };
   const beingLabelOf = (pk: string, bodyName?: string) => {
     const n = nameOf(pk);

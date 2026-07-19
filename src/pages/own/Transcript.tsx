@@ -183,11 +183,11 @@ export default function Transcript() {
                 <UserAvatar
                   pubkey={transcript.facilitatorPubkey}
                   picture={facilitator.picture}
-                  name={facilitator.display_name || facilitator.full_name || `${transcript.facilitatorPubkey.slice(0, 8)}...`}
+                  name={facilitator.full_name || facilitator.display_name || `${transcript.facilitatorPubkey.slice(0, 8)}...`}
                   className="h-8 w-8"
                 />
                 <span className="font-medium">
-                  {facilitator.display_name || facilitator.full_name || `${transcript.facilitatorPubkey.slice(0, 8)}...`}
+                  {facilitator.full_name || facilitator.display_name || `${transcript.facilitatorPubkey.slice(0, 8)}...`}
                 </span>
               </div>
             </div>
@@ -216,14 +216,14 @@ export default function Transcript() {
                   <UserAvatar
                     pubkey={message.sender_pubkey}
                     picture={profile?.picture}
-                    name={profile?.display_name || profile?.full_name || `${message.sender_pubkey.slice(0, 8)}...`}
+                    name={profile?.full_name || profile?.display_name || `${message.sender_pubkey.slice(0, 8)}...`}
                     className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
                   />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="font-semibold text-sm sm:text-base">
-                        {profile?.display_name || profile?.full_name || `${message.sender_pubkey.slice(0, 8)}...`}
+                        {profile?.full_name || profile?.display_name || `${message.sender_pubkey.slice(0, 8)}...`}
                       </span>
                       <Badge className={getRoleBadgeColor(message.role)} variant="secondary">
                         {message.role}

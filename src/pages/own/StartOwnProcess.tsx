@@ -60,7 +60,7 @@ export default function StartOwnProcess() {
           if (profile) {
             try {
               const content = JSON.parse(profile.content);
-              displayName = content.display_name || content.name || displayName;
+              displayName = content.name || content.display_name || displayName;   // real name first
               picture = content.picture;
             } catch (e) {
               console.error('Error parsing profile:', e);

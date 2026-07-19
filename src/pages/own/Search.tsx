@@ -214,7 +214,7 @@ export default function Search() {
 
                     const renderPerson = (pubkey: string, size: string = 'text-xs', avatarSize: string = 'h-5 w-5') => {
                       const profile = profiles.get(pubkey);
-                      const name = profile?.display_name || profile?.full_name || `${pubkey.slice(0, 8)}...`;
+                      const name = profile?.full_name || profile?.display_name || `${pubkey.slice(0, 8)}...`;
                       return (
                         <div key={pubkey} className="flex items-center gap-1.5 bg-muted/50 border border-border/50 px-2 py-1 rounded-md">
                           <UserAvatar pubkey={pubkey} picture={profile?.picture} name={name} className={avatarSize} />

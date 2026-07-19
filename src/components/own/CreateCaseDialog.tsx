@@ -69,7 +69,7 @@ export default function CreateCaseDialog() {
   const addParticipant = (profile: any) => {
     setSelectedParticipants(prev => [...prev, {
       pubkey: profile.pubkey,
-      name: profile.display_name || profile.name || profile.pubkey.slice(0, 8),
+      name: profile.name || profile.display_name || profile.pubkey.slice(0, 8),
       picture: profile.picture,
     }]);
     setSearchTerm("");
@@ -325,12 +325,12 @@ export default function CreateCaseDialog() {
                         <UserAvatar
                           pubkey={profile.pubkey}
                           picture={profile.picture}
-                          name={profile.display_name || profile.name || "Anonymous"}
+                          name={profile.name || profile.display_name || "Anonymous"}
                           className="h-10 w-10 flex-shrink-0"
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
-                            {profile.display_name || profile.name || "Anonymous"}
+                            {profile.name || profile.display_name || "Anonymous"}
                           </p>
                           {profile.name && profile.display_name && profile.name !== profile.display_name && (
                             <p className="text-xs text-muted-foreground truncate">

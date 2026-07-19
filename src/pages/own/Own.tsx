@@ -668,7 +668,7 @@ export default function Own() {
   const subjectList = selectedProcess
     ? Array.from(new Set(selectedProcess.participants.filter(Boolean)))
     : [];
-  const nameOfPk = (pk: string) => profiles.get(pk)?.display_name || profiles.get(pk)?.full_name || pk.slice(0, 8);
+  const nameOfPk = (pk: string) => profiles.get(pk)?.full_name || profiles.get(pk)?.display_name || pk.slice(0, 8);
 
   const chatViewEl = selectedProcess ? (
     <ChatView
@@ -751,6 +751,7 @@ export default function Own() {
               participantPubkey={session?.nostrHexId || ''}
               phase={selectedProcess?.phase}
               onAnalyzeOthers={caseRoot ? () => navigate(`/own/matrix?process=${encodeURIComponent(caseRoot)}`) : undefined}
+              onOpenTodo={() => navigate('/own/todo')}
               onOpenDetail={() => setSelfDetail(true)}
             />
           </div>

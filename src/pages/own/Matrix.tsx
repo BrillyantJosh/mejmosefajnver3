@@ -231,7 +231,7 @@ export default function Matrix() {
   const { profiles } = useNostrProfilesCacheBulk(allPubkeys);
   const nameOf = (pk: string) => {
     const p = profiles.get(pk);
-    return p?.display_name || p?.full_name || short(pk);
+    return p?.full_name || p?.display_name || short(pk);
   };
   // For palette headers: KIND 0 name when resolved, else the body's own
   // being_name, else the short hash.

@@ -72,7 +72,7 @@ export default function MyCases() {
             const profile = participantProfiles.get(pubkey);
             return {
               pubkey,
-              name: profile?.display_name || profile?.full_name || pubkey.slice(0, 8),
+              name: profile?.full_name || profile?.display_name || pubkey.slice(0, 8),
               picture: profile?.picture,
             };
           });
