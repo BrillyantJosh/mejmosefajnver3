@@ -25,6 +25,12 @@ jobs:
             git stash push --include-untracked -m "auto-stash before deploy" || true
             GIT_SSH_COMMAND="ssh -i /root/.ssh/github_deploy_mejmosefajn -o StrictHostKeyChecking=no" git pull --ff-only origin main
             docker compose -f docker-compose.prod.yml build --no-cache
-            docker compose -f docker-compose.prod.yml up -d
+            # Compose sometimes races itself on recreate ("container is marked for
+            # removal and cannot be started") — the app comes up, but the step goes
+            # red and hides real failures. Retry once after a clean down.
+            docker compose -f docker-compose.prod.yml up -d \
+              || (echo "recreate raced — cleaning up and retrying"; \
+                  docker compose -f docker-compose.prod.yml down --remove-orphans; \
+                  docker compose -f docker-compose.prod.yml up -d)
             docker image prune -f
             echo "Deploy completed at $(date)"
