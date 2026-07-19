@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Archive, ChevronDown } from "lucide-react";
-import { splitLatestPerBeing } from "@/lib/ownTimeline";
+import { splitLatestPerBeing, withFloatedGuidance, guidanceKindKey } from "@/lib/ownTimeline";
 import GrievanceStepTable from "@/components/own/GrievanceStepTable";
 import { useOwnAssessments, type AssessmentEntry, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
@@ -36,6 +36,7 @@ const TXT = {
     needsResponse: "čaka odgovor", needsOwn: "sprejmi kot svojo zablodo",
     grievLegend: "Vsak očitek gre skozi štiri korake: prejemnik nanj odgovori (vsak odziv šteje, tudi obramba) in ga brezpogojno sprejme (z opravičilom, če se le da), dajalec pa ga sprejme kot del svoje zablode. Refleksija je zaključena šele, ko je odgovorjeno na vse prejete; uskladitev šele, ko so sprejeti vsi prejeti IN vsi dani vzeti nase.",
     colResponded: "Odgovorjen", colAccepted: "Sprejet", colApologized: "Opravičen", colOwned: "Zabloda sprejeta",
+    kind: { direction: "Smer", acceptance: "Sprejetost", space: "Prostor", reminder: "Opomnik", movingOn: "Umik", closingCall: "Zaključni klic", pause: "Pavza", celebration: "Praznovanje", guidance: "Vodenje" } as Record<string, string>,
     grievDetail: "Podrobno — kaj še čaka", grievEmptyBeing: "To bitje zate še ni zabeležilo očitkov.",
     compTitle: "Primerjava bitij za to osebo",
     compIntro: "Vsako bitje bere isti pogovor, a ga destilira samostojno — ⚠ pokaže, kje se bitja razhajajo.",
@@ -64,6 +65,7 @@ const TXT = {
     needsResponse: "awaiting response", needsOwn: "own it as your delusion",
     grievLegend: "Every grievance passes four steps: the receiver responds to it (any reaction counts, defense too) and unconditionally accepts it (apologizing where possible), and the giver accepts it as part of their own delusion. Reflection completes only once every received grievance got a response; alignment only once all received are accepted AND all given are owned.",
     colResponded: "Responded", colAccepted: "Accepted", colApologized: "Apologized", colOwned: "Owned as delusion",
+    kind: { direction: "Direction", acceptance: "Acceptance", space: "Space", reminder: "Reminder", movingOn: "Moving on", closingCall: "Closing call", pause: "Pause", celebration: "Celebration", guidance: "Guidance" } as Record<string, string>,
     grievDetail: "Detail — what is still pending", grievEmptyBeing: "This being has recorded no grievances for you yet.",
     compTitle: "Being comparison for this person",
     compIntro: "Every being reads the same conversation but distills it independently — ⚠ marks where the beings diverge.",
@@ -186,6 +188,13 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
     return map;
   }, [guidance, myEntries, me]);
 
+  // A being's newest word floats onto its current opinion when its own anchor
+  // assessment moved to the archive — otherwise the being looks silent.
+  const guidanceForCurrent = useMemo(
+    () => withFloatedGuidance(guidanceByAssessment, guidance.filter((g) => g.participantPubkey === me), entriesCurrent),
+    [guidanceByAssessment, guidance, entriesCurrent, me],
+  );
+
   const myPalettes = useMemo(
     () => emotionPalettes.filter((pal) => pal.participantPubkey === me).sort((a, b) => a.beingPubkey.localeCompare(b.beingPubkey)),
     [emotionPalettes, me],
@@ -214,7 +223,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
   };
 
   // One opinion card — reused by the current list and the archive.
-  const renderEntry = (e: (typeof myEntries)[number]) => (
+  const renderEntry = (e: (typeof myEntries)[number], gmap: typeof guidanceByAssessment = guidanceByAssessment) => (
     <div key={e.id} className="rounded-lg border border-border p-3">
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
         <span className="text-sm font-semibold inline-flex items-center gap-1.5">
@@ -245,10 +254,10 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
         })}
       </div>
       {/* ↳ Smer (Steber 2): guidance nested under this exact assessment */}
-      {(guidanceByAssessment.get(e.id) || []).map((g) => (
+      {(gmap.get(e.id) || []).map((g) => (
         <div key={g.id} className="mt-2 ml-4 rounded-md border border-orange-500/25 bg-orange-500/[0.03] p-2.5">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <span className="text-xs font-semibold">↳ {en ? "Direction" : "Smer"} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
+            <span className="text-xs font-semibold">↳ {L.kind[guidanceKindKey(g)] || L.kind.guidance} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
             <span className="text-[10px] text-muted-foreground">{new Date(g.created_at * 1000).toLocaleString()}</span>
           </div>
           {g.guidance && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{g.guidance}</p>}
@@ -379,7 +388,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
             <Card><CardContent className="py-6 text-center text-xs text-muted-foreground">{isLoading ? L.loading : L.noOpinions}</CardContent></Card>
           ) : (
             <div className="space-y-2.5">
-              {entriesCurrent.map(renderEntry)}
+              {entriesCurrent.map((e) => renderEntry(e, guidanceForCurrent))}
               {entriesArchive.length > 0 && (
                 <div className="space-y-2.5 pt-1">
                   <button
@@ -394,7 +403,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                   {showArchive && (
                     <>
                       <p className="text-[11px] text-muted-foreground">{L.archiveNote}</p>
-                      <div className="space-y-2.5 opacity-75">{entriesArchive.map(renderEntry)}</div>
+                      <div className="space-y-2.5 opacity-75">{entriesArchive.map((e) => renderEntry(e))}</div>
                     </>
                   )}
                 </div>

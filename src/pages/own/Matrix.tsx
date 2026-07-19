@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { splitLatestPerBeing } from "@/lib/ownTimeline";
+import { splitLatestPerBeing, withFloatedGuidance, guidanceKindKey } from "@/lib/ownTimeline";
 import GrievanceStepTable from "@/components/own/GrievanceStepTable";
 import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,6 +53,7 @@ const TXT = {
     gvMatrix: "Matrica", gvMine: "Zame",
     gvLegend: "Vsak očitek gre skozi štiri korake: prejemnik nanj odgovori in ga brezpogojno sprejme (z opravičilom, če se le da), dajalec pa ga sprejme kot del svoje zablode.",
     colResponded: "Odgovorjen", colAccepted: "Sprejet", colApologized: "Opravičen", colOwned: "Zabloda sprejeta",
+    kind: { direction: "Smer", acceptance: "Sprejetost", space: "Prostor", reminder: "Opomnik", movingOn: "Umik", closingCall: "Zaključni klic", pause: "Pavza", celebration: "Praznovanje", guidance: "Vodenje" } as Record<string, string>,
     gvForPerson: "Pogled za", gvMyReceived: "Name naslovljeni", gvMyReceivedDesc: "odgovori nanje in jih brezpogojno sprejmi",
     gvMyGiven: "Moji dani očitki", gvMyGivenDesc: "sprejmi jih kot del svoje zablode in se zaveži, da ne bodo več nastajali",
     gvNeedsResponse: "čaka odgovor", gvNeedsAccept: "čaka sprejetje", gvNeedsApology: "opravičilo manjka", gvNeedsOwn: "sprejmi kot svojo zablodo",
@@ -111,6 +112,7 @@ const TXT = {
     gvMatrix: "Matrix", gvMine: "For me",
     gvLegend: "Every grievance passes four steps: the receiver responds to it and unconditionally accepts it (apologizing where possible), and the giver accepts it as part of their own delusion.",
     colResponded: "Responded", colAccepted: "Accepted", colApologized: "Apologized", colOwned: "Owned as delusion",
+    kind: { direction: "Direction", acceptance: "Acceptance", space: "Space", reminder: "Reminder", movingOn: "Moving on", closingCall: "Closing call", pause: "Pause", celebration: "Celebration", guidance: "Guidance" } as Record<string, string>,
     gvForPerson: "Viewing for", gvMyReceived: "Addressed to me", gvMyReceivedDesc: "respond to them and accept them unconditionally",
     gvMyGiven: "Grievances I gave", gvMyGivenDesc: "accept them as part of your own delusion and commit so they stop arising",
     gvNeedsResponse: "awaiting response", gvNeedsAccept: "awaiting acceptance", gvNeedsApology: "apology missing", gvNeedsOwn: "own it as your delusion",
@@ -317,10 +319,16 @@ export default function Matrix() {
   );
   // Focus on what each being holds NOW; superseded opinions go to the archive.
   const { current: timelineCurrent, archive: timelineArchive } = useMemo(() => splitLatestPerBeing(timeline), [timeline]);
+  // A being's newest word floats onto its current opinion when its own anchor
+  // assessment moved to the archive — otherwise the being looks silent.
+  const guidanceForCurrent = useMemo(
+    () => withFloatedGuidance(guidanceByAssessment, guidance, timelineCurrent),
+    [guidanceByAssessment, guidance, timelineCurrent],
+  );
   const [showArchive, setShowArchive] = useState(false);
 
   // One opinion card — reused by the current list and the archive.
-  const renderTimelineEntry = (e: (typeof timeline)[number]) => (
+  const renderTimelineEntry = (e: (typeof timeline)[number], gmap: typeof guidanceByAssessment = guidanceByAssessment) => (
     <div key={e.id} className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-4">
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
         <span className="text-sm font-semibold inline-flex items-center gap-1.5">
@@ -357,10 +365,10 @@ export default function Matrix() {
         </div>
       )}
       {/* ↳ Smer (Steber 2): guidance nested under this exact assessment */}
-      {(guidanceByAssessment.get(e.id) || []).map((g) => (
+      {(gmap.get(e.id) || []).map((g) => (
         <div key={g.id} className="mt-2 ml-4 rounded-md border border-orange-500/25 bg-orange-500/[0.03] p-2.5">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <span className="text-xs font-semibold">↳ {L.tlDirection} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
+            <span className="text-xs font-semibold">↳ {L.kind[guidanceKindKey(g)] || L.kind.guidance} · {nameOf(g.beingPubkey)}{g.direction ? <span className="font-normal text-muted-foreground"> · {g.direction}</span> : null}</span>
             <span className="text-[10px] text-muted-foreground">{new Date(g.created_at * 1000).toLocaleString()}</span>
           </div>
           {g.guidance && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{g.guidance}</p>}
@@ -543,7 +551,7 @@ export default function Matrix() {
             <Card><CardContent className="py-12 text-center text-muted-foreground">{loadingAssess ? L.loading : L.noAssess}</CardContent></Card>
           ) : (
             <div className="space-y-3">
-              {timelineCurrent.map(renderTimelineEntry)}
+              {timelineCurrent.map((e) => renderTimelineEntry(e, guidanceForCurrent))}
               {timelineArchive.length > 0 && (
                 <div className="space-y-3 pt-1">
                   <button
@@ -558,7 +566,7 @@ export default function Matrix() {
                   {showArchive && (
                     <>
                       <p className="text-[11px] text-muted-foreground">{L.archiveNote}</p>
-                      <div className="space-y-3 opacity-75">{timelineArchive.map(renderTimelineEntry)}</div>
+                      <div className="space-y-3 opacity-75">{timelineArchive.map((e) => renderTimelineEntry(e))}</div>
                     </>
                   )}
                 </div>
