@@ -116,7 +116,14 @@ function formatCountdown(ms: number): string {
 export default function FoodCornerOrder() {
   const { session } = useAuth();
   const { t, lang } = useTranslation(foodCornerTranslations);
-  const { nodes, orders, isLoading, error, refetch, getNodeCatalog, getNodeByRef } = useFoodCornerData();
+  const { nodes, orders, producers, isLoading, error, refetch, getNodeCatalog, getNodeByRef } = useFoodCornerData();
+
+  // Supplier (business unit) behind each offer, so buyers can see the origin
+  // of what they're ordering — e.g. "Kmetija Nabernik · Cerklje na Gorenjskem".
+  const producerByUnitRef = useMemo(
+    () => new Map(producers.map((p) => [p.unitRef, p])),
+    [producers],
+  );
   const { publishEvent, isPublishing } = useFoodCornerPublisher();
   const storageKey = session?.nostrHexId ? `food_corner_selected_node_${session.nostrHexId}` : "food_corner_selected_node";
 
@@ -690,6 +697,7 @@ export default function FoodCornerOrder() {
                   const maxOrder = listingMaxOrder(listing);
                   const enteredQty = Number.parseFloat(quantities[listing.ref] || "0");
                   const qtyViolation = orderQtyViolation(listing, enteredQty);
+                  const producer = producerByUnitRef.get(listing.unitRef);
                   return (
                     <Card key={listing.ref} className="overflow-hidden">
                       {image && (
@@ -701,6 +709,15 @@ export default function FoodCornerOrder() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <h3 className="font-semibold truncate">{listing.title}</h3>
+                            {producer && (
+                              <p className="text-xs font-medium text-primary truncate flex items-center gap-1 mt-0.5">
+                                <Store className="h-3 w-3 shrink-0" />
+                                <span className="truncate">
+                                  {producer.name}
+                                  {producer.city ? ` · ${producer.city}` : ""}
+                                </span>
+                              </p>
+                            )}
                             <p className="text-xs text-muted-foreground line-clamp-2">{listing.content}</p>
                           </div>
                           <Badge variant="secondary" className="shrink-0">{listing.type}</Badge>
