@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, RefreshCw, Send, ShoppingBasket, Store } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -124,6 +124,13 @@ export default function FoodCornerOrder() {
     () => new Map(producers.map((p) => [p.unitRef, p])),
     [producers],
   );
+
+  // Jump targets for the sticky shortcut bar — the cart and this week's orders
+  // sit far below a long offer grid, so buyers had to scroll to reach them.
+  const cartRef = useRef<HTMLDivElement>(null);
+  const myOrdersRef = useRef<HTMLDivElement>(null);
+  const scrollTo = (ref: React.RefObject<HTMLDivElement>) =>
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   const { publishEvent, isPublishing } = useFoodCornerPublisher();
   const storageKey = session?.nostrHexId ? `food_corner_selected_node_${session.nostrHexId}` : "food_corner_selected_node";
 
@@ -610,6 +617,33 @@ export default function FoodCornerOrder() {
             <Badge variant="outline">{t("order.badge.offers", { count: filteredCatalog.length })}</Badge>
           </div>
 
+          {/* Sticky shortcuts — the cart and this week's orders sit below a long
+              offer grid, so they were only reachable by scrolling all the way
+              down. These keep both one tap away, with a live cart summary. */}
+          <div className="sticky top-16 z-20 flex items-center gap-2 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75 border-b">
+            <Button size="sm" onClick={() => scrollTo(cartRef)} className="gap-2">
+              <ShoppingBasket className="h-4 w-4" />
+              {t("order.cart.title")}
+              {selectedItems.length > 0 && (
+                <span className="rounded-full bg-primary-foreground/25 px-1.5 text-xs tabular-nums">
+                  {selectedItems.length}
+                </span>
+              )}
+            </Button>
+            {selectedItems.length > 0 && (
+              <span className="text-sm font-semibold tabular-nums">{formatFoodMoney(total, currency)}</span>
+            )}
+            <Button size="sm" variant="outline" onClick={() => scrollTo(myOrdersRef)} className="gap-2 ml-auto">
+              <Store className="h-4 w-4" />
+              <span className="hidden sm:inline">{t("order.myOrders.title")}</span>
+              {myOrdersByPoint.length > 0 && (
+                <span className="rounded-full bg-muted px-1.5 text-xs tabular-nums">
+                  {myOrdersByPoint.length}
+                </span>
+              )}
+            </Button>
+          </div>
+
           {/* Offer-category chooser: Produce (36500) vs Beauty & Care (36509) */}
           {showKindChooser && (
             <div className="flex flex-wrap items-center gap-1.5">
@@ -771,7 +805,7 @@ export default function FoodCornerOrder() {
 
               {/* max-h leaves room for the sticky top offset (top-20) AND the fixed
                   bottom nav (layout pb-20) so the Confirm button never hides behind it. */}
-              <Card className="sticky top-20 max-h-[calc(100vh-11rem)] overflow-y-auto">
+              <Card ref={cartRef} className="sticky top-20 max-h-[calc(100vh-11rem)] overflow-y-auto scroll-mt-24">
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <ShoppingBasket className="h-4 w-4" />
@@ -826,7 +860,7 @@ export default function FoodCornerOrder() {
         </>
       )}
 
-      <div className="pt-4">
+      <div ref={myOrdersRef} className="pt-4 scroll-mt-24">
         <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
           <Store className="h-5 w-5 text-primary" />
           {t("order.myOrders.title")}
