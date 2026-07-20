@@ -760,9 +760,9 @@ export default function Profile() {
                       name="name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Username *</FormLabel>
+                          <FormLabel>Full Name *</FormLabel>
                           <FormControl>
-                            <Input placeholder="john_doe" {...field} />
+                            <Input placeholder="John Doe" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
