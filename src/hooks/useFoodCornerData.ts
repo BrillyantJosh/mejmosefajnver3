@@ -20,6 +20,7 @@ import {
   FoodCornerProducer,
   FoodCornerRawEvent,
   FoodCornerSupplierDelivery,
+  FoodCornerARef,
 } from "@/types/foodCorner";
 import {
   buildFoodCornerProducers,
@@ -28,6 +29,7 @@ import {
   makeARef,
   parseFoodCornerAllocation,
   parseFoodCornerFulfillment,
+  parseARef,
   parseFoodCornerListing,
   parseFoodCornerNode,
   parseFoodCornerOrder,
@@ -100,27 +102,7 @@ export function useFoodCornerData(): FoodCornerData {
         18000,
       )) as FoodCornerRawEvent[];
 
-      // Supplementary top-up for LISTINGS only. Relays return newest-first, so as
-      // orders/fulfillments accumulate the older listing events can fall outside
-      // the shared limit above — their refs then don't resolve and order lines
-      // render as "product name unavailable". This runs SEQUENTIALLY (a second
-      // concurrent querySync on the same pool can be torn down when the first
-      // hits EOSE — that briefly made orders vanish entirely) and is strictly
-      // best-effort: any failure leaves the primary result untouched.
-      let extraListings: FoodCornerRawEvent[] = [];
-      try {
-        extraListings = (await fetchTimeout(
-          pool.querySync(relays, {
-            kinds: [FOOD_CORNER_LISTING_KIND, FOOD_CORNER_BEAUTY_LISTING_KIND],
-            limit: 4000,
-          }),
-          12000,
-        )) as FoodCornerRawEvent[];
-      } catch {
-        // Non-fatal: we simply keep whatever listings the primary query returned.
-      }
-
-      const rawEvents = [...baseEvents, ...extraListings];
+      const rawEvents = baseEvents;
 
       const parsedNodes = dedupeReplaceable(
         rawEvents
@@ -136,16 +118,63 @@ export function useFoodCornerData(): FoodCornerData {
           .filter(Boolean) as FoodCornerListing[],
       ).sort((a, b) => b.createdAt - a.createdAt);
 
-      // Active listings drive the orderable catalog; the title-resolution map
-      // includes ALL listings so historical orders that reference a now-inactive
-      // listing still show the product name (not a bare ref hash).
-      const parsedListings = allParsedListings.filter((listing) => listing.status === "active");
-
+      // The title-resolution map holds ALL listings (not just active ones) so a
+      // historical order referencing a now-inactive listing still shows its name.
       const listingMap = new Map(allParsedListings.map((listing) => [listing.ref, listing]));
 
+      const orderEvents = rawEvents.filter((event) => event.kind === FOOD_CORNER_ORDER_KIND);
+
+      // TARGETED top-up. Relays return newest-first, so as activity accumulates the
+      // older listing events referenced by past orders fall outside the shared limit
+      // above; their refs then don't resolve and order lines render as "product name
+      // unavailable". Re-fetching thousands of listings to find a handful of names
+      // was too slow on mobile connections — it timed out there and silently left
+      // the names blank while desktop looked fine. Instead ask the relays for
+      // EXACTLY the refs we're missing (kind + author + d), which stays tiny and
+      // fast. Sequential + best-effort: any failure leaves the primary result intact.
+      const missingRefs = new Set<string>();
+      for (const event of orderEvents) {
+        const order = parseFoodCornerOrder(event, listingMap);
+        if (!order) continue;
+        for (const item of order.items) {
+          if (item.listingRef && !listingMap.has(item.listingRef)) missingRefs.add(item.listingRef);
+        }
+      }
+      if (missingRefs.size > 0) {
+        const refs = [...missingRefs]
+          .map(parseARef)
+          .filter((r): r is FoodCornerARef => r !== null);
+        const kinds = [...new Set(refs.map((r) => Number.parseInt(r.kind, 10)))].filter((k) =>
+          Number.isFinite(k),
+        );
+        const authors = [...new Set(refs.map((r) => r.pubkey).filter(Boolean))];
+        const dTags = [...new Set(refs.map((r) => r.d).filter(Boolean))];
+        if (kinds.length > 0 && authors.length > 0 && dTags.length > 0) {
+          try {
+            const recovered = (await fetchTimeout(
+              pool.querySync(relays, { kinds, authors, "#d": dTags, limit: 1000 }),
+              10000,
+            )) as FoodCornerRawEvent[];
+            for (const event of recovered) {
+              const listing = parseFoodCornerListing(event);
+              if (listing && !listingMap.has(listing.ref)) {
+                listingMap.set(listing.ref, listing);
+                allParsedListings.push(listing);
+              }
+            }
+          } catch {
+            // Non-fatal: the name then falls back to the title snapshotted on the
+            // order itself, and only failing that to a neutral label.
+          }
+        }
+      }
+
+      // Active listings drive the orderable catalog — computed AFTER the top-up so a
+      // recovered listing that is still active is orderable too.
+      const parsedListings = allParsedListings.filter((listing) => listing.status === "active");
+
       const parsedOrders = dedupeReplaceable(
-        rawEvents
-          .filter((event) => event.kind === FOOD_CORNER_ORDER_KIND)
+        orderEvents
           .map((event) => parseFoodCornerOrder(event, listingMap))
           .filter(Boolean) as FoodCornerOrder[],
       ).sort((a, b) => b.createdAt - a.createdAt);
