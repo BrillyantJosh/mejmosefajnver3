@@ -17,6 +17,12 @@ import { getTimezoneAbbreviation, getUserTimezone, formatTimeInTimezone } from "
 import { useTranslation } from '@/i18n/I18nContext';
 import eventsTranslations from '@/i18n/modules/events';
 
+// A recurring occurrence counts as past only once it has FINISHED — its end
+// time, or its start when no end was given. The session happening right now is
+// therefore not struck out.
+const isPastOccurrence = (entry: { start: Date; end?: Date }): boolean =>
+  (entry.end ?? entry.start).getTime() < Date.now();
+
 export default function PublicEvent() {
   const { dTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
@@ -183,16 +189,22 @@ export default function PublicEvent() {
                     <span className="text-sm text-muted-foreground">({t('card.days', { count: event.schedule.length })})</span>
                   </div>
                   <div className="bg-muted/30 rounded-lg p-3 space-y-2">
-                    {event.schedule.map((entry, idx) => (
-                      <div key={idx} className="flex items-center gap-3">
-                        <span className="font-medium min-w-[90px]">{format(entry.start, 'EEE dd.MM.')}</span>
-                        <Clock className="h-4 w-4 text-primary shrink-0" />
-                        <span>
-                          {formatTimeInTimezone(entry.start, event.timezone || 'Europe/Ljubljana')}
-                          {entry.end && ` – ${formatTimeInTimezone(entry.end, event.timezone || 'Europe/Ljubljana')}`}
-                        </span>
-                      </div>
-                    ))}
+                    {event.schedule.map((entry, idx) => {
+                      const past = isPastOccurrence(entry);
+                      return (
+                        <div
+                          key={idx}
+                          className={`flex items-center gap-3 ${past ? 'line-through text-muted-foreground/60' : ''}`}
+                        >
+                          <span className="font-medium min-w-[90px]">{format(entry.start, 'EEE dd.MM.')}</span>
+                          <Clock className={`h-4 w-4 shrink-0 ${past ? 'text-muted-foreground/60' : 'text-primary'}`} />
+                          <span>
+                            {formatTimeInTimezone(entry.start, event.timezone || 'Europe/Ljubljana')}
+                            {entry.end && ` – ${formatTimeInTimezone(entry.end, event.timezone || 'Europe/Ljubljana')}`}
+                          </span>
+                        </div>
+                      );
+                    })}
                     <div className="text-sm text-muted-foreground pt-1">
                       {t('detail.timezone')} {getTimezoneAbbreviation(event.start, event.timezone || 'Europe/Ljubljana')}
                     </div>
@@ -203,7 +215,12 @@ export default function PublicEvent() {
                     <div className="bg-muted/50 rounded-lg p-3 space-y-1">
                       <div className="text-sm text-muted-foreground mb-1">{t('detail.yourLocalTime', { tz: getTimezoneAbbreviation(event.start, getUserTimezone()) })}</div>
                       {event.schedule.map((entry, idx) => (
-                        <div key={idx} className="flex items-center gap-3 text-sm text-muted-foreground">
+                        <div
+                          key={idx}
+                          className={`flex items-center gap-3 text-sm text-muted-foreground ${
+                            isPastOccurrence(entry) ? 'line-through opacity-70' : ''
+                          }`}
+                        >
                           <span className="min-w-[90px]">{format(entry.start, 'EEE dd.MM.')}</span>
                           <Clock className="h-3 w-3 shrink-0" />
                           <span>
