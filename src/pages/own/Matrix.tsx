@@ -14,6 +14,7 @@ import { useOwnAssessments, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
 import { useOwnEmotions, HEAVY_EMOTIONS, LIGHT_EMOTIONS, EMOTION_LABELS, type EmotionPalette } from "@/hooks/useOwnEmotions";
+import { useOwnProposals } from "@/hooks/useOwnProposals";
 import { useAuth } from "@/contexts/AuthContext";
 import EmotionJourneySparkline from "@/components/own/EmotionJourneySparkline";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
@@ -81,6 +82,11 @@ const TXT = {
     emByBeing: "Globina po bitjih", emVuln: "ranljivost", emEmbody: "utelešenost", emPeak: "vrh",
     potTitle: "Pot", potWalked: "Pot prehojena ✓", potStuckDark: "zataknjen v temi", potStuckLight: "ostaja v svetlem", potOnWay: "še na poti",
     emLevel: "raven", emCourage: "prag poguma (200) — levo sila/odpor, desno moč/samoodgovornost",
+    tabProposals: "Predlogi zavez", propBeta: "beta",
+    propIntro: "Vsako bitje iz svoje matrice očitkov (danih in prejetih) predlaga jasno zavezo k spremembi v duhu sožitja in spoštovanja. Zaveza je zapisana v prvi osebi — kot besede, ki jih udeleženec lahko vzame za svoje.",
+    propNone: "Bitja še niso podala predlogov zavez. Predlogi se prvič oblikujejo, ko fasilitator odpre fazo uskladitve.",
+    propAttribution: "Predlog bitja {name} — ni izjava udeleženca.",
+    propProposedIn: "predlagano v fazi", propRev: "rev",
   },
   en: {
     title: "OWN Matrix",
@@ -140,6 +146,11 @@ const TXT = {
     emByBeing: "Depth per being", emVuln: "vulnerability", emEmbody: "embodiment", emPeak: "peak",
     potTitle: "Path", potWalked: "Path walked ✓", potStuckDark: "stuck in the dark", potStuckLight: "remains in the light", potOnWay: "still on the way",
     emLevel: "level", emCourage: "courage threshold (200) — left force/resistance, right power/self-responsibility",
+    tabProposals: "Change proposals", propBeta: "beta",
+    propIntro: "Each being, from its own matrix of grievances (given and received), proposes a clear commitment to change in the spirit of coexistence and respect. The commitment is written in the first person — as words the participant may take as their own.",
+    propNone: "The beings have not offered change proposals yet. Proposals first take shape when the facilitator opens the alignment phase.",
+    propAttribution: "Proposal by being {name} — not a statement by the participant.",
+    propProposedIn: "proposed during", propRev: "rev",
   },
 };
 
@@ -166,6 +177,7 @@ export default function Matrix() {
   const { ledgers, isLoading: loadingGriev } = useOwnGrievances(selectedCaseRoot);
   const { entries: guidance } = useOwnGuidance(selectedCaseRoot);
   const { palettes: emotionPalettes, isLoading: loadingEmotions } = useOwnEmotions(selectedCaseRoot);
+  const { proposals, isLoading: loadingProposals } = useOwnProposals(selectedCaseRoot);
 
   // Steber 2 nesting: guidance (87048) under the exact assessment (87047) it
   // was based on — join on based_on_state_id; fallback = the nearest OLDER
@@ -224,9 +236,14 @@ export default function Matrix() {
     () => Array.from(new Set(emotionPalettes.map((pal) => pal.beingPubkey))),
     [emotionPalettes],
   );
+  // Same for change-proposal authors (KIND 37048).
+  const proposalBeingPubkeys = useMemo(
+    () => Array.from(new Set(proposals.map((pr) => pr.beingPubkey))),
+    [proposals],
+  );
   const allPubkeys = useMemo(
-    () => Array.from(new Set([...participants, ...beings, ...grievPubkeys, ...emotionBeingPubkeys])),
-    [participants, beings, grievPubkeys, emotionBeingPubkeys],
+    () => Array.from(new Set([...participants, ...beings, ...grievPubkeys, ...emotionBeingPubkeys, ...proposalBeingPubkeys])),
+    [participants, beings, grievPubkeys, emotionBeingPubkeys, proposalBeingPubkeys],
   );
   const { profiles } = useNostrProfilesCacheBulk(allPubkeys);
   const nameOf = (pk: string) => {
@@ -460,11 +477,15 @@ export default function Matrix() {
       </Card>
 
       <Tabs defaultValue="matrix" className="space-y-4 md:space-y-6">
-        <TabsList className="grid w-full max-w-xl grid-cols-4">
+        <TabsList className="grid w-full max-w-2xl grid-cols-5">
           <TabsTrigger value="matrix">{L.tabMatrix}</TabsTrigger>
           <TabsTrigger value="timeline">{L.tabTimeline}</TabsTrigger>
           <TabsTrigger value="grievances">{L.tabGrievances}</TabsTrigger>
           <TabsTrigger value="emotions">{L.tabEmotions}</TabsTrigger>
+          <TabsTrigger value="proposals" className="gap-1">
+            <span className="truncate">{L.tabProposals}</span>
+            <span className="rounded-full border border-orange-500/40 bg-orange-500/10 px-1 text-[9px] leading-4 text-orange-600 shrink-0">{L.propBeta}</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* ── MATRIX ── */}
@@ -865,6 +886,65 @@ export default function Matrix() {
                                 <div className="flex flex-wrap gap-1">{LIGHT_EMOTIONS.map((k) => <Chip key={k} k={k} heavy={false} />)}</div>
                               </div>
                             )}
+                          </div>
+                        );
+                      })}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── CHANGE PROPOSALS — Predlogi zavez (beta): kaj bitja predlagajo ── */}
+        <TabsContent value="proposals" className="space-y-4">
+          <p className="text-xs text-muted-foreground">{L.propIntro}</p>
+          {proposals.filter((pr) => participants.includes(pr.participantPubkey)).length === 0 ? (
+            <Card><CardContent className="py-12 text-center text-muted-foreground">{loadingProposals ? L.loading : L.propNone}</CardContent></Card>
+          ) : (
+            <div className="space-y-4">
+              {participants.filter((p) => proposals.some((pr) => pr.participantPubkey === p)).map((p) => {
+                const mine = proposals.filter((pr) => pr.participantPubkey === p);
+                return (
+                  <Card key={p}>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm md:text-base">{nameOf(p)}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {mine.map((pr) => {
+                        const beingName = beingLabelOf(pr.beingPubkey, pr.beingName);
+                        const when = pr.updatedAt ? new Date(pr.updatedAt) : new Date(pr.created_at * 1000);
+                        return (
+                          <div key={pr.beingPubkey} className="rounded-lg border border-orange-500/25 bg-orange-500/[0.04] p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-sm font-semibold inline-flex items-center gap-1.5">
+                                <Bot className="h-4 w-4 text-orange-500" />{beingName}
+                              </span>
+                            </div>
+                            {/* Atribucija — zaveza je v prvi osebi, a je VEDNO predlog bitja */}
+                            <p className="text-[11px] text-muted-foreground">
+                              {L.propAttribution.replace("{name}", beingName)}
+                            </p>
+                            <blockquote className="border-l-4 border-orange-500/40 pl-3 py-1 text-sm italic font-serif whitespace-pre-wrap">
+                              {pr.proposedCommitment}
+                            </blockquote>
+                            {pr.points.length > 0 && (
+                              <ul className="space-y-1.5">
+                                {pr.points.map((pt, i) => (
+                                  <li key={i} className="text-xs flex flex-wrap items-center gap-1">
+                                    <span>• {pt.text}</span>
+                                    {[...pt.addresses.received, ...pt.addresses.given].map((id, j) => (
+                                      <span key={`${id}-${j}`} className="inline-flex items-center rounded-full border border-border/60 bg-muted/40 px-1.5 py-0 text-[10px] text-muted-foreground">{id}</span>
+                                    ))}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {/* faza = KDAJ je bilo predlagano, ne trenutna faza procesa */}
+                            <div className="text-[10px] text-muted-foreground">
+                              {L.propRev} {pr.revision} · {when.toLocaleString()} · {L.propProposedIn} {getPhaseLabel(pr.processPhase, lang)}
+                            </div>
                           </div>
                         );
                       })}
