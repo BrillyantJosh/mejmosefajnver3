@@ -15,10 +15,11 @@ import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
 import { useOwnEmotions, HEAVY_EMOTIONS, LIGHT_EMOTIONS, EMOTION_LABELS, type EmotionPalette } from "@/hooks/useOwnEmotions";
 import { useOwnProposals } from "@/hooks/useOwnProposals";
+import { useOwnCommitments } from "@/hooks/useOwnCommitments";
 import { useAuth } from "@/contexts/AuthContext";
 import EmotionJourneySparkline from "@/components/own/EmotionJourneySparkline";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
-import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES } from "@/lib/ownPhase";
+import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES, PHASE_ORDER } from "@/lib/ownPhase";
 import { useLang } from "@/i18n/I18nContext";
 
 const short = (pk: string) => (pk ? `${pk.slice(0, 8)}…` : "—");
@@ -87,6 +88,20 @@ const TXT = {
     propNone: "Bitja še niso podala predlogov zavez. Predlogi se prvič oblikujejo, ko fasilitator odpre fazo uskladitve.",
     propAttribution: "Predlog bitja {name} — ni izjava udeleženca.",
     propProposedIn: "predlagano v fazi", propRev: "rev",
+    tabCommitment: "Zaveza", cmtBeta: "beta",
+    cmtIntro: "Zaveza je udeleženčeva JAVNA izjava o spremembi — izrečena z lastnimi besedami v procesu, ko so točke uskladitve zaključene. Vsako bitje izjavo samostojno zapiše in preveri, ali pokriva vse očitke, zato se zapisi med bitji lahko razlikujejo. To ni predlog bitja — to so udeleženčeve besede.",
+    cmtNoneBefore: "Zaveze nastanejo v fazi Sprememba — zavihek se odpre, ko so vse točke uskladitve zaključene.",
+    cmtNoneDuring: "Faza Sprememba teče — bitja čakajo na udeleženčevo izjavo.",
+    cmtNoneAfter: "V tem procesu ni zapisanih zavez.",
+    cmtForming: "se še oblikuje", cmtComplete: "v celoti oblikovana",
+    cmtAttrForming: "Zaveza udeleženca {name} — nastaja z lastnimi besedami v procesu; zapisuje in preverja bitje {being}.",
+    cmtAttrComplete: "Zaveza udeleženca {name} — izrečena z lastnimi besedami v procesu; zapisalo in preverilo bitje {being}.",
+    cmtEmptyStatement: "Zaveza še ni ubesedena — spodaj je, kar bitje še potrebuje.",
+    cmtTasksTitle: "Da bo zaveza popolna, bitje {being} vabi k pojasnilu:",
+    cmtUncovered: "Še nepokrito:",
+    cmtDivergence: "Bitja zaveze ne berejo enako — vsako presoja samostojno in zapisi se ne združujejo.",
+    cmtRev: "rev", cmtFirstStated: "prvič izrečeno", cmtUpdated: "posodobljeno",
+    cmtRecordedIn: "zapisano v fazi",
   },
   en: {
     title: "OWN Matrix",
@@ -151,6 +166,20 @@ const TXT = {
     propNone: "The beings have not offered change proposals yet. Proposals first take shape when the facilitator opens the alignment phase.",
     propAttribution: "Proposal by being {name} — not a statement by the participant.",
     propProposedIn: "proposed during", propRev: "rev",
+    tabCommitment: "Commitment", cmtBeta: "beta",
+    cmtIntro: "The commitment is the participant's PUBLIC statement of change — spoken in their own words in the process, once the alignment points are concluded. Each being records the statement independently and verifies whether it covers every grievance, so the records may differ from being to being. This is not a being's proposal — these are the participant's own words.",
+    cmtNoneBefore: "Commitments take shape in the Change phase — this tab opens once every alignment point is concluded.",
+    cmtNoneDuring: "The Change phase is under way — the beings are waiting for the participant's statement.",
+    cmtNoneAfter: "No commitments were recorded in this process.",
+    cmtForming: "still taking shape", cmtComplete: "fully formed",
+    cmtAttrForming: "Commitment of {name} — taking shape in their own words in the process; being {being} is recording and verifying it.",
+    cmtAttrComplete: "Commitment of {name} — stated in their own words in the process; recorded and verified by being {being}.",
+    cmtEmptyStatement: "The commitment has not been put into words yet — below is what the being still needs.",
+    cmtTasksTitle: "To make the commitment whole, being {being} invites you to clarify:",
+    cmtUncovered: "Still uncovered:",
+    cmtDivergence: "The beings do not read the commitment the same way — each judges independently and the records are never merged.",
+    cmtRev: "rev", cmtFirstStated: "first stated", cmtUpdated: "updated",
+    cmtRecordedIn: "recorded during",
   },
 };
 
@@ -178,6 +207,7 @@ export default function Matrix() {
   const { entries: guidance } = useOwnGuidance(selectedCaseRoot);
   const { palettes: emotionPalettes, isLoading: loadingEmotions } = useOwnEmotions(selectedCaseRoot);
   const { proposals, isLoading: loadingProposals } = useOwnProposals(selectedCaseRoot);
+  const { commitments, isLoading: loadingCommitments } = useOwnCommitments(selectedCaseRoot);
 
   // Steber 2 nesting: guidance (87048) under the exact assessment (87047) it
   // was based on — join on based_on_state_id; fallback = the nearest OLDER
@@ -241,9 +271,14 @@ export default function Matrix() {
     () => Array.from(new Set(proposals.map((pr) => pr.beingPubkey))),
     [proposals],
   );
+  // Same for change-commitment authors (KIND 37049).
+  const commitmentBeingPubkeys = useMemo(
+    () => Array.from(new Set(commitments.map((cm) => cm.beingPubkey))),
+    [commitments],
+  );
   const allPubkeys = useMemo(
-    () => Array.from(new Set([...participants, ...beings, ...grievPubkeys, ...emotionBeingPubkeys, ...proposalBeingPubkeys])),
-    [participants, beings, grievPubkeys, emotionBeingPubkeys, proposalBeingPubkeys],
+    () => Array.from(new Set([...participants, ...beings, ...grievPubkeys, ...emotionBeingPubkeys, ...proposalBeingPubkeys, ...commitmentBeingPubkeys])),
+    [participants, beings, grievPubkeys, emotionBeingPubkeys, proposalBeingPubkeys, commitmentBeingPubkeys],
   );
   const { profiles } = useNostrProfilesCacheBulk(allPubkeys);
   const nameOf = (pk: string) => {
@@ -477,7 +512,7 @@ export default function Matrix() {
       </Card>
 
       <Tabs defaultValue="matrix" className="space-y-4 md:space-y-6">
-        <TabsList className="grid w-full max-w-2xl grid-cols-5">
+        <TabsList className="grid w-full max-w-3xl grid-cols-6">
           <TabsTrigger value="matrix">{L.tabMatrix}</TabsTrigger>
           <TabsTrigger value="timeline">{L.tabTimeline}</TabsTrigger>
           <TabsTrigger value="grievances">{L.tabGrievances}</TabsTrigger>
@@ -485,6 +520,10 @@ export default function Matrix() {
           <TabsTrigger value="proposals" className="gap-1">
             <span className="truncate">{L.tabProposals}</span>
             <span className="rounded-full border border-orange-500/40 bg-orange-500/10 px-1 text-[9px] leading-4 text-orange-600 shrink-0">{L.propBeta}</span>
+          </TabsTrigger>
+          <TabsTrigger value="commitment" className="gap-1">
+            <span className="truncate">{L.tabCommitment}</span>
+            <span className="rounded-full border border-orange-500/40 bg-orange-500/10 px-1 text-[9px] leading-4 text-orange-600 shrink-0">{L.cmtBeta}</span>
           </TabsTrigger>
         </TabsList>
 
@@ -954,6 +993,138 @@ export default function Matrix() {
               })}
             </div>
           )}
+        </TabsContent>
+
+        {/* ── CHANGE COMMITMENT — Zaveza (beta): udeleženčeva LASTNA izjava,
+             zapisana in preverjena od bitja. Obratna atribucija od 37048:
+             besede so udeleženčeve, podpis je bitjin — zato nikjer »podpisano«. */}
+        <TabsContent value="commitment" className="space-y-4">
+          <p className="text-xs text-muted-foreground">{L.cmtIntro}</p>
+          {(() => {
+            const mineAll = commitments.filter((cm) => participants.includes(cm.participantPubkey));
+            if (mineAll.length === 0) {
+              // Prazno stanje se veže na fazo — a SAMO ko zapisov res ni:
+              // zaprt/razrešen primer mora zaveze vedno prikazati (zgodovina odgovornosti).
+              const phaseIdx = PHASE_ORDER.indexOf(selected.phase as typeof PHASE_ORDER[number]);
+              const changeIdx = PHASE_ORDER.indexOf("change");
+              const msg = loadingCommitments
+                ? L.loading
+                : phaseIdx >= 0 && phaseIdx < changeIdx
+                  ? L.cmtNoneBefore
+                  : phaseIdx === changeIdx
+                    ? L.cmtNoneDuring
+                    // Past change (closing/resolution) or an unknown phase: a
+                    // concluded process must never claim the phase is running.
+                    : L.cmtNoneAfter;
+              return <Card><CardContent className="py-12 text-center text-muted-foreground">{msg}</CardContent></Card>;
+            }
+            return (
+              <div className="space-y-4">
+                {participants.filter((p) => mineAll.some((cm) => cm.participantPubkey === p)).map((p) => {
+                  // Zapisi bitij se NIKOLI ne združujejo — le uredijo: complete najprej.
+                  const mine = mineAll
+                    .filter((cm) => cm.participantPubkey === p)
+                    .sort((a, b) => (a.status === b.status ? a.beingPubkey.localeCompare(b.beingPubkey) : a.status === "complete" ? -1 : 1));
+                  const nComplete = mine.filter((cm) => cm.status === "complete").length;
+                  const nForming = mine.length - nComplete;
+                  const diverges = nComplete > 0 && nForming > 0;
+                  return (
+                    <Card key={p}>
+                      <CardHeader className="pb-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <CardTitle className="text-sm md:text-base">{nameOf(p)}</CardTitle>
+                          <span className="flex items-center gap-1.5">
+                            {nComplete > 0 && (
+                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[10px] py-0">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />{nComplete}
+                              </Badge>
+                            )}
+                            {nForming > 0 && (
+                              <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0">
+                                <CircleDot className="h-3 w-3 mr-1" />{nForming}
+                              </Badge>
+                            )}
+                          </span>
+                        </div>
+                        {diverges && <p className="text-[11px] text-amber-600/90 pt-1">{L.cmtDivergence}</p>}
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {mine.map((cm) => {
+                          const beingName = beingLabelOf(cm.beingPubkey, cm.beingName);
+                          const done = cm.status === "complete";
+                          const when = cm.updatedAt ? new Date(cm.updatedAt) : new Date(cm.created_at * 1000);
+                          const firstAt = cm.firstStatedAt ? new Date(cm.firstStatedAt) : null;
+                          const uncovered = [...(cm.coverage?.uncovered_received || []), ...(cm.coverage?.uncovered_given || [])];
+                          const attr = (done ? L.cmtAttrComplete : L.cmtAttrForming)
+                            .replace("{name}", nameOf(p))
+                            .replace("{being}", beingName);
+                          return (
+                            <div key={cm.beingPubkey} className={`rounded-lg border p-3 space-y-2 ${done ? "border-emerald-500/30 bg-emerald-500/[0.04]" : "border-amber-500/25 bg-amber-500/[0.04]"}`}>
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <span className="text-sm font-semibold inline-flex items-center gap-1.5">
+                                  <Bot className="h-4 w-4 text-orange-500" />{beingName}
+                                </span>
+                                <Badge variant="outline" className={done
+                                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[10px] py-0"
+                                  : "bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0"}>
+                                  {done ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <CircleDot className="h-3 w-3 mr-1" />}
+                                  {done ? L.cmtComplete : L.cmtForming}
+                                </Badge>
+                              </div>
+                              {/* Atribucija — besede so udeleženčeve, zapisalo/preverilo jih je bitje */}
+                              <p className="text-[11px] text-muted-foreground italic">{attr}</p>
+                              {cm.statedCommitment ? (
+                                <blockquote className={`pl-3 py-1.5 text-sm italic font-serif whitespace-pre-wrap ${done ? "border-l-4 border-emerald-500 bg-emerald-500/[0.06]" : "border-l-4 border-dashed border-amber-500/50 bg-amber-500/[0.05]"}`}>
+                                  {cm.statedCommitment}
+                                </blockquote>
+                              ) : (
+                                <p className="text-xs text-muted-foreground border-l-4 border-dashed border-amber-500/40 pl-3 py-1.5">{L.cmtEmptyStatement}</p>
+                              )}
+                              {!done && cm.tasks.length > 0 && (
+                                <div className="space-y-1">
+                                  <div className="text-[11px] font-medium text-muted-foreground">{L.cmtTasksTitle.replace("{being}", beingName)}</div>
+                                  <ul className="space-y-1">
+                                    {cm.tasks.map((t) => (
+                                      <li key={t.id} className="text-xs text-muted-foreground">• {t.text}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {cm.points.length > 0 && (
+                                <ul className="space-y-1.5">
+                                  {cm.points.map((pt, i) => (
+                                    <li key={i} className="text-xs flex flex-wrap items-center gap-1">
+                                      <span>• {pt.text}</span>
+                                      {[...pt.addresses.received, ...pt.addresses.given].map((id, j) => (
+                                        <span key={`${id}-${j}`} className="inline-flex items-center rounded-full border border-border/60 bg-muted/40 px-1.5 py-0 text-[10px] text-muted-foreground">{id}</span>
+                                      ))}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                              {uncovered.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <span className="text-[10px] text-amber-600">{L.cmtUncovered}</span>
+                                  {uncovered.map((id, j) => (
+                                    <span key={`${id}-${j}`} className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-600">{id}</span>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="text-[10px] text-muted-foreground">
+                                {L.cmtRev} {cm.revision}
+                                {firstAt && <> · {L.cmtFirstStated} {firstAt.toLocaleDateString()}</>}
+                                {" · "}{L.cmtUpdated} {when.toLocaleString()} · {L.cmtRecordedIn} {getPhaseLabel(cm.processPhase, lang)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </TabsContent>
       </Tabs>
     </div>
