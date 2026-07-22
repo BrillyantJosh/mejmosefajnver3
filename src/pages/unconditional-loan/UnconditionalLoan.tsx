@@ -440,7 +440,9 @@ const EN: Article = {
 };
 
 export default function UnconditionalLoan() {
-  const article = useLang() === "en" ? EN : SL;
+  // English is the default; Slovenian only when the KIND 0 language is Slovenian
+  // (so de/hu/it — and any unresolved language — get English, not Slovenian).
+  const article = useLang() === "sl" ? SL : EN;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 max-w-3xl pb-24">
