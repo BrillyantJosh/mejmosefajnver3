@@ -101,6 +101,19 @@ export function computePolarityFallback(emotions: EmotionEntry[]): number | null
 }
 
 export interface JourneyPoint { at: string; polarity: number; depth: number; }
+
+// POT PREDAJE EGA — the station on the ego-surrender path. Lightness LEFT of
+// the humility gate is the ego's surface; only past it is it earned.
+export type EgoStation = 'ego' | 'razpoka' | 'poniznost' | 'v-sebi' | 'lahkotnost';
+export interface EgoPath {
+  station: EgoStation;
+  passedHumility: boolean;
+  felt: number;               // 0-1 dared depth into the exposing emotions
+  surrender: number | null;   // 0-1 of the chances actually taken (null = no ledger)
+  yielded: number; chances: number;
+  lightNow: number;
+  brightButUnyielded: boolean; // warm tone while the ego is still whole
+}
 export interface PathExtremes { heaviest: { polarity: number; at: string } | null; lightest: { polarity: number; at: string } | null; }
 export interface EmotionPathVerdict { walked: boolean; stuck: 'dark' | 'light' | null; amplitude: number; heaviest: number | null; lightest: number | null; }
 
@@ -116,6 +129,7 @@ export interface EmotionPalette {
   journey: JourneyPoint[];
   extremes: PathExtremes | null;
   path: EmotionPathVerdict | null;
+  egoPath: EgoPath | null;
 }
 
 export const useOwnEmotions = (caseRoot: string | null) => {
@@ -187,6 +201,16 @@ export const useOwnEmotions = (caseRoot: string | null) => {
             extremes: body.extremes && typeof body.extremes === 'object' ? {
               heaviest: body.extremes.heaviest && Number.isFinite(Number(body.extremes.heaviest.polarity)) ? { polarity: Math.round(Number(body.extremes.heaviest.polarity)), at: String(body.extremes.heaviest.at || '') } : null,
               lightest: body.extremes.lightest && Number.isFinite(Number(body.extremes.lightest.polarity)) ? { polarity: Math.round(Number(body.extremes.lightest.polarity)), at: String(body.extremes.lightest.at || '') } : null,
+            } : null,
+            egoPath: body.ego_path && typeof body.ego_path === 'object' ? {
+              station: (['ego','razpoka','poniznost','v-sebi','lahkotnost'].includes(body.ego_path.station) ? body.ego_path.station : 'ego') as EgoStation,
+              passedHumility: body.ego_path.passed_humility === true,
+              felt: Math.max(0, Math.min(1, Number(body.ego_path.felt) || 0)),
+              surrender: Number.isFinite(Number(body.ego_path.surrender)) ? Number(body.ego_path.surrender) : null,
+              yielded: Number(body.ego_path.yielded) || 0,
+              chances: Number(body.ego_path.chances) || 0,
+              lightNow: Math.max(0, Math.min(1, Number(body.ego_path.light_now) || 0)),
+              brightButUnyielded: body.ego_path.bright_but_unyielded === true,
             } : null,
             path: body.path && typeof body.path === 'object' ? {
               walked: body.path.walked === true,

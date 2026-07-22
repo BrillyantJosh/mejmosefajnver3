@@ -18,6 +18,7 @@ import { useOwnProposals } from "@/hooks/useOwnProposals";
 import { useOwnCommitments } from "@/hooks/useOwnCommitments";
 import { useAuth } from "@/contexts/AuthContext";
 import EmotionJourneySparkline from "@/components/own/EmotionJourneySparkline";
+import EgoPathBar from "@/components/own/EgoPathBar";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES, PHASE_ORDER } from "@/lib/ownPhase";
 import { useLang } from "@/i18n/I18nContext";
@@ -81,6 +82,19 @@ const TXT = {
     emModeExpressed: "iz čustva", emModeNamed: "o čustvu", emModeHeld: "zadržano",
     emNone: "Bitja še niso zaznala čustev.", emNoneBeing: "To bitje še ni zaznalo čustev pri tej osebi.",
     emByBeing: "Globina po bitjih", emVuln: "ranljivost", emEmbody: "utelešenost", emPeak: "vrh",
+    egoPending: "Pot predaje ega se še izračunava …",
+    egoL: {
+      title: "Pot predaje ega",
+      st: { ego: "Ego", razpoka: "Razpoka", poniznost: "Ponižnost", "v-sebi": "V sebi", lahkotnost: "Lahkotnost" },
+      gate: "Do lahkotnosti ni bližnjice — vodi le skozi ponižnost (sram, krivda), kjer ego popusti. Levo od vrat je svetel ton še vedno površina ega.",
+      readBright: "Svetel ton, a ego je še cel — nase še ni vzel(a) ničesar ({y}/{c}).",
+      readCracking: "Težka čustva vzniknejo, ego še ni popustil ({y}/{c} vzetih nase).",
+      readUntouched: "Ego še nedotaknjen — ne globine ne predaje.",
+      readPassage: "Sredi prehoda: šel(a) je v težko IN nekaj vzel(a) nase ({y}/{c}).",
+      readStanding: "Skozi ponižnost — stoji v sebi, vzel(a) nase vse ({y}/{c}). Svetloba se še ni vrnila.",
+      readEarned: "Zaslužena lahkotnost — skozi ponižnost, vzel(a) nase vse ({y}/{c}); trdota se je raztopila.",
+      legend: "",
+    },
     potTitle: "Pot", potWalked: "Pot prehojena ✓", potStuckDark: "zataknjen v temi", potStuckLight: "ostaja v svetlem", potOnWay: "še na poti",
     emLevel: "raven", emCourage: "prag poguma (200) — levo sila/odpor, desno moč/samoodgovornost",
     tabProposals: "Predlogi zavez", propBeta: "beta",
@@ -159,6 +173,19 @@ const TXT = {
     emModeExpressed: "from the feeling", emModeNamed: "about the feeling", emModeHeld: "held back",
     emNone: "The beings have not detected any emotions yet.", emNoneBeing: "This being has not detected emotions for this person yet.",
     emByBeing: "Depth per being", emVuln: "vulnerability", emEmbody: "embodiment", emPeak: "peak",
+    egoPending: "The ego-surrender path is still being computed …",
+    egoL: {
+      title: "The ego-surrender path",
+      st: { ego: "Ego", razpoka: "Cracking", poniznost: "Humility", "v-sebi": "In oneself", lahkotnost: "Lightness" },
+      gate: "There is no shortcut to lightness — it leads only through humility (shame, guilt), where the ego gives way. Left of the gate a bright tone is still the ego's surface.",
+      readBright: "A bright tone, but the ego is still whole — nothing taken on yet ({y}/{c}).",
+      readCracking: "Heavy emotions are rising; the ego has not yet given way ({y}/{c} taken on).",
+      readUntouched: "The ego is untouched — neither depth nor surrender.",
+      readPassage: "Mid-passage: went into the heavy AND took something on ({y}/{c}).",
+      readStanding: "Through humility — standing in themselves, took on all of it ({y}/{c}). The light has not returned yet.",
+      readEarned: "Earned lightness — through humility, took on all of it ({y}/{c}); the hardness dissolved.",
+      legend: "",
+    },
     potTitle: "Path", potWalked: "Path walked ✓", potStuckDark: "stuck in the dark", potStuckLight: "remains in the light", potOnWay: "still on the way",
     emLevel: "level", emCourage: "courage threshold (200) — left force/resistance, right power/self-responsibility",
     tabProposals: "Change proposals", propBeta: "beta",
@@ -886,35 +913,14 @@ export default function Matrix() {
                                 {pal.depth.swing && <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0">🎢 {L.emSwing}</Badge>}
                               </span>
                             </div>
-                            {/* Globina vstopa: dvopolni trak težka ↔ svetla */}
+                            {/* POT PREDAJE EGA — nadomesti obrnjeni trak težka↔svetla */}
                             <div>
-                              <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
-                                <span>{L.emHeavy}</span>
-                                <span className="font-semibold normal-case text-foreground">{L.emDepth}: {pal.depth.score}/100{pal.depth.level != null ? <span className="font-normal text-muted-foreground"> · {L.emLevel} {pal.depth.level}</span> : null}</span>
-                                <span>{L.emLight}</span>
-                              </div>
-                              <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
-                                {/* prag poguma (Hawkins 200) = točno sredina traku */}
-                                <div title={L.emCourage} className="absolute top-1/2 -translate-y-1/2 h-3 w-0.5 bg-foreground/40" style={{ left: "50%" }} />
-                                {/* kazalec = POLARNOST (kje na nihalu so ZDAJ), ne globina; bleda markerja = max izlet v vsako stran */}
-                                {pal.extremes?.heaviest && pal.extremes?.lightest && (
-                                  <div className="absolute top-1/2 -translate-y-1/2 h-0.5 bg-foreground/25" style={{ left: `${pal.extremes.heaviest.polarity}%`, width: `${Math.max(0, pal.extremes.lightest.polarity - pal.extremes.heaviest.polarity)}%` }} />
-                                )}
-                                {pal.extremes?.heaviest && <div title={`min ${pal.extremes.heaviest.polarity}`} className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border-2 border-red-500/80 bg-background" style={{ left: `calc(${pal.extremes.heaviest.polarity}% - 5px)` }} />}
-                                {pal.extremes?.lightest && <div title={`max ${pal.extremes.lightest.polarity}`} className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border-2 border-green-500/80 bg-background" style={{ left: `calc(${pal.extremes.lightest.polarity}% - 5px)` }} />}
-                                <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-foreground border-2 border-background shadow" style={{ left: `calc(${pal.depth.polarity ?? 50}% - 7px)` }} />
-                              </div>
-                              {/* Čustvena Pot: krivulja skozi čas + sodba */}
-                              <div className="mt-2 flex items-end gap-3 flex-wrap">
+                              {pal.egoPath
+                                ? <EgoPathBar ego={pal.egoPath} L={L.egoL} />
+                                : <p className="text-[11px] text-muted-foreground">{L.egoPending}</p>}
+                              {/* krivulja čez čas ostane kot drobna sled, brez ocene */}
+                              <div className="mt-2">
                                 <EmotionJourneySparkline journey={pal.journey} extremes={pal.extremes} />
-                                {pal.path && (
-                                  <Badge variant="outline" className={pal.path.walked
-                                    ? "bg-green-500/10 text-green-600 border-green-500/30 text-[10px] py-0"
-                                    : pal.path.stuck ? "bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0"
-                                    : "text-muted-foreground border-border text-[10px] py-0"}>
-                                    {L.potTitle}: {pal.path.walked ? L.potWalked : pal.path.stuck === "dark" ? L.potStuckDark : pal.path.stuck === "light" ? L.potStuckLight : L.potOnWay}
-                                  </Badge>
-                                )}
                               </div>
                             </div>
                             {pal.emotions.length === 0 ? (

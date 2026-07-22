@@ -12,6 +12,7 @@ import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
 import { useOwnEmotions, HEAVY_EMOTIONS, LIGHT_EMOTIONS, EMOTION_LABELS } from "@/hooks/useOwnEmotions";
 import EmotionJourneySparkline from "@/components/own/EmotionJourneySparkline";
+import EgoPathBar from "@/components/own/EgoPathBar";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { getPhaseLabel, getPhaseColor, ASSESSED_PHASES } from "@/lib/ownPhase";
 import { useLang } from "@/i18n/I18nContext";
@@ -43,6 +44,19 @@ const TXT = {
     compCount: "očitkov", compMissing: "pri kakem bitju manjka", compCountDiff: "razlika v številu", compStepDiff: "nestrinjanje o koraku", compNone: "—",
     compSteps: ["odg", "spr", "opr", "zab"],
     emTitle: "Čustva", emDepth: "Globina vstopa", emHeavy: "Težka", emLight: "Svetla", emSwing: "nihaj",
+    egoPending: "Pot predaje ega se še izračunava …",
+    egoL: {
+      title: "Pot predaje ega",
+      st: { ego: "Ego", razpoka: "Razpoka", poniznost: "Ponižnost", "v-sebi": "V sebi", lahkotnost: "Lahkotnost" },
+      gate: "Do lahkotnosti ni bližnjice — vodi le skozi ponižnost (sram, krivda), kjer ego popusti. Levo od vrat je svetel ton še vedno površina ega.",
+      readBright: "Svetel ton, a ego je še cel — nase še ni vzel(a) ničesar ({y}/{c}).",
+      readCracking: "Težka čustva vzniknejo, ego še ni popustil ({y}/{c} vzetih nase).",
+      readUntouched: "Ego še nedotaknjen — ne globine ne predaje.",
+      readPassage: "Sredi prehoda: šel(a) je v težko IN nekaj vzel(a) nase ({y}/{c}).",
+      readStanding: "Skozi ponižnost — stoji v sebi, vzel(a) nase vse ({y}/{c}). Svetloba se še ni vrnila.",
+      readEarned: "Zaslužena lahkotnost — skozi ponižnost, vzel(a) nase vse ({y}/{c}); trdota se je raztopila.",
+      legend: "",
+    },
     emVuln: "ranljivost", emEmbody: "utelešenost", emPeak: "vrh",
     tabOpinions: "Mnenja", tabGrievances: "Očitki", tabEmotions: "Čustva",
     potTitle: "Pot", potWalked: "Pot prehojena ✓", potStuckDark: "zataknjen v temi", potStuckLight: "ostaja v svetlem", potOnWay: "še na poti",
@@ -72,6 +86,19 @@ const TXT = {
     compCount: "grievance(s)", compMissing: "missing for some being", compCountDiff: "entry-count differs", compStepDiff: "step disagreement", compNone: "—",
     compSteps: ["resp", "acc", "apo", "own"],
     emTitle: "Emotions", emDepth: "Depth of entry", emHeavy: "Heavy", emLight: "Light", emSwing: "swing",
+    egoPending: "The ego-surrender path is still being computed …",
+    egoL: {
+      title: "The ego-surrender path",
+      st: { ego: "Ego", razpoka: "Cracking", poniznost: "Humility", "v-sebi": "In oneself", lahkotnost: "Lightness" },
+      gate: "There is no shortcut to lightness — it leads only through humility (shame, guilt), where the ego gives way. Left of the gate a bright tone is still the ego's surface.",
+      readBright: "A bright tone, but the ego is still whole — nothing taken on yet ({y}/{c}).",
+      readCracking: "Heavy emotions are rising; the ego has not yet given way ({y}/{c} taken on).",
+      readUntouched: "The ego is untouched — neither depth nor surrender.",
+      readPassage: "Mid-passage: went into the heavy AND took something on ({y}/{c}).",
+      readStanding: "Through humility — standing in themselves, took on all of it ({y}/{c}). The light has not returned yet.",
+      readEarned: "Earned lightness — through humility, took on all of it ({y}/{c}); the hardness dissolved.",
+      legend: "",
+    },
     emVuln: "vulnerability", emEmbody: "embodiment", emPeak: "peak",
     tabOpinions: "Opinions", tabGrievances: "Grievances", tabEmotions: "Emotions",
     potTitle: "Path", potWalked: "Path walked ✓", potStuckDark: "stuck in the dark", potStuckLight: "remains in the light", potOnWay: "still on the way",
@@ -430,22 +457,10 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                         </span>
                       </div>
                       <div>
-                        <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
-                          <span>{L.emHeavy}</span>
-                          <span className="font-semibold normal-case text-foreground">{L.emDepth}: {pal.depth.score}/100{pal.depth.level != null ? <span className="font-normal text-muted-foreground"> · {en ? "level" : "raven"} {pal.depth.level}</span> : null}</span>
-                          <span>{L.emLight}</span>
-                        </div>
-                        <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg, rgba(239,68,68,.45), rgba(234,179,8,.35), rgba(34,197,94,.45))" }}>
-                          {/* prag poguma (Hawkins 200) = sredina traku */}
-                          <div title={en ? "courage threshold (200)" : "prag poguma (200)"} className="absolute top-1/2 -translate-y-1/2 h-3 w-0.5 bg-foreground/40" style={{ left: "50%" }} />
-                          {/* razponska črta + bleda markerja ekstremov (max v vsako stran) */}
-                          {pal.extremes?.heaviest && pal.extremes?.lightest && (
-                            <div className="absolute top-1/2 -translate-y-1/2 h-0.5 bg-foreground/25" style={{ left: `${pal.extremes.heaviest.polarity}%`, width: `${Math.max(0, pal.extremes.lightest.polarity - pal.extremes.heaviest.polarity)}%` }} />
-                          )}
-                          {pal.extremes?.heaviest && <div title={`min ${pal.extremes.heaviest.polarity}`} className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border-2 border-red-500/80 bg-background" style={{ left: `calc(${pal.extremes.heaviest.polarity}% - 5px)` }} />}
-                          {pal.extremes?.lightest && <div title={`max ${pal.extremes.lightest.polarity}`} className="absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border-2 border-green-500/80 bg-background" style={{ left: `calc(${pal.extremes.lightest.polarity}% - 5px)` }} />}
-                          <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-foreground border-2 border-background shadow" style={{ left: `calc(${pal.depth.polarity ?? 50}% - 7px)` }} />
-                        </div>
+                        {/* POT PREDAJE EGA — nadomesti obrnjeni trak težka↔svetla */}
+                        {pal.egoPath
+                          ? <EgoPathBar ego={pal.egoPath} L={L.egoL} />
+                          : <p className="text-[11px] text-muted-foreground">{L.egoPending}</p>}
                         {/* Čustvena Pot: krivulja skozi čas + sodba */}
                         <div className="mt-2 flex items-end gap-3 flex-wrap">
                           <EmotionJourneySparkline journey={pal.journey} extremes={pal.extremes} />
