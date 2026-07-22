@@ -4,6 +4,7 @@ const lana8wonder = {
   // ── Navigation ──
   'nav.plan': 'Plan',
   'nav.splits': 'Splits',
+  'nav.unconditionalLoan': 'Unconditional Loan',
 
   // ── Plan page (Lana8Wonder.tsx) ──
   'plan.title': 'Lana8Wonder',
@@ -105,6 +106,7 @@ const translations: TranslationDict<Lana8WonderKey> = {
     // ── Navigacija ──
     'nav.plan': 'Načrt',
     'nav.splits': 'Spliti',
+    'nav.unconditionalLoan': 'Brezpogojni kredit',
 
     // ── Stran načrta ──
     'plan.title': 'Lana8Wonder',
@@ -201,6 +203,7 @@ const translations: TranslationDict<Lana8WonderKey> = {
     // ── Navigation ──
     'nav.plan': 'Plan',
     'nav.splits': 'Splits',
+    'nav.unconditionalLoan': 'Bedingungsloser Kredit',
 
     // ── Plan-Seite ──
     'plan.title': 'Lana8Wonder',
@@ -297,6 +300,7 @@ const translations: TranslationDict<Lana8WonderKey> = {
     // ── Navigáció ──
     'nav.plan': 'Terv',
     'nav.splits': 'Splitek',
+    'nav.unconditionalLoan': 'Feltétel nélküli kölcsön',
 
     // ── Terv oldal ──
     'plan.title': 'Lana8Wonder',
@@ -393,6 +397,7 @@ const translations: TranslationDict<Lana8WonderKey> = {
     // ── Navigazione ──
     'nav.plan': 'Piano',
     'nav.splits': 'Split',
+    'nav.unconditionalLoan': 'Prestito incondizionato',
 
     // ── Pagina piano ──
     'plan.title': 'Lana8Wonder',

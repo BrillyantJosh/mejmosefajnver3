@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Sparkles, TrendingUp } from "lucide-react";
+import { Sparkles, TrendingUp, HandCoins } from "lucide-react";
 import { useTranslation } from "@/i18n/I18nContext";
 import lana8wonderTranslations from "@/i18n/modules/lana8wonder";
 
@@ -17,6 +17,11 @@ export default function Lana8WonderLayout() {
       title: t('nav.splits'),
       path: "/lana8wonder/splits",
       icon: TrendingUp
+    },
+    {
+      title: t('nav.unconditionalLoan'),
+      path: "/lana8wonder/unconditional-loan",
+      icon: HandCoins
     }
   ];
 
