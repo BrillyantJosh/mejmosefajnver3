@@ -30,6 +30,7 @@ import transparencyImage from '@/assets/transparency-module.png';
 import lanaknightsImage from '@/assets/lanaknights-module.png';
 import lanaeventsImage from '@/assets/lanaevents-module.png';
 import lanaalignsImage from '@/assets/lana-aligns-world-module.png';
+import unconditionalLoanImage from '@/assets/unconditional-loan-module.png';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
@@ -219,7 +220,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     icon: HandCoins,
     path: '/unconditional-loan',
     gradient: 'from-amber-500 to-yellow-500',
-    // image: unconditionalLoanImage,  // ← add once src/assets/unconditional-loan-module.png exists
+    image: unconditionalLoanImage,
     enabled: true,
     order: 11.5
   },
