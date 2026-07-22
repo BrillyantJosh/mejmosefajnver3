@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video, Sprout, Utensils } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video, Sprout, Utensils, HandCoins } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 
 // Language-aware module display helpers (Slovenian variants when lang === 'sl').
@@ -209,6 +209,19 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     image: lana8wonderImage,
     enabled: true,
     order: 11
+  },
+  {
+    id: 'unconditionalloan',
+    title: 'Unconditional Loans',
+    titleSl: 'Brezpogojni krediti',
+    description: 'Community financing built on trust — apply for and repay unconditional loans',
+    descriptionSl: 'Skupnostno financiranje, ki temelji na zaupanju — zaprosi za brezpogojni kredit in ga vračaj',
+    icon: HandCoins,
+    path: '/unconditional-loan',
+    gradient: 'from-amber-500 to-yellow-500',
+    // image: unconditionalLoanImage,  // ← add once src/assets/unconditional-loan-module.png exists
+    enabled: true,
+    order: 11.5
   },
   {
     id: 'lanapay',
@@ -499,7 +512,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'lanadiscount': 'Lana Discount',
     'meet': 'Lana Meet',
     'theLanaLife': 'TheLana.Life',
-    'direct-fund': 'Direct Fund'
+    'direct-fund': 'Direct Fund',
+    'unconditionalloan': 'Unconditional Loans'
   };
   return mapping[id] || id;
 };
@@ -542,7 +556,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Shop': 'shop',
     'Lana Discount': 'lanadiscount',
     'Lana Meet': 'meet',
-    'TheLana.Life': 'theLanaLife'
+    'TheLana.Life': 'theLanaLife',
+    'Unconditional Loans': 'unconditionalloan'
   };
   return mapping[id] || null;
 };

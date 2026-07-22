@@ -156,7 +156,7 @@ const Lana8Wonder = lazy(() => import("./pages/Lana8Wonder"));
 const Lana8WonderTransfer = lazy(() => import("./pages/Lana8WonderTransfer"));
 const Lana8WonderLayout = lazy(() => import("./pages/lana8wonder/Lana8WonderLayout"));
 const Lana8WonderSplits = lazy(() => import("./pages/lana8wonder/Lana8WonderSplits"));
-const Lana8WonderUnconditionalLoan = lazy(() => import("./pages/lana8wonder/UnconditionalLoan"));
+const UnconditionalLoan = lazy(() => import("./pages/unconditional-loan/UnconditionalLoan"));
 const AiAdvisor = lazy(() => import("./pages/AiAdvisor"));
 const Home = lazy(() => import("./pages/Home"));
 const FaqDetail = lazy(() => import("./pages/FaqDetail"));
@@ -356,10 +356,10 @@ const App = () => (
                   <Route path="/sell-lana" element={<SellLana />} />
                   <Route path="/test-transaction" element={<TestTransaction />} />
                   <Route path="/buy-lana" element={<BuyLana />} />
+                  <Route path="/unconditional-loan" element={<UnconditionalLoan />} />
                   <Route path="/lana8wonder" element={<Lana8WonderLayout />}>
                     <Route index element={<Lana8Wonder />} />
                     <Route path="splits" element={<Lana8WonderSplits />} />
-                    <Route path="unconditional-loan" element={<Lana8WonderUnconditionalLoan />} />
                     <Route path="transfer" element={<Lana8WonderTransfer />} />
                   </Route>
                   <Route path="/ai-advisor" element={<AiAdvisor />} />
