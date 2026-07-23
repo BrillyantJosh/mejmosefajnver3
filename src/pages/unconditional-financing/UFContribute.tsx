@@ -99,7 +99,7 @@ const UFContribute = () => {
   if (requestError || !request) {
     return (
       <div className="container mx-auto p-4 sm:p-6 pb-24">
-        <Button variant="ghost" onClick={() => navigate("/unconditional-financing")} className="gap-2 mb-4">
+        <Button variant="ghost" onClick={() => navigate("/unconditional-financing/requests")} className="gap-2 mb-4">
           <ArrowLeft className="h-4 w-4" />
           {sl ? "Nazaj" : "Back"}
         </Button>

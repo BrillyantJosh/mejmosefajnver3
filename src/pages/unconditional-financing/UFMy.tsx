@@ -263,7 +263,7 @@ const UFMy = () => {
               </p>
               <Button
                 className="gap-2"
-                onClick={() => navigate("/unconditional-financing")}
+                onClick={() => navigate("/unconditional-financing/requests")}
               >
                 <HandCoins className="h-4 w-4" />
                 {sl ? "Preglej financiranja" : "Browse financings"}

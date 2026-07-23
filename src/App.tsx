@@ -368,7 +368,8 @@ const App = () => (
                   <Route path="/test-transaction" element={<TestTransaction />} />
                   <Route path="/buy-lana" element={<BuyLana />} />
                   <Route path="/unconditional-financing" element={<UFLayout />}>
-                    <Route index element={<UFRequests />} />
+                    <Route index element={<UnconditionalFinancingAbout />} />
+                    <Route path="requests" element={<UFRequests />} />
                     <Route path="request/:id" element={<UFRequestDetail />} />
                     <Route path="create" element={<UFCreateRequest />} />
                     <Route path="contribute/:id" element={<UFContribute />} />
@@ -378,6 +379,7 @@ const App = () => (
                     <Route path="repay/:id/private-key" element={<UFRepayPrivateKey />} />
                     <Route path="repay/:id/result" element={<UFRepayResult />} />
                     <Route path="my" element={<UFMy />} />
+                    {/* Legacy alias — About now lives at the module index */}
                     <Route path="about" element={<UnconditionalFinancingAbout />} />
                   </Route>
                   <Route path="/lana8wonder" element={<Lana8WonderLayout />}>

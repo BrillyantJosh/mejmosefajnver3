@@ -1,5 +1,7 @@
-import { HandCoins } from "lucide-react";
+import { HandCoins, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useLang } from "@/i18n/I18nContext";
 
 // A block of the article. `h` = section heading, `p` = paragraph,
@@ -1121,8 +1123,10 @@ const EN: Article = {
 };
 
 export default function UnconditionalFinancing() {
+  const navigate = useNavigate();
   // English is the default; Slovenian only when the KIND 0 language is Slovenian.
-  const article = useLang() === "sl" ? SL : EN;
+  const sl = useLang() === "sl";
+  const article = sl ? SL : EN;
 
   return (
     <div className="container mx-auto p-4 sm:p-6 max-w-3xl pb-24">
@@ -1135,6 +1139,14 @@ export default function UnconditionalFinancing() {
           <p className="text-sm sm:text-base text-muted-foreground">{article.subtitle}</p>
         </div>
       </div>
+
+      <Button
+        className="w-full mb-6 gap-2"
+        onClick={() => navigate("/unconditional-financing/requests")}
+      >
+        {sl ? "Poglej financiranja" : "View financings"}
+        <ArrowRight className="h-4 w-4" />
+      </Button>
 
       <Card>
         <CardContent className="p-5 sm:p-8 space-y-4 leading-relaxed">

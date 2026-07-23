@@ -168,7 +168,7 @@ const UFRepay = () => {
             <p className="text-muted-foreground">
               {sl ? "Zahtevka ni bilo mogoče naložiti." : "Could not load the request."}
             </p>
-            <Button variant="outline" onClick={() => navigate("/unconditional-financing")}>
+            <Button variant="outline" onClick={() => navigate("/unconditional-financing/requests")}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               {sl ? "Nazaj na financiranja" : "Back to financings"}
             </Button>

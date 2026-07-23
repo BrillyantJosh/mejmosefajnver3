@@ -52,7 +52,7 @@ export default function UFCreateRequest() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => navigate("/unconditional-financing")}
+              onClick={() => navigate("/unconditional-financing/requests")}
               className="gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -88,7 +88,7 @@ export default function UFCreateRequest() {
           <Button
             variant="outline"
             className="mt-6 gap-2"
-            onClick={() => navigate("/unconditional-financing")}
+            onClick={() => navigate("/unconditional-financing/requests")}
           >
             <ArrowLeft className="h-4 w-4" />
             {sl ? "Nazaj na modul" : "Back to module"}
@@ -105,7 +105,7 @@ export default function UFCreateRequest() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => navigate("/unconditional-financing")}
+          onClick={() => navigate("/unconditional-financing/requests")}
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>

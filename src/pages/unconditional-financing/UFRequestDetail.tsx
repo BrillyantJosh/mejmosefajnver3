@@ -76,7 +76,7 @@ const UFRequestDetail = () => {
       <div className="container mx-auto p-4 sm:p-6 pb-24">
         <Button
           variant="ghost"
-          onClick={() => navigate("/unconditional-financing")}
+          onClick={() => navigate("/unconditional-financing/requests")}
           className="gap-2 mb-6"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -172,7 +172,7 @@ const UFRequestDetail = () => {
         <div className="container mx-auto px-4 py-2">
           <Button
             variant="ghost"
-            onClick={() => navigate("/unconditional-financing")}
+            onClick={() => navigate("/unconditional-financing/requests")}
             className="gap-2"
           >
             <ArrowLeft className="h-4 w-4" />

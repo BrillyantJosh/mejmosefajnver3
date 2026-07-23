@@ -15,6 +15,11 @@ const UFLayout = () => {
   const navItems = [
     {
       path: "/unconditional-financing",
+      icon: Info,
+      label: sl ? "O modulu" : "About",
+    },
+    {
+      path: "/unconditional-financing/requests",
       icon: HandCoins,
       label: sl ? "Financiranja" : "Financings",
     },
@@ -22,11 +27,6 @@ const UFLayout = () => {
       path: "/unconditional-financing/my",
       icon: Heart,
       label: sl ? "Moje" : "My",
-    },
-    {
-      path: "/unconditional-financing/about",
-      icon: Info,
-      label: sl ? "O modulu" : "About",
     },
   ];
 
