@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, CheckCircle2, ListChecks, MessageSquare, HeartHandshake, Sparkles, Bot, Telescope, Languages } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ListChecks, MessageSquare, HeartHandshake, Sparkles, Bot, Telescope, Languages, PenLine } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/i18n/I18nContext";
 import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
@@ -50,12 +50,45 @@ const TXT = {
       apologize: "Opraviči se",
       own: "Sprejmi kot svojo zablodo",
     },
-    how: {
-      respond: "Odzovi se nanj — iskren odziv šteje, tudi če se z njim ne strinjaš.",
-      accept: "Sprejmi ga brezpogojno: brez »ampak«, brez pojasnjevanja.",
-      apologize: "Opraviči se tam, kjer prepoznaš svoj del.",
-      own: "Poglej ga kot svojo projekcijo in to izreci — to je zabloda, ki je tvoja.",
+    // Značka sama ljudem ne pove, KAJ naj naredijo — najmanj pri zablodi.
+    // Zato vsak korak pove bistvo in kaj NE šteje, nikoli pa ne ponudi
+    // stavka, ki bi ga bilo mogoče prepisati. {ime} je druga oseba v očitku.
+    guide: {
+      respond: {
+        lead: "Nekdo je to naslovil nate in proces čaka tvoj odziv.",
+        points: [
+          "Strinjanje ni pogoj — če se z očitkom ne strinjaš, povej prav to.",
+          "Ta korak ustavi samo molk.",
+        ],
+      },
+      accept: {
+        lead: "Sprejmi ta očitek brezpogojno.",
+        points: [
+          "Brezpogojno pomeni: brez »ampak«, brez pojasnjevanja, brez protiočitka.",
+          "Sprejem pod pogojem (»sprejmem, če pa on …«) ni sprejem.",
+          "Bitja presojajo celotno držo v pogovoru, ne enega samega stavka.",
+        ],
+      },
+      // Ime vedno stoji v IMENOVALNIKU (za pomišljajem ali dvopičjem) — koda ga
+      // le vstavi in ga ne zna sklanjati, »kot o Rok« pa bi bilo narobe.
+      apologize: {
+        lead: "Opraviči se za svoj del — osebno, ne na splošno.",
+        points: [
+          "Opravičilo naj gre do osebe, ki je očitek izrekla — {ime}.",
+          "Povej, za KAJ se opravičuješ. Splošno »oprosti, če je koga prizadelo« ne zadene ničesar.",
+          "Če se opravičilo sredi stavka prevesi v razlago, zakaj je bilo tvoje ravnanje upravičeno, ni več opravičilo.",
+        ],
+      },
+      own: {
+        lead: "Ta očitek je tvoj — in pokazalo se je, da pove več o tebi kot o drugem.",
+        points: [
+          "Priznaj svojo zablodo neposredno osebi, ki ji je očitek letel — {ime}. Priznanje mora priti do nje, ne ostati v tvojem razmisleku.",
+          "Bistvo ni opravičilo za dejanje, ampak priznanje, da je očitek govoril o tebi.",
+          "Razlaga, zakaj se ti je takrat tako kazalo, zablodo spet spremeni v obrambo.",
+        ],
+      },
     },
+    ownWords: "Napiši s svojimi besedami, v pogovoru procesa. Bitja presojajo tvojo držo, ne obrazca — prepisan stavek ne pomeni ničesar.",
     from: "od",
     to: "za",
     byBeing: "Zaznalo bitje",
@@ -83,12 +116,39 @@ const TXT = {
       apologize: "Apologize",
       own: "Own it as your delusion",
     },
-    how: {
-      respond: "React to it — an honest reaction counts, even if you disagree.",
-      accept: "Accept it unconditionally: no 'but', no explaining.",
-      apologize: "Apologize where you recognize your part.",
-      own: "See it as your own projection and say so — this delusion is yours.",
+    guide: {
+      respond: {
+        lead: "Someone addressed this to you, and the process is waiting for your reaction.",
+        points: [
+          "Agreeing is not required — if you disagree with the grievance, say exactly that.",
+          "The only thing that stalls this step is silence.",
+        ],
+      },
+      accept: {
+        lead: "Accept this grievance unconditionally.",
+        points: [
+          "Unconditionally means: no 'but', no explaining, no counter-grievance.",
+          "Acceptance with a condition ('I accept, if he first …') is not acceptance.",
+          "The beings weigh your whole stance in the conversation, not one sentence.",
+        ],
+      },
+      apologize: {
+        lead: "Apologize for your part — to {ime}, not in general.",
+        points: [
+          "Say WHAT you are apologizing for. A general 'sorry if anyone was hurt' lands nowhere.",
+          "If the apology turns mid-sentence into why your behaviour was justified, it is no longer an apology.",
+        ],
+      },
+      own: {
+        lead: "This grievance is yours — and it turned out to say more about you than about {ime}.",
+        points: [
+          "Admit the delusion directly to {ime}. The grievance flew at that person, so the admission has to reach them — not just your own reflection.",
+          "The point is not to apologize for an act, but to admit that the grievance was speaking about you.",
+          "Explaining why it looked that way to you at the time turns the delusion back into a defence.",
+        ],
+      },
     },
+    ownWords: "Write it in your own words, in the process conversation. The beings weigh your stance, not a formula — a copied sentence means nothing.",
     from: "from",
     to: "to",
     byBeing: "Recorded by",
@@ -203,7 +263,31 @@ function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L, lang, translateO
                     </span>
                   </div>
                   {g.summary && <p className="text-sm leading-snug">{summaryOf(key, g.summary)}</p>}
-                  <p className="text-xs text-muted-foreground">→ {L.how[step]}</p>
+                  {(() => {
+                    // Druga oseba v očitku: pri prejetih je to tisti, ki ga je dal;
+                    // pri zablodi pa tisti, ki mu je bil namenjen — in prav do njega
+                    // mora priznanje priti, sicer ostane pri samem sebi.
+                    const other = nameOf(mine ? g.fromPubkey : g.toPubkey);
+                    const gd = L.guide[step];
+                    const fill = (s: string) => s.split("{ime}").join(other);
+                    return (
+                      <div className="rounded-md border border-border/60 bg-muted/40 p-2.5 space-y-1.5">
+                        <p className="text-xs font-medium leading-snug">→ {fill(gd.lead)}</p>
+                        <ul className="space-y-1">
+                          {gd.points.map((pt, i) => (
+                            <li key={i} className="text-[11px] leading-snug text-muted-foreground flex gap-1.5">
+                              <span className="text-muted-foreground/50 shrink-0">·</span>
+                              <span>{fill(pt)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-[11px] leading-snug text-orange-700 dark:text-orange-300 flex gap-1.5 pt-0.5">
+                          <PenLine className="h-3 w-3 mt-[2px] shrink-0" />
+                          <span>{L.ownWords}</span>
+                        </p>
+                      </div>
+                    );
+                  })()}
                   <div className="space-y-0.5 pt-0.5">
                     <p className="text-[11px] text-muted-foreground flex items-start gap-1 flex-wrap">
                       <Bot className="h-3 w-3 text-orange-500 mt-[3px] shrink-0" />
