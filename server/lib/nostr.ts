@@ -1246,3 +1246,289 @@ export async function indexLanacrowdFromRelays(db: any): Promise<void> {
     console.error('❌ indexLanacrowdFromRelays error:', error);
   }
 }
+
+/**
+ * Index Unconditional Financing state from relays into SQLite.
+ * KIND 31240 requests, 60210 contributions, 60211 repayments.
+ * Mirrors indexLanacrowdFromRelays: relays are the source of truth, SQLite is
+ * the fast read cache; admin/derived flags (is_hidden) are preserved.
+ */
+export async function indexUnconditionalFinancingFromRelays(db: any): Promise<void> {
+  const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+  let relays: string[] = [];
+  if (row?.relays) {
+    try {
+      const parsed = JSON.parse(row.relays);
+      if (Array.isArray(parsed) && parsed.length > 0) relays = parsed;
+    } catch {}
+  }
+  if (relays.length === 0) {
+    console.log('⚠️ indexUnconditionalFinancingFromRelays: No relays available, skipping');
+    return;
+  }
+
+  try {
+    let [requestEvents, contributionEvents, repaymentEvents] = await Promise.all([
+      queryEventsFromRelays(relays, { kinds: [31240], limit: 1000 }, 20000),
+      queryEventsFromRelays(relays, { kinds: [60210], limit: 5000 }, 20000),
+      queryEventsFromRelays(relays, { kinds: [60211], limit: 5000 }, 20000),
+    ]);
+
+    // Only index events that explicitly belong to this module — another app
+    // reusing these kind numbers on the shared relays must never leak into
+    // uf_* tables. (strfry cannot filter multi-letter tag names in the REQ,
+    // so this is a client-side post-filter.)
+    const isUf = (evt: any) =>
+      evt.tags?.some((t: string[]) => t[0] === 'service' && t[1] === 'unconditional-financing');
+    requestEvents = requestEvents.filter(isUf);
+    contributionEvents = contributionEvents.filter(isUf);
+    repaymentEvents = repaymentEvents.filter(isUf);
+
+    console.log(`📦 indexUnconditionalFinancingFromRelays: ${requestEvents.length} KIND 31240, ${contributionEvents.length} KIND 60210, ${repaymentEvents.length} KIND 60211`);
+
+    // Deduplicate requests by (pubkey + d-tag), keep newest (addressable kind)
+    const requestsByKey = new Map<string, any>();
+    for (const evt of requestEvents) {
+      const dTag = evt.tags?.find((t: string[]) => t[0] === 'd')?.[1];
+      if (!dTag) continue;
+      const key = `${evt.pubkey}:${dTag}`;
+      const existing = requestsByKey.get(key);
+      if (!existing || evt.created_at > existing.created_at) {
+        requestsByKey.set(key, { ...evt, dTag });
+      }
+    }
+
+    const upsertRequest = db.prepare(`
+      INSERT INTO uf_requests (
+        id, event_id, pubkey,
+        title, short_desc, content,
+        request_type, fiat_goal, currency, wallet,
+        cover_image, gallery_images, crowdfunding_refs,
+        published_at, funding_opens_at, status,
+        is_hidden, is_repaid,
+        nostr_created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(id) DO UPDATE SET
+        event_id = excluded.event_id,
+        title = excluded.title,
+        short_desc = excluded.short_desc,
+        content = excluded.content,
+        request_type = excluded.request_type,
+        fiat_goal = excluded.fiat_goal,
+        currency = excluded.currency,
+        wallet = excluded.wallet,
+        cover_image = excluded.cover_image,
+        gallery_images = excluded.gallery_images,
+        crowdfunding_refs = excluded.crowdfunding_refs,
+        -- first-seen-wins: an edit must NEVER move the maturing window
+        published_at = CASE WHEN uf_requests.published_at > 0
+                            THEN uf_requests.published_at ELSE excluded.published_at END,
+        funding_opens_at = CASE WHEN uf_requests.funding_opens_at > 0
+                                THEN uf_requests.funding_opens_at ELSE excluded.funding_opens_at END,
+        status = excluded.status,
+        nostr_created_at = CASE WHEN excluded.nostr_created_at > uf_requests.nostr_created_at
+                                THEN excluded.nostr_created_at ELSE uf_requests.nostr_created_at END,
+        updated_at = datetime('now')
+    `);
+
+    let requestsIndexed = 0;
+    for (const evt of requestsByKey.values()) {
+      try {
+        const getTag = (name: string) => evt.tags?.find((t: string[]) => t[0] === name)?.[1];
+        const getAllTags = (name: string) => evt.tags?.filter((t: string[]) => t[0] === name) || [];
+
+        const title = getTag('title');
+        if (!title) continue; // skip malformed events
+
+        const imageTags = getAllTags('img');
+        const coverImage = imageTags.find((t: string[]) => t[2] === 'cover')?.[1] || getTag('image') || null;
+        const galleryImages = imageTags.filter((t: string[]) => t[2] === 'gallery').map((t: string[]) => t[1]);
+        const crowdfundingRefs = getAllTags('crowdfunding').map((t: string[]) => t[1]);
+
+        // Preserve admin/derived flags + enforce addressable identity: the
+        // nostr identity of an addressable event is (pubkey, d) — a different
+        // author may never take over an existing row by reusing its d-tag.
+        const existing = db.prepare('SELECT pubkey, is_hidden, is_repaid FROM uf_requests WHERE id = ?').get(evt.dTag) as any;
+        if (existing && existing.pubkey && existing.pubkey !== evt.pubkey) continue;
+
+        // The maturing window comes from STABLE tags on the event — never from
+        // created_at, which changes on every edit of an addressable event.
+        // Sanity: published_at may not lie in the future of the event itself
+        // (a backdated tag would open funding instantly); funding_opens_at is
+        // ALWAYS derived (+8 days), never taken from a client-controlled tag.
+        let publishedAt = parseInt(getTag('published_at') || '0') || evt.created_at;
+        if (publishedAt > evt.created_at + 3600) publishedAt = evt.created_at;
+        const fundingOpensAt = publishedAt + 8 * 86400;
+
+        upsertRequest.run(
+          evt.dTag,
+          evt.id,
+          evt.pubkey,
+          title,
+          getTag('summary') || '',
+          evt.content || '',
+          getTag('request_type') || 'personal_hardship',
+          parseFloat(getTag('fiat_goal') || '0') || 0,
+          getTag('currency') || 'EUR',
+          getTag('wallet') || '',
+          coverImage,
+          JSON.stringify(galleryImages),
+          JSON.stringify(crowdfundingRefs),
+          publishedAt,
+          fundingOpensAt,
+          getTag('status') || 'active',
+          existing ? existing.is_hidden : 0,
+          existing ? existing.is_repaid : 0,
+          evt.created_at,
+        );
+        requestsIndexed++;
+      } catch (err) {
+        console.error('❌ indexUnconditionalFinancingFromRelays: failed to upsert request', evt.dTag, err);
+      }
+    }
+
+    // Contributions (regular events; keyed by event id)
+    const upsertContribution = db.prepare(`
+      INSERT INTO uf_contributions (
+        id, request_id, supporter_pubkey, recipient_pubkey,
+        amount_lanoshis, amount_fiat, currency, rate,
+        from_wallet, repayment_wallet, to_wallet, tx_id, message,
+        nostr_created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        message = COALESCE(uf_contributions.message, excluded.message)
+    `);
+
+    let contributionsIndexed = 0;
+    for (const evt of contributionEvents) {
+      try {
+        const getTag = (name: string) => evt.tags?.find((t: string[]) => t[0] === name)?.[1];
+        const requestId = getTag('request');
+        if (!requestId) continue;
+
+        // The request must exist (requests are indexed above in this same run).
+        const parentReq = db.prepare(
+          'SELECT pubkey, funding_opens_at FROM uf_requests WHERE id = ?'
+        ).get(requestId) as any;
+        if (!parentReq) continue;
+
+        // Identity = the event SIGNER. A p-tag is attacker-controlled and must
+        // never attribute a contribution (and its repayment share) to someone else.
+        const supporterPubkey = evt.pubkey;
+
+        // No self-contributions — a requester must not dilute real financiers.
+        if (supporterPubkey === parentReq.pubkey) continue;
+
+        // MATURING guard (mirrors POST /contributions/record): events dated
+        // inside the maturing window are invalid per the protocol and must not
+        // be indexed — otherwise a direct-to-relay publish would bypass the
+        // server-side 409 rule within one heartbeat re-index.
+        const timestampPaid = parseInt(getTag('timestamp_paid') || '0') || evt.created_at;
+        const effectiveTs = Math.min(evt.created_at, timestampPaid);
+        if ((parentReq.funding_opens_at || 0) > effectiveTs) continue;
+
+        upsertContribution.run(
+          evt.id,
+          requestId,
+          supporterPubkey,
+          parentReq.pubkey,
+          parseInt(getTag('amount_lanoshis') || '0') || 0,
+          parseFloat(getTag('amount_fiat') || '0') || 0,
+          getTag('currency') || 'EUR',
+          parseFloat(getTag('rate') || '0') || 0,
+          getTag('from_wallet') || '',
+          getTag('repayment_wallet') || '',
+          getTag('to_wallet') || '',
+          getTag('tx') || null,
+          (evt.content && evt.content.trim()) ? evt.content : null,
+          evt.created_at,
+        );
+        contributionsIndexed++;
+      } catch (err) {
+        console.error('❌ indexUnconditionalFinancingFromRelays: failed to upsert contribution', evt.id, err);
+      }
+    }
+
+    // Repayments (regular events; keyed by event id). Per-financier outputs are
+    // rebuilt from the repeatable `out` tags: [out, pubkey, wallet, lanoshis, fiat]
+    const upsertRepayment = db.prepare(`
+      INSERT INTO uf_repayments (
+        id, request_id, payer_pubkey,
+        total_lanoshis, total_fiat, currency, rate,
+        tx_id, outputs, nostr_created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO NOTHING
+    `);
+
+    let repaymentsIndexed = 0;
+    for (const evt of repaymentEvents) {
+      try {
+        const getTag = (name: string) => evt.tags?.find((t: string[]) => t[0] === name)?.[1];
+        const requestId = getTag('request');
+        if (!requestId) continue;
+
+        // Only the REQUEST OWNER's signature counts — a forged repayment from
+        // any other pubkey must never erase a requester's open obligation.
+        const parentReq = db.prepare('SELECT pubkey FROM uf_requests WHERE id = ?').get(requestId) as any;
+        if (!parentReq || parentReq.pubkey !== evt.pubkey) continue;
+
+        const outputs = (evt.tags?.filter((t: string[]) => t[0] === 'out') || []).map((t: string[]) => ({
+          pubkey: t[1] || '',
+          wallet: t[2] || '',
+          lanoshis: parseInt(t[3] || '0') || 0,
+          fiat: parseFloat(t[4] || '0') || 0,
+        }));
+
+        // The declared totals must match the out-tag breakdown — an inflated
+        // total with a tiny breakdown must not flip is_repaid.
+        const totalFiat = parseFloat(getTag('amount_fiat_total') || '0') || 0;
+        const totalLanoshis = parseInt(getTag('amount_lanoshis_total') || '0') || 0;
+        const sumFiat = outputs.reduce((s, o) => s + o.fiat, 0);
+        const sumLanoshis = outputs.reduce((s, o) => s + o.lanoshis, 0);
+        if (outputs.length === 0) continue;
+        if (totalFiat <= 0 || Math.abs(sumFiat - totalFiat) > Math.max(0.05, totalFiat * 0.01)) continue;
+        if (totalLanoshis <= 0 || sumLanoshis !== totalLanoshis) continue;
+
+        upsertRepayment.run(
+          evt.id,
+          requestId,
+          evt.pubkey,
+          totalLanoshis,
+          totalFiat,
+          getTag('currency') || 'EUR',
+          parseFloat(getTag('rate') || '0') || 0,
+          getTag('tx') || null,
+          JSON.stringify(outputs),
+          evt.created_at,
+        );
+        repaymentsIndexed++;
+      } catch (err) {
+        console.error('❌ indexUnconditionalFinancingFromRelays: failed to upsert repayment', evt.id, err);
+      }
+    }
+
+    // Recompute repaid status for all requests from the indexed data
+    const toCheck = db.prepare(`
+      SELECT r.id,
+             COALESCE((SELECT SUM(amount_fiat) FROM uf_contributions WHERE request_id = r.id), 0) AS funded,
+             COALESCE((SELECT SUM(total_fiat) FROM uf_repayments WHERE request_id = r.id), 0) AS repaid
+      FROM uf_requests r
+    `).all() as any[];
+
+    let repaidChanges = 0;
+    for (const r of toCheck) {
+      const isRepaid = r.funded > 0 && r.repaid >= r.funded * 0.99 ? 1 : 0;
+      const result = db.prepare('UPDATE uf_requests SET is_repaid = ? WHERE id = ? AND is_repaid != ?').run(isRepaid, r.id, isRepaid);
+      if (result.changes > 0) repaidChanges++;
+    }
+
+    db.prepare(`
+      INSERT INTO app_settings (key, value, updated_at) VALUES ('unconditional_financing_last_indexed_at', ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+    `).run(String(Math.floor(Date.now() / 1000)));
+
+    console.log(`✅ indexUnconditionalFinancingFromRelays: ${requestsIndexed} requests, ${contributionsIndexed} contributions, ${repaymentsIndexed} repayments, ${repaidChanges} repaid changes`);
+  } catch (error) {
+    console.error('❌ indexUnconditionalFinancingFromRelays error:', error);
+  }
+}

@@ -372,6 +372,76 @@ export function initializeSchema(db: Database.Database): void {
     );
 
     -- =============================================
+    -- UNCONDITIONAL FINANCING — server-authoritative cache
+    -- (KIND 31240 requests, 60210 contributions, 60211 repayments)
+    -- =============================================
+
+    CREATE TABLE IF NOT EXISTS uf_requests (
+      id TEXT PRIMARY KEY,
+      event_id TEXT UNIQUE,
+      pubkey TEXT NOT NULL,
+      title TEXT NOT NULL,
+      short_desc TEXT NOT NULL DEFAULT '',
+      content TEXT NOT NULL DEFAULT '',
+      request_type TEXT NOT NULL DEFAULT 'personal_hardship',
+      fiat_goal REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      wallet TEXT NOT NULL DEFAULT '',
+      cover_image TEXT,
+      gallery_images TEXT NOT NULL DEFAULT '[]',
+      crowdfunding_refs TEXT NOT NULL DEFAULT '[]',
+      published_at INTEGER NOT NULL DEFAULT 0,
+      funding_opens_at INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active',
+      is_hidden INTEGER NOT NULL DEFAULT 0,
+      is_repaid INTEGER NOT NULL DEFAULT 0,
+      nostr_created_at INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS uf_contributions (
+      id TEXT PRIMARY KEY,
+      request_id TEXT NOT NULL,
+      supporter_pubkey TEXT NOT NULL,
+      recipient_pubkey TEXT NOT NULL DEFAULT '',
+      amount_lanoshis INTEGER NOT NULL DEFAULT 0,
+      amount_fiat REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      rate REAL NOT NULL DEFAULT 0,
+      from_wallet TEXT NOT NULL DEFAULT '',
+      repayment_wallet TEXT NOT NULL DEFAULT '',
+      to_wallet TEXT NOT NULL DEFAULT '',
+      tx_id TEXT,
+      message TEXT,
+      nostr_created_at INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS uf_repayments (
+      id TEXT PRIMARY KEY,
+      request_id TEXT NOT NULL,
+      payer_pubkey TEXT NOT NULL,
+      total_lanoshis INTEGER NOT NULL DEFAULT 0,
+      total_fiat REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      rate REAL NOT NULL DEFAULT 0,
+      tx_id TEXT,
+      outputs TEXT NOT NULL DEFAULT '[]',
+      nostr_created_at INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Split transition history — fed by the KIND 38888 heartbeat sync. Needed to
+    -- compute "Lana8Wonder member for >= 4 completed Splits" (relays replace the
+    -- addressable 38888 event, so without this table past split dates are lost).
+    CREATE TABLE IF NOT EXISTS split_history (
+      split INTEGER PRIMARY KEY,
+      started_at INTEGER NOT NULL DEFAULT 0,
+      recorded_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- =============================================
     -- INDEXES
     -- =============================================
 
@@ -429,6 +499,12 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_lanacrowd_projects_type ON lanacrowd_projects(project_type);
     CREATE INDEX IF NOT EXISTS idx_lanacrowd_donations_project ON lanacrowd_donations(project_id);
     CREATE INDEX IF NOT EXISTS idx_lanacrowd_donations_supporter ON lanacrowd_donations(supporter_pubkey);
+    CREATE INDEX IF NOT EXISTS idx_uf_requests_status ON uf_requests(status, is_hidden, is_repaid);
+    CREATE INDEX IF NOT EXISTS idx_uf_requests_pubkey ON uf_requests(pubkey);
+    CREATE INDEX IF NOT EXISTS idx_uf_contributions_request ON uf_contributions(request_id);
+    CREATE INDEX IF NOT EXISTS idx_uf_contributions_supporter ON uf_contributions(supporter_pubkey);
+    CREATE INDEX IF NOT EXISTS idx_uf_repayments_request ON uf_repayments(request_id);
+    CREATE INDEX IF NOT EXISTS idx_uf_repayments_payer ON uf_repayments(payer_pubkey);
   `);
 
   // Migrations for existing databases

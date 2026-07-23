@@ -156,7 +156,18 @@ const Lana8Wonder = lazy(() => import("./pages/Lana8Wonder"));
 const Lana8WonderTransfer = lazy(() => import("./pages/Lana8WonderTransfer"));
 const Lana8WonderLayout = lazy(() => import("./pages/lana8wonder/Lana8WonderLayout"));
 const Lana8WonderSplits = lazy(() => import("./pages/lana8wonder/Lana8WonderSplits"));
-const UnconditionalFinancing = lazy(() => import("./pages/unconditional-financing/UnconditionalFinancing"));
+const UFLayout = lazy(() => import("./pages/unconditional-financing/UFLayout"));
+const UFRequests = lazy(() => import("./pages/unconditional-financing/UFRequests"));
+const UFRequestDetail = lazy(() => import("./pages/unconditional-financing/UFRequestDetail"));
+const UFCreateRequest = lazy(() => import("./pages/unconditional-financing/UFCreateRequest"));
+const UFContribute = lazy(() => import("./pages/unconditional-financing/UFContribute"));
+const UFContributePrivateKey = lazy(() => import("./pages/unconditional-financing/UFContributePrivateKey"));
+const UFContributeResult = lazy(() => import("./pages/unconditional-financing/UFContributeResult"));
+const UFRepay = lazy(() => import("./pages/unconditional-financing/UFRepay"));
+const UFRepayPrivateKey = lazy(() => import("./pages/unconditional-financing/UFRepayPrivateKey"));
+const UFRepayResult = lazy(() => import("./pages/unconditional-financing/UFRepayResult"));
+const UFMy = lazy(() => import("./pages/unconditional-financing/UFMy"));
+const UnconditionalFinancingAbout = lazy(() => import("./pages/unconditional-financing/UnconditionalFinancing"));
 const AiAdvisor = lazy(() => import("./pages/AiAdvisor"));
 const Home = lazy(() => import("./pages/Home"));
 const FaqDetail = lazy(() => import("./pages/FaqDetail"));
@@ -356,7 +367,19 @@ const App = () => (
                   <Route path="/sell-lana" element={<SellLana />} />
                   <Route path="/test-transaction" element={<TestTransaction />} />
                   <Route path="/buy-lana" element={<BuyLana />} />
-                  <Route path="/unconditional-financing" element={<UnconditionalFinancing />} />
+                  <Route path="/unconditional-financing" element={<UFLayout />}>
+                    <Route index element={<UFRequests />} />
+                    <Route path="request/:id" element={<UFRequestDetail />} />
+                    <Route path="create" element={<UFCreateRequest />} />
+                    <Route path="contribute/:id" element={<UFContribute />} />
+                    <Route path="contribute/:id/private-key" element={<UFContributePrivateKey />} />
+                    <Route path="contribute/:id/result" element={<UFContributeResult />} />
+                    <Route path="repay/:id" element={<UFRepay />} />
+                    <Route path="repay/:id/private-key" element={<UFRepayPrivateKey />} />
+                    <Route path="repay/:id/result" element={<UFRepayResult />} />
+                    <Route path="my" element={<UFMy />} />
+                    <Route path="about" element={<UnconditionalFinancingAbout />} />
+                  </Route>
                   <Route path="/lana8wonder" element={<Lana8WonderLayout />}>
                     <Route index element={<Lana8Wonder />} />
                     <Route path="splits" element={<Lana8WonderSplits />} />

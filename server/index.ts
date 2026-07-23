@@ -3,13 +3,14 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getDb, closeDb } from './db/connection';
-import { fetchKind38888, refreshStaleProfiles, discoverNewProfiles, cleanupOrphanedProfiles, syncProjectFundedStatus, indexLanacrowdFromRelays } from './lib/nostr';
+import { fetchKind38888, refreshStaleProfiles, discoverNewProfiles, cleanupOrphanedProfiles, syncProjectFundedStatus, indexLanacrowdFromRelays, indexUnconditionalFinancingFromRelays } from './lib/nostr';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import dbRoutes from './routes/db';
 import storageRoutes from './routes/storage';
 import lanacrowdRoutes from './routes/lanacrowd';
+import unconditionalFinancingRoutes from './routes/unconditionalFinancing';
 import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks } from './routes/sse';
 import functionsRoutes, { retryPendingNostrEvents } from './routes/functions';
 import voiceRoutes from './routes/voice';
@@ -75,6 +76,32 @@ async function syncKind38888ToDb(): Promise<boolean> {
         'SELECT created_at, event_id FROM kind_38888 ORDER BY created_at DESC LIMIT 1'
       ).get() as { created_at: number; event_id: string } | undefined;
 
+      // Record split transitions into split_history. The 38888 event is
+      // addressable (relays replace it) and the kind_38888 table is DELETEd on
+      // every update below, so this history table is the ONLY durable record of
+      // when each split started — needed by the Unconditional Financing
+      // eligibility rule ("Lana8Wonder member for >= 4 completed Splits").
+      // Audited upsert: a NEWER trusted 38888 event may CORRECT a split's
+      // started_at, but a stale relay (older event) can never regress one.
+      try {
+        const splitNo = parseInt(data.split);
+        const isFreshEnough = !existing || data.created_at >= existing.created_at;
+        if (isFreshEnough && Number.isFinite(splitNo) && splitNo > 0 && data.split_started_at > 0) {
+          const prev = db.prepare('SELECT started_at FROM split_history WHERE split = ?').get(splitNo) as any;
+          db.prepare(`
+            INSERT INTO split_history (split, started_at) VALUES (?, ?)
+            ON CONFLICT(split) DO UPDATE SET started_at = excluded.started_at
+          `).run(splitNo, data.split_started_at);
+          if (!prev) {
+            console.log(`📈 split_history: recorded split ${splitNo} started at ${data.split_started_at}`);
+          } else if (prev.started_at !== data.split_started_at) {
+            console.log(`📈 split_history: corrected split ${splitNo} started_at ${prev.started_at} → ${data.split_started_at}`);
+          }
+        }
+      } catch (err) {
+        console.error('⚠️ split_history record failed:', err);
+      }
+
       if (existing && existing.created_at >= data.created_at) {
         // Already up-to-date, no need to update
         return true;
@@ -85,8 +112,9 @@ async function syncKind38888ToDb(): Promise<boolean> {
       db.prepare(`
         INSERT INTO kind_38888 (
           id, event_id, pubkey, created_at, relays, electrum_servers,
-          exchange_rates, split, version, valid_from, trusted_signers, raw_event
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          exchange_rates, split, version, valid_from,
+          split_started_at, split_target_lana, trusted_signers, raw_event
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         'synced_' + Date.now(),
         data.event_id,
@@ -98,6 +126,8 @@ async function syncKind38888ToDb(): Promise<boolean> {
         data.split,
         data.version,
         data.valid_from,
+        data.split_started_at || null,
+        data.split_target_lana || null,
         JSON.stringify(data.trusted_signers),
         data.raw_event
       );
@@ -148,6 +178,13 @@ async function syncKind38888ToDb(): Promise<boolean> {
     await indexLanacrowdFromRelays(db);
   } catch (err) {
     console.error('❌ Startup LanaCrowd index failed:', err);
+  }
+  // Full Unconditional Financing index from relays on startup
+  try {
+    console.log('📦 Indexing Unconditional Financing from relays...');
+    await indexUnconditionalFinancingFromRelays(db);
+  } catch (err) {
+    console.error('❌ Startup Unconditional Financing index failed:', err);
   }
 })();
 
@@ -238,6 +275,12 @@ const heartbeatTimer = setInterval(async () => {
     } catch (err) {
       console.error('❌ Error indexing LanaCrowd from relays:', err);
     }
+    // Full Unconditional Financing re-index every 30 minutes (same safety net)
+    try {
+      await withTimeout(() => indexUnconditionalFinancingFromRelays(db), 'indexUnconditionalFinancingFromRelays', 120000);
+    } catch (err) {
+      console.error('❌ Error indexing Unconditional Financing from relays:', err);
+    }
   }
 
   // Sync unregistered LANA (KIND 87003/87009) every 10 heartbeats (= every 10 minutes)
@@ -273,6 +316,7 @@ app.use('/api/voice', voiceRoutes);
 
 // LanaCrowd (100millionideas) — server-authoritative REST API
 app.use('/api/lanacrowd', lanacrowdRoutes);
+app.use('/api/unconditional-financing', unconditionalFinancingRoutes);
 app.use('/api/beings', beingsRoutes);
 
 // =============================================
