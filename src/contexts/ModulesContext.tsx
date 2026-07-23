@@ -30,7 +30,8 @@ import transparencyImage from '@/assets/transparency-module.png';
 import lanaknightsImage from '@/assets/lanaknights-module.png';
 import lanaeventsImage from '@/assets/lanaevents-module.png';
 import lanaalignsImage from '@/assets/lana-aligns-world-module.png';
-import unconditionalLoanImage from '@/assets/unconditional-loan-module.png';
+import unconditionalFinancingEnImage from '@/assets/unconditional-financing-module-en.png';
+import unconditionalFinancingSlImage from '@/assets/unconditional-financing-module-sl.png';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
@@ -212,15 +213,16 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     order: 11
   },
   {
-    id: 'unconditionalloan',
-    title: 'Unconditional Loans',
-    titleSl: 'Brezpogojni krediti',
-    description: 'Community financing built on trust — apply for and repay unconditional loans',
-    descriptionSl: 'Skupnostno financiranje, ki temelji na zaupanju — zaprosi za brezpogojni kredit in ga vračaj',
+    id: 'unconditionalfinancing',
+    title: 'Unconditional Financing',
+    titleSl: 'Brezpogojno financiranje',
+    description: 'Community financing built on trust — request support and return it into the shared flow',
+    descriptionSl: 'Skupnostno financiranje, ki temelji na zaupanju — zaprosi za podporo in jo vrni v skupni tok',
     icon: HandCoins,
-    path: '/unconditional-loan',
+    path: '/unconditional-financing',
     gradient: 'from-amber-500 to-yellow-500',
-    image: unconditionalLoanImage,
+    image: unconditionalFinancingEnImage,
+    imageSl: unconditionalFinancingSlImage,
     enabled: true,
     order: 11.5
   },
@@ -514,7 +516,7 @@ const mapToNostrId = (id: ModuleType): string => {
     'meet': 'Lana Meet',
     'theLanaLife': 'TheLana.Life',
     'direct-fund': 'Direct Fund',
-    'unconditionalloan': 'Unconditional Loans'
+    'unconditionalfinancing': 'Unconditional Financing'
   };
   return mapping[id] || id;
 };
@@ -558,7 +560,7 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Lana Discount': 'lanadiscount',
     'Lana Meet': 'meet',
     'TheLana.Life': 'theLanaLife',
-    'Unconditional Loans': 'unconditionalloan'
+    'Unconditional Financing': 'unconditionalfinancing'
   };
   return mapping[id] || null;
 };
