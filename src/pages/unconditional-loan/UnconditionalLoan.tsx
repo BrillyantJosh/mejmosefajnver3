@@ -61,7 +61,7 @@ const SL: Article = {
       "kako podpira smer obilja,",
       "ter zakaj želi postati del skupnosti brezpogojnih kreditov.",
     ] },
-    { p: "S tem ne zaprosi še za konkretna sredstva. Najprej se predstavi kot človek, ki želi sodelovati v skupnem sistemu zaupanja, podpore in samoodgovornosti." },
+    { p: "S tem še ne zaprosi za konkretna sredstva. Najprej se predstavi kot človek, ki želi sodelovati v skupnem sistemu zaupanja, podpore in samoodgovornosti." },
     { h: "2. Vloga za posamezni kredit" },
     { p: "Ko je posameznik del kreditne skupnosti, lahko odda ločeno vlogo za konkretni brezpogojni kredit." },
     { p: "V njej opiše:" },
