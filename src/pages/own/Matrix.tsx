@@ -33,7 +33,7 @@ const TXT = {
     participants: "udeležencev", active: "Aktiven",
     allProcesses: "Vsi procesi", officialPhase: "Uradna faza:", beingsAssessing: "bitij ocenjuje",
     tabMatrix: "Matrica", tabTimeline: "Časovnica",
-    loadingAssess: "Nalagam ocene…", noAssess: "Za ta proces še nobeno bitje ni objavilo ocene.",
+    loadingAssess: "Nalagam ocene…", noAssess: "Za ta proces še nobeno bitje ni objavilo ocene.", noAssessYet: "Nobeno bitje še ni objavilo ocene za to osebo.",
     legendIntro: "Vsaka celica = kako to bitje bere udeleženca. Dvoje ločeno:",
     currentlyIn: "Trenutno v", currentlyInDesc: "faza, za katero bitje meni, da je udeleženec zdaj v njej.",
     reqMet: "Izpolnjene zahteve", reqMetDesc: "katere faze je zaključil:",
@@ -126,7 +126,7 @@ const TXT = {
     participants: "participant(s)", active: "Active",
     allProcesses: "All processes", officialPhase: "Official phase:", beingsAssessing: "being(s) assessing",
     tabMatrix: "Matrix", tabTimeline: "Timeline",
-    loadingAssess: "Loading assessments…", noAssess: "No being has published an assessment for this process yet.",
+    loadingAssess: "Loading assessments…", noAssess: "No being has published an assessment for this process yet.", noAssessYet: "No being has assessed this person yet.",
     legendIntro: "Each cell = how that being reads the participant. Two separate things:",
     currentlyIn: "Currently in", currentlyInDesc: "the phase the being thinks they are in right now.",
     reqMet: "Requirements met", reqMetDesc: "which phases they have completed:",
@@ -342,6 +342,24 @@ export default function Matrix() {
       <div className="flex items-center gap-1.5"><Circle className="h-4 w-4 text-muted-foreground/30 shrink-0" /><span className="text-xs text-muted-foreground/60">{label} · {L.notYet}</span></div>
     );
   };
+  // The body of one assessment cell — shared between the desktop table and the
+  // mobile stacked cards, so both read identically.
+  const AssessmentCellBody = ({ st }: { st: PhaseState }) => (
+    <>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">{L.currentlyIn}</div>
+      <Badge variant="outline" className={`${getPhaseColor(st.currentPhaseEstimate)} mb-2`}>{getPhaseLabel(st.currentPhaseEstimate, lang)}</Badge>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{L.reqMet}</div>
+      <div className="space-y-1">
+        <PhaseRow status={phaseStatus(st, "reflection")} label={L.reflection} />
+        <PhaseRow status={phaseStatus(st, "alignment")} label={L.alignment} />
+        <PhaseRow status={phaseStatus(st, "change")} label={L.change} />
+      </div>
+      {st.grievanceSummary && (
+        <div className="text-[10px] text-muted-foreground mt-1.5">{L.grievLabel}: {st.grievanceSummary.received_accepted}/{st.grievanceSummary.received} {L.grievAcceptedWord}</div>
+      )}
+      <div className="text-[10px] text-muted-foreground mt-1.5">{L.confidence} {(st.overallConfidence).toFixed(2)}</div>
+    </>
+  );
 
   const [timelineParticipant, setTimelineParticipant] = useState<string>("all");
   const [timelineBeing, setTimelineBeing] = useState<string>("all");
@@ -543,16 +561,19 @@ export default function Matrix() {
       </Card>
 
       <Tabs defaultValue="matrix" className="space-y-4 md:space-y-6">
-        <TabsList className="grid w-full max-w-3xl grid-cols-6">
-          <TabsTrigger value="matrix">{L.tabMatrix}</TabsTrigger>
-          <TabsTrigger value="timeline">{L.tabTimeline}</TabsTrigger>
-          <TabsTrigger value="grievances">{L.tabGrievances}</TabsTrigger>
-          <TabsTrigger value="emotions">{L.tabEmotions}</TabsTrigger>
-          <TabsTrigger value="proposals" className="gap-1">
+        {/* Mobile: a single scrollable row (labels keep their full width, you
+            swipe). Desktop: an even 6-column grid. Prevents the cramped
+            "MatricaČasovnica" overlap on narrow phones. */}
+        <TabsList className="flex w-full max-w-3xl justify-start gap-1 overflow-x-auto md:grid md:grid-cols-6 md:overflow-visible">
+          <TabsTrigger value="matrix" className="shrink-0 md:shrink">{L.tabMatrix}</TabsTrigger>
+          <TabsTrigger value="timeline" className="shrink-0 md:shrink">{L.tabTimeline}</TabsTrigger>
+          <TabsTrigger value="grievances" className="shrink-0 md:shrink">{L.tabGrievances}</TabsTrigger>
+          <TabsTrigger value="emotions" className="shrink-0 md:shrink">{L.tabEmotions}</TabsTrigger>
+          <TabsTrigger value="proposals" className="shrink-0 md:shrink gap-1">
             <span className="truncate">{L.tabProposals}</span>
             <span className="rounded-full border border-orange-500/40 bg-orange-500/10 px-1 text-[9px] leading-4 text-orange-600 shrink-0">{L.propBeta}</span>
           </TabsTrigger>
-          <TabsTrigger value="commitment" className="gap-1">
+          <TabsTrigger value="commitment" className="shrink-0 md:shrink gap-1">
             <span className="truncate">{L.tabCommitment}</span>
             <span className="rounded-full border border-orange-500/40 bg-orange-500/10 px-1 text-[9px] leading-4 text-orange-600 shrink-0">{L.cmtBeta}</span>
           </TabsTrigger>
@@ -563,8 +584,8 @@ export default function Matrix() {
           {beings.length === 0 ? (
             <Card><CardContent className="py-12 text-center text-muted-foreground">{loadingAssess ? L.loadingAssess : L.noAssess}</CardContent></Card>
           ) : (
-            <div className="overflow-x-auto">
-              <div className="mb-4 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1.5">
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1.5">
                 <div>{L.legendIntro}</div>
                 <div className="flex flex-wrap gap-x-5 gap-y-1">
                   <span><strong className="text-foreground">{L.currentlyIn}</strong> — {L.currentlyInDesc}</span>
@@ -576,45 +597,64 @@ export default function Matrix() {
                   <span className="inline-flex items-center gap-1"><Circle className="h-3.5 w-3.5 text-muted-foreground/40" /> {L.notYetLeg}</span>
                 </div>
               </div>
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left p-3 font-semibold">{L.participant}</th>
-                    {beings.map((b) => (
-                      <th key={b} className="text-left p-3 font-semibold whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1"><Bot className="h-3.5 w-3.5 text-orange-500" />{nameOf(b)}</span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {participants.map((p) => (
-                    <tr key={p} className="border-b border-border/50 align-top">
-                      <td className="p-3 font-medium whitespace-nowrap">{nameOf(p)}</td>
-                      {beings.map((b) => {
-                        const st = stateFor(b, p);
-                        if (!st) return <td key={b} className="p-3 text-muted-foreground/50">—</td>;
-                        return (
-                          <td key={b} className="p-3">
-                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">{L.currentlyIn}</div>
-                            <Badge variant="outline" className={`${getPhaseColor(st.currentPhaseEstimate)} mb-2`}>{getPhaseLabel(st.currentPhaseEstimate, lang)}</Badge>
-                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{L.reqMet}</div>
-                            <div className="space-y-1">
-                              <PhaseRow status={phaseStatus(st, "reflection")} label={L.reflection} />
-                              <PhaseRow status={phaseStatus(st, "alignment")} label={L.alignment} />
-                              <PhaseRow status={phaseStatus(st, "change")} label={L.change} />
-                            </div>
-                            {st.grievanceSummary && (
-                              <div className="text-[10px] text-muted-foreground mt-1.5">{L.grievLabel}: {st.grievanceSummary.received_accepted}/{st.grievanceSummary.received} {L.grievAcceptedWord}</div>
-                            )}
-                            <div className="text-[10px] text-muted-foreground mt-1.5">{L.confidence} {(st.overallConfidence).toFixed(2)}</div>
-                          </td>
-                        );
-                      })}
+
+              {/* DESKTOP: the wide participant × being table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left p-3 font-semibold">{L.participant}</th>
+                      {beings.map((b) => (
+                        <th key={b} className="text-left p-3 font-semibold whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1"><Bot className="h-3.5 w-3.5 text-orange-500" />{nameOf(b)}</span>
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {participants.map((p) => (
+                      <tr key={p} className="border-b border-border/50 align-top">
+                        <td className="p-3 font-medium whitespace-nowrap">{nameOf(p)}</td>
+                        {beings.map((b) => {
+                          const st = stateFor(b, p);
+                          if (!st) return <td key={b} className="p-3 text-muted-foreground/50">—</td>;
+                          return <td key={b} className="p-3"><AssessmentCellBody st={st} /></td>;
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* MOBILE: one card per participant, one block per being that
+                  assessed them — no horizontal scrolling, nothing cut off. */}
+              <div className="md:hidden space-y-3">
+                {participants.map((p) => {
+                  const assessed = beings.filter((b) => stateFor(b, p));
+                  return (
+                    <Card key={p}>
+                      <CardContent className="p-3 space-y-2.5">
+                        <div className="font-semibold text-sm">{nameOf(p)}</div>
+                        {assessed.length === 0 ? (
+                          <div className="text-xs text-muted-foreground/60">{L.noAssessYet}</div>
+                        ) : (
+                          assessed.map((b) => {
+                            const st = stateFor(b, p)!;
+                            return (
+                              <div key={b} className="rounded-md border border-border/60 bg-background/40 p-2.5">
+                                <div className="inline-flex items-center gap-1 text-xs font-medium mb-1.5">
+                                  <Bot className="h-3.5 w-3.5 text-orange-500" />{nameOf(b)}
+                                </div>
+                                <AssessmentCellBody st={st} />
+                              </div>
+                            );
+                          })
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
           )}
         </TabsContent>
