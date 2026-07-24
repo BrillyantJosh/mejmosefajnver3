@@ -33,7 +33,7 @@ const TXT = {
     participants: "udeležencev", active: "Aktiven",
     allProcesses: "Vsi procesi", officialPhase: "Uradna faza:", beingsAssessing: "bitij ocenjuje",
     tabMatrix: "Matrica", tabTimeline: "Časovnica",
-    loadingAssess: "Nalagam ocene…", noAssess: "Za ta proces še nobeno bitje ni objavilo ocene.", noAssessYet: "Nobeno bitje še ni objavilo ocene za to osebo.",
+    loadingAssess: "Nalagam ocene…", noAssess: "Za ta proces še nobeno bitje ni objavilo ocene.", noAssessYet: "Nobeno bitje še ni objavilo ocene za to osebo.", noAssessYetBeing: "To bitje te še ni ocenilo.",
     legendIntro: "Vsaka celica = kako to bitje bere udeleženca. Dvoje ločeno:",
     currentlyIn: "Trenutno v", currentlyInDesc: "faza, za katero bitje meni, da je udeleženec zdaj v njej.",
     reqMet: "Izpolnjene zahteve", reqMetDesc: "katere faze je zaključil:",
@@ -126,7 +126,7 @@ const TXT = {
     participants: "participant(s)", active: "Active",
     allProcesses: "All processes", officialPhase: "Official phase:", beingsAssessing: "being(s) assessing",
     tabMatrix: "Matrix", tabTimeline: "Timeline",
-    loadingAssess: "Loading assessments…", noAssess: "No being has published an assessment for this process yet.", noAssessYet: "No being has assessed this person yet.",
+    loadingAssess: "Loading assessments…", noAssess: "No being has published an assessment for this process yet.", noAssessYet: "No being has assessed this person yet.", noAssessYetBeing: "This being hasn't assessed them yet.",
     legendIntro: "Each cell = how that being reads the participant. Two separate things:",
     currentlyIn: "Currently in", currentlyInDesc: "the phase the being thinks they are in right now.",
     reqMet: "Requirements met", reqMetDesc: "which phases they have completed:",
@@ -626,34 +626,30 @@ export default function Matrix() {
                 </table>
               </div>
 
-              {/* MOBILE: one card per participant, one block per being that
-                  assessed them — no horizontal scrolling, nothing cut off. */}
+              {/* MOBILE: one card per participant. EVERY being is shown (same
+                  set for every person, matching the desktop columns) — a being
+                  that has not assessed this person yet gets a muted "—" line, so
+                  the layout is consistent and nobody looks half-missing. No
+                  horizontal scrolling, nothing cut off. */}
               <div className="md:hidden space-y-3">
-                {participants.map((p) => {
-                  const assessed = beings.filter((b) => stateFor(b, p));
-                  return (
-                    <Card key={p}>
-                      <CardContent className="p-3 space-y-2.5">
-                        <div className="font-semibold text-sm">{nameOf(p)}</div>
-                        {assessed.length === 0 ? (
-                          <div className="text-xs text-muted-foreground/60">{L.noAssessYet}</div>
-                        ) : (
-                          assessed.map((b) => {
-                            const st = stateFor(b, p)!;
-                            return (
-                              <div key={b} className="rounded-md border border-border/60 bg-background/40 p-2.5">
-                                <div className="inline-flex items-center gap-1 text-xs font-medium mb-1.5">
-                                  <Bot className="h-3.5 w-3.5 text-orange-500" />{nameOf(b)}
-                                </div>
-                                <AssessmentCellBody st={st} />
-                              </div>
-                            );
-                          })
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                {participants.map((p) => (
+                  <Card key={p}>
+                    <CardContent className="p-3 space-y-2.5">
+                      <div className="font-semibold text-sm">{nameOf(p)}</div>
+                      {beings.map((b) => {
+                        const st = stateFor(b, p);
+                        return (
+                          <div key={b} className="rounded-md border border-border/60 bg-background/40 p-2.5">
+                            <div className="inline-flex items-center gap-1 text-xs font-medium mb-1.5">
+                              <Bot className="h-3.5 w-3.5 text-orange-500" />{nameOf(b)}
+                            </div>
+                            {st ? <AssessmentCellBody st={st} /> : <div className="text-xs text-muted-foreground/50">{L.noAssessYetBeing}</div>}
+                          </div>
+                        );
+                      })}
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             </div>
           )}
@@ -836,6 +832,7 @@ export default function Matrix() {
                           <GrievanceStepTable
                             grievances={l.grievances}
                             nameOf={nameOf}
+                            roster={participants}
                             labels={{ grievances: L.grievLabel, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen }}
                           />
                         )

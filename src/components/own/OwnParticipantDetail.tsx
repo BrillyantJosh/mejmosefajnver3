@@ -166,6 +166,17 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
     return out;
   }, [ledgers, me]);
 
+  // One roster across ALL beings' grievances so a person is the same colour in
+  // every being's sub-table (colours are assigned by position, not a hash).
+  const grievRoster = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of ledgers) for (const g of l.grievances) {
+      set.add((g.fromPubkey || "").toLowerCase());
+      set.add((g.toPubkey || "").toLowerCase());
+    }
+    return Array.from(set);
+  }, [ledgers]);
+
   // Steber 2 nesting: this participant's guidance (87048) under the exact
   // assessment (87047) — join on basedOnStateId, fallback nearest OLDER
   // assessment by the same being.
@@ -407,6 +418,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                       <GrievanceStepTable
                         grievances={[...received, ...given]}
                         nameOf={nameOf}
+                        roster={grievRoster}
                         highlightPubkey={me}
                         labels={{ grievances: L.grievTitle, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen }}
                       />

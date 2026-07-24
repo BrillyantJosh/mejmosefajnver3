@@ -38,25 +38,41 @@ const PALETTE = [
   { name: "text-orange-600 dark:text-orange-400", ring: "border-orange-500", fill: "bg-orange-500/15", dot: "bg-orange-500" },
 ] as const;
 
-// Stable colour per pubkey — identical in every table on every surface, no
-// matter which subset of grievances a given being shows.
-function colorFor(pubkey: string) {
+function hashIndex(pubkey: string) {
   const s = (pubkey || "").toLowerCase();
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length];
+  return h % PALETTE.length;
 }
 
 export default function GrievanceStepTable({
-  grievances, nameOf, labels, highlightPubkey,
+  grievances, nameOf, labels, highlightPubkey, roster,
 }: {
   grievances: Grievance[];
   nameOf: (pk: string) => string;
   labels: GrievanceStepLabels;
   /** When set, this person's name is emphasized in every from → to pair. */
   highlightPubkey?: string;
+  /** The full participant roster — colours are assigned BY POSITION here, so
+   *  ≤6 people always get DISTINCT hues (a plain hash collides). Sorted for a
+   *  canonical order identical across every being's sub-table and every app. */
+  roster?: string[];
 }) {
   const me = (highlightPubkey || "").toLowerCase();
+
+  // Canonical colour order: the roster if given, else the distinct people in
+  // this table — sorted, so the same person is the same colour everywhere.
+  const order = (() => {
+    const src = roster && roster.length
+      ? roster
+      : grievances.flatMap((g) => [g.fromPubkey, g.toPubkey]);
+    return Array.from(new Set(src.map((p) => (p || "").toLowerCase()))).sort();
+  })();
+  // Distinct by position; fall back to a hash only for a pk not in the order.
+  const colorFor = (pk: string) => {
+    const i = order.indexOf((pk || "").toLowerCase());
+    return PALETTE[(i >= 0 ? i : hashIndex(pk)) % PALETTE.length];
+  };
 
   const party = (pk: string) => {
     const c = colorFor(pk);
