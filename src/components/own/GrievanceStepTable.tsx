@@ -1,5 +1,7 @@
-import { Check } from "lucide-react";
+import { useState } from "react";
+import { Check, ChevronDown, Quote } from "lucide-react";
 import type { Grievance } from "@/hooks/useOwnGrievances";
+import type { GrievanceSourceMap } from "@/hooks/useOwnGrievanceSources";
 
 // The four-step grievance table — one row per grievance, one column per
 // milestone. Shared so the /own/matrix Matrica and a participant's own
@@ -25,6 +27,14 @@ export interface GrievanceStepLabels {
   doneWord?: string;
   /** "še ne" — used only in the accessible title of an open cell. */
   openWord?: string;
+  /** "Vir" / "Source" — the per-row source disclosure toggle. */
+  sourceWord?: string;
+  /** "iz sporočila" / "from message" — precedes the short msg-id anchor. */
+  fromMessageWord?: string;
+  /** "sporočilo" / "message" — label prefix for the short msg-id anchor. */
+  messageWord?: string;
+  /** "kopirano" / "copied" — toast-less inline confirmation after copy. */
+  copiedWord?: string;
 }
 
 // Full static class strings (Tailwind cannot see interpolated names). Six
@@ -46,7 +56,7 @@ function hashIndex(pubkey: string) {
 }
 
 export default function GrievanceStepTable({
-  grievances, nameOf, labels, highlightPubkey, roster,
+  grievances, nameOf, labels, highlightPubkey, roster, sources,
 }: {
   grievances: Grievance[];
   nameOf: (pk: string) => string;
@@ -57,6 +67,10 @@ export default function GrievanceStepTable({
    *  ≤6 people always get DISTINCT hues (a plain hash collides). Sorted for a
    *  canonical order identical across every being's sub-table and every app. */
   roster?: string[];
+  /** PARTICIPANT-ONLY source excerpts, keyed by grievance id (see
+   *  useOwnGrievanceSources). Only viewers with the group key ever receive a
+   *  non-empty map — that is the privacy gate. Absent/empty → no disclosure. */
+  sources?: GrievanceSourceMap;
 }) {
   const me = (highlightPubkey || "").toLowerCase();
 
@@ -102,6 +116,64 @@ export default function GrievanceStepTable({
     );
   };
 
+  // ── PARTICIPANT-ONLY "Vir" disclosure ──
+  // A compact per-row toggle that reveals the verbatim message excerpts a being
+  // sourced this grievance from. Rendered only when this grievance actually has
+  // sources; a grievance with none shows nothing at all (no empty toggle).
+  const SourceDisclosure = ({ grievanceId }: { grievanceId: string }) => {
+    const list = sources?.get(grievanceId);
+    const [open, setOpen] = useState(false);
+    const [copied, setCopied] = useState<string | null>(null);
+    if (!list || list.length === 0) return null;
+    const copy = (id: string) => {
+      try {
+        navigator.clipboard?.writeText(id);
+        setCopied(id);
+        setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500);
+      } catch { /* clipboard unavailable — the id is still visible to copy by hand */ }
+    };
+    return (
+      <div className="mt-1.5">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/80 hover:text-foreground transition-colors"
+          aria-expanded={open}
+        >
+          <Quote className="h-3 w-3" />
+          {labels.sourceWord || "Source"}
+          <span className="opacity-70">({list.length})</span>
+          <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+        {open && (
+          <div className="mt-1.5 space-y-2 border-l-2 border-border/60 pl-2.5">
+            {list.map((s) => (
+              <div key={s.msgId} className="space-y-0.5">
+                <blockquote className="text-[11px] italic leading-snug text-foreground/90">
+                  “{s.quote}{s.truncated ? "…" : ""}”
+                </blockquote>
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-muted-foreground">
+                  <span>{nameOf(s.senderPubkey)}</span>
+                  {s.createdAt > 0 && <span>· {new Date(s.createdAt * 1000).toLocaleString()}</span>}
+                  <span>· {labels.fromMessageWord || "from message"}</span>
+                  <button
+                    type="button"
+                    onClick={() => copy(s.msgId)}
+                    title={s.msgId}
+                    className="font-mono text-[10px] text-sky-600 hover:underline dark:text-sky-400"
+                  >
+                    {labels.messageWord || "message"} {s.msgId.slice(0, 8)}…
+                  </button>
+                  {copied === s.msgId && <span className="text-green-600">✓ {labels.copiedWord || "copied"}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // The distinct people who actually appear in this table, in a stable order,
   // for the legend chips.
   const parties: string[] = [];
@@ -143,6 +215,7 @@ export default function GrievanceStepTable({
               <td className="p-2 min-w-[12rem]">
                 <div>{party(g.fromPubkey)} → {party(g.toPubkey)}</div>
                 {g.summary && <div className="text-muted-foreground leading-snug mt-0.5">{g.summary}</div>}
+                <SourceDisclosure grievanceId={g.id} />
               </td>
               {/* respond / accept / apologize = the RECEIVER's (toPubkey) work */}
               <StepCell done={g.respondedByTarget} ownerPubkey={g.toPubkey} label={labels.responded} />
