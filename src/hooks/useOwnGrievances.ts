@@ -28,6 +28,12 @@ export interface Grievance {
   acceptedByGiver: boolean;
   confidence: number;
   lastUpdateAt: number;
+  // Evidence-gating (37050 v2 era) — all default false/absent on legacy bodies:
+  disputedByGiver: boolean;      // the giver denies ever voicing this grievance
+  disputedAt: number | null;
+  disputeEvidence: string;       // abstract of the giver's denial, when present
+  grounded: boolean;             // true = entry was evidence-gated at creation
+  evidenceMsgIds: string[];
 }
 
 export interface GrievanceRollup {
@@ -101,6 +107,11 @@ export const useOwnGrievances = (caseRoot: string | null) => {
                   acceptedByGiver: !!g.accepted_by_giver,
                   confidence: Number(g.confidence) || 0,
                   lastUpdateAt: Number(g.last_update_at) || 0,
+                  disputedByGiver: !!g.disputed_by_giver,
+                  disputedAt: g.disputed_at != null ? Number(g.disputed_at) || 0 : null,
+                  disputeEvidence: String(g.dispute_evidence || ''),
+                  grounded: !!g.grounded,
+                  evidenceMsgIds: Array.isArray(g.evidence_msg_ids) ? g.evidence_msg_ids.map(String) : [],
                 }))
             : [];
 

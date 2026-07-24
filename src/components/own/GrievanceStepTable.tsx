@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Check, ChevronDown, Quote, Loader2, ExternalLink, Copy } from "lucide-react";
 import type { Grievance } from "@/hooks/useOwnGrievances";
-import type { GrievanceSourceMap, OriginalMessage } from "@/hooks/useOwnGrievanceSources";
+import type { SourceRecord, PairMsgIdMap, OriginalMessage } from "@/hooks/useOwnGrievanceSources";
 import TranslateButton from "@/components/own/TranslateButton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AudioPlayer } from "@/components/AudioPlayer";
@@ -46,6 +46,16 @@ export interface GrievanceStepLabels {
   originalErrorWord?: string;
   /** "Kopiraj ID" / "Copy id". */
   copyIdWord?: string;
+  /** "vir ni najden" / "no source found" — being located no message voicing this. */
+  unsourcedWord?: string;
+  /** "vir ne potrjuje, da gre za to osebo" / "source does not confirm the target". */
+  sourceNotTargetWord?: string;
+  /** "vir le delno podpira očitek" / "source only partly supports the claim". */
+  sourcePartialWord?: string;
+  /** "dajalec očitek zanika" / "the giver disputes this claim". */
+  disputedWord?: string;
+  /** "ta vir navaja samo to bitje" / "only this being cites this source". */
+  onlyThisBeingWord?: string;
 }
 
 // Full static class strings (Tailwind cannot see interpolated names). Six
@@ -132,7 +142,7 @@ function OriginalMessageDialog({ msgId, fetchOriginal, nameOf, labels, onClose }
 }
 
 export default function GrievanceStepTable({
-  grievances, nameOf, labels, highlightPubkey, roster, sources, fetchOriginal,
+  grievances, nameOf, labels, highlightPubkey, roster, sources, beingPubkey, corroboration, beingsWithSources, fetchOriginal,
 }: {
   grievances: Grievance[];
   nameOf: (pk: string) => string;
@@ -143,10 +153,19 @@ export default function GrievanceStepTable({
    *  ≤6 people always get DISTINCT hues (a plain hash collides). Sorted for a
    *  canonical order identical across every being's sub-table and every app. */
   roster?: string[];
-  /** PARTICIPANT-ONLY source excerpts, keyed by grievance id (see
-   *  useOwnGrievanceSources). Only viewers with the group key ever receive a
-   *  non-empty map — that is the privacy gate. Absent/empty → no disclosure. */
-  sources?: GrievanceSourceMap;
+  /** PARTICIPANT-ONLY source records for THE ONE BEING whose ledger this table
+   *  renders — grievance_id -> record (see useOwnGrievanceSources). Ids are
+   *  per-being sequential, so the caller must pass
+   *  sourcesByBeing.get(beingPubkey), never a cross-being merge. Only viewers
+   *  with the group key ever receive data — that is the privacy gate. */
+  sources?: Map<string, SourceRecord>;
+  /** The being whose ledger this table renders (same key as in `sources`). */
+  beingPubkey?: string;
+  /** Cross-being pair→msg_ids map (buildPairMsgIdMap) for the corroboration
+   *  chip. Rendered only when beingsWithSources ≥ 2. */
+  corroboration?: PairMsgIdMap;
+  /** How many beings' 37050 the viewer could decrypt (corroboration gate). */
+  beingsWithSources?: number;
   /** Opens the ORIGINAL 87046 message a source points to (decrypted transcript
    *  + audio). From the same hook as `sources`; when omitted, the source shows
    *  a copyable id only, no "open original" button. */
@@ -196,16 +215,79 @@ export default function GrievanceStepTable({
     );
   };
 
+  // This grievance's source record + the entries safe to show: HARD FILTER —
+  // an entry whose sender is not the grievance's giver is never rendered
+  // (defense in depth against cross-person/cross-being leakage).
+  const recordFor = (g: Grievance) => sources?.get(g.id);
+  const entriesFor = (g: Grievance) =>
+    (recordFor(g)?.entries || []).filter((s) => s.senderPubkey === (g.fromPubkey || "").toLowerCase());
+
+  // ── Honesty badges (37050 v2 verdicts + 37046 dispute) + corroboration chip.
+  // Rendered only when the data is actually present — never guessed.
+  const SourceBadges = ({ g }: { g: Grievance }) => {
+    const rec = recordFor(g);
+    const list = entriesFor(g);
+    // Corroboration (participant-only): does any OTHER being record the same
+    // (from,to) grievance citing ≥1 of the same messages? Only meaningful when
+    // the viewer decrypted sources for ≥2 beings.
+    let onlyThisBeing = false;
+    if (rec && list.length > 0 && beingPubkey && corroboration && (beingsWithSources || 0) >= 2) {
+      const self = beingPubkey.toLowerCase();
+      const pairKey = `${g.fromPubkey}|${g.toPubkey}`;
+      let others = 0;
+      for (const [b2, pairMap] of corroboration) {
+        if (b2 === self) continue;
+        const set = pairMap.get(pairKey);
+        if (set && list.some((s) => set.has(s.msgId))) others++;
+      }
+      onlyThisBeing = others === 0;   // count including this being === 1
+    }
+    const badges: { key: string; text: string; red?: boolean }[] = [];
+    if (rec?.unsourced === true)
+      badges.push({ key: "unsourced", text: labels.unsourcedWord || "no source found" });
+    if (rec?.support && rec.support.target === false)
+      badges.push({ key: "not-target", text: labels.sourceNotTargetWord || "source does not confirm the target", red: true });
+    if (rec?.support && rec.support.target === true && rec.support.deed === false)
+      badges.push({ key: "partial", text: labels.sourcePartialWord || "source only partly supports the claim" });
+    if (g.disputedByGiver === true)
+      badges.push({ key: "disputed", text: labels.disputedWord || "the giver disputes this claim", red: true });
+    if (badges.length === 0 && !onlyThisBeing) return null;
+    return (
+      <>
+        <div className="mt-1 flex flex-wrap items-center gap-1">
+          {badges.map((b) => (
+            <span
+              key={b.key}
+              className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] ${b.red
+                ? "border-red-500/40 bg-red-500/10 text-red-600"
+                : "border-amber-500/40 bg-amber-500/10 text-amber-600"}`}
+            >
+              {b.text}
+            </span>
+          ))}
+          {onlyThisBeing && (
+            <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-600">
+              ⚠ {labels.onlyThisBeingWord || "only this being cites this source"}
+            </span>
+          )}
+        </div>
+        {g.disputedByGiver && g.disputeEvidence && (
+          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{g.disputeEvidence}</p>
+        )}
+      </>
+    );
+  };
+
   // ── PARTICIPANT-ONLY "Vir" disclosure ──
   // A compact per-row toggle that reveals the verbatim message excerpts a being
   // sourced this grievance from. Rendered only when this grievance actually has
   // sources; a grievance with none shows nothing at all (no empty toggle).
-  const SourceDisclosure = ({ grievanceId }: { grievanceId: string }) => {
-    const list = sources?.get(grievanceId);
+  const SourceDisclosure = ({ g }: { g: Grievance }) => {
+    const list = entriesFor(g);
     const [open, setOpen] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
     const [openMsg, setOpenMsg] = useState<string | null>(null);
-    if (!list || list.length === 0) return null;
+    if (list.length === 0) return null;
     const copy = (id: string) => {
       try {
         navigator.clipboard?.writeText(id);
@@ -321,7 +403,8 @@ export default function GrievanceStepTable({
               <td className="p-2 min-w-[12rem]">
                 <div>{party(g.fromPubkey)} → {party(g.toPubkey)}</div>
                 {g.summary && <div className="text-muted-foreground leading-snug mt-0.5">{g.summary}</div>}
-                <SourceDisclosure grievanceId={g.id} />
+                <SourceBadges g={g} />
+                <SourceDisclosure g={g} />
               </td>
               {/* respond / accept / apologize = the RECEIVER's (toPubkey) work */}
               <StepCell done={g.respondedByTarget} ownerPubkey={g.toPubkey} label={labels.responded} />

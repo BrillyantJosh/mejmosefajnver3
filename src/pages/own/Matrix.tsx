@@ -12,7 +12,7 @@ import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Users, Telescope, Arch
 import { useAllOwnProcesses } from "@/hooks/useAllOwnProcesses";
 import { useOwnAssessments, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
-import { useOwnGrievanceSources } from "@/hooks/useOwnGrievanceSources";
+import { useOwnGrievanceSources, buildPairMsgIdMap } from "@/hooks/useOwnGrievanceSources";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
 import { useOwnEmotions, HEAVY_EMOTIONS, LIGHT_EMOTIONS, EMOTION_LABELS, type EmotionPalette } from "@/hooks/useOwnEmotions";
 import { useOwnProposals } from "@/hooks/useOwnProposals";
@@ -60,6 +60,7 @@ const TXT = {
     grievColorHint: "Vsak udeleženec ima svojo barvo. Prva tri dejanja (odgovori, sprejmi, opraviči se) so na prejemniku očitka, priznanje zablode pa na dajalcu. Poln krogec s kljukico = opravljeno, obroč = še odprto — barva pove, čigavo je.",
     grievDone: "opravljeno", grievOpen: "še ne", grievOpenOrig: "Odpri izvirno sporočilo", grievOrigTitle: "Izvirno sporočilo", grievOrigErr: "Sporočila ni bilo mogoče naložiti.", grievCopyId: "Kopiraj ID",
     grievSource: "Vir", grievFromMessage: "iz sporočila", grievMessage: "sporočilo", grievCopied: "kopirano",
+    grievUnsourced: "vir ni najden", grievSrcNotTarget: "vir ne potrjuje, da gre za to osebo", grievSrcPartial: "vir le delno podpira očitek", grievDisputed: "dajalec očitek zanika", grievOnlyBeing: "ta vir navaja samo to bitje",
     kind: { direction: "Smer", acceptance: "Sprejetost", space: "Prostor", reminder: "Opomnik", movingOn: "Umik", closingCall: "Zaključni klic", pause: "Pavza", celebration: "Praznovanje", guidance: "Vodenje" } as Record<string, string>,
     gvForPerson: "Pogled za", gvMyReceived: "Name naslovljeni", gvMyReceivedDesc: "odgovori nanje in jih brezpogojno sprejmi",
     gvMyGiven: "Moji dani očitki", gvMyGivenDesc: "sprejmi jih kot del svoje zablode in se zaveži, da ne bodo več nastajali",
@@ -154,6 +155,7 @@ const TXT = {
     grievColorHint: "Each participant has their own colour. The first three (respond, accept, apologize) are the receiver's; owning the delusion is the giver's. Filled check = done, hollow ring = still open — the colour tells you whose.",
     grievDone: "done", grievOpen: "not yet", grievOpenOrig: "Open original message", grievOrigTitle: "Original message", grievOrigErr: "Could not load the message.", grievCopyId: "Copy id",
     grievSource: "Source", grievFromMessage: "from message", grievMessage: "message", grievCopied: "copied",
+    grievUnsourced: "no source found", grievSrcNotTarget: "source does not confirm the target", grievSrcPartial: "source only partly supports the claim", grievDisputed: "the giver disputes this claim", grievOnlyBeing: "only this being cites this source",
     kind: { direction: "Direction", acceptance: "Acceptance", space: "Space", reminder: "Reminder", movingOn: "Moving on", closingCall: "Closing call", pause: "Pause", celebration: "Celebration", guidance: "Guidance" } as Record<string, string>,
     gvForPerson: "Viewing for", gvMyReceived: "Addressed to me", gvMyReceivedDesc: "respond to them and accept them unconditionally",
     gvMyGiven: "Grievances I gave", gvMyGivenDesc: "accept them as part of your own delusion and commit so they stop arising",
@@ -238,9 +240,13 @@ export default function Matrix() {
 
   const { entries, states, isLoading: loadingAssess } = useOwnAssessments(selectedCaseRoot);
   const { ledgers, isLoading: loadingGriev } = useOwnGrievances(selectedCaseRoot);
-  // PARTICIPANT-ONLY source excerpts (KIND 37050, group-key-decrypted). A
+  // PARTICIPANT-ONLY source records (KIND 37050, group-key-decrypted), keyed
+  // per being — grievance ids are per-being sequential, never merged. A
   // non-participant never gets the group key, so this stays empty for them.
-  const { sources: grievSources, fetchOriginal: grievFetchOriginal } = useOwnGrievanceSources(selectedCaseRoot);
+  const { sourcesByBeing: grievSourcesByBeing, beingsWithSources: grievBeingsWithSources, fetchOriginal: grievFetchOriginal } = useOwnGrievanceSources(selectedCaseRoot);
+  // Cross-being corroboration lookup for the "only this being cites this
+  // source" chip — built once per process (cheap).
+  const grievPairMsgIds = useMemo(() => buildPairMsgIdMap(ledgers, grievSourcesByBeing), [ledgers, grievSourcesByBeing]);
   const { entries: guidance } = useOwnGuidance(selectedCaseRoot);
   const { palettes: emotionPalettes, isLoading: loadingEmotions } = useOwnEmotions(selectedCaseRoot);
   const { proposals, isLoading: loadingProposals } = useOwnProposals(selectedCaseRoot);
@@ -839,9 +845,12 @@ export default function Matrix() {
                             grievances={l.grievances}
                             nameOf={nameOf}
                             roster={participants}
-                            sources={grievSources}
+                            sources={grievSourcesByBeing.get(l.beingPubkey)}
+                            beingPubkey={l.beingPubkey}
+                            corroboration={grievPairMsgIds}
+                            beingsWithSources={grievBeingsWithSources}
                             fetchOriginal={grievFetchOriginal}
-                            labels={{ grievances: L.grievLabel, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen, sourceWord: L.grievSource, fromMessageWord: L.grievFromMessage, messageWord: L.grievMessage, copiedWord: L.grievCopied, openOriginalWord: L.grievOpenOrig, originalTitleWord: L.grievOrigTitle, originalErrorWord: L.grievOrigErr, copyIdWord: L.grievCopyId }}
+                            labels={{ grievances: L.grievLabel, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen, sourceWord: L.grievSource, fromMessageWord: L.grievFromMessage, messageWord: L.grievMessage, copiedWord: L.grievCopied, openOriginalWord: L.grievOpenOrig, originalTitleWord: L.grievOrigTitle, originalErrorWord: L.grievOrigErr, copyIdWord: L.grievCopyId, unsourcedWord: L.grievUnsourced, sourceNotTargetWord: L.grievSrcNotTarget, sourcePartialWord: L.grievSrcPartial, disputedWord: L.grievDisputed, onlyThisBeingWord: L.grievOnlyBeing }}
                           />
                         )
                       ) : (

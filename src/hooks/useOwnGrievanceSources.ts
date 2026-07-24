@@ -52,12 +52,17 @@ function parseMessagePayload(text: string): { transcript: string; audioUrl?: str
 // fails and we simply return nothing — that IS the privacy gate, no UI-only
 // hiding is added anywhere.
 //
-// Decrypted body:
-//   { schema: 'lana-own-grievance-source-v1', being_pubkey, being_name,
-//     case_root, prompt_rev, updated_at,
+// Decrypted body — TWO schemas coexist on relays:
+//   v1 ('lana-own-grievance-source-v1'):
 //     sources: { "<grievance_id>": [ {msg_id, sender_pubkey, created_at,
-//                                     quote, truncated} ] } }
-// grievance_id matches the `id` on each grievance already rendered.
+//                                     quote, truncated} ] }   (bare array)
+//   v2 ('lana-own-grievance-source-v2'):
+//     sources: { "<grievance_id>": { from_pubkey, to_pubkey, summary_snapshot,
+//                                    support: null|{deed,target}, unsourced,
+//                                    attempts, entries: [ ...same shape... ] } }
+// grievance_id matches the `id` on each grievance already rendered — but ONLY
+// within the SAME being's ledger: ids (g1..gN) are per-being sequential, so
+// sources are keyed by (being, grievance_id) and NEVER merged across beings.
 
 const GRIEVANCE_SOURCE_KIND = 37050;
 
@@ -77,12 +82,73 @@ export interface GrievanceSource {
   truncated: boolean;
 }
 
-// grievance_id -> list of source excerpts (merged across all beings, deduped
-// by msg_id).
-export type GrievanceSourceMap = Map<string, GrievanceSource[]>;
+// One being's source record for ONE of its own grievance ids. v2 bodies carry
+// the full record; v1 bodies are a bare entries array → wrapped with
+// null/false metadata so both render through the same path.
+export interface SourceRecord {
+  fromPubkey: string | null;   // giver, as the being recorded it (v2 only)
+  toPubkey: string | null;     // target, as the being recorded it (v2 only)
+  support: { deed: boolean; target: boolean } | null;   // v2 verdict; null = unknown (v1)
+  unsourced: boolean;          // true = the being found NO message voicing this
+  entries: GrievanceSource[];
+}
+
+// beingPubkeyLower -> grievance_id -> record. NEVER merged across beings —
+// grievance ids (g1..gN) are per-being sequential, so a bare-gid merge renders
+// being A's g8 sources under being B's completely different g8.
+export type BeingSourceMap = Map<string, Map<string, SourceRecord>>;
+
+// beingPubkeyLower -> "from|to" pair -> the msg_ids that being's sources cite
+// for that directed pair. Built ONCE per page (cheap) for the corroboration
+// chip: a source only "corroborates" across beings when another being records
+// the SAME (from,to) grievance citing ≥1 of the same messages.
+export type PairMsgIdMap = Map<string, Map<string, Set<string>>>;
+
+export function buildPairMsgIdMap(
+  ledgers: { beingPubkey: string; grievances: { id: string; fromPubkey: string; toPubkey: string }[] }[],
+  sourcesByBeing: BeingSourceMap,
+): PairMsgIdMap {
+  const out: PairMsgIdMap = new Map();
+  for (const l of ledgers) {
+    const being = (l.beingPubkey || '').toLowerCase();
+    const gidMap = sourcesByBeing.get(being);
+    if (!gidMap) continue;
+    let pairMap = out.get(being);
+    for (const g of l.grievances) {
+      const rec = gidMap.get(g.id);
+      if (!rec || rec.entries.length === 0) continue;
+      const key = `${g.fromPubkey}|${g.toPubkey}`;
+      if (!pairMap) { pairMap = new Map(); out.set(being, pairMap); }
+      let set = pairMap.get(key);
+      if (!set) { set = new Set(); pairMap.set(key, set); }
+      for (const e of rec.entries) set.add(e.msgId);
+    }
+  }
+  return out;
+}
+
+// Entries parser shared by v1 (bare array) and v2 (record.entries) — dedupe by
+// msg_id WITHIN one being's record, oldest first.
+const parseEntries = (arr: any[]): GrievanceSource[] => {
+  const byMsg = new Map<string, GrievanceSource>();
+  for (const s of arr) {
+    if (!s || typeof s !== 'object') continue;
+    const msgId = String(s.msg_id || '');
+    if (!msgId || byMsg.has(msgId)) continue;
+    byMsg.set(msgId, {
+      msgId,
+      senderPubkey: String(s.sender_pubkey || '').toLowerCase(),
+      createdAt: Number(s.created_at) || 0,
+      quote: String(s.quote || ''),
+      truncated: !!s.truncated,
+    });
+  }
+  return Array.from(byMsg.values()).sort((a, b) => a.createdAt - b.createdAt);
+};
 
 export const useOwnGrievanceSources = (caseRoot: string | null): {
-  sources: GrievanceSourceMap;
+  sourcesByBeing: BeingSourceMap;
+  beingsWithSources: number;
   isLoading: boolean;
   fetchOriginal: (msgId: string) => Promise<OriginalMessage | null>;
 } => {
@@ -97,16 +163,16 @@ export const useOwnGrievanceSources = (caseRoot: string | null): {
     session?.nostrPrivateKey || null,
   );
 
-  const [sources, setSources] = useState<GrievanceSourceMap>(new Map());
+  const [sourcesByBeing, setSourcesByBeing] = useState<BeingSourceMap>(new Map());
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!caseRoot || !groupKey || !parameters?.relays?.length) {
-      setSources(new Map());
+      setSourcesByBeing(new Map());
       return;
     }
     let cancelled = false;
-    setSources(new Map());
+    setSourcesByBeing(new Map());
     setIsLoading(true);
     const relays = parameters.relays;
     const pool = new SimplePool();
@@ -130,8 +196,9 @@ export const useOwnGrievanceSources = (caseRoot: string | null): {
           latestPerBeing.set(being, { created_at: ev.created_at, content: ev.content, pubkey: ev.pubkey });
         }
 
-        // grievance_id -> msg_id -> source (dedupe by msg_id across beings).
-        const merged = new Map<string, Map<string, GrievanceSource>>();
+        // (being, grievance_id) -> record. The 37050 author (ev.pubkey) IS the
+        // being — sources are keyed per being and NEVER merged across beings.
+        const byBeing: BeingSourceMap = new Map();
         for (const { content, pubkey } of latestPerBeing.values()) {
           let body: any;
           try {
@@ -143,31 +210,33 @@ export const useOwnGrievanceSources = (caseRoot: string | null): {
           }
           const srcMap = body?.sources;
           if (!srcMap || typeof srcMap !== 'object') continue;
-          for (const [grievanceId, arr] of Object.entries<any>(srcMap)) {
-            if (!Array.isArray(arr)) continue;
-            let bucket = merged.get(grievanceId);
-            if (!bucket) { bucket = new Map(); merged.set(grievanceId, bucket); }
-            for (const s of arr) {
-              if (!s || typeof s !== 'object') continue;
-              const msgId = String(s.msg_id || '');
-              if (!msgId || bucket.has(msgId)) continue;
-              bucket.set(msgId, {
-                msgId,
-                senderPubkey: String(s.sender_pubkey || '').toLowerCase(),
-                createdAt: Number(s.created_at) || 0,
-                quote: String(s.quote || ''),
-                truncated: !!s.truncated,
+          const gidMap = new Map<string, SourceRecord>();
+          for (const [grievanceId, raw] of Object.entries<any>(srcMap)) {
+            if (Array.isArray(raw)) {
+              // v1: a bare entries array, no verdict metadata.
+              gidMap.set(grievanceId, {
+                fromPubkey: null, toPubkey: null, support: null,
+                unsourced: false, entries: parseEntries(raw),
+              });
+            } else if (raw && typeof raw === 'object') {
+              // v2: full record — kept even with zero entries so the
+              // "unsourced" verdict can still render a badge.
+              gidMap.set(grievanceId, {
+                fromPubkey: raw.from_pubkey ? String(raw.from_pubkey).toLowerCase() : null,
+                toPubkey: raw.to_pubkey ? String(raw.to_pubkey).toLowerCase() : null,
+                support: raw.support && typeof raw.support === 'object'
+                  ? { deed: !!raw.support.deed, target: !!raw.support.target }
+                  : null,
+                unsourced: !!raw.unsourced,
+                entries: parseEntries(Array.isArray(raw.entries) ? raw.entries : []),
               });
             }
           }
+          // Even an empty gidMap counts: this being's 37050 DID decrypt, which
+          // is what beingsWithSources measures for the corroboration gate.
+          byBeing.set(pubkey.toLowerCase(), gidMap);
         }
-
-        const out: GrievanceSourceMap = new Map();
-        for (const [grievanceId, bucket] of merged) {
-          const list = Array.from(bucket.values()).sort((a, b) => a.createdAt - b.createdAt);
-          if (list.length) out.set(grievanceId, list);
-        }
-        if (!cancelled) setSources(out);
+        if (!cancelled) setSourcesByBeing(byBeing);
       } catch (e) {
         console.error('useOwnGrievanceSources error:', e);
       } finally {
@@ -206,5 +275,5 @@ export const useOwnGrievanceSources = (caseRoot: string | null): {
     }
   }, [groupKey, parameters?.relays]);
 
-  return { sources, isLoading, fetchOriginal };
+  return { sourcesByBeing, beingsWithSources: sourcesByBeing.size, isLoading, fetchOriginal };
 };

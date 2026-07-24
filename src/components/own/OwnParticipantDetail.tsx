@@ -9,7 +9,7 @@ import { splitLatestPerBeing, withFloatedGuidance, guidanceKindKey } from "@/lib
 import GrievanceStepTable from "@/components/own/GrievanceStepTable";
 import { useOwnAssessments, type AssessmentEntry, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
-import { useOwnGrievanceSources } from "@/hooks/useOwnGrievanceSources";
+import { useOwnGrievanceSources, buildPairMsgIdMap } from "@/hooks/useOwnGrievanceSources";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
 import { useOwnEmotions, HEAVY_EMOTIONS, LIGHT_EMOTIONS, EMOTION_LABELS } from "@/hooks/useOwnEmotions";
 import EmotionJourneySparkline from "@/components/own/EmotionJourneySparkline";
@@ -41,6 +41,7 @@ const TXT = {
     grievColorHint: "Vsak udeleženec ima svojo barvo. Odgovor, sprejem in opravičilo so na prejemniku očitka, priznanje zablode na dajalcu. Tvoje ime je podčrtano. Poln krogec s kljukico = opravljeno, obroč = še odprto.",
     grievDone: "opravljeno", grievOpen: "še ne", grievOpenOrig: "Odpri izvirno sporočilo", grievOrigTitle: "Izvirno sporočilo", grievOrigErr: "Sporočila ni bilo mogoče naložiti.", grievCopyId: "Kopiraj ID",
     grievSource: "Vir", grievFromMessage: "iz sporočila", grievMessage: "sporočilo", grievCopied: "kopirano",
+    grievUnsourced: "vir ni najden", grievSrcNotTarget: "vir ne potrjuje, da gre za to osebo", grievSrcPartial: "vir le delno podpira očitek", grievDisputed: "dajalec očitek zanika", grievOnlyBeing: "ta vir navaja samo to bitje",
     kind: { direction: "Smer", acceptance: "Sprejetost", space: "Prostor", reminder: "Opomnik", movingOn: "Umik", closingCall: "Zaključni klic", pause: "Pavza", celebration: "Praznovanje", guidance: "Vodenje" } as Record<string, string>,
     grievDetail: "Podrobno — kaj še čaka", grievEmptyBeing: "To bitje zate še ni zabeležilo očitkov.",
     compTitle: "Primerjava bitij za to osebo",
@@ -86,6 +87,7 @@ const TXT = {
     grievColorHint: "Each participant has their own colour. Respond, accept and apologize are the receiver's; owning the delusion is the giver's. Your name is underlined. Filled check = done, hollow ring = still open.",
     grievDone: "done", grievOpen: "not yet", grievOpenOrig: "Open original message", grievOrigTitle: "Original message", grievOrigErr: "Could not load the message.", grievCopyId: "Copy id",
     grievSource: "Source", grievFromMessage: "from message", grievMessage: "message", grievCopied: "copied",
+    grievUnsourced: "no source found", grievSrcNotTarget: "source does not confirm the target", grievSrcPartial: "source only partly supports the claim", grievDisputed: "the giver disputes this claim", grievOnlyBeing: "only this being cites this source",
     kind: { direction: "Direction", acceptance: "Acceptance", space: "Space", reminder: "Reminder", movingOn: "Moving on", closingCall: "Closing call", pause: "Pause", celebration: "Celebration", guidance: "Guidance" } as Record<string, string>,
     grievDetail: "Detail — what is still pending", grievEmptyBeing: "This being has recorded no grievances for you yet.",
     compTitle: "Being comparison for this person",
@@ -129,9 +131,13 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
   const lang: "en" | "sl" = en ? "en" : "sl";
   const { entries, states, isLoading } = useOwnAssessments(caseRoot);
   const { ledgers } = useOwnGrievances(caseRoot);
-  // PARTICIPANT-ONLY source excerpts (KIND 37050, group-key-decrypted). Empty
+  // PARTICIPANT-ONLY source records (KIND 37050, group-key-decrypted), keyed
+  // per being — grievance ids are per-being sequential, never merged. Empty
   // for anyone without the process group key — that is the privacy gate.
-  const { sources: grievSources, fetchOriginal: grievFetchOriginal } = useOwnGrievanceSources(caseRoot);
+  const { sourcesByBeing: grievSourcesByBeing, beingsWithSources: grievBeingsWithSources, fetchOriginal: grievFetchOriginal } = useOwnGrievanceSources(caseRoot);
+  // Cross-being corroboration lookup for the "only this being cites this
+  // source" chip — built once per case (cheap).
+  const grievPairMsgIds = useMemo(() => buildPairMsgIdMap(ledgers, grievSourcesByBeing), [ledgers, grievSourcesByBeing]);
   const { entries: guidance } = useOwnGuidance(caseRoot);
   const { palettes: emotionPalettes } = useOwnEmotions(caseRoot);
   const me = (participantPubkey || "").toLowerCase();
@@ -426,9 +432,12 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                         nameOf={nameOf}
                         roster={grievRoster}
                         highlightPubkey={me}
-                        sources={grievSources}
+                        sources={grievSourcesByBeing.get(being)}
+                        beingPubkey={being}
+                        corroboration={grievPairMsgIds}
+                        beingsWithSources={grievBeingsWithSources}
                         fetchOriginal={grievFetchOriginal}
-                        labels={{ grievances: L.grievTitle, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen, sourceWord: L.grievSource, fromMessageWord: L.grievFromMessage, messageWord: L.grievMessage, copiedWord: L.grievCopied, openOriginalWord: L.grievOpenOrig, originalTitleWord: L.grievOrigTitle, originalErrorWord: L.grievOrigErr, copyIdWord: L.grievCopyId }}
+                        labels={{ grievances: L.grievTitle, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen, sourceWord: L.grievSource, fromMessageWord: L.grievFromMessage, messageWord: L.grievMessage, copiedWord: L.grievCopied, openOriginalWord: L.grievOpenOrig, originalTitleWord: L.grievOrigTitle, originalErrorWord: L.grievOrigErr, copyIdWord: L.grievCopyId, unsourcedWord: L.grievUnsourced, sourceNotTargetWord: L.grievSrcNotTarget, sourcePartialWord: L.grievSrcPartial, disputedWord: L.grievDisputed, onlyThisBeingWord: L.grievOnlyBeing }}
                       />
                     )}
                   </CardContent>
