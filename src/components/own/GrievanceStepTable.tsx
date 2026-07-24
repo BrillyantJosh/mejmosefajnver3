@@ -1,17 +1,18 @@
-import { CheckCircle2 } from "lucide-react";
+import { Check } from "lucide-react";
 import type { Grievance } from "@/hooks/useOwnGrievances";
 
 // The four-step grievance table — one row per grievance, one column per
 // milestone. Shared so the /own/matrix Matrica and a participant's own
 // detail view read identically (the same being sees the same picture).
 //
-// COLOUR BY PARTICIPANT (Brilly, 2026-07-24): without it the icons were an
-// undifferentiated wall and nobody could tell whose step was still open. Each
-// person gets one stable colour. The KEY move: every step belongs to ONE
-// person — respond / accept / apologize are the RECEIVER's work, owning the
-// delusion is the GIVER's — so an OPEN step is drawn in the colour of the
-// person who still has to do it. Done stays a neutral green check ("done is
-// done"), so a coloured mark always means "this person still owes this".
+// COLOUR BY PARTICIPANT (Brilly, 2026-07-24): each person gets one stable
+// colour. Every step belongs to ONE person — respond / accept / apologize are
+// the RECEIVER's work, owning the delusion is the GIVER's. The colour is kept
+// on BOTH states so the trace never disappears (Brilly, 2026-07-24 v2):
+//   · open  = a hollow RING in that person's colour — still to do
+//   · done  = a FILLED disc with a white check in the same colour — done, but
+//             you can still see whose step it was.
+// Shape (ring vs filled) carries done/open; colour always carries WHO.
 export interface GrievanceStepLabels {
   grievances: string;
   responded: string;
@@ -71,10 +72,13 @@ export default function GrievanceStepTable({
       <td className="p-2 text-center">
         <span title={title} role="img" aria-label={title} className="inline-flex items-center justify-center">
           {done ? (
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            // done: a FILLED disc in the person's colour with a white check —
+            // the colour trace stays, so you still see whose step it was.
+            <span className={`inline-flex h-4 w-4 items-center justify-center rounded-full ${c.dot}`}>
+              <Check className="h-3 w-3 text-white" strokeWidth={3} />
+            </span>
           ) : (
-            // open: a filled ring in the responsible person's colour — it POPS,
-            // because an open coloured mark is exactly "someone still owes this".
+            // open: a hollow ring in that person's colour — still to do.
             <span className={`inline-block h-3.5 w-3.5 rounded-full border-2 ${c.ring} ${c.fill}`} />
           )}
         </span>
