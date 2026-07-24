@@ -39,7 +39,7 @@ const TXT = {
     grievLegend: "Vsak očitek gre skozi štiri korake: prejemnik nanj odgovori (vsak odziv šteje, tudi obramba), ga brezpogojno sprejme in se zanj opraviči (opravičilo je obvezno), dajalec pa ga sprejme kot del svoje zablode. Refleksija je zaključena šele, ko je udeleženec tudi sam izrazil vsaj en očitek IN odgovoril na vse prejete; uskladitev šele, ko so vsi prejeti sprejeti in opravičeni IN vsi dani vzeti nase. Ko fasilitator prestopi v uskladitev, se matrica zapečati — novi očitki ne vstopajo več.",
     colResponded: "Odgovorjen", colAccepted: "Sprejet", colApologized: "Opravičen", colOwned: "Zabloda sprejeta",
     grievColorHint: "Vsak udeleženec ima svojo barvo. Odgovor, sprejem in opravičilo so na prejemniku očitka, priznanje zablode na dajalcu. Tvoje ime je podčrtano. Poln krogec s kljukico = opravljeno, obroč = še odprto.",
-    grievDone: "opravljeno", grievOpen: "še ne",
+    grievDone: "opravljeno", grievOpen: "še ne", grievOpenOrig: "Odpri izvirno sporočilo", grievOrigTitle: "Izvirno sporočilo", grievOrigErr: "Sporočila ni bilo mogoče naložiti.", grievCopyId: "Kopiraj ID",
     grievSource: "Vir", grievFromMessage: "iz sporočila", grievMessage: "sporočilo", grievCopied: "kopirano",
     kind: { direction: "Smer", acceptance: "Sprejetost", space: "Prostor", reminder: "Opomnik", movingOn: "Umik", closingCall: "Zaključni klic", pause: "Pavza", celebration: "Praznovanje", guidance: "Vodenje" } as Record<string, string>,
     grievDetail: "Podrobno — kaj še čaka", grievEmptyBeing: "To bitje zate še ni zabeležilo očitkov.",
@@ -84,7 +84,7 @@ const TXT = {
     grievLegend: "Every grievance passes four steps: the receiver responds to it (any reaction counts, defense too), unconditionally accepts it and apologizes for it (the apology is mandatory), and the giver accepts it as part of their own delusion. Reflection completes only once the participant has also expressed at least one grievance of their own AND responded to every received one; alignment only once all received are accepted and apologized AND all given are owned. Once the facilitator moves to alignment the matrix is sealed — new grievances no longer enter.",
     colResponded: "Responded", colAccepted: "Accepted", colApologized: "Apologized", colOwned: "Owned as delusion",
     grievColorHint: "Each participant has their own colour. Respond, accept and apologize are the receiver's; owning the delusion is the giver's. Your name is underlined. Filled check = done, hollow ring = still open.",
-    grievDone: "done", grievOpen: "not yet",
+    grievDone: "done", grievOpen: "not yet", grievOpenOrig: "Open original message", grievOrigTitle: "Original message", grievOrigErr: "Could not load the message.", grievCopyId: "Copy id",
     grievSource: "Source", grievFromMessage: "from message", grievMessage: "message", grievCopied: "copied",
     kind: { direction: "Direction", acceptance: "Acceptance", space: "Space", reminder: "Reminder", movingOn: "Moving on", closingCall: "Closing call", pause: "Pause", celebration: "Celebration", guidance: "Guidance" } as Record<string, string>,
     grievDetail: "Detail — what is still pending", grievEmptyBeing: "This being has recorded no grievances for you yet.",
@@ -131,7 +131,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
   const { ledgers } = useOwnGrievances(caseRoot);
   // PARTICIPANT-ONLY source excerpts (KIND 37050, group-key-decrypted). Empty
   // for anyone without the process group key — that is the privacy gate.
-  const { sources: grievSources } = useOwnGrievanceSources(caseRoot);
+  const { sources: grievSources, fetchOriginal: grievFetchOriginal } = useOwnGrievanceSources(caseRoot);
   const { entries: guidance } = useOwnGuidance(caseRoot);
   const { palettes: emotionPalettes } = useOwnEmotions(caseRoot);
   const me = (participantPubkey || "").toLowerCase();
@@ -427,7 +427,8 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                         roster={grievRoster}
                         highlightPubkey={me}
                         sources={grievSources}
-                        labels={{ grievances: L.grievTitle, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen, sourceWord: L.grievSource, fromMessageWord: L.grievFromMessage, messageWord: L.grievMessage, copiedWord: L.grievCopied }}
+                        fetchOriginal={grievFetchOriginal}
+                        labels={{ grievances: L.grievTitle, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen, sourceWord: L.grievSource, fromMessageWord: L.grievFromMessage, messageWord: L.grievMessage, copiedWord: L.grievCopied, openOriginalWord: L.grievOpenOrig, originalTitleWord: L.grievOrigTitle, originalErrorWord: L.grievOrigErr, copyIdWord: L.grievCopyId }}
                       />
                     )}
                   </CardContent>

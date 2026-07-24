@@ -1,8 +1,46 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { SimplePool, nip44 } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNostrGroupKey } from '@/hooks/useNostrGroupKey';
+
+const GROUP_MESSAGE_KIND = 87046;
+const OWN_API_URL = import.meta.env.VITE_API_URL ?? '';
+const DM_AUDIO_BUCKET = 'dm-audio';
+
+// The original chat message a source points to, decrypted from its 87046 event.
+export interface OriginalMessage {
+  senderPubkey: string;
+  createdAt: number;
+  transcript: string;      // full message text / audio transcript (never capped)
+  audioUrl?: string;       // present when the source message was a voice note
+  audioDuration?: number;
+}
+
+// Parse the raw 87046 payload text into transcript + optional audio, exactly as
+// the OWN chat (Own.tsx) does: "audio:<path>|dur:<n>|transcript:<text>".
+function parseMessagePayload(text: string): { transcript: string; audioUrl?: string; audioDuration?: number } {
+  const t = String(text || '').trim();
+  if (t.startsWith('audio:')) {
+    const raw = t.slice('audio:'.length).trim();
+    let before = raw;
+    let transcript = '';
+    const ti = raw.indexOf('|transcript:');
+    if (ti !== -1) { transcript = raw.slice(ti + '|transcript:'.length); before = raw.slice(0, ti); }
+    let path = before;
+    let audioDuration: number | undefined;
+    const dm = before.match(/^(.+)\|dur:(\d+)$/);
+    if (dm) { path = dm[1]; audioDuration = parseInt(dm[2], 10); }
+    const audioUrl = path.startsWith('http') ? path : `${OWN_API_URL}/api/storage/${DM_AUDIO_BUCKET}/${path}`;
+    return { transcript, audioUrl, audioDuration };
+  }
+  // Legacy: a full audio URL embedded in the text.
+  if (t.includes('supabase.co/storage/v1/object/public/dm-audio')) {
+    const m = t.match(/https:\/\/[^\s]+/);
+    return { transcript: '', audioUrl: m ? m[0] : t };
+  }
+  return { transcript: t };
+}
 
 // PARTICIPANT-ONLY "source of grievance" reader.
 //
@@ -46,6 +84,7 @@ export type GrievanceSourceMap = Map<string, GrievanceSource[]>;
 export const useOwnGrievanceSources = (caseRoot: string | null): {
   sources: GrievanceSourceMap;
   isLoading: boolean;
+  fetchOriginal: (msgId: string) => Promise<OriginalMessage | null>;
 } => {
   const { parameters } = useSystemParameters();
   const { session } = useAuth();
@@ -139,5 +178,33 @@ export const useOwnGrievanceSources = (caseRoot: string | null): {
     return () => { cancelled = true; pool.close(relays); };
   }, [caseRoot, groupKey, parameters?.relays]);
 
-  return { sources, isLoading };
+  // Open the ORIGINAL message a source points to: fetch the 87046 event by id,
+  // decrypt it with the same group key, and return its full transcript + audio.
+  // Same privacy gate — no group key (non-participant) → null.
+  const fetchOriginal = useCallback(async (msgId: string): Promise<OriginalMessage | null> => {
+    const relays = parameters?.relays;
+    if (!groupKey || !relays?.length || !/^[0-9a-f]{64}$/i.test(msgId)) return null;
+    const pool = new SimplePool();
+    try {
+      const evs = await pool.querySync(relays, { ids: [msgId], kinds: [GROUP_MESSAGE_KIND] });
+      const ev = evs[0];
+      if (!ev) return null;
+      const convKey = nip44.v2.utils.getConversationKey(hexToBytes(groupKey), ev.pubkey);
+      const payload = JSON.parse(nip44.v2.decrypt(ev.content, convKey));
+      const parsed = parseMessagePayload(payload?.text || '');
+      return {
+        senderPubkey: ev.pubkey.toLowerCase(),
+        createdAt: ev.created_at,
+        transcript: parsed.transcript,
+        audioUrl: parsed.audioUrl,
+        audioDuration: parsed.audioDuration,
+      };
+    } catch {
+      return null;   // undecryptable / not found / malformed
+    } finally {
+      pool.close(relays);
+    }
+  }, [groupKey, parameters?.relays]);
+
+  return { sources, isLoading, fetchOriginal };
 };

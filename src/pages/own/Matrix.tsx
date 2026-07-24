@@ -58,7 +58,7 @@ const TXT = {
     gvLegend: "Vsak očitek gre skozi štiri korake: prejemnik nanj odgovori, ga brezpogojno sprejme in se zanj opraviči (obvezno), dajalec pa ga sprejme kot del svoje zablode. Po prestopu v uskladitev je matrica zapečatena — novi očitki ne vstopajo več.",
     colResponded: "Odgovorjen", colAccepted: "Sprejet", colApologized: "Opravičen", colOwned: "Zabloda sprejeta",
     grievColorHint: "Vsak udeleženec ima svojo barvo. Prva tri dejanja (odgovori, sprejmi, opraviči se) so na prejemniku očitka, priznanje zablode pa na dajalcu. Poln krogec s kljukico = opravljeno, obroč = še odprto — barva pove, čigavo je.",
-    grievDone: "opravljeno", grievOpen: "še ne",
+    grievDone: "opravljeno", grievOpen: "še ne", grievOpenOrig: "Odpri izvirno sporočilo", grievOrigTitle: "Izvirno sporočilo", grievOrigErr: "Sporočila ni bilo mogoče naložiti.", grievCopyId: "Kopiraj ID",
     grievSource: "Vir", grievFromMessage: "iz sporočila", grievMessage: "sporočilo", grievCopied: "kopirano",
     kind: { direction: "Smer", acceptance: "Sprejetost", space: "Prostor", reminder: "Opomnik", movingOn: "Umik", closingCall: "Zaključni klic", pause: "Pavza", celebration: "Praznovanje", guidance: "Vodenje" } as Record<string, string>,
     gvForPerson: "Pogled za", gvMyReceived: "Name naslovljeni", gvMyReceivedDesc: "odgovori nanje in jih brezpogojno sprejmi",
@@ -152,7 +152,7 @@ const TXT = {
     gvLegend: "Every grievance passes four steps: the receiver responds to it, unconditionally accepts it and apologizes for it (mandatory), and the giver accepts it as part of their own delusion. Once the process moves to alignment the matrix is sealed — new grievances no longer enter.",
     colResponded: "Responded", colAccepted: "Accepted", colApologized: "Apologized", colOwned: "Owned as delusion",
     grievColorHint: "Each participant has their own colour. The first three (respond, accept, apologize) are the receiver's; owning the delusion is the giver's. Filled check = done, hollow ring = still open — the colour tells you whose.",
-    grievDone: "done", grievOpen: "not yet",
+    grievDone: "done", grievOpen: "not yet", grievOpenOrig: "Open original message", grievOrigTitle: "Original message", grievOrigErr: "Could not load the message.", grievCopyId: "Copy id",
     grievSource: "Source", grievFromMessage: "from message", grievMessage: "message", grievCopied: "copied",
     kind: { direction: "Direction", acceptance: "Acceptance", space: "Space", reminder: "Reminder", movingOn: "Moving on", closingCall: "Closing call", pause: "Pause", celebration: "Celebration", guidance: "Guidance" } as Record<string, string>,
     gvForPerson: "Viewing for", gvMyReceived: "Addressed to me", gvMyReceivedDesc: "respond to them and accept them unconditionally",
@@ -240,7 +240,7 @@ export default function Matrix() {
   const { ledgers, isLoading: loadingGriev } = useOwnGrievances(selectedCaseRoot);
   // PARTICIPANT-ONLY source excerpts (KIND 37050, group-key-decrypted). A
   // non-participant never gets the group key, so this stays empty for them.
-  const { sources: grievSources } = useOwnGrievanceSources(selectedCaseRoot);
+  const { sources: grievSources, fetchOriginal: grievFetchOriginal } = useOwnGrievanceSources(selectedCaseRoot);
   const { entries: guidance } = useOwnGuidance(selectedCaseRoot);
   const { palettes: emotionPalettes, isLoading: loadingEmotions } = useOwnEmotions(selectedCaseRoot);
   const { proposals, isLoading: loadingProposals } = useOwnProposals(selectedCaseRoot);
@@ -840,7 +840,8 @@ export default function Matrix() {
                             nameOf={nameOf}
                             roster={participants}
                             sources={grievSources}
-                            labels={{ grievances: L.grievLabel, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen, sourceWord: L.grievSource, fromMessageWord: L.grievFromMessage, messageWord: L.grievMessage, copiedWord: L.grievCopied }}
+                            fetchOriginal={grievFetchOriginal}
+                            labels={{ grievances: L.grievLabel, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen, sourceWord: L.grievSource, fromMessageWord: L.grievFromMessage, messageWord: L.grievMessage, copiedWord: L.grievCopied, openOriginalWord: L.grievOpenOrig, originalTitleWord: L.grievOrigTitle, originalErrorWord: L.grievOrigErr, copyIdWord: L.grievCopyId }}
                           />
                         )
                       ) : (

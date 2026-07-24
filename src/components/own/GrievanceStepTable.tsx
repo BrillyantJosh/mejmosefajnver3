@@ -1,8 +1,10 @@
-import { useState } from "react";
-import { Check, ChevronDown, Quote } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Check, ChevronDown, Quote, Loader2, ExternalLink, Copy } from "lucide-react";
 import type { Grievance } from "@/hooks/useOwnGrievances";
-import type { GrievanceSourceMap } from "@/hooks/useOwnGrievanceSources";
+import type { GrievanceSourceMap, OriginalMessage } from "@/hooks/useOwnGrievanceSources";
 import TranslateButton from "@/components/own/TranslateButton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AudioPlayer } from "@/components/AudioPlayer";
 
 // The four-step grievance table — one row per grievance, one column per
 // milestone. Shared so the /own/matrix Matrica and a participant's own
@@ -36,6 +38,14 @@ export interface GrievanceStepLabels {
   messageWord?: string;
   /** "kopirano" / "copied" — toast-less inline confirmation after copy. */
   copiedWord?: string;
+  /** "Odpri izvirno sporočilo" / "Open original message" — the dialog opener. */
+  openOriginalWord?: string;
+  /** "Izvirno sporočilo" / "Original message" — the dialog title. */
+  originalTitleWord?: string;
+  /** "Sporočila ni bilo mogoče naložiti." / "Could not load the message." */
+  originalErrorWord?: string;
+  /** "Kopiraj ID" / "Copy id". */
+  copyIdWord?: string;
 }
 
 // Full static class strings (Tailwind cannot see interpolated names). Six
@@ -56,8 +66,73 @@ function hashIndex(pubkey: string) {
   return h % PALETTE.length;
 }
 
+// Opens the ORIGINAL 87046 message a source points to: decrypts it on demand
+// (participant-only, same group key) and shows the full transcript + audio.
+function OriginalMessageDialog({ msgId, fetchOriginal, nameOf, labels, onClose }: {
+  msgId: string;
+  fetchOriginal: (msgId: string) => Promise<OriginalMessage | null>;
+  nameOf: (pk: string) => string;
+  labels: GrievanceStepLabels;
+  onClose: () => void;
+}) {
+  const [msg, setMsg] = useState<OriginalMessage | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setErr(false);
+    fetchOriginal(msgId).then((m) => {
+      if (cancelled) return;
+      if (m) setMsg(m); else setErr(true);
+      setLoading(false);
+    }).catch(() => { if (!cancelled) { setErr(true); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [msgId, fetchOriginal]);
+  const copyId = () => {
+    try { navigator.clipboard?.writeText(msgId); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* id still visible */ }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-base">{labels.originalTitleWord || "Original message"}</DialogTitle>
+        </DialogHeader>
+        {loading ? (
+          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> …</div>
+        ) : err || !msg ? (
+          <p className="py-4 text-sm text-muted-foreground">{labels.originalErrorWord || "Could not load the message."}</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="text-xs text-muted-foreground">
+              {nameOf(msg.senderPubkey)}{msg.createdAt > 0 && <> · {new Date(msg.createdAt * 1000).toLocaleString()}</>}
+            </div>
+            {msg.audioUrl && <AudioPlayer audioUrl={msg.audioUrl} initialDuration={msg.audioDuration} />}
+            {msg.transcript && (
+              <p className="whitespace-pre-wrap break-words text-sm leading-snug text-foreground/90 border-l-2 border-primary/40 pl-2.5">
+                {msg.transcript}
+              </p>
+            )}
+            {/* The quote in the source is capped; the transcript here is the full text. */}
+            {msg.transcript && <TranslateButton text={msg.transcript} />}
+            <button
+              type="button"
+              onClick={copyId}
+              title={msgId}
+              className="inline-flex items-center gap-1 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              <Copy className="h-3 w-3" /> {labels.copyIdWord || "Copy id"} {msgId.slice(0, 12)}…
+              {copied && <span className="text-green-600">✓ {labels.copiedWord || "copied"}</span>}
+            </button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function GrievanceStepTable({
-  grievances, nameOf, labels, highlightPubkey, roster, sources,
+  grievances, nameOf, labels, highlightPubkey, roster, sources, fetchOriginal,
 }: {
   grievances: Grievance[];
   nameOf: (pk: string) => string;
@@ -72,6 +147,10 @@ export default function GrievanceStepTable({
    *  useOwnGrievanceSources). Only viewers with the group key ever receive a
    *  non-empty map — that is the privacy gate. Absent/empty → no disclosure. */
   sources?: GrievanceSourceMap;
+  /** Opens the ORIGINAL 87046 message a source points to (decrypted transcript
+   *  + audio). From the same hook as `sources`; when omitted, the source shows
+   *  a copyable id only, no "open original" button. */
+  fetchOriginal?: (msgId: string) => Promise<OriginalMessage | null>;
 }) {
   const me = (highlightPubkey || "").toLowerCase();
 
@@ -125,6 +204,7 @@ export default function GrievanceStepTable({
     const list = sources?.get(grievanceId);
     const [open, setOpen] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
+    const [openMsg, setOpenMsg] = useState<string | null>(null);
     if (!list || list.length === 0) return null;
     const copy = (id: string) => {
       try {
@@ -159,20 +239,42 @@ export default function GrievanceStepTable({
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-muted-foreground">
                   <span>{nameOf(s.senderPubkey)}</span>
                   {s.createdAt > 0 && <span>· {new Date(s.createdAt * 1000).toLocaleString()}</span>}
-                  <span>· {labels.fromMessageWord || "from message"}</span>
-                  <button
-                    type="button"
-                    onClick={() => copy(s.msgId)}
-                    title={s.msgId}
-                    className="font-mono text-[10px] text-sky-600 hover:underline dark:text-sky-400"
-                  >
-                    {labels.messageWord || "message"} {s.msgId.slice(0, 8)}…
-                  </button>
+                  <span>·</span>
+                  {fetchOriginal ? (
+                    // Primary action: open the ORIGINAL message (transcript + audio).
+                    <button
+                      type="button"
+                      onClick={() => setOpenMsg(s.msgId)}
+                      className="inline-flex items-center gap-1 font-medium text-sky-600 hover:underline dark:text-sky-400"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {labels.openOriginalWord || "Open original message"}
+                    </button>
+                  ) : (
+                    // No decrypt fn wired → fall back to a copyable id.
+                    <button
+                      type="button"
+                      onClick={() => copy(s.msgId)}
+                      title={s.msgId}
+                      className="font-mono text-[10px] text-sky-600 hover:underline dark:text-sky-400"
+                    >
+                      {labels.messageWord || "message"} {s.msgId.slice(0, 8)}…
+                    </button>
+                  )}
                   {copied === s.msgId && <span className="text-green-600">✓ {labels.copiedWord || "copied"}</span>}
                 </div>
               </div>
             ))}
           </div>
+        )}
+        {fetchOriginal && openMsg && (
+          <OriginalMessageDialog
+            msgId={openMsg}
+            fetchOriginal={fetchOriginal}
+            nameOf={nameOf}
+            labels={labels}
+            onClose={() => setOpenMsg(null)}
+          />
         )}
       </div>
     );
