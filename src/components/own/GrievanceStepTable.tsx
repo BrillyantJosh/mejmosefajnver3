@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, ChevronDown, Quote } from "lucide-react";
 import type { Grievance } from "@/hooks/useOwnGrievances";
 import type { GrievanceSourceMap } from "@/hooks/useOwnGrievanceSources";
+import TranslateButton from "@/components/own/TranslateButton";
 
 // The four-step grievance table — one row per grievance, one column per
 // milestone. Shared so the /own/matrix Matrica and a participant's own
@@ -152,6 +153,9 @@ export default function GrievanceStepTable({
                 <blockquote className="text-[11px] italic leading-snug text-foreground/90">
                   “{s.quote}{s.truncated ? "…" : ""}”
                 </blockquote>
+                {/* Same OWN translate control as /own/todo — the quote is in the
+                    conversation's language, so a non-Slovene participant can read it. */}
+                <TranslateButton text={s.quote} className="!mt-0.5" />
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-muted-foreground">
                   <span>{nameOf(s.senderPubkey)}</span>
                   {s.createdAt > 0 && <span>· {new Date(s.createdAt * 1000).toLocaleString()}</span>}
