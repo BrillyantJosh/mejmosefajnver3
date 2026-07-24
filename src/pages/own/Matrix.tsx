@@ -56,6 +56,8 @@ const TXT = {
     gvMatrix: "Matrica", gvMine: "Zame",
     gvLegend: "Vsak očitek gre skozi štiri korake: prejemnik nanj odgovori, ga brezpogojno sprejme in se zanj opraviči (obvezno), dajalec pa ga sprejme kot del svoje zablode. Po prestopu v uskladitev je matrica zapečatena — novi očitki ne vstopajo več.",
     colResponded: "Odgovorjen", colAccepted: "Sprejet", colApologized: "Opravičen", colOwned: "Zabloda sprejeta",
+    grievColorHint: "Barva = čigavo dejanje je še odprto. Prva tri dejanja (odgovori, sprejmi, opraviči se) so na prejemniku očitka, priznanje zablode pa na dajalcu. Zeleno = opravljeno.",
+    grievDone: "opravljeno", grievOpen: "še ne",
     kind: { direction: "Smer", acceptance: "Sprejetost", space: "Prostor", reminder: "Opomnik", movingOn: "Umik", closingCall: "Zaključni klic", pause: "Pavza", celebration: "Praznovanje", guidance: "Vodenje" } as Record<string, string>,
     gvForPerson: "Pogled za", gvMyReceived: "Name naslovljeni", gvMyReceivedDesc: "odgovori nanje in jih brezpogojno sprejmi",
     gvMyGiven: "Moji dani očitki", gvMyGivenDesc: "sprejmi jih kot del svoje zablode in se zaveži, da ne bodo več nastajali",
@@ -147,6 +149,8 @@ const TXT = {
     gvMatrix: "Matrix", gvMine: "For me",
     gvLegend: "Every grievance passes four steps: the receiver responds to it, unconditionally accepts it and apologizes for it (mandatory), and the giver accepts it as part of their own delusion. Once the process moves to alignment the matrix is sealed — new grievances no longer enter.",
     colResponded: "Responded", colAccepted: "Accepted", colApologized: "Apologized", colOwned: "Owned as delusion",
+    grievColorHint: "Colour = whose action is still open. The first three (respond, accept, apologize) are the receiver's; owning the delusion is the giver's. Green = done.",
+    grievDone: "done", grievOpen: "not yet",
     kind: { direction: "Direction", acceptance: "Acceptance", space: "Space", reminder: "Reminder", movingOn: "Moving on", closingCall: "Closing call", pause: "Pause", celebration: "Celebration", guidance: "Guidance" } as Record<string, string>,
     gvForPerson: "Viewing for", gvMyReceived: "Addressed to me", gvMyReceivedDesc: "respond to them and accept them unconditionally",
     gvMyGiven: "Grievances I gave", gvMyGivenDesc: "accept them as part of your own delusion and commit so they stop arising",
@@ -792,7 +796,7 @@ export default function Matrix() {
                           <GrievanceStepTable
                             grievances={l.grievances}
                             nameOf={nameOf}
-                            labels={{ grievances: L.grievLabel, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned }}
+                            labels={{ grievances: L.grievLabel, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen }}
                           />
                         )
                       ) : (

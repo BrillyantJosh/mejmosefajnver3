@@ -37,6 +37,8 @@ const TXT = {
     needsResponse: "čaka odgovor", needsOwn: "sprejmi kot svojo zablodo",
     grievLegend: "Vsak očitek gre skozi štiri korake: prejemnik nanj odgovori (vsak odziv šteje, tudi obramba), ga brezpogojno sprejme in se zanj opraviči (opravičilo je obvezno), dajalec pa ga sprejme kot del svoje zablode. Refleksija je zaključena šele, ko je udeleženec tudi sam izrazil vsaj en očitek IN odgovoril na vse prejete; uskladitev šele, ko so vsi prejeti sprejeti in opravičeni IN vsi dani vzeti nase. Ko fasilitator prestopi v uskladitev, se matrica zapečati — novi očitki ne vstopajo več.",
     colResponded: "Odgovorjen", colAccepted: "Sprejet", colApologized: "Opravičen", colOwned: "Zabloda sprejeta",
+    grievColorHint: "Barva = čigavo dejanje je še odprto. Odgovor, sprejem in opravičilo so na prejemniku očitka, priznanje zablode na dajalcu. Tvoje ime je podčrtano. Zeleno = opravljeno.",
+    grievDone: "opravljeno", grievOpen: "še ne",
     kind: { direction: "Smer", acceptance: "Sprejetost", space: "Prostor", reminder: "Opomnik", movingOn: "Umik", closingCall: "Zaključni klic", pause: "Pavza", celebration: "Praznovanje", guidance: "Vodenje" } as Record<string, string>,
     grievDetail: "Podrobno — kaj še čaka", grievEmptyBeing: "To bitje zate še ni zabeležilo očitkov.",
     compTitle: "Primerjava bitij za to osebo",
@@ -79,6 +81,8 @@ const TXT = {
     needsResponse: "awaiting response", needsOwn: "own it as your delusion",
     grievLegend: "Every grievance passes four steps: the receiver responds to it (any reaction counts, defense too), unconditionally accepts it and apologizes for it (the apology is mandatory), and the giver accepts it as part of their own delusion. Reflection completes only once the participant has also expressed at least one grievance of their own AND responded to every received one; alignment only once all received are accepted and apologized AND all given are owned. Once the facilitator moves to alignment the matrix is sealed — new grievances no longer enter.",
     colResponded: "Responded", colAccepted: "Accepted", colApologized: "Apologized", colOwned: "Owned as delusion",
+    grievColorHint: "Colour = whose action is still open. Respond, accept and apologize are the receiver's; owning the delusion is the giver's. Your name is underlined. Green = done.",
+    grievDone: "done", grievOpen: "not yet",
     kind: { direction: "Direction", acceptance: "Acceptance", space: "Space", reminder: "Reminder", movingOn: "Moving on", closingCall: "Closing call", pause: "Pause", celebration: "Celebration", guidance: "Guidance" } as Record<string, string>,
     grievDetail: "Detail — what is still pending", grievEmptyBeing: "This being has recorded no grievances for you yet.",
     compTitle: "Being comparison for this person",
@@ -404,7 +408,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                         grievances={[...received, ...given]}
                         nameOf={nameOf}
                         highlightPubkey={me}
-                        labels={{ grievances: L.grievTitle, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned }}
+                        labels={{ grievances: L.grievTitle, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen }}
                       />
                     )}
                   </CardContent>
