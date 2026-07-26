@@ -32,23 +32,40 @@ async function call(method: string, path: string, body?: unknown) {
   return { status: res.status, data: await res.json().catch(() => ({})) };
 }
 
-async function setSettings(days: unknown, maxAmounts: unknown) {
+/** Admin writes are signed with the admin's Nostr key (kind 27235, NIP-98). */
+function signSettings(secret: Uint8Array, settings: unknown, createdAt?: number) {
+  return finalizeEvent({
+    kind: 27235,
+    created_at: createdAt ?? Math.floor(Date.now() / 1000),
+    tags: [['u', FN], ['method', 'POST']],
+    content: JSON.stringify(settings),
+  }, secret);
+}
+
+async function postSettings(event: unknown) {
   const res = await fetch(FN, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      settings: [
-        { key: 'unconditional_financing_maturing_days', value: days },
-        { key: 'unconditional_financing_max_amounts', value: maxAmounts },
-      ],
-    }),
+    body: JSON.stringify({ event }),
   });
-  if (!res.ok) throw new Error(`settings update failed: ${res.status}`);
+  return { status: res.status, data: await res.json().catch(() => ({})) };
+}
+
+async function setSettings(days: unknown, maxAmounts: unknown) {
+  const r = await postSettings(signSettings(skAdmin, [
+    { key: 'unconditional_financing_maturing_days', value: days },
+    { key: 'unconditional_financing_max_amounts', value: maxAmounts },
+  ]));
+  if (r.status !== 200) throw new Error(`settings update failed: ${r.status} ${JSON.stringify(r.data)}`);
 }
 
 const now = Math.floor(Date.now() / 1000);
 const skOwner = generateSecretKey();
 const pkOwner = getPublicKey(skOwner);
+// Stand-in administrator, registered in admin_users for the duration of the run.
+const skAdmin = generateSecretKey();
+const pkAdmin = getPublicKey(skAdmin);
+const skIntruder = generateSecretKey();
 const SEED_ID = 'uf:test-settings-seeded';
 
 function requestEvent(sk: Uint8Array, dTag: string, type: string, goal: number) {
@@ -82,6 +99,7 @@ async function main() {
 
   const SEED_WINDOW = now - 2 * 86400; // seeded row is already open for funding
   const seedDb = new Database(DB_PATH);
+  seedDb.prepare('INSERT OR IGNORE INTO admin_users (nostr_hex_id) VALUES (?)').run(pkAdmin);
   seedDb.prepare(`
     INSERT OR REPLACE INTO uf_requests (
       id, event_id, pubkey, title, short_desc, content, request_type, fiat_goal,
@@ -91,6 +109,74 @@ async function main() {
   seedDb.close();
 
   try {
+    console.log('— app_settings can only be written by a signed administrator —');
+    {
+      const legit = [{ key: 'unconditional_financing_maturing_days', value: 3 }];
+      let r = await postSettings(undefined);
+      check('no signed event → 401', r.status === 401, r);
+
+      r = await fetch(FN, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: legit }),
+      }).then(async (x) => ({ status: x.status, data: await x.json().catch(() => ({})) }));
+      check('old unsigned body → 401 (endpoint is closed)', r.status === 401, r);
+
+      const tampered = { ...signSettings(skAdmin, legit), content: JSON.stringify([{ key: 'app_name', value: 'pwned' }]) };
+      r = await postSettings(tampered);
+      check('payload swapped after signing → 401', r.status === 401, r);
+
+      r = await postSettings(signSettings(skIntruder, legit));
+      check('valid signature but not an admin → 403', r.status === 403, r);
+
+      r = await postSettings(signSettings(skAdmin, legit, Math.floor(Date.now() / 1000) - 3600));
+      check('replay of an hour-old event → 401', r.status === 401, r);
+
+      r = await postSettings(signSettings(skAdmin, 'not-an-array'));
+      check('signed but malformed payload → 400', r.status === 400, r);
+
+      r = await postSettings(signSettings(skAdmin, legit));
+      check('signed by an admin → 200', r.status === 200, r);
+
+      const check401 = new Database(DB_PATH, { readonly: true });
+      const appName = (check401.prepare("SELECT value FROM app_settings WHERE key = 'app_name'").get() as any)?.value;
+      check401.close();
+      check('the tampered write never landed', appName !== '"pwned"' && appName !== 'pwned', appName);
+    }
+
+    console.log('— the generic db route cannot be used to go around the signature —');
+    {
+      const DB_API = 'http://localhost:3210/api/db';
+      const send = async (method: string, table: string, body?: unknown) => {
+        const res = await fetch(`${DB_API}/${table}`, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        return { status: res.status, data: await res.json().catch(() => ({})) };
+      };
+
+      let r = await send('POST', 'app_settings', { key: 'app_name', value: 'pwned-via-db' });
+      check('POST /api/db/app_settings → 403', r.status === 403, r);
+      r = await send('PATCH', 'app_settings?key=eq.app_name', { value: 'pwned-via-db' });
+      check('PATCH /api/db/app_settings → 403', r.status === 403, r);
+      r = await send('DELETE', 'app_settings?key=eq.app_name');
+      check('DELETE /api/db/app_settings → 403', r.status === 403, r);
+      r = await send('POST', 'admin_users', { nostr_hex_id: 'f'.repeat(64) });
+      check('self-promotion via POST /api/db/admin_users → 403', r.status === 403, r);
+
+      const after = new Database(DB_PATH, { readonly: true });
+      const name = (after.prepare("SELECT value FROM app_settings WHERE key = 'app_name'").get() as any)?.value;
+      const intruder = after.prepare('SELECT 1 FROM admin_users WHERE nostr_hex_id = ?').get('f'.repeat(64));
+      after.close();
+      check('app_name untouched', String(name).indexOf('pwned') === -1, name);
+      check('no intruder was added to admin_users', !intruder);
+
+      // Reads must keep working — the app loads settings on every start.
+      r = await send('GET', 'app_settings?select=key,value');
+      check('reading settings still works', r.status === 200 && Array.isArray(r.data), r.status);
+    }
+
     console.log('— settings endpoint reflects what is saved —');
     await setSettings(3, { personal_hardship: 500, lifestyle_transition: 0, wellbeing_project: 1200 });
     let r = await call('GET', '/settings');
@@ -170,6 +256,7 @@ async function main() {
     if (originalMax === undefined) del.run('unconditional_financing_max_amounts');
     else upsert.run('unconditional_financing_max_amounts', originalMax);
     restore.prepare("DELETE FROM uf_requests WHERE id LIKE 'uf:test-settings-%'").run();
+    restore.prepare('DELETE FROM admin_users WHERE nostr_hex_id = ?').run(pkAdmin);
     restore.close();
     console.log('cleanup done (original settings restored)');
   }

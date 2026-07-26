@@ -1,10 +1,19 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { finalizeEvent } from "nostr-tools";
 import { AppSettings, ThemeColors, ProjectTypeSettings, ProjectOverrides, UfMaxAmounts } from "@/types/admin";
 import { toast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
+
+const hexToBytes = (hex: string): Uint8Array => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+};
 
 interface AdminContextType {
   isAdmin: boolean;
@@ -113,11 +122,35 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /**
+   * Writing app_settings is an admin action, so the request is signed with the
+   * session's Nostr private key (kind 27235, NIP-98 HTTP Auth). The server
+   * derives the identity from the signature and checks it against admin_users;
+   * the settings travel inside the signed payload, so what the admin authorised
+   * is exactly what gets written. The key never leaves the browser.
+   */
   const invokeSettingsUpdate = async (key: string, value: unknown) => {
+    if (!session?.nostrPrivateKey) {
+      throw new Error('Not authenticated');
+    }
+
+    const signed = finalizeEvent(
+      {
+        kind: 27235,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['u', `${API_URL}/api/functions/update-app-settings`],
+          ['method', 'POST'],
+        ],
+        content: JSON.stringify([{ key, value }]),
+      },
+      hexToBytes(session.nostrPrivateKey)
+    );
+
     const res = await fetch(`${API_URL}/api/functions/update-app-settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings: [{ key, value }] }),
+      body: JSON.stringify({ event: signed }),
     });
 
     if (!res.ok) {

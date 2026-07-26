@@ -14,6 +14,7 @@ import { detectMissingFields, createPendingTask } from '../lib/aiTasks';
 import { sendLanaTransaction, sendBatchLanaTransaction, base58CheckDecode, uint8ArrayToHex, privateKeyToPublicKey, privateKeyToUncompressedPublicKey, publicKeyToAddress, normalizeWif, buildSignedTx } from '../lib/crypto';
 import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays, discoverNewProfiles } from '../lib/nostr';
 import { sendPushToUser } from '../lib/pushNotification';
+import { verifyEvent } from 'nostr-tools';
 import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -241,14 +242,62 @@ router.post('/get-block-height', async (req: Request, res: Response) => {
 });
 
 // update-app-settings
+//
+// Writing app_settings is an ADMIN action: the same table carries the admin
+// lists, the module rules and the money-relevant limits, so an open endpoint
+// would let anyone rewrite them. Authenticated the way the rest of the app
+// already authenticates writes — with the user's Nostr key: the caller signs an
+// event with their session private key and the server derives the identity from
+// the SIGNATURE, never from anything the body claims.
+//
+// Kind 27235 is NIP-98 (HTTP Auth): an ephemeral event made for authenticating
+// an HTTP request. It is never published to relays, so no Lana kind is spent.
 router.post('/update-app-settings', async (req: Request, res: Response) => {
   try {
-    const { settings } = req.body;
-    if (!settings || !Array.isArray(settings)) {
-      return res.status(400).json({ error: 'settings array required' });
+    const { event } = req.body;
+
+    if (!event || typeof event !== 'object') {
+      return res.status(401).json({ error: 'Signed event required' });
+    }
+    if (event.kind !== 27235) {
+      return res.status(401).json({ error: 'Expected kind 27235' });
+    }
+    try {
+      if (!verifyEvent(event)) return res.status(401).json({ error: 'Invalid event signature' });
+    } catch {
+      return res.status(401).json({ error: 'Invalid event signature' });
+    }
+
+    // Freshness window: a captured event cannot be replayed indefinitely.
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (Math.abs(nowSec - (event.created_at || 0)) > 300) {
+      return res.status(401).json({ error: 'Event expired — check the device clock and retry' });
     }
 
     const db = getDb();
+
+    // The SIGNER must be an administrator.
+    const admin = db
+      .prepare('SELECT 1 FROM admin_users WHERE nostr_hex_id = ?')
+      .get(event.pubkey) as any;
+    if (!admin) {
+      return res.status(403).json({ error: 'Not an administrator' });
+    }
+
+    // Settings come from the signed payload, so what was authorised is exactly
+    // what gets written — the request body is never trusted for content.
+    let settings: any;
+    try {
+      settings = JSON.parse(event.content || '');
+    } catch {
+      return res.status(400).json({ error: 'Signed payload is not valid JSON' });
+    }
+    if (!Array.isArray(settings) || settings.length === 0) {
+      return res.status(400).json({ error: 'settings array required' });
+    }
+    if (!settings.every((s: any) => s && typeof s.key === 'string' && s.key.length > 0)) {
+      return res.status(400).json({ error: 'each setting needs a key' });
+    }
     const upsert = db.prepare(`
       INSERT INTO app_settings (id, key, value, updated_at)
       VALUES (lower(hex(randomblob(16))), ?, ?, datetime('now'))

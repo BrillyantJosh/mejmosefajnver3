@@ -22,6 +22,19 @@ function validateTable(table: string): boolean {
   return ALLOWED_TABLES.has(table);
 }
 
+/**
+ * Tables that decide who is an administrator and what the modules are allowed to
+ * do. They stay readable (the app reads settings on every load) but may NOT be
+ * written through this generic route — writing them requires an event signed by
+ * an administrator, via /api/functions/update-app-settings. Without this, that
+ * signature check would be pointless: anyone could POST the same rows here.
+ */
+const READ_ONLY_TABLES = new Set(['app_settings', 'admin_users']);
+
+function isWritable(table: string): boolean {
+  return !READ_ONLY_TABLES.has(table);
+}
+
 // Parse Supabase-style filters from query params
 // e.g. ?nostr_hex_id=eq.abc123&is_active=eq.true&order=created_at.desc&limit=10
 function buildWhereClause(query: Record<string, any>, table: string): { where: string; params: any[]; orderBy: string; limit: string; selectColumns: string } {
@@ -267,6 +280,12 @@ router.post('/:table', (req: Request, res: Response) => {
     return res.status(400).json({ error: `Invalid table: ${table}` });
   }
 
+  if (!isWritable(table)) {
+    return res.status(403).json({
+      error: `${table} is read-only here — write it with an admin-signed request to /api/functions/update-app-settings`,
+    });
+  }
+
   try {
     const db = getDb();
     const rows = Array.isArray(req.body) ? req.body : [req.body];
@@ -365,6 +384,12 @@ router.patch('/:table', (req: Request, res: Response) => {
     return res.status(400).json({ error: `Invalid table: ${table}` });
   }
 
+  if (!isWritable(table)) {
+    return res.status(403).json({
+      error: `${table} is read-only here — write it with an admin-signed request to /api/functions/update-app-settings`,
+    });
+  }
+
   try {
     const db = getDb();
     const updates = req.body;
@@ -416,6 +441,12 @@ router.delete('/:table', (req: Request, res: Response) => {
 
   if (!validateTable(table)) {
     return res.status(400).json({ error: `Invalid table: ${table}` });
+  }
+
+  if (!isWritable(table)) {
+    return res.status(403).json({
+      error: `${table} is read-only here — write it with an admin-signed request to /api/functions/update-app-settings`,
+    });
   }
 
   try {
