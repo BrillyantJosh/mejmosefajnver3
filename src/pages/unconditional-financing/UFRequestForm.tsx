@@ -37,6 +37,7 @@ import {
   UF_API,
   UF_REQUEST_KIND,
   ufTypeLabel,
+  type UfRequest,
   type UfRequestType,
 } from "@/hooks/useUFData";
 import { useUfSettings } from "@/hooks/useUFSettings";
@@ -55,9 +56,18 @@ interface MyCrowdProject {
 
 interface UFRequestFormProps {
   onSuccess: () => void;
+  /**
+   * When present the form edits this request instead of creating a new one:
+   * the d-tag and the original publication date are kept, so relays and the
+   * server treat the result as a new version of the same request.
+   */
+  existing?: UfRequest | null;
 }
 
-export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
+export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProps) {
+  const isEdit = !!existing;
+  // Refining is a maturing-phase freedom; once funding is open the date is fixed.
+  const isStillMaturing = !!existing && Math.floor(Date.now() / 1000) < existing.fundingOpensAt;
   const sl = useLang() === "sl";
   const { session } = useAuth();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
@@ -70,27 +80,32 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
     wallets.find((w) => w.walletType === "Wallet");
   const walletFrozen = !!mainWallet?.freezeStatus;
 
-  // ── Form state ──
-  const [requestType, setRequestType] = useState<UfRequestType>("personal_hardship");
-  const [title, setTitle] = useState("");
-  const [shortDesc, setShortDesc] = useState("");
-  const [content, setContent] = useState("");
-  const [fiatGoal, setFiatGoal] = useState("");
-  const [currency, setCurrency] = useState("EUR");
+  // ── Form state (prefilled from the request being edited) ──
+  const [requestType, setRequestType] = useState<UfRequestType>(
+    existing?.requestType ?? "personal_hardship"
+  );
+  const [title, setTitle] = useState(existing?.title ?? "");
+  const [shortDesc, setShortDesc] = useState(existing?.shortDesc ?? "");
+  const [content, setContent] = useState(existing?.content ?? "");
+  const [fiatGoal, setFiatGoal] = useState(existing ? String(existing.fiatGoal) : "");
+  const [currency, setCurrency] = useState(existing?.currency ?? "EUR");
 
-  // Cover image
+  // Cover image — an edit starts with the already-published one; picking a new
+  // file replaces it, leaving it alone re-publishes the same URL.
   const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [coverPreview, setCoverPreview] = useState("");
+  const [coverPreview, setCoverPreview] = useState(existing?.coverImage ?? "");
+  const [keptCoverUrl, setKeptCoverUrl] = useState(existing?.coverImage ?? "");
 
   // Gallery images
   const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
-  const [galleryPreviews, setGalleryPreviews] = useState<string[]>([]);
+  const [galleryPreviews, setGalleryPreviews] = useState<string[]>(existing?.galleryImages ?? []);
+  const [keptGalleryUrls, setKeptGalleryUrls] = useState<string[]>(existing?.galleryImages ?? []);
 
   // Crowdfunding references (required for wellbeing_project)
   const [myProjects, setMyProjects] = useState<MyCrowdProject[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [selectedProjectRefs, setSelectedProjectRefs] = useState<string[]>([]);
-  const [externalRefs, setExternalRefs] = useState<string[]>([]);
+  const [externalRefs, setExternalRefs] = useState<string[]>(existing?.crowdfundingRefs ?? []);
   const [externalRefInput, setExternalRefInput] = useState("");
 
   // Status
@@ -260,6 +275,7 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
     }
     setCoverFile(null);
     setCoverPreview("");
+    setKeptCoverUrl("");
   };
 
   const handleGallerySelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -275,7 +291,15 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
     if (galleryPreviews[index]?.startsWith("blob:")) {
       URL.revokeObjectURL(galleryPreviews[index]);
     }
-    setGalleryFiles((prev) => prev.filter((_, i) => i !== index));
+    // Previews render as [...already-published, ...newly picked], so the index
+    // decides which of the two underlying lists the removal applies to.
+    const keptCount = keptGalleryUrls.length;
+    if (index < keptCount) {
+      setKeptGalleryUrls((prev) => prev.filter((_, i) => i !== index));
+    } else {
+      const fileIndex = index - keptCount;
+      setGalleryFiles((prev) => prev.filter((_, i) => i !== fileIndex));
+    }
     setGalleryPreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -356,14 +380,15 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
     setUploading(true);
 
     try {
-      // Upload images
-      let finalCoverUrl = "";
+      // Upload images. On an edit, already-published images are kept as-is
+      // unless the user replaced or removed them.
+      let finalCoverUrl = keptCoverUrl;
       if (coverFile) {
         const url = await uploadImage(coverFile);
         if (url) finalCoverUrl = url;
       }
 
-      const uploadedGalleryUrls: string[] = [];
+      const uploadedGalleryUrls: string[] = [...keptGalleryUrls];
       for (const file of galleryFiles) {
         const url = await uploadImage(file);
         if (url) uploadedGalleryUrls.push(url);
@@ -372,11 +397,21 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
       setUploading(false);
 
       // Build KIND 31240 tags (exact schema — parsed by the server indexer)
-      const dTag = `uf:${crypto.randomUUID()}`;
-      const pubTs = Math.floor(Date.now() / 1000);
-      // The server re-derives this from its own setting and ignores our value;
-      // we publish the same number so the event is self-consistent on relays.
-      const fundingOpensAt = pubTs + ufSettings.maturingDays * 86400;
+      const nowTs = Math.floor(Date.now() / 1000);
+      // An edit keeps the request's identity (d-tag) and its ORIGINAL publication
+      // date; only the event's created_at moves. A new request gets both fresh.
+      const dTag = existing ? existing.id : `uf:${crypto.randomUUID()}`;
+      const pubTs = existing ? existing.publishedAt : nowTs;
+      // The server re-derives this and ignores our value; we publish the same
+      // number so the event is self-consistent on relays. Editing during
+      // maturing restarts the review period from now.
+      const maturingSecs = ufSettings.maturingDays * 86400;
+      const fundingOpensAt =
+        existing && nowTs < existing.fundingOpensAt
+          ? Math.max(existing.fundingOpensAt, nowTs + maturingSecs)
+          : existing
+            ? existing.fundingOpensAt
+            : nowTs + maturingSecs;
 
       const tags: string[][] = [
         ["d", dTag],
@@ -407,7 +442,9 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
       const signedEvent = finalizeEvent(
         {
           kind: UF_REQUEST_KIND,
-          created_at: pubTs,
+          // Always NOW: relays keep the newest version of an addressable event,
+          // so an edit signed with the original date would not replace it.
+          created_at: nowTs,
           tags,
           content: content.trim(),
         },
@@ -450,10 +487,26 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
         console.warn("UF request upsert failed (indexer will pick it up):", upsertErr);
       }
 
+      // Report the date that was actually saved, so the requester knows exactly
+      // when funding opens after refining the request.
+      const opensLabel = new Date(fundingOpensAt * 1000).toLocaleString(sl ? "sl-SI" : "en-GB", {
+        dateStyle: "long",
+        timeStyle: "short",
+      });
+      const restarted = !!existing && fundingOpensAt > existing.fundingOpensAt;
+
       toast.success(
-        sl
-          ? "Zahtevek je objavljen. 8-dnevno obdobje zorenja se je začelo — komentarji so odprti, financiranje se odpre po zorenju."
-          : "Request published. The 8-day maturing period starts now — comments are open, funding opens after maturing."
+        isEdit
+          ? restarted
+            ? sl
+              ? `Zahtevek je posodobljen. Zorenje se je začelo znova — financiranje se odpre ${opensLabel}.`
+              : `Request updated. Maturing has restarted — funding opens ${opensLabel}.`
+            : sl
+              ? "Zahtevek je posodobljen."
+              : "Request updated."
+          : sl
+            ? `Zahtevek je objavljen. Obdobje zorenja se je začelo — komentarji so odprti, financiranje se odpre ${opensLabel}.`
+            : `Request published. The maturing period starts now — comments are open, funding opens ${opensLabel}.`
       );
 
       onSuccess();
@@ -480,13 +533,21 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
-          {ufSettings.maturingDays === 0
-            ? sl
-              ? "Financiranje tega zahtevka se odpre takoj po objavi."
-              : "Funding for this request opens immediately after publishing."
-            : sl
-              ? `Po objavi zahtevek najprej ${formatDays(ufSettings.maturingDays, true)} zori — komentarji so odprti, financiranje pa še zaprto. Po ${formatDaysAfter(ufSettings.maturingDays, true)} se financiranje odpre.`
-              : `After publishing, the request matures for ${formatDays(ufSettings.maturingDays, false)} — comments are open while funding stays closed. Funding opens after ${formatDays(ufSettings.maturingDays, false)}.`}
+          {isEdit
+            ? isStillMaturing
+              ? sl
+                ? `Zahtevek še zori, zato ga lahko dodelaš. Ko shraniš, se zorenje začne znova: financiranje se odpre ${formatDaysAfter(ufSettings.maturingDays, true)} od shranitve, da skupnost vidi dopolnjeno različico.`
+                : `The request is still maturing, so you can refine it. When you save, maturing restarts: funding opens ${formatDays(ufSettings.maturingDays, false)} from the moment you save, so the community sees the updated version.`
+              : sl
+                ? "Financiranje tega zahtevka je že odprto. Popravki besedila ne premaknejo datuma odprtja."
+                : "Funding for this request is already open. Editing the text does not move the opening date."
+            : ufSettings.maturingDays === 0
+              ? sl
+                ? "Financiranje tega zahtevka se odpre takoj po objavi."
+                : "Funding for this request opens immediately after publishing."
+              : sl
+                ? `Po objavi zahtevek najprej ${formatDays(ufSettings.maturingDays, true)} zori — komentarji so odprti, financiranje pa še zaprto. Po ${formatDaysAfter(ufSettings.maturingDays, true)} se financiranje odpre.`
+                : `After publishing, the request matures for ${formatDays(ufSettings.maturingDays, false)} — comments are open while funding stays closed. Funding opens after ${formatDays(ufSettings.maturingDays, false)}.`}
         </AlertDescription>
       </Alert>
 
@@ -907,6 +968,10 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
           ? sl
             ? "Objavljanje ..."
             : "Publishing..."
+          : isEdit
+          ? sl
+            ? "Shrani spremembe"
+            : "Save changes"
           : sl
           ? "Objavi zahtevek"
           : "Publish request"}

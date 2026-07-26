@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock, HandCoins, Heart, ImageOff, PlusCircle, Undo2 } from "lucide-react";
+import { Clock, HandCoins, Heart, ImageOff, Pencil, PlusCircle, Undo2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/i18n/I18nContext";
 import {
@@ -137,10 +137,12 @@ const FinancingCard = ({
   financing,
   sl,
   onRepay,
+  onEdit,
 }: {
   financing: UfMyFinancing;
   sl: boolean;
   onRepay: (id: string) => void;
+  onEdit: (id: string) => void;
 }) => {
   const { request } = financing;
   const goal = request.fiatGoal || 0;
@@ -149,6 +151,7 @@ const FinancingCard = ({
   const maturingDays =
     request.phase === "maturing" ? ufMaturingDaysLeft(request.fundingOpensAt) : 0;
   const canRepay = financing.totalFunded > 0 && !request.isRepaid;
+  const canEdit = request.phase === "maturing";
 
   return (
     <Card className="overflow-hidden">
@@ -207,12 +210,25 @@ const FinancingCard = ({
               </div>
             </div>
 
-            {canRepay && (
-              <div className="flex justify-end mt-3">
-                <Button size="sm" className="gap-1" onClick={() => onRepay(request.id)}>
-                  <Undo2 className="h-4 w-4" />
-                  {sl ? "Vrni sredstva" : "Repay"}
-                </Button>
+            {(canEdit || canRepay) && (
+              <div className="flex flex-wrap justify-end gap-2 mt-3">
+                {canEdit && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1"
+                    onClick={() => onEdit(request.id)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    {sl ? "Dodelaj" : "Refine"}
+                  </Button>
+                )}
+                {canRepay && (
+                  <Button size="sm" className="gap-1" onClick={() => onRepay(request.id)}>
+                    <Undo2 className="h-4 w-4" />
+                    {sl ? "Vrni sredstva" : "Repay"}
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -315,6 +331,7 @@ const UFMy = () => {
                 financing={financing}
                 sl={sl}
                 onRepay={(id) => navigate(`/unconditional-financing/repay/${id}`)}
+                onEdit={(id) => navigate(`/unconditional-financing/edit/${id}`)}
               />
             ))}
           </div>

@@ -8,6 +8,7 @@ import {
   Info,
   Link2,
   Loader2,
+  Pencil,
   Target,
   Undo2,
   Users,
@@ -225,6 +226,24 @@ const UFRequestDetail = () => {
               {sl
                 ? `Financiranje se odpre ${new Date(request.fundingOpensAt * 1000).toLocaleString("sl-SI")}. Do takrat prispevki še niso mogoči — vprašanja in komentarji spodaj pa so zelo dobrodošli.`
                 : `Funding opens on ${new Date(request.fundingOpensAt * 1000).toLocaleString("en-GB")}. Until then contributions are not yet possible — questions and comments below are very welcome.`}
+              {isRequester && (
+                <>
+                  <p className="mt-2">
+                    {sl
+                      ? "Dokler zahtevek zori, ga lahko dopolniš. Ob shranitvi se zorenje začne znova, da skupnost vidi dopolnjeno različico."
+                      : "While the request matures you can still refine it. Saving restarts maturing, so the community sees the updated version."}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2 mt-3"
+                    onClick={() => navigate(`/unconditional-financing/edit/${request.id}`)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    {sl ? "Dodelaj zahtevek" : "Refine the request"}
+                  </Button>
+                </>
+              )}
             </AlertDescription>
           </Alert>
         )}

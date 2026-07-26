@@ -160,6 +160,7 @@ const UFLayout = lazy(() => import("./pages/unconditional-financing/UFLayout"));
 const UFRequests = lazy(() => import("./pages/unconditional-financing/UFRequests"));
 const UFRequestDetail = lazy(() => import("./pages/unconditional-financing/UFRequestDetail"));
 const UFCreateRequest = lazy(() => import("./pages/unconditional-financing/UFCreateRequest"));
+const UFEditRequest = lazy(() => import("./pages/unconditional-financing/UFEditRequest"));
 const UFContribute = lazy(() => import("./pages/unconditional-financing/UFContribute"));
 const UFContributePrivateKey = lazy(() => import("./pages/unconditional-financing/UFContributePrivateKey"));
 const UFContributeResult = lazy(() => import("./pages/unconditional-financing/UFContributeResult"));
@@ -373,6 +374,7 @@ const App = () => (
                     <Route path="requests" element={<UFRequests />} />
                     <Route path="request/:id" element={<UFRequestDetail />} />
                     <Route path="create" element={<UFCreateRequest />} />
+                    <Route path="edit/:id" element={<UFEditRequest />} />
                     <Route path="contribute/:id" element={<UFContribute />} />
                     <Route path="contribute/:id/private-key" element={<UFContributePrivateKey />} />
                     <Route path="contribute/:id/result" element={<UFContributeResult />} />

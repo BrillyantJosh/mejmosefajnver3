@@ -1324,11 +1324,13 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         cover_image = excluded.cover_image,
         gallery_images = excluded.gallery_images,
         crowdfunding_refs = excluded.crowdfunding_refs,
-        -- first-seen-wins: an edit must NEVER move the maturing window
+        -- first-seen-wins: the original publication date never changes
         published_at = CASE WHEN uf_requests.published_at > 0
                             THEN uf_requests.published_at ELSE excluded.published_at END,
-        funding_opens_at = CASE WHEN uf_requests.funding_opens_at > 0
-                                THEN uf_requests.funding_opens_at ELSE excluded.funding_opens_at END,
+        -- the caller computed this (restart-on-edit while maturing) and already
+        -- clamped it to never land earlier than the window announced so far
+        funding_opens_at = CASE WHEN excluded.funding_opens_at > uf_requests.funding_opens_at
+                                THEN excluded.funding_opens_at ELSE uf_requests.funding_opens_at END,
         status = excluded.status,
         nostr_created_at = CASE WHEN excluded.nostr_created_at > uf_requests.nostr_created_at
                                 THEN excluded.nostr_created_at ELSE uf_requests.nostr_created_at END,
@@ -1352,20 +1354,31 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         // Preserve admin/derived flags + enforce addressable identity: the
         // nostr identity of an addressable event is (pubkey, d) — a different
         // author may never take over an existing row by reusing its d-tag.
-        const existing = db.prepare('SELECT pubkey, is_hidden, is_repaid FROM uf_requests WHERE id = ?').get(evt.dTag) as any;
+        const existing = db.prepare(
+          'SELECT pubkey, is_hidden, is_repaid, funding_opens_at FROM uf_requests WHERE id = ?'
+        ).get(evt.dTag) as any;
         if (existing && existing.pubkey && existing.pubkey !== evt.pubkey) continue;
 
-        // The maturing window comes from STABLE tags on the event — never from
-        // created_at, which changes on every edit of an addressable event.
-        // Sanity: published_at may not lie in the future of the event itself
-        // (a backdated tag would open funding instantly); funding_opens_at is
-        // ALWAYS derived from the admin-configured maturing length, never taken
-        // from a client-controlled tag. Rows that already exist keep their own
-        // window (the ON CONFLICT clause below), so changing the setting never
-        // moves a window that has already been announced.
+        // The publication date comes from a STABLE tag — never from created_at,
+        // which changes on every edit of an addressable event. Sanity:
+        // published_at may not lie in the future of the event itself (a
+        // backdated tag would open funding instantly).
         let publishedAt = parseInt(getTag('published_at') || '0') || evt.created_at;
         if (publishedAt > evt.created_at + 3600) publishedAt = evt.created_at;
-        const fundingOpensAt = publishedAt + maturingSeconds;
+
+        // funding_opens_at is ALWAYS derived, never taken from a client tag.
+        // Mirrors the REST route: a request refined WHILE MATURING restarts the
+        // review period from the moment of that edit, so the community gets a
+        // full window on the version it will fund. Once funding is open the
+        // window is frozen, and the value can only ever move later — an edit can
+        // never make funding open sooner than already announced.
+        let fundingOpensAt = publishedAt + maturingSeconds;
+        if (existing && existing.funding_opens_at > 0) {
+          fundingOpensAt =
+            evt.created_at < existing.funding_opens_at
+              ? Math.max(existing.funding_opens_at, evt.created_at + maturingSeconds)
+              : existing.funding_opens_at;
+        }
 
         upsertRequest.run(
           evt.dTag,

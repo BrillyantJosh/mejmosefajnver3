@@ -417,9 +417,18 @@ router.post('/requests/upsert', async (req, res) => {
     let publishedAt: number;
     let fundingOpensAt: number;
     if (existing) {
-      // Edits never move the maturing window.
       publishedAt = existing.published_at;
-      fundingOpensAt = existing.funding_opens_at;
+      if (nowSec < existing.funding_opens_at) {
+        // Refining a request WHILE IT MATURES restarts the review period, so the
+        // community always gets a full window on the version it will fund.
+        // Clamped to never land EARLIER than the window already announced: an
+        // edit may only ever delay funding, never open it sooner (which is what
+        // the write-once rule protected against).
+        fundingOpensAt = Math.max(existing.funding_opens_at, nowSec + settings.maturingSeconds);
+      } else {
+        // Funding is already open — an edit must not drag it back into maturing.
+        fundingOpensAt = existing.funding_opens_at;
+      }
     } else {
       // First insert: server-clamped window. The client-supplied published_at is
       // accepted only within a small tolerance of NOW; funding_opens_at is always
@@ -467,6 +476,12 @@ router.post('/requests/upsert', async (req, res) => {
         cover_image = excluded.cover_image,
         gallery_images = excluded.gallery_images,
         crowdfunding_refs = excluded.crowdfunding_refs,
+        -- Both were computed above from the EXISTING row: published_at is carried
+        -- over unchanged, and funding_opens_at is either the untouched window or
+        -- a restarted one that can only ever be later. Writing them here is what
+        -- makes a restart actually persist.
+        published_at = excluded.published_at,
+        funding_opens_at = excluded.funding_opens_at,
         status = excluded.status,
         nostr_created_at = CASE WHEN excluded.nostr_created_at > uf_requests.nostr_created_at
                                 THEN excluded.nostr_created_at ELSE uf_requests.nostr_created_at END,
