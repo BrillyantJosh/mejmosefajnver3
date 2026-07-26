@@ -43,8 +43,12 @@ const SL: EligibilityContent = {
       t: "postavljanje lokalnih vozlišč za pretok oz. ponudbo eko pridelkov in izdelkov, aktivnosti in dogodkov, povezanih z Lano.",
     },
     {
-      h: "Zaveza ponudnika za pot (od 5/10/15 %) do 20 %",
+      h: "Zaveze ponudnikov za pot (od 5/10/15 %) do 20 %",
       t: "spodbuda za ponudnike izdelkov in storitev, da stopijo na pot najboljšega od najboljšega — ekološkega, naravnega, okolju in človeku prijaznega, ter nato inspirirajo druge k temu.",
+    },
+    {
+      h: "Predstavitev ideje kot osnova za pridobitev brezpogojnega financiranja",
+      t: "pri brezpogojnem financiranju projekta, namenjenega skupnemu dobremu (skupina 3), mora biti pred oddajo zahtevka izveden najmanj en crowdfunding projekt, ki podrobneje predstavi to idejo in njeno izvedbo.",
     },
   ],
   agree: "Razumem in se strinjam",
@@ -71,8 +75,12 @@ const EN: EligibilityContent = {
       t: "setting up local hubs for the flow and offering of eco produce and products, activities and events connected with Lana.",
     },
     {
-      h: "Provider's commitment to the path (from 5/10/15%) up to 20%",
+      h: "Providers' commitments to the path (from 5/10/15%) up to 20%",
       t: "an incentive for providers of products and services to step onto the path of the best of the best — ecological, natural, friendly to the environment and people — and then inspire others to do the same.",
+    },
+    {
+      h: "Presenting the idea as the basis for receiving unconditional financing",
+      t: "for the unconditional financing of a project serving the common good (group 3), at least one crowdfunding project that presents the idea and its realization in more detail must be carried out before the request is submitted.",
     },
   ],
   agree: "I understand and agree",
