@@ -181,6 +181,7 @@ const WhatsUpAdmin = lazy(() => import("./pages/admin/WhatsUpAdmin"));
 const FaqAdmin = lazy(() => import("./pages/admin/FaqAdmin"));
 const MillionIdeasAdmin = lazy(() => import("./pages/admin/MillionIdeasAdmin"));
 const DiscountAdmin = lazy(() => import("./pages/admin/DiscountAdmin"));
+const UnconditionalFinancingAdmin = lazy(() => import("./pages/admin/UnconditionalFinancingAdmin"));
 const ReportBug = lazy(() => import("./pages/ReportBug"));
 const PublicPost = lazy(() => import("./pages/PublicPost"));
 const PublicEvent = lazy(() => import("./pages/PublicEvent"));
@@ -443,6 +444,7 @@ const App = () => (
                     <Route path="faq" element={<FaqAdmin />} />
                     <Route path="100-million-ideas" element={<MillionIdeasAdmin />} />
                     <Route path="lana-discount" element={<DiscountAdmin />} />
+                    <Route path="unconditional-financing" element={<UnconditionalFinancingAdmin />} />
                     <Route path="settings" element={<AdminSettings />} />
                   </Route>
                 </Route>

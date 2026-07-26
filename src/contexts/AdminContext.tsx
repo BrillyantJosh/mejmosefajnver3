@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { AppSettings, ThemeColors, ProjectTypeSettings, ProjectOverrides } from "@/types/admin";
+import { AppSettings, ThemeColors, ProjectTypeSettings, ProjectOverrides, UfMaxAmounts } from "@/types/admin";
 import { toast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,6 +21,7 @@ interface AdminContextType {
   updateAuthorizedCreators: (creators: any[]) => Promise<void>;
   updateProjectOverrides: (overrides: ProjectOverrides) => Promise<void>;
   updateDiscountSettings: (settings: Partial<Pick<AppSettings, 'discount_commission_lanapays' | 'discount_commission_other' | 'discount_min_sell_eur' | 'discount_min_sell_usd' | 'discount_min_sell_gbp' | 'discount_buyback_wallet' | 'discount_api_url' | 'discount_api_key'>>) => Promise<void>;
+  updateUnconditionalFinancingSettings: (settings: { uf_maturing_days: number; uf_max_amounts: UfMaxAmounts }) => Promise<void>;
   loadAppSettings: () => Promise<void>;
 }
 
@@ -99,6 +100,13 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         discount_buyback_wallet: (getValue('discount_buyback_wallet') as string) || 'Lg7iw2aQp8qazNsZVZFhf4rP7bikSrLRxB',
         discount_api_url: (getValue('discount_api_url') as string) || 'https://www.lana.discount',
         discount_api_key: (getValue('discount_api_key') as string) || '',
+        uf_maturing_days: (getValue('unconditional_financing_maturing_days') as number) ?? 8,
+        uf_max_amounts: {
+          personal_hardship: 0,
+          lifestyle_transition: 0,
+          wellbeing_project: 0,
+          ...((getValue('unconditional_financing_max_amounts') as Partial<UfMaxAmounts>) || {}),
+        },
       });
     } catch (error) {
       console.error('Error loading app settings:', error);
@@ -333,6 +341,27 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateUnconditionalFinancingSettings = async (
+    settings: { uf_maturing_days: number; uf_max_amounts: UfMaxAmounts }
+  ) => {
+    if (!session?.nostrHexId) {
+      toast({ title: "Error", description: "Not authenticated", variant: "destructive" });
+      return;
+    }
+    try {
+      // app_settings keys are what the SERVER reads when it derives the maturing
+      // window and enforces the caps — keep these names in sync with
+      // server/lib/ufSettings.ts.
+      await invokeSettingsUpdate('unconditional_financing_maturing_days', settings.uf_maturing_days);
+      await invokeSettingsUpdate('unconditional_financing_max_amounts', settings.uf_max_amounts);
+      setAppSettings(prev => prev ? { ...prev, ...settings } : null);
+      toast({ title: "Success", description: "Unconditional Financing settings saved" });
+    } catch (error) {
+      console.error('Error updating unconditional financing settings:', error);
+      toast({ title: "Error", description: "Failed to save Unconditional Financing settings", variant: "destructive" });
+    }
+  };
+
   // Compute 100M Ideas admin status
   const is100MAdmin = Boolean(
     session?.nostrHexId && (
@@ -382,6 +411,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         updateAuthorizedCreators,
         updateProjectOverrides,
         updateDiscountSettings,
+        updateUnconditionalFinancingSettings,
         loadAppSettings,
       }}
     >

@@ -17,12 +17,12 @@ import { Router } from 'express';
 import { verifyEvent } from 'nostr-tools';
 import { getDb } from '../db/connection.js';
 import { queryEventsFromRelays } from '../lib/nostr.js';
+import { getUfSettings, maxAmountFor } from '../lib/ufSettings.js';
 
 const router = Router();
 
 // How many completed Splits of Lana8Wonder membership a requester needs.
 const REQUIRED_COMPLETED_SPLITS = 4;
-const MATURING_SECONDS = 8 * 86400;
 const SERVICE_TAG = 'unconditional-financing';
 
 // ──────────────────────────────────────────────
@@ -401,6 +401,19 @@ router.post('/requests/upsert', async (req, res) => {
       return res.status(403).json({ error: 'Request id belongs to a different author' });
     }
 
+    const settings = getUfSettings();
+
+    // Per-group cap (admin-configurable; 0 = uncapped). Enforced on edits too,
+    // otherwise a within-cap request could be edited up afterwards.
+    const requestedGoal = parseFloat(getTag(evt, 'fiat_goal') || '0') || 0;
+    const cap = maxAmountFor(getTag(evt, 'request_type') || '', settings);
+    if (cap > 0 && requestedGoal > cap) {
+      return res.status(400).json({
+        error: `Requested amount exceeds the maximum for this group (${cap})`,
+        maxAmount: cap,
+      });
+    }
+
     let publishedAt: number;
     let fundingOpensAt: number;
     if (existing) {
@@ -409,11 +422,12 @@ router.post('/requests/upsert', async (req, res) => {
       fundingOpensAt = existing.funding_opens_at;
     } else {
       // First insert: server-clamped window. The client-supplied published_at is
-      // accepted only within a small tolerance of NOW; funding_opens_at is
-      // always derived (+8 days) — a client can never open its own funding early.
+      // accepted only within a small tolerance of NOW; funding_opens_at is always
+      // derived from the admin-configured maturing length — a client can never
+      // open its own funding early.
       const claimed = parseInt(getTag(evt, 'published_at') || '0') || nowSec;
       publishedAt = Math.min(Math.max(claimed, nowSec - 3600), nowSec + 300);
-      fundingOpensAt = publishedAt + MATURING_SECONDS;
+      fundingOpensAt = publishedAt + settings.maturingSeconds;
 
       // Eligibility: Lana8Wonder member for >= 4 completed Splits.
       const elig = await computeEligibility(db, evt.pubkey);
@@ -837,6 +851,21 @@ router.get('/eligibility/:pubkey', async (req, res) => {
     res.json(result);
   } catch (err: any) {
     console.error('❌ GET /api/unconditional-financing/eligibility error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
+// GET /settings — the module rules the server actually enforces
+// (maturing length + per-group caps), so the form and the article can
+// present exactly what will be applied. Public, read-only.
+// ──────────────────────────────────────────────
+router.get('/settings', (_req, res) => {
+  try {
+    const s = getUfSettings();
+    res.json({ maturingDays: s.maturingDays, maxAmounts: s.maxAmounts });
+  } catch (err: any) {
+    console.error('❌ GET /api/unconditional-financing/settings error:', err);
     res.status(500).json({ error: err.message });
   }
 });

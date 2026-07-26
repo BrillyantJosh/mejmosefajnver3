@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useLang } from "@/i18n/I18nContext";
+import { useUfSettings } from "@/hooks/useUFSettings";
+import { formatDays, formatDaysAfter } from "@/lib/ufSettings";
 
 // A block of the article. `h` = section heading, `p` = paragraph,
 // `ul` = bullet list, `ol` = numbered steps.
@@ -201,8 +203,8 @@ const SL: Article = {
       "ter kaj želi s podporo ustvariti ali spremeniti.",
     ] },
 
-    { h: "Osem dni zorenja" },
-    { p: "Ko je zahtevek objavljen, najprej vstopi v obdobje zorenja, ki traja osem dni." },
+    { h: "{days} zorenja" },
+    { p: "Ko je zahtevek objavljen, najprej vstopi v obdobje zorenja, ki traja {days}." },
     { p: "V času zorenja še ni mogoče prispevati sredstev." },
     { p: "Člani skupnosti lahko v tem obdobju:" },
     { ul: [
@@ -224,10 +226,10 @@ const SL: Article = {
     ] },
     { p: "Zorenje ni namenjeno obsojanju človeka ali iskanju razlogov proti financiranju." },
     { p: "Njegov namen je, da se zahtevek skozi komunikacijo razvije, razjasni in dozori, preden začne skupnost vanj namenjati sredstva." },
-    { p: "Po osmih dneh zahtevek dozori in financiranje se lahko začne." },
+    { p: "Po {daysAfter} zahtevek dozori in financiranje se lahko začne." },
 
     { h: "Začetek financiranja" },
-    { p: "Ko se osemdnevno obdobje zorenja zaključi, lahko člani skupnosti in centralni sklad začnejo prispevati sredstva." },
+    { p: "Ko se obdobje zorenja ({days}) zaključi, lahko člani skupnosti in centralni sklad začnejo prispevati sredstva." },
     { p: "Član ne vpisuje količine LANE, ki jo želi poslati." },
     { p: "Vpiše FIAT znesek, ki ga želi prispevati, na primer:" },
     { ul: ["50 EUR,", "200 EUR,", "1.000 USD,", "ali drug znesek v valuti konkretnega financiranja."] },
@@ -755,8 +757,8 @@ const EN: Article = {
       "and what they wish to create or change with the support.",
     ] },
 
-    { h: "Eight days of maturing" },
-    { p: "Once the request is published, it first enters a maturing period that lasts eight days." },
+    { h: "{days} of maturing" },
+    { p: "Once the request is published, it first enters a maturing period that lasts {days}." },
     { p: "During the maturing period it is not yet possible to contribute funds." },
     { p: "In this period, community members can:" },
     { ul: [
@@ -778,10 +780,10 @@ const EN: Article = {
     ] },
     { p: "Maturing is not meant for judging a person or looking for reasons against the financing." },
     { p: "Its purpose is for the request to develop, become clear, and mature through communication, before the community starts directing funds into it." },
-    { p: "After eight days the request matures and financing can begin." },
+    { p: "After {days} the request matures and financing can begin." },
 
     { h: "The start of financing" },
-    { p: "Once the eight-day maturing period ends, community members and the central fund can begin contributing funds." },
+    { p: "Once the maturing period of {days} ends, community members and the central fund can begin contributing funds." },
     { p: "A member does not enter the amount of LANA they wish to send." },
     { p: "They enter the FIAT amount they wish to contribute, for example:" },
     { ul: ["50 EUR,", "200 EUR,", "1,000 USD,", "or another amount in the currency of that particular financing."] },
@@ -1128,6 +1130,14 @@ export default function UnconditionalFinancing() {
   const sl = useLang() === "sl";
   const article = sl ? SL : EN;
 
+  // The maturing length is an admin setting, so the article states the value
+  // that is actually enforced rather than a hardcoded "eight days".
+  const { settings } = useUfSettings();
+  const fill = (s: string) =>
+    s
+      .replace(/\{daysAfter\}/g, formatDaysAfter(settings.maturingDays, sl))
+      .replace(/\{days\}/g, formatDays(settings.maturingDays, sl));
+
   return (
     <div className="container mx-auto p-4 sm:p-6 max-w-3xl pb-24">
       <div className="flex items-center gap-3 mb-6">
@@ -1157,7 +1167,7 @@ export default function UnconditionalFinancing() {
                   key={i}
                   className="text-lg sm:text-xl font-semibold text-foreground pt-5 mt-1 first:pt-0 first:mt-0 border-t first:border-t-0 border-border/60"
                 >
-                  {block.h}
+                  {fill(block.h)}
                 </h2>
               );
             }
@@ -1165,7 +1175,7 @@ export default function UnconditionalFinancing() {
               return (
                 <ul key={i} className="list-disc pl-6 space-y-1.5 text-muted-foreground marker:text-primary">
                   {block.ul.map((item, j) => (
-                    <li key={j} className="leading-relaxed">{item}</li>
+                    <li key={j} className="leading-relaxed">{fill(item)}</li>
                   ))}
                 </ul>
               );
@@ -1177,14 +1187,14 @@ export default function UnconditionalFinancing() {
                   className="list-decimal pl-6 space-y-1.5 text-muted-foreground marker:text-primary marker:font-semibold"
                 >
                   {block.ol.map((item, j) => (
-                    <li key={j} className="leading-relaxed">{item}</li>
+                    <li key={j} className="leading-relaxed">{fill(item)}</li>
                   ))}
                 </ol>
               );
             }
             return (
               <p key={i} className="text-muted-foreground">
-                {block.p}
+                {fill(block.p)}
               </p>
             );
           })}

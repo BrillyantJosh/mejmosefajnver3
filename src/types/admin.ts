@@ -29,6 +29,13 @@ export interface AuthorizedCreator {
   maxAmount: number;
 }
 
+/** Highest amount a request may ask for, per Unconditional Financing group. 0 = no cap. */
+export interface UfMaxAmounts {
+  personal_hardship: number;
+  lifestyle_transition: number;
+  wellbeing_project: number;
+}
+
 export interface AppSettings {
   app_name: string;
   theme_colors: ThemeColors;
@@ -48,6 +55,9 @@ export interface AppSettings {
   discount_buyback_wallet?: string;       // Wallet address to send LANA to
   discount_api_url?: string;              // Lana.Discount API URL
   discount_api_key?: string;              // Lana.Discount API key
+  // Unconditional Financing settings
+  uf_maturing_days?: number;              // Days a request matures before funding opens (default 8)
+  uf_max_amounts?: UfMaxAmounts;          // Highest requestable amount per group (0 = no cap)
 }
 
 export interface ThemeColors {

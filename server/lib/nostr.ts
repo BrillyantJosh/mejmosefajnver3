@@ -4,6 +4,7 @@
  */
 
 import WebSocket from 'ws';
+import { getUfSettings } from './ufSettings.js';
 
 // Official Lana Relays - ONLY these should be used for KIND 38888
 const LANA_RELAYS = [
@@ -1267,6 +1268,9 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
     return;
   }
 
+  // Same rules the REST route enforces, so both write paths agree.
+  const { maturingSeconds } = getUfSettings();
+
   try {
     let [requestEvents, contributionEvents, repaymentEvents] = await Promise.all([
       queryEventsFromRelays(relays, { kinds: [31240], limit: 1000 }, 20000),
@@ -1355,10 +1359,13 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         // created_at, which changes on every edit of an addressable event.
         // Sanity: published_at may not lie in the future of the event itself
         // (a backdated tag would open funding instantly); funding_opens_at is
-        // ALWAYS derived (+8 days), never taken from a client-controlled tag.
+        // ALWAYS derived from the admin-configured maturing length, never taken
+        // from a client-controlled tag. Rows that already exist keep their own
+        // window (the ON CONFLICT clause below), so changing the setting never
+        // moves a window that has already been announced.
         let publishedAt = parseInt(getTag('published_at') || '0') || evt.created_at;
         if (publishedAt > evt.created_at + 3600) publishedAt = evt.created_at;
-        const fundingOpensAt = publishedAt + 8 * 86400;
+        const fundingOpensAt = publishedAt + maturingSeconds;
 
         upsertRequest.run(
           evt.dTag,

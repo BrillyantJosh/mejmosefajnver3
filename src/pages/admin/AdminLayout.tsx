@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useLocation } from "react-router-dom";
-import { Brain, Bug, Database, HelpCircle, Lightbulb, Newspaper, Settings, Shield, Tag } from "lucide-react";
+import { Brain, Bug, Database, HandCoins, HelpCircle, Lightbulb, Newspaper, Settings, Shield, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const adminNavItems = [
@@ -10,6 +10,7 @@ const adminNavItems = [
   { title: "FAQ", path: "/admin/faq", icon: HelpCircle },
   { title: "100M Ideas", path: "/admin/100-million-ideas", icon: Lightbulb },
   { title: "Lana Discount", path: "/admin/lana-discount", icon: Tag },
+  { title: "Unconditional Financing", path: "/admin/unconditional-financing", icon: HandCoins },
   { title: "Settings", path: "/admin/settings", icon: Settings },
 ];
 

@@ -39,6 +39,8 @@ import {
   ufTypeLabel,
   type UfRequestType,
 } from "@/hooks/useUFData";
+import { useUfSettings } from "@/hooks/useUFSettings";
+import { formatDays, formatDaysAfter } from "@/lib/ufSettings";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 
@@ -59,6 +61,8 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
   const sl = useLang() === "sl";
   const { session } = useAuth();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
+  // Admin-configured module rules (maturing length, per-group caps).
+  const { settings: ufSettings } = useUfSettings();
 
   // Recipient always receives on their Main Wallet (canonical lookup).
   const mainWallet =
@@ -312,6 +316,17 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
       );
       return;
     }
+    // Per-group cap (0 = uncapped). The server enforces this too; checking here
+    // keeps the user from paying the publish round-trip just to be rejected.
+    const cap = ufSettings.maxAmounts[requestType] || 0;
+    if (cap > 0 && goalNum > cap) {
+      toast.error(
+        sl
+          ? `Najvišji znesek za to skupino je ${cap} ${currency}`
+          : `The maximum amount for this group is ${cap} ${currency}`
+      );
+      return;
+    }
     if (requestType === "wellbeing_project" && allRefs.length === 0) {
       toast.error(
         sl
@@ -359,7 +374,9 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
       // Build KIND 31240 tags (exact schema — parsed by the server indexer)
       const dTag = `uf:${crypto.randomUUID()}`;
       const pubTs = Math.floor(Date.now() / 1000);
-      const fundingOpensAt = pubTs + 8 * 86400;
+      // The server re-derives this from its own setting and ignores our value;
+      // we publish the same number so the event is self-consistent on relays.
+      const fundingOpensAt = pubTs + ufSettings.maturingDays * 86400;
 
       const tags: string[][] = [
         ["d", dTag],
@@ -463,9 +480,13 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
-          {sl
-            ? "Po objavi zahtevek najprej 8 dni zori — komentarji so odprti, financiranje pa še zaprto. Po 8 dneh se financiranje odpre."
-            : "After publishing, the request matures for 8 days — comments are open while funding stays closed. Funding opens after 8 days."}
+          {ufSettings.maturingDays === 0
+            ? sl
+              ? "Financiranje tega zahtevka se odpre takoj po objavi."
+              : "Funding for this request opens immediately after publishing."
+            : sl
+              ? `Po objavi zahtevek najprej ${formatDays(ufSettings.maturingDays, true)} zori — komentarji so odprti, financiranje pa še zaprto. Po ${formatDaysAfter(ufSettings.maturingDays, true)} se financiranje odpre.`
+              : `After publishing, the request matures for ${formatDays(ufSettings.maturingDays, false)} — comments are open while funding stays closed. Funding opens after ${formatDays(ufSettings.maturingDays, false)}.`}
         </AlertDescription>
       </Alert>
 
@@ -507,6 +528,12 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
                 <div className="flex-1">
                   <p className="font-medium">{ufTypeLabel(opt.value, sl)}</p>
                   <p className="text-sm text-muted-foreground">{opt.desc}</p>
+                  {ufSettings.maxAmounts[opt.value] > 0 && (
+                    <p className="mt-1 text-xs font-medium text-primary">
+                      {sl ? "Do " : "Up to "}
+                      {ufSettings.maxAmounts[opt.value]} {currency}
+                    </p>
+                  )}
                 </div>
                 {selected && <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />}
               </div>
@@ -580,10 +607,24 @@ export default function UFRequestForm({ onSuccess }: UFRequestFormProps) {
                 type="number"
                 step="0.01"
                 min="0.01"
+                max={ufSettings.maxAmounts[requestType] || undefined}
                 value={fiatGoal}
                 onChange={(e) => setFiatGoal(e.target.value)}
                 placeholder="1000.00"
               />
+              {ufSettings.maxAmounts[requestType] > 0 && (
+                <p
+                  className={`text-xs ${
+                    parseFloat(fiatGoal) > ufSettings.maxAmounts[requestType]
+                      ? "text-destructive font-medium"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {sl
+                    ? `Najvišji znesek za to skupino: ${ufSettings.maxAmounts[requestType]} ${currency}`
+                    : `Maximum for this group: ${ufSettings.maxAmounts[requestType]} ${currency}`}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="currency">{sl ? "Valuta" : "Currency"}</Label>
