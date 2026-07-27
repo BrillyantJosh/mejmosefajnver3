@@ -1,12 +1,29 @@
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { SupportedLang, SUPPORTED_LANGS, DEFAULT_LANG, TranslationDict } from './types';
 
 interface I18nContextValue {
   lang: SupportedLang;
+  /** Set a reader's override; null clears it back to the derived language. */
+  setLang: (l: SupportedLang | null) => void;
+  /** The override itself, so a control can show "following your profile". */
+  override: SupportedLang | null;
 }
 
-const I18nContext = createContext<I18nContextValue>({ lang: DEFAULT_LANG });
+const I18nContext = createContext<I18nContextValue>({ lang: DEFAULT_LANG, setLang: () => {}, override: null });
+
+// A READER'S override, above every derived signal. The language used to be
+// derived only — profile, then country, then browser — which is right for a
+// first visit but leaves a visitor with no way to read the page in a language
+// they actually know. Stored locally, never published, and clearable back to
+// the derived value.
+const OVERRIDE_KEY = 'lana_lang_override';
+const readOverride = (): SupportedLang | null => {
+  try {
+    const v = localStorage.getItem(OVERRIDE_KEY);
+    return v && SUPPORTED_LANGS.includes(v as SupportedLang) ? (v as SupportedLang) : null;
+  } catch (_) { return null; }
+};
 
 /**
  * Resolves a raw profile language string to a SupportedLang.
@@ -82,8 +99,17 @@ function detectBrowserLang(): SupportedLang | null {
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { session } = useAuth();
+  const [override, setOverride] = useState<SupportedLang | null>(readOverride);
 
-  const lang = useMemo(() => {
+  const setLang = useCallback((l: SupportedLang | null) => {
+    setOverride(l);
+    try {
+      if (l) localStorage.setItem(OVERRIDE_KEY, l);
+      else localStorage.removeItem(OVERRIDE_KEY);
+    } catch (_) { /* private mode */ }
+  }, []);
+
+  const derived = useMemo(() => {
     // Priority: 1) explicit profile lang, 2) country code, 3) browser/OS lang, 4) default (sl)
     const fromLang = resolveLang(session?.profileLang);
     const fromCountry = resolveCountry(session?.profileCountry);
@@ -93,12 +119,20 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return resolved;
   }, [session?.profileLang, session?.profileCountry]);
 
+  const lang = override ?? derived;
+
   return (
-    <I18nContext.Provider value={{ lang }}>
+    <I18nContext.Provider value={{ lang, setLang, override }}>
       {children}
     </I18nContext.Provider>
   );
 };
+
+/** Read AND set the interface language. `setLang(null)` returns to the derived one. */
+export function useLangControl() {
+  const { lang, setLang, override } = useContext(I18nContext);
+  return { lang, setLang, override };
+}
 
 /**
  * Hook that returns a translator function `t` bound to the given dictionary.

@@ -12,6 +12,7 @@ import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Users, Telescope, Arch
 import { useAllOwnProcesses } from "@/hooks/useAllOwnProcesses";
 import { useOwnAssessments, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
+import { LangPicker } from "@/components/own/LangPicker";
 import { useOwnGrievanceSources, buildPairMsgIdMap } from "@/hooks/useOwnGrievanceSources";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
 import { useOwnEmotions, HEAVY_EMOTIONS, LIGHT_EMOTIONS, EMOTION_LABELS, type EmotionPalette } from "@/hooks/useOwnEmotions";
@@ -117,7 +118,13 @@ const TXT = {
     cmtAttrComplete: "Zaveza udeleženca {name} — izrečena z lastnimi besedami v procesu; zapisalo in preverilo bitje {being}.",
     cmtEmptyStatement: "Zaveza še ni ubesedena — spodaj je, kar bitje še potrebuje.",
     cmtTasksTitle: "Da bo zaveza popolna, bitje {being} vabi k pojasnilu:",
-    cmtUncovered: "Še nepokrito:",
+    cmtUncovered: "Še nepokriti očitki",
+    cmtAnswers: "Odgovarja na",
+    grvGiven: "očitek, ki ga je dal",
+    grvReceived: "očitek, ki ga je prejel",
+    grvAccepted: "sprejet",
+    grvOpen: "odprt",
+    grvDisputed: "sporen",
     cmtDivergence: "Bitja zaveze ne berejo enako — vsako presoja samostojno in zapisi se ne združujejo.",
     cmtRev: "rev", cmtFirstStated: "prvič izrečeno", cmtUpdated: "posodobljeno",
     cmtRecordedIn: "zapisano v fazi",
@@ -212,12 +219,55 @@ const TXT = {
     cmtAttrComplete: "Commitment of {name} — stated in their own words in the process; recorded and verified by being {being}.",
     cmtEmptyStatement: "The commitment has not been put into words yet — below is what the being still needs.",
     cmtTasksTitle: "To make the commitment whole, being {being} invites you to clarify:",
-    cmtUncovered: "Still uncovered:",
+    cmtUncovered: "Grievances not yet covered",
+    cmtAnswers: "Answers",
+    grvGiven: "grievance they gave",
+    grvReceived: "grievance they received",
+    grvAccepted: "accepted",
+    grvOpen: "open",
+    grvDisputed: "disputed",
     cmtDivergence: "The beings do not read the commitment the same way — each judges independently and the records are never merged.",
     cmtRev: "rev", cmtFirstStated: "first stated", cmtUpdated: "updated",
     cmtRecordedIn: "recorded during",
   },
 };
+
+/** One grievance a commitment refers to, in words rather than as a bare id. */
+function GrievanceLine({
+  g, id, dir, L, nameOf, warn = false,
+}: {
+  g: Grievance | undefined;
+  id: string;
+  dir: "given" | "received";
+  L: typeof TXT.sl;
+  nameOf: (pk: string) => string;
+  warn?: boolean;
+}) {
+  const box = warn
+    ? "border-amber-500/30 bg-amber-500/[0.06]"
+    : "border-border/60 bg-muted/40";
+  // The ledger may not have arrived yet, or the being may reference an id that
+  // is no longer in its own ledger. Show the id rather than inventing text.
+  if (!g) {
+    return (
+      <li className={`rounded border px-2 py-1 text-[10px] font-mono text-muted-foreground ${box}`}>{id}</li>
+    );
+  }
+  return (
+    <li className={`rounded border px-2 py-1.5 ${box}`}>
+      <div className="text-[10px] text-muted-foreground">
+        <span className="font-mono">{g.id}</span>
+        {" · "}
+        {dir === "given" ? `${L.grvGiven} → ${nameOf(g.toPubkey)}` : `${L.grvReceived} ← ${nameOf(g.fromPubkey)}`}
+        {" · "}
+        <span className={g.status === "accepted" ? "text-emerald-600" : ""}>
+          {g.disputedByGiver ? L.grvDisputed : g.status === "accepted" ? L.grvAccepted : L.grvOpen}
+        </span>
+      </div>
+      <div className="text-xs text-foreground/85">{g.summary}</div>
+    </li>
+  );
+}
 
 export default function Matrix() {
   const en = useLang() === "en";
@@ -240,6 +290,19 @@ export default function Matrix() {
 
   const { entries, states, isLoading: loadingAssess } = useOwnAssessments(selectedCaseRoot);
   const { ledgers, isLoading: loadingGriev } = useOwnGrievances(selectedCaseRoot);
+  // A commitment answers grievances by ID ("g4"), which tells a reader nothing
+  // on its own. Every being's ledger is already loaded on this page, so the
+  // ids resolve to their actual wording without another fetch. Keyed per
+  // (being, id) BECAUSE ids are per-being sequential — one being's g4 is a
+  // different grievance from another's, and merging them would attach the
+  // wrong sentence to the wrong commitment.
+  const grievanceByBeing = useMemo(() => {
+    const m = new Map<string, Grievance>();
+    for (const l of ledgers) {
+      for (const g of l.grievances) m.set(`${l.beingPubkey.toLowerCase()}:${g.id}`, g);
+    }
+    return m;
+  }, [ledgers]);
   // PARTICIPANT-ONLY source records (KIND 37050, group-key-decrypted), keyed
   // per being — grievance ids are per-being sequential, never merged. A
   // non-participant never gets the group key, so this stays empty for them.
@@ -497,9 +560,12 @@ export default function Matrix() {
     return (
       <div className="space-y-4 md:space-y-6 px-4 md:px-0">
         <div>
-          <h2 className="text-base md:text-lg font-semibold flex items-center gap-2">
-            <Telescope className="h-5 w-5 text-orange-600 dark:text-orange-400" /> {L.title}
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base md:text-lg font-semibold flex items-center gap-2">
+              <Telescope className="h-5 w-5 text-orange-600 dark:text-orange-400" /> {L.title}
+            </h2>
+            <LangPicker />
+          </div>
           <p className="text-sm text-muted-foreground mt-1">{L.intro}</p>
         </div>
 
@@ -540,9 +606,12 @@ export default function Matrix() {
   // ── DETAIL VIEW ──
   return (
     <div className="space-y-4 md:space-y-6 px-4 md:px-0">
-      <Button variant="ghost" size="sm" onClick={() => setSelectedCaseRoot(null)} className="flex items-center gap-2 text-muted-foreground hover:text-foreground -ml-2">
-        <ArrowLeft size={16} /><span>{L.allProcesses}</span>
-      </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button variant="ghost" size="sm" onClick={() => setSelectedCaseRoot(null)} className="flex items-center gap-2 text-muted-foreground hover:text-foreground -ml-2">
+          <ArrowLeft size={16} /><span>{L.allProcesses}</span>
+        </Button>
+        <LangPicker />
+      </div>
 
       <Card>
         <CardContent className="pt-6">
@@ -1155,23 +1224,46 @@ export default function Matrix() {
                                 </div>
                               )}
                               {cm.points.length > 0 && (
-                                <ul className="space-y-1.5">
-                                  {cm.points.map((pt, i) => (
-                                    <li key={i} className="text-xs flex flex-wrap items-center gap-1">
-                                      <span>• {pt.text}</span>
-                                      {[...pt.addresses.received, ...pt.addresses.given].map((id, j) => (
-                                        <span key={`${id}-${j}`} className="inline-flex items-center rounded-full border border-border/60 bg-muted/40 px-1.5 py-0 text-[10px] text-muted-foreground">{id}</span>
-                                      ))}
-                                    </li>
-                                  ))}
+                                <ul className="space-y-2">
+                                  {cm.points.map((pt, i) => {
+                                    const refs = [
+                                      ...pt.addresses.received.map((id) => ({ id, dir: "received" as const })),
+                                      ...pt.addresses.given.map((id) => ({ id, dir: "given" as const })),
+                                    ];
+                                    return (
+                                      <li key={i} className="text-xs">
+                                        <span>• {pt.text}</span>
+                                        {refs.length > 0 && (
+                                          <>
+                                            <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">{L.cmtAnswers}</div>
+                                            <ul className="mt-1 space-y-1">
+                                              {refs.map(({ id, dir }, j) => (
+                                                <GrievanceLine key={`${id}-${j}`} g={grievanceByBeing.get(`${cm.beingPubkey.toLowerCase()}:${id}`)} id={id} dir={dir} L={L} nameOf={nameOf} />
+                                              ))}
+                                            </ul>
+                                          </>
+                                        )}
+                                      </li>
+                                    );
+                                  })}
                                 </ul>
                               )}
                               {uncovered.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-1">
-                                  <span className="text-[10px] text-amber-600">{L.cmtUncovered}</span>
-                                  {uncovered.map((id, j) => (
-                                    <span key={`${id}-${j}`} className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-600">{id}</span>
-                                  ))}
+                                <div className="space-y-1">
+                                  <div className="text-[10px] uppercase tracking-wider text-amber-600">{L.cmtUncovered}</div>
+                                  <ul className="space-y-1">
+                                    {uncovered.map((id, j) => (
+                                      <GrievanceLine
+                                        key={`${id}-${j}`}
+                                        g={grievanceByBeing.get(`${cm.beingPubkey.toLowerCase()}:${id}`)}
+                                        id={id}
+                                        dir={(cm.coverage?.uncovered_received || []).includes(id) ? "received" : "given"}
+                                        L={L}
+                                        nameOf={nameOf}
+                                        warn
+                                      />
+                                    ))}
+                                  </ul>
                                 </div>
                               )}
                               <div className="text-[10px] text-muted-foreground">
