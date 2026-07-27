@@ -136,6 +136,61 @@ async function main() {
     det = await call('GET', `/requests/${OPEN_ID}`);
     check('request stays open for funding', det.data.request?.phase !== 'maturing', det.data.request?.phase);
 
+    console.log('— the receiving wallet survives an edit —');
+    {
+      // An edit that claims a DIFFERENT wallet must not move where funds land.
+      const evt = finalizeEvent({
+        kind: 31240,
+        created_at: now,
+        tags: [
+          ['d', OPEN_ID],
+          ['service', 'unconditional-financing'],
+          ['title', 'Wallet swap attempt'],
+          ['summary', 's'],
+          ['request_type', 'personal_hardship'],
+          ['fiat_goal', '1000'],
+          ['currency', 'EUR'],
+          ['wallet', 'LAttackerWallet'],
+          ['published_at', String(OPEN_PUB)],
+          ['funding_opens_at', String(OPEN_OPENS)],
+          ['status', 'active'],
+        ],
+        content: 'x',
+      }, sk);
+      const r2 = await call('POST', '/requests/upsert', { event: evt });
+      check('edit accepted → 200', r2.status === 200, r2);
+      const det2 = await call('GET', `/requests/${OPEN_ID}`);
+      check('funding is open → wallet PINNED, swap refused',
+        det2.data.request?.wallet === 'LTestWallet', det2.data.request?.wallet);
+      check('the rest of the edit still applied', det2.data.request?.title === 'Wallet swap attempt', det2.data.request?.title);
+    }
+
+    console.log('— while maturing the wallet may still be corrected —');
+    {
+      const evt = finalizeEvent({
+        kind: 31240,
+        created_at: now,
+        tags: [
+          ['d', MATURING_ID],
+          ['service', 'unconditional-financing'],
+          ['title', 'New wallet while maturing'],
+          ['summary', 's'],
+          ['request_type', 'personal_hardship'],
+          ['fiat_goal', '1000'],
+          ['currency', 'EUR'],
+          ['wallet', 'LCorrectedWallet'],
+          ['published_at', String(MATURING_PUB)],
+          ['funding_opens_at', String(MATURING_OPENS)],
+          ['status', 'active'],
+        ],
+        content: 'x',
+      }, sk);
+      const r3 = await call('POST', '/requests/upsert', { event: evt });
+      check('edit accepted → 200', r3.status === 200, r3);
+      const det3 = await call('GET', `/requests/${MATURING_ID}`);
+      check('wallet updated while still maturing', det3.data.request?.wallet === 'LCorrectedWallet', det3.data.request?.wallet);
+    }
+
     console.log('— only the author may refine —');
     r = await call('POST', '/requests/upsert', {
       event: editEvent(skOther, MATURING_ID, 'Hijack', MATURING_PUB, now),

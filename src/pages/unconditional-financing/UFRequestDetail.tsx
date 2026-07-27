@@ -240,7 +240,7 @@ const UFRequestDetail = () => {
                     onClick={() => navigate(`/unconditional-financing/edit/${request.id}`)}
                   >
                     <Pencil className="h-4 w-4" />
-                    {sl ? "Dodelaj zahtevek" : "Refine the request"}
+                    {sl ? "Uredi besedilo" : "Edit text"}
                   </Button>
                 </>
               )}
@@ -373,7 +373,7 @@ const UFRequestDetail = () => {
                 {/* The maturing banner above already offers this while the
                     request matures; here it covers every other phase, so the
                     author can always correct their own presentation. */}
-                {isRequester && request.phase !== "maturing" && !request.isRepaid && (
+                {isRequester && request.phase !== "maturing" && (
                   <Button
                     variant="outline"
                     className="w-full"

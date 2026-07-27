@@ -75,10 +75,16 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
   const { settings: ufSettings } = useUfSettings();
 
   // Recipient always receives on their Main Wallet (canonical lookup).
+  // On an EDIT the wallet is NOT reconsidered: the request keeps the address it
+  // was published with, so correcting the text can never silently redirect
+  // where contributions arrive (the author's Main Wallet may have changed, and
+  // financiers gave to the request as it stood).
   const mainWallet =
     wallets.find((w) => w.walletType === "Main Wallet") ||
     wallets.find((w) => w.walletType === "Wallet");
   const walletFrozen = !!mainWallet?.freezeStatus;
+  /** Where the funds arrive: fixed at first publication, never changed by an edit. */
+  const receivingWallet = existing ? existing.wallet : mainWallet?.walletId || "";
 
   // ── Form state (prefilled from the request being edited) ──
   const [requestType, setRequestType] = useState<UfRequestType>(
@@ -359,7 +365,7 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
       );
       return;
     }
-    if (!mainWallet) {
+    if (!isEdit && !mainWallet) {
       toast.error(
         sl
           ? "Za prejem financiranja potrebuješ glavno denarnico (Main Wallet)"
@@ -367,7 +373,7 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
       );
       return;
     }
-    if (walletFrozen) {
+    if (!isEdit && walletFrozen) {
       toast.error(
         sl
           ? "Tvoja glavna denarnica je zamrznjena in ne more pravilno prejemati financiranja"
@@ -421,7 +427,7 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
         ["request_type", requestType],
         ["fiat_goal", String(goalNum)],
         ["currency", currency],
-        ["wallet", mainWallet.walletId],
+        ["wallet", receivingWallet],
         ["published_at", String(pubTs)],
         ["funding_opens_at", String(fundingOpensAt)],
         ["status", "active"],
@@ -525,7 +531,10 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
     }
   };
 
-  const submitBlocked = walletsLoading || !mainWallet || walletFrozen;
+  // Publishing needs a usable Main Wallet; editing an existing request does not
+  // — the address is already fixed, and the author must always be able to
+  // correct their own text.
+  const submitBlocked = isEdit ? false : walletsLoading || !mainWallet || walletFrozen;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -914,7 +923,17 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {walletsLoading ? (
+          {isEdit ? (
+            // An existing request keeps the address it was published with.
+            <div className="rounded-lg border bg-muted/40 p-3">
+              <p className="font-mono text-sm break-all">{receivingWallet}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {sl
+                  ? "Denarnica tega zahtevka ostane nespremenjena — urejanje besedila je ne premakne."
+                  : "This request keeps its receiving wallet — editing the text does not change it."}
+              </p>
+            </div>
+          ) : walletsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               {sl ? "Nalaganje denarnic ..." : "Loading wallets..."}

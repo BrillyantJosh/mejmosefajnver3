@@ -151,12 +151,6 @@ const FinancingCard = ({
   const maturingDays =
     request.phase === "maturing" ? ufMaturingDaysLeft(request.fundingOpensAt) : 0;
   const canRepay = financing.totalFunded > 0 && !request.isRepaid;
-  // My own request stays editable whatever phase it is in. While it matures an
-  // edit restarts the review period; once funding is open the opening date no
-  // longer moves, but the presentation can still be corrected — with a maturing
-  // length of 0 days there is no maturing phase at all, so tying the button to
-  // it would mean the author could never fix their own text.
-  const canEdit = !request.isRepaid;
 
   return (
     <Card className="overflow-hidden">
@@ -215,27 +209,26 @@ const FinancingCard = ({
               </div>
             </div>
 
-            {(canEdit || canRepay) && (
-              <div className="flex flex-wrap justify-end gap-2 mt-3">
-                {canEdit && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-1"
-                    onClick={() => onEdit(request.id)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    {sl ? "Dodelaj" : "Refine"}
-                  </Button>
-                )}
-                {canRepay && (
-                  <Button size="sm" className="gap-1" onClick={() => onRepay(request.id)}>
-                    <Undo2 className="h-4 w-4" />
-                    {sl ? "Vrni sredstva" : "Repay"}
-                  </Button>
-                )}
-              </div>
-            )}
+            {/* Editing is offered in EVERY phase: while the request matures an
+                edit restarts the review period, afterwards the opening date no
+                longer moves — but the author can always correct their own text. */}
+            <div className="flex flex-wrap justify-end gap-2 mt-3">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1"
+                onClick={() => onEdit(request.id)}
+              >
+                <Pencil className="h-4 w-4" />
+                {sl ? "Uredi besedilo" : "Edit text"}
+              </Button>
+              {canRepay && (
+                <Button size="sm" className="gap-1" onClick={() => onRepay(request.id)}>
+                  <Undo2 className="h-4 w-4" />
+                  {sl ? "Vrni sredstva" : "Repay"}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </CardContent>

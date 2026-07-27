@@ -409,7 +409,7 @@ router.post('/requests/upsert', async (req, res) => {
 
   try {
     const existing = db.prepare(
-      'SELECT pubkey, is_hidden, is_repaid, published_at, funding_opens_at FROM uf_requests WHERE id = ?'
+      'SELECT pubkey, is_hidden, is_repaid, published_at, funding_opens_at, wallet FROM uf_requests WHERE id = ?'
     ).get(dTag) as any;
 
     // Addressable identity is (pubkey, d): a different author may never take
@@ -429,6 +429,15 @@ router.post('/requests/upsert', async (req, res) => {
         error: `Requested amount exceeds the maximum for this group (${cap})`,
         maxAmount: cap,
       });
+    }
+
+    // Where the money lands. While the request matures it may still change (no
+    // funds are in flight and the restarted window gives the community a fresh
+    // look at it); once funding is open it is PINNED, so an edit can never
+    // redirect contributions away from the address people are giving to.
+    let wallet = getTag(evt, 'wallet') || '';
+    if (existing && existing.wallet && nowSec >= existing.funding_opens_at) {
+      wallet = existing.wallet;
     }
 
     let publishedAt: number;
@@ -513,7 +522,7 @@ router.post('/requests/upsert', async (req, res) => {
       getTag(evt, 'request_type') || 'personal_hardship',
       parseFloat(getTag(evt, 'fiat_goal') || '0') || 0,
       getTag(evt, 'currency') || 'EUR',
-      getTag(evt, 'wallet') || '',
+      wallet,
       coverImage,
       JSON.stringify(galleryImages),
       JSON.stringify(crowdfundingRefs),

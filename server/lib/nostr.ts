@@ -1118,7 +1118,7 @@ export async function indexLanacrowdFromRelays(db: any): Promise<void> {
           evt.content || '',
           parseFloat(getTag('fiat_goal') || '0') || 0,
           getTag('currency') || 'EUR',
-          getTag('wallet') || '',
+          wallet,
           getTag('responsibility_statement') || '',
           getTag('project_type') || 'Inspiration',
           getTag('what_type') || null,
@@ -1355,7 +1355,7 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         // nostr identity of an addressable event is (pubkey, d) — a different
         // author may never take over an existing row by reusing its d-tag.
         const existing = db.prepare(
-          'SELECT pubkey, is_hidden, is_repaid, funding_opens_at FROM uf_requests WHERE id = ?'
+          'SELECT pubkey, is_hidden, is_repaid, funding_opens_at, wallet FROM uf_requests WHERE id = ?'
         ).get(evt.dTag) as any;
         if (existing && existing.pubkey && existing.pubkey !== evt.pubkey) continue;
 
@@ -1378,6 +1378,15 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
             evt.created_at < existing.funding_opens_at
               ? Math.max(existing.funding_opens_at, evt.created_at + maturingSeconds)
               : existing.funding_opens_at;
+        }
+
+        // Same rule as the REST route: the receiving address may still change
+        // while the request matures, but is PINNED once funding is open — an
+        // edit must never redirect contributions away from the address people
+        // are giving to.
+        let wallet = getTag('wallet') || '';
+        if (existing && existing.wallet && evt.created_at >= (existing.funding_opens_at || 0)) {
+          wallet = existing.wallet;
         }
 
         upsertRequest.run(
