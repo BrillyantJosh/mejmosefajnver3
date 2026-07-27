@@ -31,7 +31,13 @@ import {
 import { useUfSettings } from "@/hooks/useUFSettings";
 import { formatDays } from "@/lib/ufSettings";
 
-const TAB_ORDER: UfPhase[] = ["maturing", "repaying", "repaid"];
+/**
+ * "All" first and selected by default: the phases split a small set of requests
+ * across three tabs, so opening the module on a single phase made the others
+ * look like they did not exist.
+ */
+type UfTab = "all" | UfPhase;
+const TAB_ORDER: UfTab[] = ["all", "maturing", "repaying", "repaid"];
 
 /** Slovenian declension for "financer" (1 financer, 2 financerja, 3–4 financerji, 5+ financerjev). */
 const financierLabel = (n: number, sl: boolean): string => {
@@ -253,7 +259,7 @@ const UfRequestCardSkeleton = () => (
 
 const UFRequests = () => {
   const sl = useLang() === "sl";
-  const [tab, setTab] = useState<UfPhase>("maturing");
+  const [tab, setTab] = useState<UfTab>("all");
   const [page, setPage] = useState(1);
 
   const { settings: ufSettings } = useUfSettings();
@@ -261,6 +267,10 @@ const UFRequests = () => {
     tab,
     page,
   );
+  // "All" is the sum of the phases, so every tab carries a number.
+  const tabCount = (t: UfTab): number =>
+    t === "all" ? counts.maturing + counts.repaying + counts.repaid : counts[t];
+
 
   // Bulk profile lookup for all requesters on the current page.
   const requesterPubkeys = useMemo(
@@ -269,13 +279,22 @@ const UFRequests = () => {
   );
   const { profiles } = useNostrProfilesCacheBulk(requesterPubkeys);
 
-  const tabLabels: Record<UfPhase, string> = {
+  const tabLabels: Record<UfTab, string> = {
+    all: sl ? "Vsi" : "All",
     maturing: sl ? "Zorenje" : "Maturing",
     repaying: sl ? "V odplačevanju" : "Repaying",
     repaid: sl ? "Poplačano" : "Repaid",
   };
 
-  const emptyStates: Record<UfPhase, { title: string; hint: string }> = {
+  const emptyStates: Record<UfTab, { title: string; hint: string }> = {
+    all: {
+      title: sl
+        ? "Ni še nobenega zahtevka za financiranje."
+        : "There are no financing requests yet.",
+      hint: sl
+        ? "Bodi prvi — objavi zahtevek za financiranje."
+        : "Be the first — publish a financing request.",
+    },
     maturing: {
       title: sl
         ? "Trenutno noben zahtevek ne zori."
@@ -332,13 +351,13 @@ const UFRequests = () => {
             }`}
           >
             {tabLabels[t]}
-            {counts[t] > 0 && (
+            {tabCount(t) > 0 && (
               <span
                 className={`ml-1.5 text-xs ${
                   tab === t ? "text-primary-foreground/80" : "text-muted-foreground/80"
                 }`}
               >
-                {counts[t]}
+                {tabCount(t)}
               </span>
             )}
           </button>
