@@ -120,6 +120,12 @@ export function useUfRequests(tab: 'maturing' | 'repaying' | 'repaid' | 'all', p
   const [requests, setRequests] = useState<UfRequest[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  // How many requests exist in each phase — lets the tabs show where the rest are.
+  const [counts, setCounts] = useState<{ maturing: number; repaying: number; repaid: number }>({
+    maturing: 0,
+    repaying: 0,
+    repaid: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -134,6 +140,7 @@ export function useUfRequests(tab: 'maturing' | 'repaying' | 'repaid' | 'all', p
         setRequests(d.requests || []);
         setTotal(d.total || 0);
         setTotalPages(d.totalPages || 1);
+        if (d.counts) setCounts(d.counts);
         setError(null);
       })
       .catch((e) => alive && setError(e.message))
@@ -142,7 +149,7 @@ export function useUfRequests(tab: 'maturing' | 'repaying' | 'repaid' | 'all', p
   }, [tab, page, limit, refreshKey]);
 
   const refetch = useCallback(() => setRefreshKey((k) => k + 1), []);
-  return { requests, total, totalPages, isLoading, error, refetch };
+  return { requests, total, totalPages, counts, isLoading, error, refetch };
 }
 
 export function useUfRequest(id: string | undefined) {

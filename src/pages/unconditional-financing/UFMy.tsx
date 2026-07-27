@@ -151,7 +151,12 @@ const FinancingCard = ({
   const maturingDays =
     request.phase === "maturing" ? ufMaturingDaysLeft(request.fundingOpensAt) : 0;
   const canRepay = financing.totalFunded > 0 && !request.isRepaid;
-  const canEdit = request.phase === "maturing";
+  // My own request stays editable whatever phase it is in. While it matures an
+  // edit restarts the review period; once funding is open the opening date no
+  // longer moves, but the presentation can still be corrected — with a maturing
+  // length of 0 days there is no maturing phase at all, so tying the button to
+  // it would mean the author could never fix their own text.
+  const canEdit = !request.isRepaid;
 
   return (
     <Card className="overflow-hidden">

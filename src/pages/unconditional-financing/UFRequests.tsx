@@ -28,6 +28,8 @@ import {
   CachedProfile,
   useNostrProfilesCacheBulk,
 } from "@/hooks/useNostrProfilesCacheBulk";
+import { useUfSettings } from "@/hooks/useUFSettings";
+import { formatDays } from "@/lib/ufSettings";
 
 const TAB_ORDER: UfPhase[] = ["maturing", "repaying", "repaid"];
 
@@ -254,7 +256,8 @@ const UFRequests = () => {
   const [tab, setTab] = useState<UfPhase>("maturing");
   const [page, setPage] = useState(1);
 
-  const { requests, totalPages, isLoading, error, refetch } = useUfRequests(
+  const { settings: ufSettings } = useUfSettings();
+  const { requests, totalPages, counts, isLoading, error, refetch } = useUfRequests(
     tab,
     page,
   );
@@ -286,8 +289,8 @@ const UFRequests = () => {
         ? "Noben zahtevek še ni odprt za financiranje."
         : "No requests are open for funding yet.",
       hint: sl
-        ? "Zahtevki se odprejo za financiranje po 8-dnevnem obdobju zorenja."
-        : "Requests open for funding after the 8-day maturing period.",
+        ? `Zahtevki se odprejo za financiranje po obdobju zorenja (${formatDays(ufSettings.maturingDays, true)}).`
+        : `Requests open for funding after the maturing period (${formatDays(ufSettings.maturingDays, false)}).`,
     },
     repaid: {
       title: sl
@@ -329,6 +332,15 @@ const UFRequests = () => {
             }`}
           >
             {tabLabels[t]}
+            {counts[t] > 0 && (
+              <span
+                className={`ml-1.5 text-xs ${
+                  tab === t ? "text-primary-foreground/80" : "text-muted-foreground/80"
+                }`}
+              >
+                {counts[t]}
+              </span>
+            )}
           </button>
         ))}
       </div>

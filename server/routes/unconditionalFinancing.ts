@@ -293,8 +293,25 @@ router.get('/requests', (req, res) => {
       LIMIT ? OFFSET ?
     `).all(...params, limit, offset) as any[];
 
+    // How many requests sit in each phase, so the tabs can show it. Without
+    // this a request in another tab is effectively invisible: someone looking
+    // at an empty (or single-entry) tab has no hint that more exist elsewhere.
+    const visible = "WHERE r.status != 'draft' AND r.is_hidden = 0";
+    const countsRow = db.prepare(`
+      SELECT
+        SUM(CASE WHEN r.is_repaid = 0 AND r.funding_opens_at >  ? THEN 1 ELSE 0 END) AS maturing,
+        SUM(CASE WHEN r.is_repaid = 0 AND r.funding_opens_at <= ? THEN 1 ELSE 0 END) AS repaying,
+        SUM(CASE WHEN r.is_repaid = 1 THEN 1 ELSE 0 END) AS repaid
+      FROM uf_requests r ${visible}
+    `).get(nowSec, nowSec) as any;
+
     res.json({
       requests: rows.map(r => requestRowToApi(r, nowSec)),
+      counts: {
+        maturing: countsRow?.maturing ?? 0,
+        repaying: countsRow?.repaying ?? 0,
+        repaid: countsRow?.repaid ?? 0,
+      },
       total,
       page,
       totalPages: Math.ceil(total / limit),
