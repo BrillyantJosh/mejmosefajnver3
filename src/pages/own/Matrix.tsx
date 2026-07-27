@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { splitLatestPerBeing, withFloatedGuidance, guidanceKindKey } from "@/lib/ownTimeline";
 import GrievanceStepTable from "@/components/own/GrievanceStepTable";
 import { useSearchParams } from "react-router-dom";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Users, Telescope, Archive, ChevronDown } from "lucide-react";
+import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Users, Telescope, Archive, ChevronDown, Languages } from "lucide-react";
 import { useAllOwnProcesses } from "@/hooks/useAllOwnProcesses";
 import { useOwnAssessments, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
@@ -120,6 +120,10 @@ const TXT = {
     cmtTasksTitle: "Da bo zaveza popolna, bitje {being} vabi k pojasnilu:",
     cmtUncovered: "Še nepokriti očitki",
     cmtAnswers: "Odgovarja na",
+    cmtTranslate: "Prevedi",
+    cmtShowOriginal: "Pokaži izvirnik",
+    cmtTranslating: "Prevajam …",
+    cmtMachineTx: "Strojni prevod — objavljeni zapis ostaja v izvirnih besedah.",
     grvGiven: "očitek, ki ga je dal",
     grvReceived: "očitek, ki ga je prejel",
     grvAccepted: "sprejet",
@@ -221,6 +225,10 @@ const TXT = {
     cmtTasksTitle: "To make the commitment whole, being {being} invites you to clarify:",
     cmtUncovered: "Grievances not yet covered",
     cmtAnswers: "Answers",
+    cmtTranslate: "Translate",
+    cmtShowOriginal: "Show original",
+    cmtTranslating: "Translating …",
+    cmtMachineTx: "Machine translation — the published record keeps the original words.",
     grvGiven: "grievance they gave",
     grvReceived: "grievance they received",
     grvAccepted: "accepted",
@@ -234,13 +242,14 @@ const TXT = {
 
 /** One grievance a commitment refers to, in words rather than as a bare id. */
 function GrievanceLine({
-  g, id, dir, L, nameOf, warn = false,
+  g, id, dir, L, nameOf, tx = (t: string) => t, warn = false,
 }: {
   g: Grievance | undefined;
   id: string;
   dir: "given" | "received";
   L: typeof TXT.sl;
   nameOf: (pk: string) => string;
+  tx?: (t: string) => string;
   warn?: boolean;
 }) {
   const box = warn
@@ -264,7 +273,7 @@ function GrievanceLine({
           {g.disputedByGiver ? L.grvDisputed : g.status === "accepted" ? L.grvAccepted : L.grvOpen}
         </span>
       </div>
-      <div className="text-xs text-foreground/85">{g.summary}</div>
+      <div className="text-xs text-foreground/85">{tx(g.summary)}</div>
     </li>
   );
 }
@@ -442,6 +451,42 @@ export default function Matrix() {
   // ── Matrica Očitkov state ──
   const { session } = useAuth();
   const myPubkey = (session?.nostrHexId || "").toLowerCase();
+
+  // ── Reader's translation of a commitment ──────────────────────────
+  // The beings write grievance abstracts in English, so a Slovenian reader
+  // meets a wall of English exactly where the meaning matters most. This
+  // translates a whole commitment card on demand — the statement, its points,
+  // the being's invitations and every grievance it refers to.
+  //
+  // NOTHING IS REWRITTEN AT THE SOURCE. The translation lives in this browser
+  // for this visit; the published record keeps the words that were actually
+  // spoken, and one click returns to them.
+  const [txCache, setTxCache] = useState<Record<string, string>>({});   // `${lang}::${text}` → translation
+  const [txCards, setTxCards] = useState<Set<string>>(new Set());       // cards currently showing a translation
+  const [txBusy, setTxBusy] = useState<string | null>(null);
+
+  const translateTexts = useCallback(async (texts: string[], target: "sl" | "en") => {
+    const todo = [...new Set(texts.map((t) => (t || "").trim()).filter(Boolean))]
+      .filter((t) => txCache[`${target}::${t}`] === undefined);
+    if (!todo.length) return;
+    const results = await Promise.all(todo.map(async (text) => {
+      try {
+        const res = await fetch("/api/functions/translate-post", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: text, targetLanguage: target, format: "plain", nostrHexId: session?.nostrHexId }),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return typeof data?.translatedText === "string" ? ([text, data.translatedText] as const) : null;
+      } catch (_) { return null; }
+    }));
+    setTxCache((prev) => {
+      const next = { ...prev };
+      for (const r of results) if (r) next[`${target}::${r[0]}`] = r[1];
+      return next;
+    });
+  }, [txCache, session?.nostrHexId]);
   const [grievView, setGrievView] = useState<"matrix" | "mine" | "compare">("matrix");
   // »Zame« defaults to the logged-in user when they are in the process; the
   // overseer picks any participant from the same select.
@@ -1185,6 +1230,30 @@ export default function Matrix() {
                         {mine.map((cm) => {
                           const beingName = beingLabelOf(cm.beingPubkey, cm.beingName);
                           const done = cm.status === "complete";
+                          const cardKey = `${p}:${cm.beingPubkey}`;
+                          const showTx = txCards.has(cardKey);
+                          // Falls back to the original whenever a translation
+                          // is missing — a half-translated card is honest, an
+                          // empty one is not.
+                          const tx = (t: string) => (showTx ? (txCache[`${lang}::${(t || "").trim()}`] ?? t) : t);
+                          const gOf = (id: string) => grievanceByBeing.get(`${cm.beingPubkey.toLowerCase()}:${id}`);
+                          const cardTexts = () => [
+                            cm.statedCommitment,
+                            ...cm.points.map((pt) => pt.text),
+                            ...cm.tasks.map((t) => t.text),
+                            ...[...cm.points.flatMap((pt) => [...pt.addresses.given, ...pt.addresses.received]),
+                                ...(cm.coverage?.uncovered_given || []), ...(cm.coverage?.uncovered_received || [])]
+                              .map((id) => gOf(id)?.summary || ""),
+                          ].filter(Boolean) as string[];
+                          const toggleTx = async () => {
+                            if (showTx) { setTxCards((s2) => { const n = new Set(s2); n.delete(cardKey); return n; }); return; }
+                            setTxBusy(cardKey);
+                            try { await translateTexts(cardTexts(), lang); }
+                            finally {
+                              setTxBusy(null);
+                              setTxCards((s2) => new Set(s2).add(cardKey));
+                            }
+                          };
                           const when = cm.updatedAt ? new Date(cm.updatedAt) : new Date(cm.created_at * 1000);
                           const firstAt = cm.firstStatedAt ? new Date(cm.firstStatedAt) : null;
                           const uncovered = [...(cm.coverage?.uncovered_received || []), ...(cm.coverage?.uncovered_given || [])];
@@ -1197,18 +1266,29 @@ export default function Matrix() {
                                 <span className="text-sm font-semibold inline-flex items-center gap-1.5">
                                   <Bot className="h-4 w-4 text-orange-500" />{beingName}
                                 </span>
-                                <Badge variant="outline" className={done
-                                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[10px] py-0"
-                                  : "bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0"}>
-                                  {done ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <CircleDot className="h-3 w-3 mr-1" />}
-                                  {done ? L.cmtComplete : L.cmtForming}
-                                </Badge>
+                                <span className="inline-flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={toggleTx}
+                                    disabled={txBusy === cardKey}
+                                    className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-60"
+                                  >
+                                    <Languages className="h-3 w-3" />
+                                    {txBusy === cardKey ? L.cmtTranslating : showTx ? L.cmtShowOriginal : L.cmtTranslate}
+                                  </button>
+                                  <Badge variant="outline" className={done
+                                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[10px] py-0"
+                                    : "bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] py-0"}>
+                                    {done ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <CircleDot className="h-3 w-3 mr-1" />}
+                                    {done ? L.cmtComplete : L.cmtForming}
+                                  </Badge>
+                                </span>
                               </div>
                               {/* Atribucija — besede so udeleženčeve, zapisalo/preverilo jih je bitje */}
                               <p className="text-[11px] text-muted-foreground italic">{attr}</p>
                               {cm.statedCommitment ? (
                                 <blockquote className={`pl-3 py-1.5 text-sm italic font-serif whitespace-pre-wrap ${done ? "border-l-4 border-emerald-500 bg-emerald-500/[0.06]" : "border-l-4 border-dashed border-amber-500/50 bg-amber-500/[0.05]"}`}>
-                                  {cm.statedCommitment}
+                                  {tx(cm.statedCommitment)}
                                 </blockquote>
                               ) : (
                                 <p className="text-xs text-muted-foreground border-l-4 border-dashed border-amber-500/40 pl-3 py-1.5">{L.cmtEmptyStatement}</p>
@@ -1218,7 +1298,7 @@ export default function Matrix() {
                                   <div className="text-[11px] font-medium text-muted-foreground">{L.cmtTasksTitle.replace("{being}", beingName)}</div>
                                   <ul className="space-y-1">
                                     {cm.tasks.map((t) => (
-                                      <li key={t.id} className="text-xs text-muted-foreground">• {t.text}</li>
+                                      <li key={t.id} className="text-xs text-muted-foreground">• {tx(t.text)}</li>
                                     ))}
                                   </ul>
                                 </div>
@@ -1232,13 +1312,13 @@ export default function Matrix() {
                                     ];
                                     return (
                                       <li key={i} className="text-xs">
-                                        <span>• {pt.text}</span>
+                                        <span>• {tx(pt.text)}</span>
                                         {refs.length > 0 && (
                                           <>
                                             <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">{L.cmtAnswers}</div>
                                             <ul className="mt-1 space-y-1">
                                               {refs.map(({ id, dir }, j) => (
-                                                <GrievanceLine key={`${id}-${j}`} g={grievanceByBeing.get(`${cm.beingPubkey.toLowerCase()}:${id}`)} id={id} dir={dir} L={L} nameOf={nameOf} />
+                                                <GrievanceLine key={`${id}-${j}`} g={gOf(id)} id={id} dir={dir} L={L} nameOf={nameOf} tx={tx} />
                                               ))}
                                             </ul>
                                           </>
@@ -1255,17 +1335,19 @@ export default function Matrix() {
                                     {uncovered.map((id, j) => (
                                       <GrievanceLine
                                         key={`${id}-${j}`}
-                                        g={grievanceByBeing.get(`${cm.beingPubkey.toLowerCase()}:${id}`)}
+                                        g={gOf(id)}
                                         id={id}
                                         dir={(cm.coverage?.uncovered_received || []).includes(id) ? "received" : "given"}
                                         L={L}
                                         nameOf={nameOf}
+                                        tx={tx}
                                         warn
                                       />
                                     ))}
                                   </ul>
                                 </div>
                               )}
+                              {showTx && <p className="text-[10px] italic text-muted-foreground">{L.cmtMachineTx}</p>}
                               <div className="text-[10px] text-muted-foreground">
                                 {L.cmtRev} {cm.revision}
                                 {firstAt && <> · {L.cmtFirstStated} {firstAt.toLocaleDateString()}</>}
