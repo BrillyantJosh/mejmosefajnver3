@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import ConversationList from "@/components/own/ConversationList";
 import ChatView from "@/components/own/ChatView";
