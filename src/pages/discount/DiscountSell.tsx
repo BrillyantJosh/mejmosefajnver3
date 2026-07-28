@@ -727,6 +727,26 @@ export default function DiscountSell() {
                         );
                       }
 
+                      // A frozen wallet cannot send, so it must not be
+                      // selectable — it used to be merely dimmed, and the sale
+                      // failed only later, at the transaction.
+                      if (isFrozen) {
+                        return (
+                          <div
+                            key={w.walletId}
+                            aria-disabled="true"
+                            className="w-full rounded-xl border-2 border-border bg-muted/20 px-3 sm:px-5 py-3 sm:py-4 space-y-3 opacity-60 cursor-not-allowed"
+                          >
+                            {cardBody}
+                            <div className="rounded-lg border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 p-3">
+                              <p className="text-xs text-blue-700 dark:text-blue-400 leading-relaxed">
+                                {t("sell.wallet.frozenBlocked")}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+
                       return (
                         <button
                           key={w.walletId}
@@ -735,7 +755,7 @@ export default function DiscountSell() {
                             selectedWallet === w.walletId
                               ? "border-primary bg-primary/5"
                               : "border-border hover:border-muted-foreground/30"
-                          } ${isFrozen ? "opacity-60" : ""}`}
+                          }`}
                         >
                           {cardBody}
                         </button>

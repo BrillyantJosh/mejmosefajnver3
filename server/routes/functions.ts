@@ -15,6 +15,7 @@ import { sendLanaTransaction, sendBatchLanaTransaction, base58CheckDecode, uint8
 import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays, discoverNewProfiles } from '../lib/nostr';
 import { sendPushToUser } from '../lib/pushNotification';
 import { verifyEvent } from 'nostr-tools';
+import { blockIfFrozen } from '../lib/walletFreeze';
 import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -2186,25 +2187,9 @@ router.post('/consolidate-wallet', async (req: Request, res: Response) => {
       hasKey: !!privateKey
     });
 
-    // Server-side freeze check (same pattern as send-lana-transaction)
-    if (userPubkey) {
-      const relays = getRelaysFromDb();
-      const db = getDb();
-      const params = db.prepare('SELECT trusted_signers FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
-      let trustedSigners: string[] = [];
-      if (params?.trusted_signers) {
-        try {
-          const parsed = JSON.parse(params.trusted_signers);
-          if (parsed?.LanaRegistrar) trustedSigners = parsed.LanaRegistrar;
-        } catch {}
-      }
-      const wallets = await fetchUserWallets(userPubkey, relays, trustedSigners);
-      const senderWallet = wallets.find(w => w.walletId === senderAddress);
-      if (senderWallet?.freezeStatus) {
-        console.log(`🚫 BLOCKED: Consolidation from frozen wallet ${senderAddress} (freeze: ${senderWallet.freezeStatus})`);
-        return res.json({ success: false, error: 'This wallet is frozen. Outgoing transactions are disabled.' });
-      }
-    }
+    // Address-resolved freeze check — runs for every caller.
+    const frozenError = await blockIfFrozen(senderAddress, 'consolidate-wallet');
+    if (frozenError) return res.json({ success: false, error: frozenError });
 
     // Validate the WIF derives the sender address (compressed OR uncompressed)
     let useCompressed: boolean;
@@ -2844,25 +2829,11 @@ router.post('/send-lana-transaction', async (req: Request, res: Response) => {
     servers: req.body.electrumServers?.length || 0
   });
   try {
-    // Server-side freeze check: block transactions from frozen wallets
-    if (req.body.senderAddress && req.body.userPubkey) {
-      const relays = getRelaysFromDb();
-      const db = getDb();
-      const params = db.prepare('SELECT trusted_signers FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
-      let trustedSigners: string[] = [];
-      if (params?.trusted_signers) {
-        try {
-          const parsed = JSON.parse(params.trusted_signers);
-          if (parsed?.LanaRegistrar) trustedSigners = parsed.LanaRegistrar;
-        } catch {}
-      }
-      const wallets = await fetchUserWallets(req.body.userPubkey, relays, trustedSigners);
-      const senderWallet = wallets.find(w => w.walletId === req.body.senderAddress);
-      if (senderWallet?.freezeStatus) {
-        console.log(`🚫 BLOCKED: Transaction from frozen wallet ${req.body.senderAddress} (freeze: ${senderWallet.freezeStatus})`);
-        return res.json({ success: false, error: 'This wallet is frozen. Outgoing transactions are disabled.' });
-      }
-    }
+    // Freeze check, resolved from the sender ADDRESS so it runs for every
+    // caller — it used to depend on the caller volunteering userPubkey, which
+    // most payment screens never did.
+    const frozenError = await blockIfFrozen(req.body.senderAddress, 'send-lana-transaction');
+    if (frozenError) return res.json({ success: false, error: frozenError });
 
     const result = await sendLanaTransaction(req.body);
     console.log('📋 send-lana-transaction result:', { success: result.success, error: result.error, txHash: result.txHash });
@@ -2876,25 +2847,9 @@ router.post('/send-lana-transaction', async (req: Request, res: Response) => {
 // send-batch-lana-transaction (multiple recipients in one TX)
 router.post('/send-batch-lana-transaction', async (req: Request, res: Response) => {
   try {
-    // Server-side freeze check for batch transactions
-    if (req.body.senderAddress && req.body.userPubkey) {
-      const relays = getRelaysFromDb();
-      const db = getDb();
-      const params = db.prepare('SELECT trusted_signers FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
-      let trustedSigners: string[] = [];
-      if (params?.trusted_signers) {
-        try {
-          const parsed = JSON.parse(params.trusted_signers);
-          if (parsed?.LanaRegistrar) trustedSigners = parsed.LanaRegistrar;
-        } catch {}
-      }
-      const wallets = await fetchUserWallets(req.body.userPubkey, relays, trustedSigners);
-      const senderWallet = wallets.find(w => w.walletId === req.body.senderAddress);
-      if (senderWallet?.freezeStatus) {
-        console.log(`🚫 BLOCKED: Batch transaction from frozen wallet ${req.body.senderAddress}`);
-        return res.json({ success: false, error: 'This wallet is frozen. Outgoing transactions are disabled.' });
-      }
-    }
+    // Address-resolved freeze check — runs for every caller.
+    const frozenError = await blockIfFrozen(req.body.senderAddress, 'send-batch-lana-transaction');
+    if (frozenError) return res.json({ success: false, error: frozenError });
 
     const result = await sendBatchLanaTransaction(req.body);
     return res.json(result);

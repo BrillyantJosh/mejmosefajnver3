@@ -89,6 +89,8 @@ const discount = {
   "sell.utxo.title": "Wallet Consolidation Required",
   "sell.utxo.watch": "Watch: How to consolidate your wallet",
   "sell.wallet.frozen": "Frozen",
+  "sell.wallet.frozenBlocked":
+    "This wallet is frozen, so it cannot send LANA — selling from it is not possible. Choose another wallet, or wait until the freeze is lifted.",
   "sell.wallet.noneText": "No wallets are registered for your account. Please contact support.",
   "sell.wallet.noneTitle": "No registered wallets found",
   "sell.wif.label": "WIF Private Key",
@@ -224,6 +226,8 @@ const translations: TranslationDict<DiscountKey> = {
     "sell.utxo.title": "Potrebna je konsolidacija denarnice",
     "sell.utxo.watch": "Oglej si: Kako konsolidirati denarnico",
     "sell.wallet.frozen": "Zamrznjeno",
+    "sell.wallet.frozenBlocked":
+      "Ta denarnica je zamrznjena in ne more pošiljati LANE — prodaja z nje ni mogoča. Izberi drugo denarnico ali počakaj, da se zamrznitev sprosti.",
     "sell.wallet.noneText": "Za tvoj račun ni registrirane nobene denarnice. Prosimo, obrni se na podporo.",
     "sell.wallet.noneTitle": "Ni najdenih registriranih denarnic",
     "sell.wif.label": "Zasebni ključ WIF",
