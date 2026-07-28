@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Users, Telescope, Archive, ChevronDown, Languages } from "lucide-react";
 import { useAllOwnProcesses } from "@/hooks/useAllOwnProcesses";
-import { useOwnAssessments, type PhaseState } from "@/hooks/useOwnAssessments";
+import { useOwnAssessments, isSilenced, formatResumeDate, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { LangPicker } from "@/components/own/LangPicker";
 import { useOwnGrievanceSources, buildPairMsgIdMap } from "@/hooks/useOwnGrievanceSources";
@@ -132,6 +132,11 @@ const TXT = {
     cmtDivergence: "Bitja zaveze ne berejo enako — vsako presoja samostojno in zapisi se ne združujejo.",
     cmtRev: "rev", cmtFirstStated: "prvič izrečeno", cmtUpdated: "posodobljeno",
     cmtRecordedIn: "zapisano v fazi",
+    silTitle: "Bitja čakajo v tišini",
+    silBody: "Bitja so zaznala čustven izbruh, ki ruši odnose, in čakajo v tišini do {when}, preden nadaljujejo s procesom.",
+    silBodyOpen: "Bitja so zaznala čustven izbruh, ki ruši odnose, in čakajo v tišini, preden nadaljujejo s procesom.",
+    silStale: "Spodnja ocena je izpred tišine in se med njo ne posodablja.",
+    silLegend: "V tišini — bitja čakajo; proces za to osebo miruje.",
   },
   en: {
     title: "OWN Matrix",
@@ -237,6 +242,11 @@ const TXT = {
     cmtDivergence: "The beings do not read the commitment the same way — each judges independently and the records are never merged.",
     cmtRev: "rev", cmtFirstStated: "first stated", cmtUpdated: "updated",
     cmtRecordedIn: "recorded during",
+    silTitle: "The beings are waiting in silence",
+    silBody: "The beings noticed an emotional outburst that damages relationships, and are waiting in silence until {when} before the process continues.",
+    silBodyOpen: "The beings noticed an emotional outburst that damages relationships, and are waiting in silence before the process continues.",
+    silStale: "The verdict below predates the silence and is not updated while it holds.",
+    silLegend: "In silence — the beings are waiting; the process rests for this person.",
   },
 };
 
@@ -428,22 +438,44 @@ export default function Matrix() {
   };
   // The body of one assessment cell — shared between the desktop table and the
   // mobile stacked cards, so both read identically.
-  const AssessmentCellBody = ({ st }: { st: PhaseState }) => (
-    <>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">{L.currentlyIn}</div>
-      <Badge variant="outline" className={`${getPhaseColor(st.currentPhaseEstimate)} mb-2`}>{getPhaseLabel(st.currentPhaseEstimate, lang)}</Badge>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{L.reqMet}</div>
-      <div className="space-y-1">
-        <PhaseRow status={phaseStatus(st, "reflection")} label={L.reflection} />
-        <PhaseRow status={phaseStatus(st, "alignment")} label={L.alignment} />
-        <PhaseRow status={phaseStatus(st, "change")} label={L.change} />
-      </div>
-      {st.grievanceSummary && (
-        <div className="text-[10px] text-muted-foreground mt-1.5">{L.grievLabel}: {st.grievanceSummary.received_accepted}/{st.grievanceSummary.received} {L.grievAcceptedWord}</div>
-      )}
-      <div className="text-[10px] text-muted-foreground mt-1.5">{L.confidence} {(st.overallConfidence).toFixed(2)}</div>
-    </>
-  );
+  const AssessmentCellBody = ({ st }: { st: PhaseState }) => {
+    // This cell belongs to ONE being, so it shows THAT being's own silence —
+    // never a merged verdict across beings (they diverge by design).
+    const silent = isSilenced(st.silence);
+    const when = formatResumeDate(st.silence?.resume_at, lang);
+    return (
+      <>
+        {silent && (
+          <div className="mb-2 rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-2">
+            <div className="text-xs font-medium text-amber-700 dark:text-amber-400">🤲 {L.silTitle}</div>
+            <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+              {when ? L.silBody.replace("{when}", when) : L.silBodyOpen}
+            </p>
+            {/* Nad oceno, ker besedilo govori o »spodnji oceni«. */}
+            <p className="text-[10px] text-muted-foreground/80 italic leading-snug mt-1">{L.silStale}</p>
+          </div>
+        )}
+        {/* Med tišino bitje ničesar ne ocenjuje — VSE spodaj je izpred nje,
+            vključno z značko faze. Ta pravi »zdaj«, in prav to je trditev, ki
+            jo tišina razveljavi; ostra barvna značka pod napisom bi se brala
+            kot sveža sodba. */}
+        <div className={silent ? "opacity-60" : undefined}>
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">{L.currentlyIn}</div>
+          <Badge variant="outline" className={`${getPhaseColor(st.currentPhaseEstimate)} mb-2`}>{getPhaseLabel(st.currentPhaseEstimate, lang)}</Badge>
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{L.reqMet}</div>
+          <div className="space-y-1">
+            <PhaseRow status={phaseStatus(st, "reflection")} label={L.reflection} />
+            <PhaseRow status={phaseStatus(st, "alignment")} label={L.alignment} />
+            <PhaseRow status={phaseStatus(st, "change")} label={L.change} />
+          </div>
+          {st.grievanceSummary && (
+            <div className="text-[10px] text-muted-foreground mt-1.5">{L.grievLabel}: {st.grievanceSummary.received_accepted}/{st.grievanceSummary.received} {L.grievAcceptedWord}</div>
+          )}
+          <div className="text-[10px] text-muted-foreground mt-1.5">{L.confidence} {(st.overallConfidence).toFixed(2)}</div>
+        </div>
+      </>
+    );
+  };
 
   const [timelineParticipant, setTimelineParticipant] = useState<string>("all");
   const [timelineBeing, setTimelineBeing] = useState<string>("all");
@@ -721,6 +753,7 @@ export default function Matrix() {
                   <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> {L.doneLeg}</span>
                   <span className="inline-flex items-center gap-1"><CircleDot className="h-3.5 w-3.5 text-amber-500" /> {L.inProgressLeg}</span>
                   <span className="inline-flex items-center gap-1"><Circle className="h-3.5 w-3.5 text-muted-foreground/40" /> {L.notYetLeg}</span>
+                  <span className="inline-flex items-center gap-1"><span aria-hidden>🤲</span> {L.silLegend}</span>
                 </div>
               </div>
 

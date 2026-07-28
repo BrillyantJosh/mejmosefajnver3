@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { CheckCircle2, CircleDot, Circle } from "lucide-react";
-import type { PhaseState } from "@/hooks/useOwnAssessments";
+import { silenceRollup, formatResumeDate, type PhaseState, type SilenceRollup } from "@/hooks/useOwnAssessments";
 import { EMOTION_LABELS } from "@/hooks/useOwnEmotions";
 
 // ── The condensed three-pillar cross-section (presek) of ONE participant,
@@ -17,6 +17,11 @@ const TXT = {
     needResponse: "brez odgovora", needAccept: "nesprejeti", needOwn: "zablode nesprejete",
     emotions: "Čustva", depth: "globina", swing: "nihaj", noEmotions: "še ni zaznanih",
     potWalked: "Pot prehojena", potStuckDark: "zataknjen v temi", potStuckLight: "ostaja v svetlem", potOnWay: "še na poti", potOf: "bitij",
+    silTitle: "Bitja čakajo v tišini",
+    silBody: "Bitja so zaznala čustven izbruh, ki ruši odnose, in čakajo v tišini do {when}, preden nadaljujejo s procesom.",
+    silBodyOpen: "Bitja so zaznala čustven izbruh, ki ruši odnose, in čakajo v tišini, preden nadaljujejo s procesom.",
+    silStale: "Spodnja ocena je izpred tišine in se med njo ne posodablja.",
+    silOfBeings: "V tišini: {n} od {total} bitij.",
   },
   en: {
     phases: "Phases", beingsSuffix: "beings",
@@ -25,6 +30,11 @@ const TXT = {
     needResponse: "unanswered", needAccept: "unaccepted", needOwn: "not owned as delusion",
     emotions: "Emotions", depth: "depth", swing: "swing", noEmotions: "none detected yet",
     potWalked: "Path walked", potStuckDark: "stuck in the dark", potStuckLight: "remains in the light", potOnWay: "still on the way", potOf: "beings",
+    silTitle: "The beings are waiting in silence",
+    silBody: "The beings noticed an emotional outburst that damages relationships, and are waiting in silence until {when} before the process continues.",
+    silBodyOpen: "The beings noticed an emotional outburst that damages relationships, and are waiting in silence before the process continues.",
+    silStale: "The verdict below predates the silence and is not updated while it holds.",
+    silOfBeings: "In silence: {n} of {total} beings.",
   },
 };
 
@@ -33,6 +43,8 @@ export interface PillarAggregate {
   phases: { key: "reflection" | "alignment" | "change"; met: number }[];
   griev: { anyData: boolean; unresponded: number; unaccepted: number; unowned: number; allDone: boolean };
   emotion: { count: number; avgDepth: number; avgPolarity: number | null; swing: boolean; top: string[]; walkedCount: number; pathCount: number; stuck: 'dark' | 'light' | null };
+  // Never flattened to a yes/no: beings diverge, so the count is the message.
+  silence: SilenceRollup;
 }
 
 // Aggregate one participant's per-being states into the cross-section.
@@ -70,13 +82,19 @@ export function aggregatePillars(states: PhaseState[]): PillarAggregate {
     phases,
     griev: { anyData, unresponded, unaccepted, unowned, allDone: anyData && !unresponded && !unaccepted && !unowned },
     emotion: { count: ems.length, avgDepth, avgPolarity, swing: ems.some((e) => e.swing === true), top: (deepest?.top || []).slice(0, 3), walkedCount, pathCount: paths.length, stuck },
+    silence: silenceRollup(states),
   };
 }
 
-export default function OwnPillarSummary({ states, lang }: { states: PhaseState[]; lang: "sl" | "en" }) {
+// `showSilence={false}` when the PARENT already states the silence in full
+// (OwnSelfMatrix does) — otherwise the same notice would appear twice inside
+// one card. The parent then also owns the de-emphasis and the stale line.
+export default function OwnPillarSummary({ states, lang, showSilence = true }: { states: PhaseState[]; lang: "sl" | "en"; showSilence?: boolean }) {
   const L = TXT[lang];
   const agg = useMemo(() => aggregatePillars(states), [states]);
   if (!agg.beings) return null;
+  const silent = showSilence && agg.silence.any;
+  const silWhen = agg.silence.openEnded ? null : formatResumeDate(agg.silence.resumeAt, lang);
 
   const PhaseRow = ({ label, met }: { label: string; met: number }) => {
     const all = met === agg.beings && agg.beings > 0;
@@ -98,6 +116,21 @@ export default function OwnPillarSummary({ states, lang }: { states: PhaseState[
 
   return (
     <div className="space-y-1.5">
+      {/* Bitja čakajo — nad vsemi tremi stebri, ker med tišino ničesar ne ocenjujejo */}
+      {silent && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/[0.06] px-2 py-1.5">
+          <div className="text-[11px] font-medium text-amber-700 dark:text-amber-400">🤲 {L.silTitle}</div>
+          <p className="text-[10px] text-muted-foreground leading-snug mt-0.5">
+            {silWhen ? L.silBody.replace("{when}", silWhen) : L.silBodyOpen}
+          </p>
+          <p className="text-[10px] text-muted-foreground/80 mt-0.5">
+            {L.silOfBeings.replace("{n}", String(agg.silence.waiting)).replace("{total}", String(agg.silence.total))}
+          </p>
+          {/* Stoji NAD oceno — besedilo govori o »spodnji oceni«. */}
+          <p className="text-[10px] text-muted-foreground/80 italic leading-snug mt-1">{L.silStale}</p>
+        </div>
+      )}
+      <div className={`space-y-1.5 ${silent ? "opacity-60" : ""}`}>
       {/* Steber 1 — faze, agregirano čez bitja */}
       <div className="flex flex-wrap items-center">
         <PhaseRow label={L.reflection} met={agg.phases[0].met} />
@@ -132,6 +165,7 @@ export default function OwnPillarSummary({ states, lang }: { states: PhaseState[
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

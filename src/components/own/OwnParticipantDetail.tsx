@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Archive, ChevronDown } from "lucide-react";
 import { splitLatestPerBeing, withFloatedGuidance, guidanceKindKey } from "@/lib/ownTimeline";
 import GrievanceStepTable from "@/components/own/GrievanceStepTable";
-import { useOwnAssessments, type AssessmentEntry, type PhaseState } from "@/hooks/useOwnAssessments";
+import { useOwnAssessments, isSilenced, silenceRollup, formatResumeDate, type AssessmentEntry, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { useOwnGrievanceSources, buildPairMsgIdMap } from "@/hooks/useOwnGrievanceSources";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
@@ -66,6 +66,12 @@ const TXT = {
     tabOpinions: "Mnenja", tabGrievances: "Očitki", tabEmotions: "Čustva",
     potTitle: "Pot", potWalked: "Pot prehojena ✓", potStuckDark: "zataknjen v temi", potStuckLight: "ostaja v svetlem", potOnWay: "še na poti",
     noGriev: "Ni zabeleženih očitkov za to osebo.", noEmotions: "Bitja še niso zaznala čustev pri tej osebi.",
+    silTitle: "Bitja čakajo v tišini",
+    silBody: "Bitja so zaznala čustven izbruh, ki ruši odnose, in čakajo v tišini do {when}, preden nadaljujejo s procesom.",
+    silBodyOpen: "Bitja so zaznala čustven izbruh, ki ruši odnose, in čakajo v tišini, preden nadaljujejo s procesom.",
+    silStale: "Spodnja ocena je izpred tišine in se med njo ne posodablja.",
+    silChip: "V tišini",
+    silOfBeings: "V tišini: {n} od {total} bitij.",
   },
   en: {
     back: "Back to chat",
@@ -112,6 +118,12 @@ const TXT = {
     tabOpinions: "Opinions", tabGrievances: "Grievances", tabEmotions: "Emotions",
     potTitle: "Path", potWalked: "Path walked ✓", potStuckDark: "stuck in the dark", potStuckLight: "remains in the light", potOnWay: "still on the way",
     noGriev: "No grievances recorded for this person.", noEmotions: "No emotions detected for this person yet.",
+    silTitle: "The beings are waiting in silence",
+    silBody: "The beings noticed an emotional outburst that damages relationships, and are waiting in silence until {when} before the process continues.",
+    silBodyOpen: "The beings noticed an emotional outburst that damages relationships, and are waiting in silence before the process continues.",
+    silStale: "The verdict below predates the silence and is not updated while it holds.",
+    silChip: "In silence",
+    silOfBeings: "In silence: {n} of {total} beings.",
   },
 };
 
@@ -165,6 +177,16 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
     latestEntryByBeing.forEach((_v, b) => set.add(b));
     return Array.from(set).sort();
   }, [myStates, latestEntryByBeing]);
+
+  // Aggregate banner: HOW MANY beings are waiting (they diverge by design).
+  // The denominator must be the beings actually RENDERED below — `beings`
+  // includes any that published only an opinion (87047) and no phase state, so
+  // counting states alone would print "1 of 2" above three visible cards.
+  const silence = useMemo(() => {
+    const roll = silenceRollup(myStates);
+    return { ...roll, total: beings.length };
+  }, [myStates, beings]);
+  const silenceWhen = silence.openEnded ? null : formatResumeDate(silence.resumeAt, lang);
 
   // This participant's grievances per being — kept per being (divergence is by
   // design), only beings with at least one grievance involving them show up.
@@ -327,6 +349,20 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
 
       <h3 className="text-base font-semibold">{participantName}</h3>
 
+      {/* Bitja čakajo — čez cel pas, pred zavihki. Brez »spodnje ocene«: pod
+          njim so zavihki, ne ocena; stale stoji pri vsaki oceni posebej. */}
+      {silence.any && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-3">
+          <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">🤲 {L.silTitle}</div>
+          <p className="text-xs text-muted-foreground leading-snug mt-1">
+            {silenceWhen ? L.silBody.replace("{when}", silenceWhen) : L.silBodyOpen}
+          </p>
+          <p className="text-[11px] text-muted-foreground/80 mt-1">
+            {L.silOfBeings.replace("{n}", String(silence.waiting)).replace("{total}", String(silence.total))}
+          </p>
+        </div>
+      )}
+
       {/* Trije zavihki — kot na strani Matrix: Mnenja / Očitki / Čustva */}
       <Tabs defaultValue="opinions" className="space-y-3">
         <TabsList className="grid w-full max-w-md grid-cols-3">
@@ -348,6 +384,8 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
               {beings.map((b) => {
                 const st = stateOf(b);
                 const entry = latestEntryByBeing.get(b);
+                // THIS being's own silence — never the aggregate.
+                const stSilent = isSilenced(st?.silence);
                 return (
                   <Card key={b} className="border-orange-500/25 bg-orange-500/[0.04]">
                     <CardContent className="p-3 space-y-2">
@@ -355,12 +393,19 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
                         <span className="text-sm font-medium inline-flex items-center gap-1.5">
                           <Bot className="h-4 w-4 text-orange-500" />{nameOf(b)}
                         </span>
-                        {st?.currentPhaseEstimate && (
-                          <Badge variant="outline" className={getPhaseColor(st.currentPhaseEstimate)}>{getPhaseLabel(st.currentPhaseEstimate, lang)}</Badge>
-                        )}
+                        <span className="inline-flex items-center gap-1.5 shrink-0">
+                          {stSilent && (
+                            <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px] py-0">🤲 {L.silChip}</Badge>
+                          )}
+                          {st?.currentPhaseEstimate && (
+                            <Badge variant="outline" className={getPhaseColor(st.currentPhaseEstimate)}>{getPhaseLabel(st.currentPhaseEstimate, lang)}</Badge>
+                          )}
+                        </span>
                       </div>
+                      {/* Nad oceno, ker besedilo govori o »spodnji oceni«. */}
+                      {stSilent && <p className="text-[10px] text-muted-foreground/80 italic leading-snug">{L.silStale}</p>}
                       {st && (
-                        <div className="space-y-1">
+                        <div className={`space-y-1 ${stSilent ? "opacity-60" : ""}`}>
                           <Req status={reqStatus(st, "reflection")} label={L.reflection} />
                           <Req status={reqStatus(st, "alignment")} label={L.alignment} />
                           <Req status={reqStatus(st, "change")} label={L.change} />

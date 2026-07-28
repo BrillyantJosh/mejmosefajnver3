@@ -25,6 +25,22 @@ export interface GrievanceSummary {
   apologized: boolean;
 }
 
+// The being's own statement that it is WAITING for this participant (an
+// emotional outburst that damages relationships was noticed). Absent on every
+// 37045 published before the feature existed — absent means NOT silenced, and
+// the publisher may also emit an explicit `{ silenced: false }`, so the only
+// safe gate is `silenced === true` (see isSilenced below).
+//
+// NOTE: `since` / `resume_at` are ISO 8601 STRINGS, unlike every other
+// timestamp in this codebase (which are unix seconds). Never feed them to a
+// `* 1000` helper.
+export interface SilenceState {
+  silenced: boolean;
+  reason: string;
+  since: string;
+  resume_at: string | null;
+}
+
 // Steber 3 rollup mirrored from the being's 37047 palette.
 export interface EmotionRollup {
   depth: number;
@@ -61,7 +77,67 @@ export interface PhaseState {
   overallConfidence: number;
   grievanceSummary?: GrievanceSummary | null;
   emotionSummary?: EmotionRollup | null;
+  silence?: SilenceState | null;
 }
+
+// The ONE rule for "is this being waiting?". An absent field and an explicit
+// `{ silenced: false }` both mean NOT silenced — truthiness would get the
+// second case wrong and put a notice on someone who is fine.
+export const isSilenced = (s?: SilenceState | null): boolean => s?.silenced === true;
+
+export interface SilenceRollup {
+  waiting: number;      // how many of these beings are waiting
+  total: number;        // how many beings are in the set at all
+  any: boolean;
+  resumeAt: string | null;  // the LATEST resume_at among the waiting ones
+  openEnded: boolean;       // at least one waiting being named no end date
+}
+
+// Per-being divergence is structural: one being may be waiting while another
+// is not, and their states are never merged. An aggregate view must therefore
+// say HOW MANY are waiting rather than flatten it to a single yes/no.
+export const silenceRollup = (states: PhaseState[]): SilenceRollup => {
+  const waiting = states.filter((s) => isSilenced(s.silence));
+  let resumeAt: string | null = null;
+  let openEnded = false;
+  for (const s of waiting) {
+    const raw = s.silence?.resume_at ?? null;
+    const t = raw ? Date.parse(raw) : NaN;
+    if (Number.isNaN(t)) { openEnded = true; continue; }   // no end date, or unparseable
+    if (resumeAt === null || t > Date.parse(resumeAt)) resumeAt = raw;
+  }
+  return { waiting: waiting.length, total: states.length, any: waiting.length > 0, resumeAt, openEnded };
+};
+
+// resume_at as a LOCAL DATE the reader can act on. Returns null when there is
+// nothing truthful to print (missing or unparseable) — the caller then uses the
+// open-ended wording instead of showing "null" or "Invalid Date".
+// The date may already lie in the PAST (37045 is replaceable and a record can
+// lag) — that is fine to show; never turn it into a countdown.
+// Slovene needs the GENITIVE here: the sentence is "…čakajo v tišini do 31.
+// JULIJA 2026…", and toLocaleDateString only ever yields the nominative
+// ("31. julij 2026"), which reads as a grammatical error to every Slovene
+// reader. Small thing, but this sentence is about a real person and will be
+// read by the people in the process.
+const SL_MONTHS_GENITIVE = [
+  'januarja', 'februarja', 'marca', 'aprila', 'maja', 'junija',
+  'julija', 'avgusta', 'septembra', 'oktobra', 'novembra', 'decembra',
+];
+
+export const formatResumeDate = (iso: string | null | undefined, lang: 'sl' | 'en'): string | null => {
+  // MUST be a string. `new Date(<number>)` reads a number as epoch
+  // MILLISECONDS, so a publisher writing unix SECONDS — the convention every
+  // other timestamp in this codebase follows — would render "21. januarja
+  // 1970" as a confident answer instead of falling through to the
+  // open-ended wording.
+  if (typeof iso !== 'string' || !iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  if (lang === 'en') {
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  return `${d.getDate()}. ${SL_MONTHS_GENITIVE[d.getMonth()]} ${d.getFullYear()}`;
+};
 
 const tagVal = (ev: Event, name: string, marker?: string): string | undefined => {
   const t = ev.tags.find((x) => x[0] === name && (marker ? x[3] === marker || x[2] === marker : true));
@@ -132,6 +208,7 @@ export const useOwnAssessments = (caseRoot: string | null) => {
               overallConfidence: Number(body.overall_confidence) || 0,
               grievanceSummary: body.grievance_summary ?? null,
               emotionSummary: body.emotion_summary ?? null,
+              silence: body.silence ?? null,
             });
           }
         }
