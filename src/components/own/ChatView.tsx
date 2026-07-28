@@ -8,6 +8,7 @@ import ChatMessage from "./ChatMessage";
 import OwnAudioRecorder from "./OwnAudioRecorder";
 import PauseProcessDialog from "./PauseProcessDialog";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
+import { formatResumeDate } from "@/hooks/useOwnAssessments";
 import { useLang } from "@/i18n/I18nContext";
 import { toast } from "sonner";
 
@@ -153,6 +154,13 @@ interface ChatViewProps {
   // Facilitator pause / reopen props
   isLocked?: boolean;
   lockedUntil?: number; // unix seconds
+  // The beings' silence toward the LOGGED-IN person (KIND 37045). Nothing like
+  // the facilitator pause: it is about one participant, everyone else keeps
+  // writing, and it is care rather than a sanction.
+  isSilencedForMe?: boolean;
+  silenceWaiting?: number;   // how many beings are waiting…
+  silenceTotal?: number;     // …of how many that published about me
+  silenceResumeAt?: string | null; // ISO 8601 STRING (not unix seconds); null = no end named
   canPause?: boolean;
   onPause?: (until: number, note: string) => Promise<void>;
   onReopen?: () => Promise<void>;
@@ -180,6 +188,10 @@ export default function ChatView({
   onReEnter,
   isLocked = false,
   lockedUntil,
+  isSilencedForMe = false,
+  silenceWaiting = 0,
+  silenceTotal = 0,
+  silenceResumeAt = null,
   canPause = false,
   onPause,
   onReopen,
@@ -387,6 +399,11 @@ export default function ChatView({
 
   const currentPhase = PHASE_INFO[phase || ''] || PHASE_INFO.opening;
 
+  // Slovene needs the genitive month ("do 4. avgusta"), which is why this goes
+  // through formatResumeDate instead of toLocaleDateString. null = the beings
+  // named no end, and the sentence switches to the open-ended form.
+  const silenceWhen = formatResumeDate(silenceResumeAt, en ? 'en' : 'sl');
+
   return (
     <div className={`flex flex-col h-full ${currentPhase.bgFull}`}>
       {/* Header — title + phase badge on ONE compact line (the old separate
@@ -508,9 +525,15 @@ export default function ChatView({
         </div>
       </ScrollArea>
 
-      {/* Input — while the facilitator has the process paused, the whole composer
-          (text + audio + image) is replaced by a notice, so NObody can post; the
-          messages above stay readable. The facilitator additionally gets Reopen. */}
+      {/* Input — two different things can take the composer away, and they are
+          never merged:
+            · the facilitator's pause (below) stops EVERYONE, and the
+              facilitator can lift it;
+            · the beings' silence stops ONLY this reader, nobody lifts it by
+              hand, and it is not a sanction.
+          Either way the whole composer (text + audio + image) is replaced by a
+          notice and the messages above stay readable. The pause is checked
+          first: it is process-wide and carries the Reopen button. */}
       {isLocked ? (
         <Card className="p-4 sticky bottom-0">
           <div className="flex flex-col items-center text-center gap-2">
@@ -532,6 +555,34 @@ export default function ChatView({
                 )}
               </Button>
             )}
+          </div>
+        </Card>
+      ) : isSilencedForMe ? (
+        /* The beings' silence toward THIS reader. Calm amber + 🤲, the same
+           marks the matrix and the self view use for it — no red, no warning
+           triangle: the beings stepped back to leave room, they did not
+           punish. Reading stays fully open. */
+        <Card className="p-4 sticky bottom-0 border-amber-500/30 bg-amber-500/[0.06]">
+          <div className="flex flex-col items-center text-center gap-2">
+            <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <span className="text-lg leading-none">🤲</span>
+              <span className="font-semibold">
+                {en ? 'The beings are waiting in silence' : 'Bitja čakajo v tišini'}
+              </span>
+              {/* Never speak in the plural for beings that released nobody: one
+                  being still waiting is enough to hold the composer, and the
+                  count is what every other silence surface already prints. */}
+              {silenceTotal > 0 && silenceWaiting < silenceTotal && (
+                <span className="text-xs font-normal opacity-80">
+                  ({silenceWaiting}/{silenceTotal})
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground max-w-md">
+              {en
+                ? `The beings noticed an emotional outburst that damages relationships, and chose silence so you have room to turn inward. You can still read everything — you can write again ${silenceWhen ? `on ${silenceWhen}` : 'once the beings speak'}.`
+                : `Bitja so zaznala čustven izbruh, ki ruši odnose, in izbrala tišino, da imaš prostor za pogled vase. Vse lahko še naprej bereš — pišeš lahko spet${silenceWhen ? ` ${silenceWhen}` : ', ko bitja znova spregovorijo'}.`}
+            </p>
           </div>
         </Card>
       ) : (

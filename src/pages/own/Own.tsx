@@ -12,6 +12,7 @@ import { useNostrGroupMessages } from "@/hooks/useNostrGroupMessages";
 import { useNostrProcessExitState, PROCESS_EXIT_KIND } from "@/hooks/useNostrProcessExitState";
 import { useNostrProcessPauseState, useNostrProcessPauseStatesBulk, PROCESS_PAUSE_KIND } from "@/hooks/useNostrProcessPauseState";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
+import { useOwnAssessments, activeSilenceFor } from "@/hooks/useOwnAssessments";
 import { useLang } from "@/i18n/I18nContext";
 import { finalizeEvent, nip44 } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
@@ -117,6 +118,15 @@ export default function Own() {
   // Get selected process
   const selectedProcess = processes.find(p => p.id === selectedProcessId);
 
+  // The case root matches the beings' 87047/37045 #e reference (strip the own:
+  // prefix if present — idempotent when processEventId is already the root).
+  // Declared up here, above every hook and above the processesLoading early
+  // return, because the silence gate below is a hook and hooks may not sit
+  // behind a conditional return.
+  const caseRoot = selectedProcess?.processEventId
+    ? (selectedProcess.processEventId.startsWith('own:') ? selectedProcess.processEventId.slice(4) : selectedProcess.processEventId)
+    : null;
+
   // Step 1: Fetch group key for selected process
   const { groupKey, isLoading: keyLoading } = useNostrGroupKey(
     selectedProcess?.processEventId || null,
@@ -146,6 +156,46 @@ export default function Own() {
   // Only the facilitator may pause / reopen the process
   const canPause = selectedProcess?.userRole === 'facilitator';
   const en = useLang() === 'en';
+
+  // The beings' silence (KIND 37045) toward the LOGGED-IN person in THIS case.
+  // While it runs they keep full read access but cannot post — the silence is
+  // room to turn inward, and a reply typed into it is the opposite of that.
+  //
+  // Nothing here is process-wide: `activeSilenceFor` looks only at states whose
+  // subject is this user, so the facilitator and the other participants are
+  // untouched by a silence that was never about them.
+  //
+  // Recomputed on every render rather than memoised on a captured timestamp, so
+  // the moment the silence lapses the composer comes back on the next render
+  // instead of holding someone the beings have already released.
+  const { states: assessmentStates, isLoading: assessmentsLoading } = useOwnAssessments(caseRoot);
+  // A tick, so the release is not hostage to an unrelated re-render. React
+  // does not re-render because time passed, and a silence that lapses while
+  // the tab is open would otherwise keep the composer shut on someone the
+  // beings have already let go — with nothing on screen explaining why.
+  const [silenceNow, setSilenceNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setSilenceNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  // Only a being the FACILITATOR actually put in this process may hold the
+  // gate. 37045 is unauthenticated, so without this a stranger could publish
+  // one and mute a named person. Facilitators and guests are the roles a being
+  // holds; participants are the ones being assessed, never the assessors.
+  const silenceAuthors = useMemo(
+    () => [
+      ...(selectedProcess?.facilitators?.length ? selectedProcess.facilitators : [selectedProcess?.facilitator]),
+      ...(selectedProcess?.guests || []),
+    ].filter(Boolean) as string[],
+    [selectedProcess],
+  );
+  const mySilence = activeSilenceFor(assessmentStates, session?.nostrHexId, silenceNow, silenceAuthors);
+  // Fail OPEN while the read is unresolved. `states` is emptied at the start of
+  // every fetch and only ever filled from a parsed 37045, so an unresolved,
+  // failed or absent read already yields blocked = false; the isLoading term is
+  // the second lock on the same door — someone the beings never silenced can
+  // never be silenced by a pending request.
+  const silenceBlocksMe = !assessmentsLoading && mySilence.blocked;
 
   // Get message IDs for LASH counts from Supabase
   const messageIds = messages.map(m => m.id);
@@ -290,13 +340,24 @@ export default function Own() {
     }
 
     // Fail closed while the process is paused (or while the pause state is still
-    // resolving) so a stale-UI send can't slip a message through the silence.
+    // resolving) so a stale-UI send can't slip a message through the pause.
     if (isLocked) {
       toast.error(en ? 'The process is paused — you cannot post' : 'Proces je v premoru — objavljanje ni mogoče');
       return false;
     }
     if (pauseLoading) {
       toast.error(en ? 'One moment — checking the process state…' : 'Trenutek — preverjam stanje procesa …');
+      return false;
+    }
+
+    // The beings' silence toward this one person. Deliberately the mirror image
+    // of the pause guard above: the pause is a process-wide lock and fails
+    // CLOSED while unresolved, this one fails OPEN — only a positive, still
+    // running 37045 record stops a send, never a pending or empty read.
+    if (silenceBlocksMe) {
+      toast.error(en
+        ? 'The beings are waiting in silence — you cannot post right now'
+        : 'Bitja čakajo v tišini — zdaj ne moreš objavljati');
       return false;
     }
 
@@ -672,18 +733,14 @@ export default function Own() {
   // matrix beside the chat. NOTE: useNostrOpenProcesses resolves role by
   // priority (initiator before participant), so someone who is both is tagged
   // 'initiator' — hence we must accept both here. The facilitator/guests are
-  // not assessed; their tailored views come next. The case root matches the
-  // beings' 87047/37045 #e reference (strip the own: prefix if present —
-  // idempotent when processEventId is already the root).
+  // not assessed; their tailored views come next. (caseRoot is derived at the
+  // top of the component — the silence gate needs it before any early return.)
   const isSubjectView = !!selectedProcessId
     && (selectedProcess?.userRole === 'participant' || selectedProcess?.userRole === 'initiator');
   // Overseers (facilitator / guest) get the WHOLE participant×being matrix on
   // the left + a per-participant timeline on the right.
   const isOverseerView = !!selectedProcessId
     && (selectedProcess?.userRole === 'facilitator' || selectedProcess?.userRole === 'guest');
-  const caseRoot = selectedProcess?.processEventId
-    ? (selectedProcess.processEventId.startsWith('own:') ? selectedProcess.processEventId.slice(4) : selectedProcess.processEventId)
-    : null;
   // The overseer matrix lists only the actual PARTICIPANTS of the process. The
   // initiator appears iff they are ALSO tagged a participant (i.e. they too are
   // going through the process) — a pure initiator who merely opened the case is
@@ -711,6 +768,10 @@ export default function Own() {
       }}
       isLocked={isLocked}
       lockedUntil={lockedUntil || undefined}
+      isSilencedForMe={silenceBlocksMe}
+      silenceWaiting={mySilence.waiting}
+      silenceTotal={assessmentStates.filter((s) => s.participantPubkey === (session?.nostrHexId || '').toLowerCase()).length}
+      silenceResumeAt={mySilence.openEnded ? null : mySilence.resumeAt}
       canPause={canPause}
       onPause={async (until: number, note: string) => {
         const ok = await publishPauseEvent('pause', until, note);

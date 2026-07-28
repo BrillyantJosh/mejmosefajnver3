@@ -96,17 +96,126 @@ export interface SilenceRollup {
 // Per-being divergence is structural: one being may be waiting while another
 // is not, and their states are never merged. An aggregate view must therefore
 // say HOW MANY are waiting rather than flatten it to a single yes/no.
-export const silenceRollup = (states: PhaseState[]): SilenceRollup => {
-  const waiting = states.filter((s) => isSilenced(s.silence));
+// Expiry is applied here too, on the SAME predicate the gate uses. Two
+// definitions of "in silence" on one screen is its own defect: the composer
+// would come back while the matrix beside it still announced that the beings
+// were waiting, and the reader has no way to tell which one to believe.
+export const silenceRollup = (states: PhaseState[], now: number = Date.now()): SilenceRollup => {
+  const waiting = states.filter((s) => silenceActiveAt(s.silence, now));
   let resumeAt: string | null = null;
   let openEnded = false;
   for (const s of waiting) {
-    const raw = s.silence?.resume_at ?? null;
-    const t = raw ? Date.parse(raw) : NaN;
-    if (Number.isNaN(t)) { openEnded = true; continue; }   // no end date, or unparseable
-    if (resumeAt === null || t > Date.parse(resumeAt)) resumeAt = raw;
+    const stated = isoMs(s.silence?.resume_at);
+    if (stated === null) { openEnded = true; continue; }   // no end date the being itself named
+    if (resumeAt === null || stated > Date.parse(resumeAt)) resumeAt = s.silence?.resume_at ?? null;
   }
   return { waiting: waiting.length, total: states.length, any: waiting.length > 0, resumeAt, openEnded };
+};
+
+// Is THIS being's silence still running at `now`?
+//
+// `silenceRollup` above answers "did a being declare silence?" — right for a
+// display that reports the beings' standing position. This answers the narrower
+// question a GATE has to ask: "is that silence still in force this second?".
+//
+// An expired record never keeps anyone quiet. 37045 is replaceable, so a being
+// that stops publishing (crash, key rotation, case moved on) leaves its last
+// state standing forever, and reading it literally would mute a person for
+// good. Wrongly silencing someone is the worse error, so a resume_at in the
+// PAST fails OPEN.
+//
+// Missing or unparseable `resume_at` is NOT an expiry — the being named no end.
+// But "no end named" must never become "no end at all": the protocol's own hard
+// cap is 10 days after onset, so an undated silence falls back to
+// `since + 10 days`. Without that, one record with a null date — or a publisher
+// that emits unix seconds by mistake — mutes a person for the rest of time.
+// If `since` is unusable too there is nothing left to bound it with, and the
+// only safe answer is to let them speak.
+// (`typeof === 'string'` matters: these two are ISO 8601 while every other
+// timestamp here is unix seconds, and `Date.parse(<number>)` would not save
+// us — see formatResumeDate below.)
+const MAX_SILENCE_MS = 10 * 24 * 60 * 60 * 1000;
+
+/** ISO string → ms, or null for anything else (including a number). */
+const isoMs = (raw: unknown): number | null => {
+  if (typeof raw !== 'string' || !raw) return null;
+  const t = Date.parse(raw);
+  return Number.isNaN(t) ? null : t;
+};
+
+/** When this silence stops holding, or null when nothing can bound it. */
+export const silenceEndsAt = (s: SilenceState | null | undefined): number | null => {
+  const stated = isoMs(s?.resume_at);
+  if (stated !== null) return stated;
+  const since = isoMs(s?.since);
+  return since === null ? null : since + MAX_SILENCE_MS;
+};
+
+const silenceActiveAt = (s: SilenceState | null | undefined, now: number): boolean => {
+  if (!isSilenced(s)) return false;
+  const ends = silenceEndsAt(s);
+  if (ends === null) return false;   // unbounded and unanchored — never a life sentence
+  return ends > now;
+};
+
+export interface ActiveSilence {
+  blocked: boolean;         // at least one being is silent toward this person RIGHT NOW
+  waiting: number;          // how many of them
+  resumeAt: string | null;  // the LATEST resume_at among the still-running silences
+  openEnded: boolean;       // at least one of them named no usable end
+}
+
+// The beings' silence toward ONE participant, as of `now`. Per-being divergence
+// is structural — one being may be waiting while another speaks — so ANY being
+// still in silence holds the gate, and the end date shown is the LAST one to
+// lapse (releasing at the earliest date would speak for beings that have not
+// released anyone).
+//
+// Blocking requires a POSITIVE, still-running record: an empty `states` (not
+// fetched yet, fetch failed, being never published) yields blocked = false.
+// That is what makes it impossible to silence someone the beings never named.
+// SPOOF PROTECTION. 37045 is public plaintext and unauthenticated — anyone can
+// sign one naming any case and any subject. That was harmless while this kind
+// only fed a display (a bogus row was an obviously bogus extra column), but a
+// gate is access control: without an allowlist any stranger could take away a
+// named person's ability to speak, and the state map keys on the author, so a
+// forgery never even has to outrace a real being's record.
+// `allowedAuthors` is the process's OWN roster — the pubkeys the facilitator
+// tagged as `facilitator`/`guest` in KIND 37044, which is where a being's
+// standing in a case comes from in the first place. Exactly the discipline
+// useNostrProcessPauseState already applies to 87056.
+// Pass an EMPTY/undefined list only where no gate depends on the answer: an
+// empty allowlist blocks nobody, which is the safe direction.
+export const activeSilenceFor = (
+  states: PhaseState[],
+  participantPubkey: string | null | undefined,
+  now: number = Date.now(),
+  allowedAuthors?: Iterable<string> | null,
+): ActiveSilence => {
+  const me = (participantPubkey || '').toLowerCase();
+  const none: ActiveSilence = { blocked: false, waiting: 0, resumeAt: null, openEnded: false };
+  if (!me) return none;
+  const allowed = allowedAuthors
+    ? new Set(Array.from(allowedAuthors, (a) => String(a || '').toLowerCase()).filter(Boolean))
+    : null;
+  if (allowed && allowed.size === 0) return none;
+  const running = states.filter(
+    (s) => s.participantPubkey === me
+      && (!allowed || allowed.has(String(s.beingPubkey || '').toLowerCase()))
+      && silenceActiveAt(s.silence, now),
+  );
+  if (running.length === 0) return none;
+  let latest: number | null = null;
+  let resumeAt: string | null = null;
+  let openEnded = false;
+  for (const s of running) {
+    const stated = isoMs(s.silence?.resume_at);
+    // A being that named no end is still bounded by the 10-day cap, but we do
+    // not print that derived date as if the being had promised it.
+    if (stated === null) { openEnded = true; continue; }
+    if (latest === null || stated > latest) { latest = stated; resumeAt = s.silence?.resume_at ?? null; }
+  }
+  return { blocked: true, waiting: running.length, resumeAt, openEnded };
 };
 
 // resume_at as a LOCAL DATE the reader can act on. Returns null when there is
