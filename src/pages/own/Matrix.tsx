@@ -33,6 +33,7 @@ const TXT = {
     intro: "Vsi aktivni OWN procesi in ocene bitij (javno). Izberi proces za matrico po udeležencih in časovnico mnenj bitij.",
     noProcs: "Trenutno ni aktivnih OWN procesov.",
     participants: "udeležencev", active: "Aktiven",
+    facilitator: "Vodi", facilitators: "Vodita",
     allProcesses: "Vsi procesi", officialPhase: "Uradna faza:", beingsAssessing: "bitij ocenjuje",
     tabMatrix: "Matrica", tabTimeline: "Časovnica",
     loadingAssess: "Nalagam ocene…", noAssess: "Za ta proces še nobeno bitje ni objavilo ocene.", noAssessYet: "Nobeno bitje še ni objavilo ocene za to osebo.", noAssessYetBeing: "To bitje te še ni ocenilo.",
@@ -143,6 +144,7 @@ const TXT = {
     intro: "All active OWN processes and the beings' assessments (public). Pick a process for the participant matrix and the beings' timeline.",
     noProcs: "No active OWN processes right now.",
     participants: "participant(s)", active: "Active",
+    facilitator: "Led by", facilitators: "Co-led by",
     allProcesses: "All processes", officialPhase: "Official phase:", beingsAssessing: "being(s) assessing",
     tabMatrix: "Matrix", tabTimeline: "Timeline",
     loadingAssess: "Loading assessments…", noAssess: "No being has published an assessment for this process yet.", noAssessYet: "No being has assessed this person yet.", noAssessYetBeing: "This being hasn't assessed them yet.",
@@ -358,14 +360,24 @@ export default function Matrix() {
     return m;
   }, [guidance, entries]);
 
+  // Who LEADS this process. Not matrix rows — the beings assess the people who
+  // go THROUGH the process, never those who lead it — but named through the very
+  // same profile lookup, so a co-facilitator prints as a person and not as hex.
+  const facilitators = useMemo(
+    () => (selected?.facilitators?.length ? selected.facilitators : [selected?.facilitator]).filter(Boolean) as string[],
+    [selected],
+  );
+
   const participants = useMemo(() => {
     if (!selected) return [] as string[];
     const set = [...(selected.participants || [])];
-    if (selected.initiator && selected.initiator !== selected.facilitator && !set.includes(selected.initiator)) {
+    // The initiator joins the rows only when they are not among the leaders —
+    // and with co-facilitation "the leader" is a set, not one pubkey.
+    if (selected.initiator && !facilitators.includes(selected.initiator) && !set.includes(selected.initiator)) {
       set.unshift(selected.initiator);
     }
     return set;
-  }, [selected]);
+  }, [selected, facilitators]);
 
   const beings = useMemo(() => {
     const set = new Set<string>();
@@ -402,8 +414,8 @@ export default function Matrix() {
     [commitments],
   );
   const allPubkeys = useMemo(
-    () => Array.from(new Set([...participants, ...beings, ...grievPubkeys, ...emotionBeingPubkeys, ...proposalBeingPubkeys, ...commitmentBeingPubkeys])),
-    [participants, beings, grievPubkeys, emotionBeingPubkeys, proposalBeingPubkeys, commitmentBeingPubkeys],
+    () => Array.from(new Set([...participants, ...facilitators, ...beings, ...grievPubkeys, ...emotionBeingPubkeys, ...proposalBeingPubkeys, ...commitmentBeingPubkeys])),
+    [participants, facilitators, beings, grievPubkeys, emotionBeingPubkeys, proposalBeingPubkeys, commitmentBeingPubkeys],
   );
   const { profiles } = useNostrProfilesCacheBulk(allPubkeys);
   const nameOf = (pk: string) => {
@@ -668,7 +680,7 @@ export default function Matrix() {
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" />{(p.participants?.length || 0) + (p.initiator && p.initiator !== p.facilitator ? 1 : 0)} {L.participants}</span>
+                    <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" />{(p.participants?.length || 0) + (p.initiator && !(p.facilitators?.length ? p.facilitators : [p.facilitator]).includes(p.initiator) ? 1 : 0)} {L.participants}</span>
                     <span>{L.active}</span>
                   </div>
                 </CardContent>
@@ -701,6 +713,12 @@ export default function Matrix() {
             <span>·</span>
             <span className="inline-flex items-center gap-1"><Bot className="h-3.5 w-3.5 text-orange-500" />{beings.length} {L.beingsAssessing}</span>
           </div>
+          {facilitators.length > 0 && (
+            <div className="mt-1 text-sm text-muted-foreground">
+              <span className="font-medium">{facilitators.length > 1 ? L.facilitators : L.facilitator}:</span>{" "}
+              {facilitators.map(nameOf).join(", ")}
+            </div>
+          )}
           {processes.length > 1 && (
             <div className="mt-3">
               <Select value={selectedCaseRoot || ""} onValueChange={(v) => { setSelectedCaseRoot(v); setTimelineParticipant("all"); setTimelineBeing("all"); }}>

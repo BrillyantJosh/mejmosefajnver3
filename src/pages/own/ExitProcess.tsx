@@ -56,7 +56,11 @@ export default function ExitProcess() {
         ['client', 'lana-own'],
       ];
       if (process.initiator) tags.push(['p', process.initiator, '', 'initiator']);
-      if (process.facilitator) tags.push(['p', process.facilitator, '', 'facilitator']);
+      // Notify EVERY leader — on a co-led process an exit must reach both,
+      // not only whoever opened the record.
+      for (const f of (process.facilitators?.length ? process.facilitators : [process.facilitator])) {
+        if (f) tags.push(['p', f, '', 'facilitator']);
+      }
 
       const signedEvent = finalizeEvent(
         {

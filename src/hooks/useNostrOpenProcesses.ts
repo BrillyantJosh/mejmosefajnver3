@@ -10,7 +10,14 @@ export interface OpenProcess {
   phase: string;
   openedAt: number;
   initiator: string;
+  /** The OPENING facilitator — the one who authored the record. */
   facilitator: string;
+  /**
+   * Every facilitator, in tag order, opening one first. A process can be
+   * co-led (e.g. a human together with a being), and each co-facilitator
+   * carries the same ['p',hex,'facilitator'] tag and the same standing.
+   */
+  facilitators: string[];
   participants: string[];
   guests: string[];
   language: string;
@@ -84,7 +91,12 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
             // Lowercase all pubkeys from tags — downstream assessment lookups
             // key on lowercased hex, and role checks must be case-insensitive.
             const initiator = (event.tags.find(t => t[0] === 'p' && (t[2] === 'initiator' || t[3] === 'initiator'))?.[1] || '').toLowerCase();
-            const facilitator = (event.tags.find(t => t[0] === 'p' && (t[2] === 'facilitator' || t[3] === 'facilitator'))?.[1] || '').toLowerCase();
+            // ALL facilitators — a co-led process has more than one, and
+            // reading only the first would leave the co-facilitator with no
+            // role at all, so the .filter below would hide the process from
+            // the very person who leads it.
+            const facilitators = event.tags.filter(t => t[0] === 'p' && (t[2] === 'facilitator' || t[3] === 'facilitator')).map(t => (t[1] || '').toLowerCase()).filter(Boolean);
+            const facilitator = facilitators[0] || '';
             const participants = event.tags.filter(t => t[0] === 'p' && (t[2] === 'participant' || t[3] === 'participant')).map(t => (t[1] || '').toLowerCase());
             const guests = event.tags.filter(t => t[0] === 'p' && (t[2] === 'guest' || t[3] === 'guest')).map(t => (t[1] || '').toLowerCase());
 
@@ -92,7 +104,7 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
             const userPk = (userPubkey || '').toLowerCase();
             let userRole: string | undefined;
             if (initiator === userPk) userRole = 'initiator';
-            else if (facilitator === userPk) userRole = 'facilitator';
+            else if (facilitators.includes(userPk)) userRole = 'facilitator';
             else if (participants.includes(userPk)) userRole = 'participant';
             else if (guests.includes(userPk)) userRole = 'guest';
 
@@ -105,6 +117,7 @@ export const useNostrOpenProcesses = (userPubkey: string | null) => {
               openedAt,
               initiator,
               facilitator,
+              facilitators,
               participants,
               guests,
               language,

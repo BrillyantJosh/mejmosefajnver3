@@ -7,7 +7,7 @@ interface Conversation {
   id: string;
   title: string;
   initiator: string;
-  facilitator: string;
+  facilitators: string[];
   participants: string[];
   guests: string[];
   status: string;
@@ -62,8 +62,8 @@ export default function ConversationList({ conversations, selectedId, onSelect }
 
             <div className="space-y-1 text-xs md:text-sm text-muted-foreground">
               <p className="break-words"><span className="font-medium">Initiator:</span> {conv.initiator}</p>
-              {conv.facilitator && (
-                <p className="break-words"><span className="font-medium">Facilitator:</span> {conv.facilitator}</p>
+              {conv.facilitators.length > 0 && (
+                <p className="break-words"><span className="font-medium">{conv.facilitators.length > 1 ? 'Facilitators' : 'Facilitator'}:</span> {conv.facilitators.join(', ')}</p>
               )}
               {conv.participants.length > 0 && (
                 <p className="break-words"><span className="font-medium">Participants:</span> {conv.participants.join(', ')}</p>

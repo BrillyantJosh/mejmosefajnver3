@@ -205,12 +205,14 @@ export default function Search() {
                   {/* Roles — grouped by role, no duplicates */}
                   {(() => {
                     const roles = ownCase.participantRoles || [];
-                    const facilitatorEntry = roles.find(r => r.role === 'facilitator');
+                    // A process can be CO-LED — show every facilitator, each
+                    // rendered exactly like a participant.
+                    const facilitatorEntries = roles.filter(r => r.role === 'facilitator');
                     const initiatorEntry = roles.find(r => r.role === 'initiator');
                     const participantEntries = roles.filter(r => r.role === 'participant');
                     const guestEntries = roles.filter(r => r.role === 'guest');
                     // Dedupe: don't show facilitator again in other sections
-                    const facilitatorPk = facilitatorEntry?.pubkey;
+                    const facilitatorPks = new Set(facilitatorEntries.map(f => f.pubkey));
 
                     const renderPerson = (pubkey: string, size: string = 'text-xs', avatarSize: string = 'h-5 w-5') => {
                       const profile = profiles.get(pubkey);
@@ -226,17 +228,17 @@ export default function Search() {
                     return (
                       <div className="space-y-3">
                         {/* Facilitator */}
-                        {facilitatorEntry && (
+                        {facilitatorEntries.length > 0 && (
                           <div>
-                            <span className="text-xs text-muted-foreground font-medium">Facilitator</span>
+                            <span className="text-xs text-muted-foreground font-medium">{facilitatorEntries.length > 1 ? 'Facilitators' : 'Facilitator'}</span>
                             <div className="flex flex-wrap gap-2 mt-1">
-                              {renderPerson(facilitatorEntry.pubkey, 'text-sm font-medium', 'h-6 w-6')}
+                              {facilitatorEntries.map(f => renderPerson(f.pubkey, 'text-sm font-medium', 'h-6 w-6'))}
                             </div>
                           </div>
                         )}
 
                         {/* Initiator (if different from facilitator) */}
-                        {initiatorEntry && initiatorEntry.pubkey !== facilitatorPk && (
+                        {initiatorEntry && !facilitatorPks.has(initiatorEntry.pubkey) && (
                           <div>
                             <span className="text-xs text-muted-foreground font-medium">Initiator</span>
                             <div className="flex flex-wrap gap-2 mt-1">
@@ -253,7 +255,7 @@ export default function Search() {
                               <span className="text-xs text-muted-foreground font-medium">Participants ({participantEntries.length})</span>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              {participantEntries.filter(p => p.pubkey !== facilitatorPk).map(p => renderPerson(p.pubkey, 'text-sm', 'h-6 w-6'))}
+                              {participantEntries.filter(p => !facilitatorPks.has(p.pubkey)).map(p => renderPerson(p.pubkey, 'text-sm', 'h-6 w-6'))}
                             </div>
                           </div>
                         )}
@@ -263,7 +265,7 @@ export default function Search() {
                           <div>
                             <span className="text-xs text-muted-foreground font-medium">Guests ({guestEntries.length})</span>
                             <div className="flex flex-wrap gap-2 mt-1">
-                              {guestEntries.filter(g => g.pubkey !== facilitatorPk).map(g => renderPerson(g.pubkey))}
+                              {guestEntries.filter(g => !facilitatorPks.has(g.pubkey)).map(g => renderPerson(g.pubkey))}
                             </div>
                           </div>
                         )}

@@ -15,7 +15,11 @@ export interface OwnProcessRecord {
   phase: string;
   status: string;
   initiator: string;
+  /** The OPENING facilitator — the one who authored the record. */
   facilitator: string;
+  /** Every facilitator, in tag order. A process can be co-led — e.g. a human
+   *  together with a being — and each co-leader carries the same role tag. */
+  facilitators: string[];
   participants: string[];
   guests: string[];
   openedAt: number;
@@ -40,6 +44,7 @@ const parse = (ev: Event): OwnProcessRecord => {
     status: tag('status') || 'open',
     initiator: roleAll('initiator')[0] || '',
     facilitator: roleAll('facilitator')[0] || ev.pubkey.toLowerCase(),
+    facilitators: roleAll('facilitator').length ? roleAll('facilitator') : [ev.pubkey.toLowerCase()],
     participants: roleAll('participant'),
     guests: roleAll('guest'),
     openedAt: parseInt(tag('opened_at')) || ev.created_at,

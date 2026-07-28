@@ -141,7 +141,7 @@ export default function Own() {
   // Facilitator pause / reopen (KIND 87056) state for the selected process
   const { pauseEvents, isLocked, lockedUntil, isLoading: pauseLoading } = useNostrProcessPauseState(
     selectedProcess?.processEventId || null,
-    selectedProcess?.facilitator || null
+    selectedProcess?.facilitators?.length ? selectedProcess.facilitators : (selectedProcess?.facilitator || null)
   );
   // Only the facilitator may pause / reopen the process
   const canPause = selectedProcess?.userRole === 'facilitator';
@@ -154,7 +154,7 @@ export default function Own() {
   // Collect all unique pubkeys for profile fetching
   const allPubkeys = processes.length > 0 
     ? Array.from(new Set([
-        ...processes.flatMap(p => [p.initiator, p.facilitator, ...p.participants, ...p.guests]),
+        ...processes.flatMap(p => [p.initiator, ...(p.facilitators?.length ? p.facilitators : [p.facilitator]), ...p.participants, ...p.guests]),
         ...messages.map(m => m.senderPubkey)
       ]))
     : [];
@@ -251,7 +251,7 @@ export default function Own() {
   // Pause state for EVERY listed process (one relay subscription), so the list
   // cards can show a "paused until …" notice without opening each process.
   const pauseStatuses = useNostrProcessPauseStatesBulk(
-    processes.map(p => ({ processEventId: p.processEventId, facilitator: p.facilitator }))
+    processes.map(p => ({ processEventId: p.processEventId, facilitator: p.facilitator, facilitators: p.facilitators }))
   );
 
   // Format conversations for display
@@ -259,7 +259,11 @@ export default function Own() {
     id: process.id,
     title: process.title,
     initiator: profiles.get(process.initiator)?.full_name || process.initiator.slice(0, 8),
-    facilitator: profiles.get(process.facilitator)?.full_name || process.facilitator.slice(0, 8),
+    // Every co-leader, named the same way a participant is — a co-facilitated
+    // process must not print one name and silently drop the other.
+    facilitators: (process.facilitators?.length ? process.facilitators : [process.facilitator])
+      .filter(Boolean)
+      .map(f => profiles.get(f)?.full_name || f.slice(0, 8)),
     participants: process.participants.map(p =>
       profiles.get(p)?.full_name || p.slice(0, 8)
     ),

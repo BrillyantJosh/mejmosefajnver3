@@ -35,8 +35,14 @@ export interface ProcessPauseEvent {
  */
 export const useNostrProcessPauseState = (
   processEventId: string | null,
-  facilitatorPubkey: string | null,
+  /** One facilitator, or ALL of them when the process is co-led. */
+  facilitatorPubkey: string | string[] | null,
 ) => {
+  // A co-led process has several facilitators, and any of them may pause it.
+  // Joined into a string so an inline array literal from the caller does not
+  // re-run the memo on every render.
+  const facilitatorKey = (Array.isArray(facilitatorPubkey) ? facilitatorPubkey : [facilitatorPubkey])
+    .filter(Boolean).join(',');
   const [allEvents, setAllEvents] = useState<ProcessPauseEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -108,10 +114,14 @@ export const useNostrProcessPauseState = (
     };
   }, [processEventId, parameters?.relays]);
 
-  // Only honour events signed by the real facilitator (spoof protection).
+  // Only honour events signed by a real facilitator of THIS process (spoof
+  // protection). Co-leaders each hold that authority, so any of them may pause.
   const pauseEvents = useMemo(
-    () => (facilitatorPubkey ? allEvents.filter((e) => e.authorPubkey === facilitatorPubkey) : []),
-    [allEvents, facilitatorPubkey],
+    () => {
+      const allowed = new Set(facilitatorKey.split(',').filter(Boolean));
+      return allowed.size ? allEvents.filter((e) => allowed.has(e.authorPubkey)) : [];
+    },
+    [allEvents, facilitatorKey],
   );
 
   // Global latest-wins: the newest facilitator event decides the lock state.
@@ -156,7 +166,7 @@ export interface ProcessPauseStatus {
  * passes, checked on a 30s tick).
  */
 export const useNostrProcessPauseStatesBulk = (
-  processes: { processEventId: string; facilitator: string }[],
+  processes: { processEventId: string; facilitator: string; facilitators?: string[] }[],
 ): Map<string, ProcessPauseStatus> => {
   const { parameters } = useSystemParameters();
   const [byProcess, setByProcess] = useState<Map<string, ProcessPauseEvent[]>>(new Map());
@@ -164,8 +174,12 @@ export const useNostrProcessPauseStatesBulk = (
 
   const eventIds = processes.map((p) => p.processEventId).filter(Boolean);
   const eventIdsKey = [...eventIds].sort().join(',');
+  // Every co-leader of a process may pause it, so the spoof filter below
+  // allows any of its facilitators — not only the one who opened it.
+  const facilitatorsOf = (p: { facilitator: string; facilitators?: string[] }) =>
+    (p.facilitators?.length ? p.facilitators : [p.facilitator]).filter(Boolean);
   const facilitatorKey = processes
-    .map((p) => `${p.processEventId}:${p.facilitator}`)
+    .map((p) => `${p.processEventId}:${facilitatorsOf(p).join('+')}`)
     .filter(Boolean)
     .sort()
     .join('|');
@@ -232,8 +246,9 @@ export const useNostrProcessPauseStatesBulk = (
     const map = new Map<string, ProcessPauseStatus>();
     for (const p of processes) {
       if (!p.processEventId) continue;
+      const allowed = new Set(facilitatorsOf(p));
       const list = (byProcess.get(p.processEventId) || []).filter(
-        (e) => p.facilitator && e.authorPubkey === p.facilitator,
+        (e) => allowed.has(e.authorPubkey),
       );
       const latest = list.length > 0 ? list[list.length - 1] : null;
       const lockedUntil = latest?.action === 'pause' ? latest.until : null;
