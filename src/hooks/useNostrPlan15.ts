@@ -13,6 +13,28 @@ export const PLAN15_PAYOUT_KIND = 91516;     // Regular
 
 export const LANOSHIS_PER_LANA = 100_000_000;
 
+// A txid is the ONLY proof a PLAN15 record has that money actually moved, and
+// both 91515 and 91516 are public claims about a named person. So the shape is
+// checked HERE, at the boundary where the value enters the event — not only
+// wherever it came from.
+//
+// The server does validate (server/lib/crypto.ts refuses anything that is not
+// 64 hex before it ever reports success), so this is belt and braces. It exists
+// because trusting a guarantee that lives one layer away is exactly what went
+// wrong in the being's copy of this module on 2026-07-28: LanaCoin's ElectrumX
+// returned its rejection INSIDE the result — {u'message': u'TX rejected',
+// u'code': -22} — nothing checked the shape, and two deliveries of 1000 LANA
+// were announced as "confirmed" while the coins never left the wallet.
+const isTxId = (v: unknown): boolean => /^[0-9a-f]{64}$/i.test(String(v ?? '').trim());
+
+/** Throws unless `txid` is a real transaction id. `what` names the leg for the user. */
+const assertTxId = (txid: unknown, what: string): string => {
+  if (!isTxId(txid)) {
+    throw new Error(`${what}: the blockchain did not return a transaction id (${String(txid ?? 'empty') || 'empty'}) — nothing was published.`);
+  }
+  return String(txid).trim();
+};
+
 export interface Plan15Member {
   pubkey: string;
   wallet: string;        // plan15_wallet
@@ -371,7 +393,7 @@ export const useNostrPlan15 = () => {
       ['payment_amount', String(Math.round(opts.paymentAmountLanoshis))],
       ['payment_from', opts.paymentFrom],
       ['payment_to', opts.paymentTo],
-      ['payment_txid', opts.paymentTxid],
+      ['payment_txid', assertTxId(opts.paymentTxid, 'Registered payment')],
       ['status', 'paid'],
     ];
     const ev = await publish(PLAN15_ACCEPTANCE_KIND, `Buying ${amountLana} unregistered LANA; paid registered LANA on-chain.`, tags);
@@ -392,7 +414,7 @@ export const useNostrPlan15 = () => {
       ['to_wallet', acceptance.buyerWallet],
       ['amount', String(acceptance.amount)],
       ['amount_fiat', acceptance.amountFiat],
-      ['txid', opts.txid],
+      ['txid', assertTxId(opts.txid, 'Unregistered delivery')],
       ['status', opts.status || 'confirmed'],
       ['confirmed_at', new Date().toISOString()],
     ];
