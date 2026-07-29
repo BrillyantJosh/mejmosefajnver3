@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/i18n/I18nContext";
 import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
 import { useOwnGrievances } from "@/hooks/useOwnGrievances";
+import { useOwnCommitments } from "@/hooks/useOwnCommitments";
 import { mergeTodo, STEP_ORDER, type StepKey } from "@/lib/ownTodo";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 
@@ -89,6 +90,33 @@ const TXT = {
       },
     },
     ownWords: "Napiši s svojimi besedami, v pogovoru procesa. Bitja presojajo tvojo držo, ne obrazca — prepisan stavek ne pomeni ničesar.",
+    cmt: {
+      heading: "Zaveza — Sprememba",
+      noneTitle: "Tvoja zaveza še ni izrečena",
+      essenceLead: "Bistvo zaveze: edina zaveza, ki jo lahko držiš, je meja, ki si jo postaviš SEBI — v svojem notranjem svetu, kjer imaš moč.",
+      essencePoints: [
+        "Vzorec, ki ustvarja zaplete, je razdajanje: pomagaš čez svoje moči, da bi bil všečen → nastanejo pričakovanja → pride konflikt. Meja, ki si jo postaviš sebi, ta krog prekine.",
+        "Pravila za druge (»oni naj …«, »on mora …«) ne držijo — v zunanjem svetu nimaš moči.",
+        "Obljube (»bom boljši«, »bom se potrudil«) so prazne — zavezujejo prihodnjega tebe, ki mu nihče ne ukazuje.",
+        "Meja lahko omenja druge (»ko me X prosi, bom rekel ne«) — vprašanje je le, KOGA zavezuje: tebe.",
+      ],
+      howLead: "Kako jo narediš:",
+      howPoints: [
+        "V pogovoru procesa, s svojimi besedami, v prvi osebi.",
+        "Konkretno in opazljivo: »ko se zgodi X, bom jaz pri sebi naredil Y«.",
+        "Povej vse do konca — bitje posluša in pregleda šele čez nekaj ur. En premišljen zapis šteje več kot deset hitrih.",
+      ],
+      stated: "Tvoja izrečena zaveza",
+      tasksLead: "Napotki bitja",
+      weighing: "tvojo zavezo še presoja — napotkov zaenkrat ni. Bitje pregleda nekaj ur po tvojih zadnjih besedah.",
+      attribForming: "Zaveza udeleženca {name} — nastaja z lastnimi besedami v procesu; zapisuje in preverja bitje {being}.",
+      attribComplete: "Zaveza udeleženca {name} — izrečena z lastnimi besedami v procesu; zapisalo in preverilo bitje {being}.",
+      doneTitle: "Sprememba je zaključena",
+      doneBody: "Tvoja zaveza je izrečena z lastnimi besedami in potrjena pri vseh bitjih, ki jo spremljajo ({n}). V Spremembi te ne čaka nič več.",
+      allDoneEverything: "Vse je zaključeno — očitki in zaveza. Na tebi ni ničesar več.",
+      confirmedBy: "Potrjeno pri",
+      formingAt: "Še nastaja pri",
+    },
     from: "od",
     to: "za",
     byBeing: "Zaznalo bitje",
@@ -149,6 +177,33 @@ const TXT = {
       },
     },
     ownWords: "Write it in your own words, in the process conversation. The beings weigh your stance, not a formula — a copied sentence means nothing.",
+    cmt: {
+      heading: "Commitment — Change",
+      noneTitle: "Your commitment has not been stated yet",
+      essenceLead: "The essence: the only commitment you can keep is a boundary you set for YOURSELF — in your inner world, the one place you hold power.",
+      essencePoints: [
+        "The pattern behind the tangles is over-giving: helping beyond your strength to be liked → expectations arise → conflict follows. A boundary you set for yourself breaks that circle.",
+        "Rules for others ('they should …', 'he must …') do not hold — you have no power in the outer world.",
+        "Promises ('I'll be better', 'I'll try harder') are empty — they bind a future you that nobody commands.",
+        "A boundary may mention others ('when X asks, I will say no') — the only question is WHO it binds: you.",
+      ],
+      howLead: "How to make it:",
+      howPoints: [
+        "In the process conversation, in your own words, first person.",
+        "Concrete and observable: 'when X happens, I will do Y in myself'.",
+        "Say everything to the end — the being listens and reviews hours later. One considered statement counts more than ten quick ones.",
+      ],
+      stated: "Your stated commitment",
+      tasksLead: "Directions from being",
+      weighing: "is still weighing your commitment — no directions yet. The being reviews a few hours after your last words.",
+      attribForming: "Commitment of {name} — taking shape in their own words in the process; being {being} is recording and verifying it.",
+      attribComplete: "Commitment of {name} — stated in their own words in the process; recorded and verified by being {being}.",
+      doneTitle: "Change is concluded",
+      doneBody: "Your commitment is stated in your own words and confirmed by every being following it ({n}). Nothing more waits for you in Change.",
+      allDoneEverything: "Everything is concluded — grievances and the commitment. Nothing remains on you.",
+      confirmedBy: "Confirmed by",
+      formingAt: "Still forming at",
+    },
     from: "from",
     to: "to",
     byBeing: "Recorded by",
@@ -165,21 +220,39 @@ const STEP_ICON: Record<StepKey, typeof MessageSquare> = {
   own: CheckCircle2,
 };
 
-function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L, lang, translateOn, myPubkey }: {
-  caseRoot: string; title: string; me: string; onOpen: () => void; onOpenSelf: () => void;
+function CaseTodo({ caseRoot, title, me, phase, onOpen, onOpenSelf, L, lang, translateOn, myPubkey }: {
+  caseRoot: string; title: string; me: string; phase: string; onOpen: () => void; onOpenSelf: () => void;
   L: typeof TXT.sl; lang: "sl" | "en"; translateOn: boolean; myPubkey?: string;
 }) {
   const { ledgers, isLoading } = useOwnGrievances(caseRoot);
   const items = useMemo(() => mergeTodo(ledgers, me), [ledgers, me]);
+
+  // CHANGE — the commitment leg of "what waits for me". Three honest states:
+  // no record yet → how a commitment is made and what its essence is (the
+  // self-boundary doctrine); forming → each being's open directions (napotki),
+  // never merged across beings; all complete → say it PLAINLY that Change is
+  // concluded. Mirrors being3's phase window: change always, later phases only
+  // while a record exists.
+  const { commitments, isLoading: cmtsLoading } = useOwnCommitments(caseRoot);
+  const myCmts = useMemo(() => commitments.filter((c) => c.participantPubkey === me), [commitments, me]);
+  const ph = String(phase || "").toLowerCase();
+  // While the 37049 read is still in flight, the section stays silent — a
+  // "your commitment is not stated yet" card flashing at someone whose record
+  // simply has not arrived would be a confident falsehood.
+  const cmtsReady = !cmtsLoading || myCmts.length > 0;
+  const changeOpen = cmtsReady && (ph === "change" || (myCmts.length > 0 && (ph === "closing" || ph === "resolution")));
+  const allCmtComplete = myCmts.length > 0 && myCmts.every((c) => c.status === "complete");
+  const changeNeedsMe = changeOpen && !allCmtComplete;
   const pubkeys = useMemo(() => {
     const set = new Set<string>([me]);
+    myCmts.forEach((c) => set.add(c.beingPubkey));
     items.forEach(({ g, pending, done }) => {
       set.add(g.fromPubkey); set.add(g.toPubkey);
       pending.forEach((x) => set.add(x.beingPubkey));   // the beings, or their names render as hashes
       done.forEach((b) => set.add(b));
     });
     return Array.from(set);
-  }, [items, me]);
+  }, [items, me, myCmts]);
   const { profiles } = useNostrProfilesCacheBulk(pubkeys);
 
   // Translation of the grievance texts themselves (the beings write them in the
@@ -219,6 +292,101 @@ function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L, lang, translateO
     return p?.full_name || p?.display_name || `${pk.slice(0, 8)}…`;
   };
 
+  // The spec-mandated attribution line, verbatim per status: the being signs
+  // the event, the participant never does — so every rendering surface names
+  // who spoke and who merely recorded.
+  const attrib = (status: string, being: string) =>
+    (status === "complete" ? L.cmt.attribComplete : L.cmt.attribForming)
+      .split("{name}").join(nameOf(me)).split("{being}").join(being);
+
+  const changeSection = !changeOpen ? null : (
+    <div className="rounded-lg border border-border p-3 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Badge className={allCmtComplete
+          ? "bg-green-500/15 text-green-700 dark:text-green-300 border-green-500/40 hover:bg-green-500/15"
+          : "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 hover:bg-amber-500/15"}>
+          <Sparkles className="h-3.5 w-3.5 mr-1" />{L.cmt.heading}
+        </Badge>
+      </div>
+
+      {myCmts.length === 0 ? (
+        <div className="rounded-md border border-border/60 bg-muted/40 p-2.5 space-y-1.5">
+          <p className="text-xs font-medium leading-snug">→ {L.cmt.noneTitle}</p>
+          <p className="text-[11px] leading-snug">{L.cmt.essenceLead}</p>
+          <ul className="space-y-1">
+            {L.cmt.essencePoints.map((pt, i) => (
+              <li key={i} className="text-[11px] leading-snug text-muted-foreground flex gap-1.5">
+                <span className="text-muted-foreground/50 shrink-0">·</span><span>{pt}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] font-medium leading-snug pt-1">{L.cmt.howLead}</p>
+          <ul className="space-y-1">
+            {L.cmt.howPoints.map((pt, i) => (
+              <li key={i} className="text-[11px] leading-snug text-muted-foreground flex gap-1.5">
+                <span className="text-muted-foreground/50 shrink-0">·</span><span>{pt}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] leading-snug text-orange-700 dark:text-orange-300 flex gap-1.5 pt-0.5">
+            <PenLine className="h-3 w-3 mt-[2px] shrink-0" /><span>{L.ownWords}</span>
+          </p>
+        </div>
+      ) : allCmtComplete ? (
+        <div className="rounded-md border border-green-500/40 bg-green-500/[0.07] p-2.5 space-y-1.5">
+          <p className="text-sm font-semibold text-green-700 dark:text-green-300 flex items-center gap-1.5">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />{L.cmt.doneTitle}
+          </p>
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            {L.cmt.doneBody.split("{n}").join(String(myCmts.length))}
+          </p>
+          {myCmts[0]?.statedCommitment && (
+            <p className="text-sm leading-snug italic">»{myCmts[0].statedCommitment}«</p>
+          )}
+          <p className="text-[11px] text-muted-foreground/80 flex items-start gap-1">
+            <Bot className="h-3 w-3 text-green-600 mt-[3px] shrink-0" />
+            <span><span className="font-medium">{L.cmt.confirmedBy}:</span> {myCmts.map((c) => c.beingName || nameOf(c.beingPubkey)).join(", ")}</span>
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {myCmts.map((c) => (
+            <div key={c.beingPubkey} className="rounded-md border border-border/60 bg-muted/40 p-2.5 space-y-1.5">
+              <p className="text-[11px] text-muted-foreground flex items-start gap-1">
+                <Bot className="h-3 w-3 text-orange-500 mt-[3px] shrink-0" />
+                <span>{attrib(c.status, c.beingName || nameOf(c.beingPubkey))}</span>
+              </p>
+              {c.statedCommitment && <p className="text-sm leading-snug italic">»{c.statedCommitment}«</p>}
+              {c.status === "complete" ? (
+                <p className="text-[11px] leading-snug text-green-700 dark:text-green-300 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />{L.cmt.confirmedBy} {c.beingName || nameOf(c.beingPubkey)}
+                </p>
+              ) : c.tasks.length > 0 ? (
+                <>
+                  <p className="text-xs font-medium leading-snug">→ {L.cmt.tasksLead} {c.beingName || nameOf(c.beingPubkey)}:</p>
+                  <ul className="space-y-1">
+                    {c.tasks.map((t) => (
+                      <li key={t.id} className="text-[11px] leading-snug text-muted-foreground flex gap-1.5">
+                        <span className="text-muted-foreground/50 shrink-0">·</span><span>{t.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] leading-snug text-orange-700 dark:text-orange-300 flex gap-1.5 pt-0.5">
+                    <PenLine className="h-3 w-3 mt-[2px] shrink-0" /><span>{L.ownWords}</span>
+                  </p>
+                </>
+              ) : (
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  {(c.beingName || nameOf(c.beingPubkey))} {L.cmt.weighing}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -237,9 +405,20 @@ function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L, lang, translateO
       <CardContent className="space-y-2.5">
         {isLoading && ledgers.length === 0 ? (
           <Skeleton className="h-16 w-full rounded-lg" />
-        ) : items.length === 0 ? (
+        ) : items.length === 0 && !changeNeedsMe ? (
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">{L.caseDone}</p>
+            {/* When Change is genuinely concluded, say it PLAINLY — not just
+                "nothing waits", but that grievances AND the commitment stand. */}
+            {changeOpen && allCmtComplete ? (
+              <>
+                <p className="text-sm font-medium text-green-700 dark:text-green-300 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />{L.cmt.allDoneEverything}
+                </p>
+                {changeSection}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">{L.caseDone}</p>
+            )}
             <Button variant="ghost" size="sm" onClick={onOpenSelf} className="text-orange-700 dark:text-orange-300 hover:text-orange-800 -ml-2">
               <Telescope className="h-4 w-4 mr-2" />{L.openSelf}
             </Button>
@@ -312,6 +491,7 @@ function CaseTodo({ caseRoot, title, me, onOpen, onOpenSelf, L, lang, translateO
                 </div>
               );
             })}
+            {changeSection}
             <div className="flex flex-col sm:flex-row gap-2 pt-0.5">
               <Button variant="outline" size="sm" onClick={onOpen} className="w-full sm:w-auto">
                 <MessageSquare className="h-4 w-4 mr-2" />{L.openChat}
@@ -377,6 +557,7 @@ export default function OwnTodo() {
               caseRoot={p.processEventId}
               title={p.title || p.processEventId.slice(0, 12)}
               me={me}
+              phase={p.phase}
               onOpen={() => navigate(`/own?process=${encodeURIComponent(p.processEventId)}`)}
               onOpenSelf={() => navigate(`/own?process=${encodeURIComponent(p.processEventId)}&self=1`)}
               L={L}
