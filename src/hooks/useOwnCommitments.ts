@@ -23,12 +23,13 @@ export interface CommitmentPoint {
 export interface CommitmentTask {
   id: string;
   text: string;
-  source: string;   // 'being' | 'coverage'
+  source: string;   // 'being' | 'coverage' | 'boundary'
 }
 
 export interface CommitmentCoverage {
   covered_given: string[];
   covered_received: string[];
+  /** Informational since 37049 v1.1.0 — no longer gates completion. */
   uncovered_given: string[];
   uncovered_received: string[];
 }
