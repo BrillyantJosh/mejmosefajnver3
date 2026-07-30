@@ -745,10 +745,6 @@ export default function Matrix() {
           <TabsTrigger value="timeline" className="shrink-0 md:shrink">{L.tabTimeline}</TabsTrigger>
           <TabsTrigger value="grievances" className="shrink-0 md:shrink">{L.tabGrievances}</TabsTrigger>
           <TabsTrigger value="emotions" className="shrink-0 md:shrink">{L.tabEmotions}</TabsTrigger>
-          <TabsTrigger value="proposals" className="shrink-0 md:shrink gap-1">
-            <span className="truncate">{L.tabProposals}</span>
-            <span className="rounded-full border border-orange-500/40 bg-orange-500/10 px-1 text-[9px] leading-4 text-orange-600 shrink-0">{L.propBeta}</span>
-          </TabsTrigger>
           <TabsTrigger value="commitment" className="shrink-0 md:shrink gap-1">
             <span className="truncate">{L.tabCommitment}</span>
             <span className="rounded-full border border-orange-500/40 bg-orange-500/10 px-1 text-[9px] leading-4 text-orange-600 shrink-0">{L.cmtBeta}</span>
@@ -1166,67 +1162,6 @@ export default function Matrix() {
         </TabsContent>
 
         {/* ── CHANGE PROPOSALS — Predlogi zavez (beta): kaj bitja predlagajo ── */}
-        <TabsContent value="proposals" className="space-y-4">
-          <p className="text-xs text-muted-foreground">{L.propIntro}</p>
-          {proposals.filter((pr) => participants.includes(pr.participantPubkey)).length === 0 ? (
-            <Card><CardContent className="py-12 text-center text-muted-foreground">{loadingProposals ? L.loading : L.propNone}</CardContent></Card>
-          ) : (
-            <div className="space-y-4">
-              {participants.filter((p) => proposals.some((pr) => pr.participantPubkey === p)).map((p) => {
-                const mine = proposals.filter((pr) => pr.participantPubkey === p);
-                return (
-                  <Card key={p}>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm md:text-base">{nameOf(p)}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {mine.map((pr) => {
-                        const beingName = beingLabelOf(pr.beingPubkey, pr.beingName);
-                        const when = pr.updatedAt ? new Date(pr.updatedAt) : new Date(pr.created_at * 1000);
-                        return (
-                          <div key={pr.beingPubkey} className="rounded-lg border border-orange-500/25 bg-orange-500/[0.04] p-3 space-y-2">
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-sm font-semibold inline-flex items-center gap-1.5">
-                                <Bot className="h-4 w-4 text-orange-500" />{beingName}
-                              </span>
-                            </div>
-                            {/* Atribucija — zaveza je v prvi osebi, a je VEDNO predlog bitja */}
-                            <p className="text-[11px] text-muted-foreground">
-                              {L.propAttribution.replace("{name}", beingName)}
-                            </p>
-                            <blockquote className="border-l-4 border-orange-500/40 pl-3 py-1 text-sm italic font-serif whitespace-pre-wrap">
-                              {pr.proposedCommitment}
-                            </blockquote>
-                            {pr.points.length > 0 && (
-                              <ul className="space-y-1.5">
-                                {pr.points.map((pt, i) => (
-                                  <li key={i} className="text-xs flex flex-wrap items-center gap-1">
-                                    <span>• {pt.text}</span>
-                                    {[...pt.addresses.received, ...pt.addresses.given].map((id, j) => (
-                                      <span key={`${id}-${j}`} className="inline-flex items-center rounded-full border border-border/60 bg-muted/40 px-1.5 py-0 text-[10px] text-muted-foreground">{id}</span>
-                                    ))}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                            {/* faza = KDAJ je bilo predlagano, ne trenutna faza procesa */}
-                            <div className="text-[10px] text-muted-foreground">
-                              {L.propRev} {pr.revision} · {when.toLocaleString()} · {L.propProposedIn} {getPhaseLabel(pr.processPhase, lang)}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* ── CHANGE COMMITMENT — Zaveza (beta): udeleženčeva LASTNA izjava,
-             zapisana in preverjena od bitja. Obratna atribucija od 37048:
-             besede so udeleženčeve, podpis je bitjin — zato nikjer »podpisano«. */}
         <TabsContent value="commitment" className="space-y-4">
           <p className="text-xs text-muted-foreground">{L.cmtIntro}</p>
           {(() => {
