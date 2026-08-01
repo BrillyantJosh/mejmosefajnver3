@@ -14,6 +14,8 @@ interface Conversation {
   phase?: string;
   lastActivity: string;
   pausedUntil?: number | null; // unix seconds — set while the facilitator has paused it
+  /** How many people in this case are frozen (KIND 87057). 0 = nobody, or unverified. */
+  frozenCount?: number;
 }
 
 interface ConversationListProps {
@@ -77,6 +79,17 @@ export default function ConversationList({ conversations, selectedId, onSelect }
               <Badge className={`text-xs border ${phaseInfo.bg} ${phaseInfo.color}`}>
                 {phaseInfo.emoji} {phaseInfo.label}
               </Badge>
+              {/* Beside the pause, never instead of it: a process can be paused
+                  AND hold a frozen person, and hiding one behind the other
+                  reads as though the other had been lifted. */}
+              {!!conv.frozenCount && (
+                <Badge className="text-xs gap-1 border bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950 dark:text-blue-300">
+                  <span aria-hidden="true">❄️</span>
+                  {conv.frozenCount === 1
+                    ? (en ? '1 person frozen' : '1 zamrznjen')
+                    : (en ? `${conv.frozenCount} people frozen` : `${conv.frozenCount} zamrznjenih`)}
+                </Badge>
+              )}
               {conv.pausedUntil && (
                 <Badge className="text-xs gap-1 border bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300">
                   <Lock className="w-3 h-3" />

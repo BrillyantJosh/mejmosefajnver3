@@ -14,6 +14,7 @@ import { useNostrProcessPauseState, useNostrProcessPauseStatesBulk, PROCESS_PAUS
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { useOwnAssessments, activeSilenceFor } from "@/hooks/useOwnAssessments";
 import { useProcessFreezes } from "@/hooks/useProcessFreezes";
+import { useProcessFreezesBulk } from "@/hooks/useProcessFreezesBulk";
 import { freezeBlocksWriting } from "@/lib/ownFreeze";
 import { useLang } from "@/i18n/I18nContext";
 import { finalizeEvent, nip44 } from "nostr-tools";
@@ -334,6 +335,16 @@ export default function Own() {
     processes.map(p => ({ processEventId: p.processEventId, facilitator: p.facilitator, facilitators: p.facilitators }))
   );
 
+  // KIND 87057 across every listed process, so the list can say that someone in
+  // a case is frozen before it is opened. The case root is the 87044 id — the
+  // same key the beings tag — so strip the own: prefix the way the selected
+  // process does above.
+  const listRoots = useMemo(
+    () => processes.map((p) => (p.processEventId.startsWith('own:') ? p.processEventId.slice(4) : p.processEventId)),
+    [processes],
+  );
+  const { byCase: freezesByCase } = useProcessFreezesBulk(listRoots);
+
   // Format conversations for display
   const conversations = processes.map(process => ({
     id: process.id,
@@ -354,6 +365,14 @@ export default function Own() {
     phase: process.phase,
     lastActivity: new Date(process.openedAt * 1000).toLocaleDateString(),
     pausedUntil: pauseStatuses.get(process.processEventId)?.lockedUntil ?? null,
+    // How many people in this case are frozen right now (0 = nobody, and an
+    // unverified read yields 0 too — the list never asserts a sanction it
+    // could not check).
+    frozenCount: (() => {
+      const root = process.processEventId.startsWith('own:') ? process.processEventId.slice(4) : process.processEventId;
+      const st = freezesByCase.get(root.toLowerCase());
+      return st ? [...st.values()].filter((x) => x.frozen).length : 0;
+    })(),
   }));
 
   // Send OWN message (text or audio). replyTo = event id of the message being

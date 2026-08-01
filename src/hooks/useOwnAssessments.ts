@@ -290,11 +290,20 @@ export const useOwnAssessments = (caseRoot: string | null) => {
 
     (async () => {
       try {
-        const evs = await pool.querySync(relays, {
-          kinds: [ASSESSMENT_ENTRY_KIND, ASSESSMENT_STATE_KIND],
-          '#e': [caseRoot],
-          limit: 5000,
-        });
+        // TWO queries, never one. KIND 87047 is append-only and grows without
+        // bound; KIND 37045 is replaceable and stays tiny — at most one per
+        // (being, participant). A relay applies `limit` PER FILTER and returns
+        // the NEWEST, so asking for both together lets a long case's history
+        // crowd the states out: on 2026-08-01 a case with ~490 messages showed
+        // "Še ni ocene" for the two participants whose verdicts were oldest
+        // (24 and 30 July), while the two assessed that morning came through.
+        // The data was on the relays the whole time. own-matrix.js already
+        // carries this exact fix; this hook never got it.
+        const [entryEvs, stateEvs] = await Promise.all([
+          pool.querySync(relays, { kinds: [ASSESSMENT_ENTRY_KIND], '#e': [caseRoot], limit: 5000 }),
+          pool.querySync(relays, { kinds: [ASSESSMENT_STATE_KIND], '#e': [caseRoot], limit: 500 }),
+        ]);
+        const evs = [...entryEvs, ...stateEvs];
         if (cancelled) return;
         const entryMap = new Map<string, AssessmentEntry>();
         const stateMap = new Map<string, PhaseState>(); // being:participant, newest wins
