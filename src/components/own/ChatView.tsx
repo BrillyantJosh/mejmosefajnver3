@@ -157,6 +157,15 @@ interface ChatViewProps {
   // The beings' silence toward the LOGGED-IN person (KIND 37045). Nothing like
   // the facilitator pause: it is about one participant, everyone else keeps
   // writing, and it is care rather than a sanction.
+  // KIND 87057 — the facilitator froze THIS reader. A sanction, unlike the
+  // silence above: someone decided it about them, and only a facilitator (or
+  // the named SPLIT arriving) lifts it. Only a SPLIT-bounded freeze reaches
+  // this component as `true`; an open-ended one is shown on the matrices but
+  // never closes the composer.
+  isFrozenForMe?: boolean;
+  freezeUntilSplit?: number | null;
+  freezeReason?: string;
+  freezeEffectiveAt?: number | null;   // unix seconds — the DATE, never created_at
   isSilencedForMe?: boolean;
   silenceWaiting?: number;   // how many beings are waiting…
   silenceTotal?: number;     // …of how many that published about me
@@ -188,6 +197,10 @@ export default function ChatView({
   onReEnter,
   isLocked = false,
   lockedUntil,
+  isFrozenForMe = false,
+  freezeUntilSplit = null,
+  freezeReason = '',
+  freezeEffectiveAt = null,
   isSilencedForMe = false,
   silenceWaiting = 0,
   silenceTotal = 0,
@@ -429,6 +442,17 @@ export default function ChatView({
                   {en ? 'Paused' : 'V premoru'}
                 </Badge>
               )}
+              {/* Beside Paused, never instead of it: a process can be paused
+                  AND hold a frozen person, and hiding one behind the other
+                  would make the reader think the other had been lifted. */}
+              {isFrozenForMe && (
+                <Badge className="text-xs shrink-0 gap-1 bg-blue-100 text-blue-700 border border-blue-300 dark:bg-blue-950 dark:text-blue-300">
+                  <span aria-hidden="true">❄️</span>
+                  {freezeUntilSplit != null
+                    ? (en ? `Frozen · up to SPLIT ${freezeUntilSplit}` : `Zamrznjen · do SPLITA ${freezeUntilSplit}`)
+                    : (en ? 'Frozen' : 'Zamrznjen')}
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -555,6 +579,41 @@ export default function ChatView({
                 )}
               </Button>
             )}
+          </div>
+        </Card>
+      ) : isFrozenForMe ? (
+        /* Frozen by the facilitator. Cold blue and ❄️, deliberately NOT the
+           amber of the silence: one is a sanction someone decided about this
+           person, the other is the beings stepping back to leave room. Two
+           different things must not wear the same colour. Reading stays open. */
+        <Card className="p-4 sticky bottom-0 border-blue-500/30 bg-blue-500/[0.06]">
+          <div className="flex flex-col items-center text-center gap-2">
+            <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <span className="text-lg leading-none">❄️</span>
+              <span className="font-semibold">
+                {en ? 'You are frozen in this process' : 'V tem procesu si zamrznjen'}
+              </span>
+              {freezeUntilSplit != null && (
+                <span className="text-xs font-normal opacity-80">
+                  {en ? `up to SPLIT ${freezeUntilSplit}` : `do SPLITA ${freezeUntilSplit}`}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground max-w-md">
+              {en
+                ? `The facilitator froze you${freezeEffectiveAt ? ` on ${new Date(freezeEffectiveAt * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}. You can still read everything — you can write again${freezeUntilSplit != null ? ` as SPLIT ${freezeUntilSplit} opens` : ' once the freeze is lifted'}.`
+                : `Fasilitator te je zamrznil${freezeEffectiveAt ? ` ${new Date(freezeEffectiveAt * 1000).toLocaleDateString('sl-SI', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}. Vse lahko še naprej bereš — pišeš lahko spet${freezeUntilSplit != null ? `, ko vstopimo v SPLIT ${freezeUntilSplit}` : ', ko bo zamrznitev odpravljena'}.`}
+            </p>
+            {freezeReason && (
+              <p className="text-sm text-blue-800 dark:text-blue-300 max-w-md italic">{freezeReason}</p>
+            )}
+            {/* 87057 is a process-level fact. Saying nothing here would let the
+                reader assume the obvious wrong thing about their money. */}
+            <p className="text-xs text-muted-foreground max-w-md">
+              {en
+                ? 'This is about your standing in this process — whether any wallet is frozen is answered only by the registrar.'
+                : 'To je dejstvo o tvojem položaju v tem procesu — ali je katera denarnica zamrznjena, odgovori izključno registrar.'}
+            </p>
           </div>
         </Card>
       ) : isSilencedForMe ? (

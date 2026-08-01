@@ -13,6 +13,8 @@ import { useNostrProcessExitState, PROCESS_EXIT_KIND } from "@/hooks/useNostrPro
 import { useNostrProcessPauseState, useNostrProcessPauseStatesBulk, PROCESS_PAUSE_KIND } from "@/hooks/useNostrProcessPauseState";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import { useOwnAssessments, activeSilenceFor } from "@/hooks/useOwnAssessments";
+import { useProcessFreezes } from "@/hooks/useProcessFreezes";
+import { freezeBlocksWriting } from "@/lib/ownFreeze";
 import { useLang } from "@/i18n/I18nContext";
 import { finalizeEvent, nip44 } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
@@ -205,6 +207,26 @@ export default function Own() {
   // never be silenced by a pending request.
   const silenceBlocksMe = !assessmentsLoading && mySilence.blocked;
 
+  // KIND 87057 — has the facilitator frozen me in this case?
+  //
+  // A freeze sits BETWEEN the two existing gates. The pause (87056) stops
+  // everyone on a clock; this stops one named person; the beings' silence
+  // (37045) stops one person by their own state. Different authors, different
+  // reasons, and they must never be merged into one amber notice.
+  //
+  // Only a SPLIT-bounded freeze closes the composer, and only until that round
+  // opens — an open-ended freeze is shown but never blocks (the process
+  // owner's rule; see freezeBlocksWriting). The silence keeps its own end date
+  // alongside it, so a person is held while EITHER applies and a SPLIT bound
+  // can outlast a silence that already ran out.
+  const freezes = useProcessFreezes(caseRoot);
+  const myFreeze = freezes.states.get((session?.nostrHexId || '').toLowerCase());
+  // Fail OPEN while unresolved, and equally when authority could not be
+  // established: `unverified` means we could not ask, which is never the same
+  // as "this person is frozen".
+  const freezeBlocksMe = !freezes.isLoading && !freezes.unverified
+    && freezeBlocksWriting(myFreeze, freezes.currentSplit);
+
   // Get message IDs for LASH counts from Supabase
   const messageIds = messages.map(m => m.id);
   const { lashCounts } = useSupabaseLashCounts(messageIds);
@@ -355,6 +377,18 @@ export default function Own() {
     }
     if (pauseLoading) {
       toast.error(en ? 'One moment — checking the process state…' : 'Trenutek — preverjam stanje procesa …');
+      return false;
+    }
+
+    // Frozen by the facilitator — checked BEFORE the beings' silence, because
+    // it is the stronger claim: a person can be released from a silence by
+    // their own settling, but only a facilitator (or the named SPLIT) lifts
+    // this one.
+    if (freezeBlocksMe) {
+      const n = myFreeze?.decidedBy?.untilSplit;
+      toast.error(en
+        ? `You are frozen in this process${n ? ` — up to SPLIT ${n}` : ''}`
+        : `V tem procesu si zamrznjen${n ? ` — do SPLITA ${n}` : ''}`);
       return false;
     }
 
@@ -776,6 +810,10 @@ export default function Own() {
       }}
       isLocked={isLocked}
       lockedUntil={lockedUntil || undefined}
+      isFrozenForMe={freezeBlocksMe}
+      freezeUntilSplit={myFreeze?.decidedBy?.untilSplit ?? null}
+      freezeReason={myFreeze?.decidedBy?.reason || ''}
+      freezeEffectiveAt={myFreeze?.decidedBy?.effectiveAt ?? null}
       isSilencedForMe={silenceBlocksMe}
       silenceWaiting={mySilence.waiting}
       silenceTotal={assessmentStates.filter((s) => s.participantPubkey === (session?.nostrHexId || '').toLowerCase()).length}
@@ -840,6 +878,7 @@ export default function Own() {
           <div className="w-full md:w-[340px] md:shrink-0 md:h-full md:overflow-y-auto mb-4 md:mb-0 px-4 md:px-0">
             <OwnSelfMatrix
               caseRoot={caseRoot}
+              freezes={freezes.states}
               participantPubkey={session?.nostrHexId || ''}
               phase={selectedProcess?.phase}
               onAnalyzeOthers={caseRoot ? () => navigate(`/own/matrix?process=${encodeURIComponent(caseRoot)}`) : undefined}
@@ -851,6 +890,7 @@ export default function Own() {
             {selfDetail && session?.nostrHexId ? (
               <OwnParticipantDetail
                 caseRoot={caseRoot}
+                freezes={freezes.states}
                 participantPubkey={session.nostrHexId}
                 participantName={nameOfPk(session.nostrHexId)}
                 phase={selectedProcess?.phase}
@@ -868,6 +908,7 @@ export default function Own() {
           <div className="w-full md:w-[360px] md:shrink-0 md:h-full md:overflow-y-auto mb-4 md:mb-0 px-4 md:px-0">
             <OwnFullMatrix
               caseRoot={caseRoot}
+              freezes={freezes.states}
               participants={subjectList}
               phase={selectedProcess?.phase}
               selectedParticipant={matrixParticipant}
@@ -878,6 +919,7 @@ export default function Own() {
             {matrixParticipant ? (
               <OwnParticipantDetail
                 caseRoot={caseRoot}
+                freezes={freezes.states}
                 participantPubkey={matrixParticipant}
                 participantName={nameOfPk(matrixParticipant)}
                 phase={selectedProcess?.phase}

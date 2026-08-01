@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { FreezeNotice } from "@/components/own/FreezeBadge";
+import type { PersonFreezeState } from "@/lib/ownFreeze";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -46,12 +48,15 @@ interface Props {
   onAnalyzeOthers?: () => void;
   onOpenTodo?: () => void;
   onOpenDetail?: () => void;
+  /** KIND 87057 freeze state per person, handed down so every surface on
+   *  /own reads ONE fetch and they can never disagree about who is frozen. */
+  freezes?: Map<string, PersonFreezeState>;
 }
 
 // The participant's own condensed cross-section (presek): the three pillars
 // AGGREGATED across all beings — not one card per being. The detail button
 // opens the full per-being breakdown (verdicts, grievances, emotions, smer).
-export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase, onAnalyzeOthers, onOpenDetail, onOpenTodo }: Props) {
+export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase, onAnalyzeOthers, onOpenDetail, onOpenTodo, freezes }: Props) {
   const en = useLang() === "en";
   const L = en ? TXT.en : TXT.sl;
   const lang: "en" | "sl" = en ? "en" : "sl";
@@ -91,6 +96,7 @@ export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase, onAn
       ) : (
         <Card className="border-orange-500/25 bg-orange-500/[0.04]">
           <CardContent className="p-3 space-y-2">
+            <FreezeNotice state={freezes?.get((participantPubkey || '').toLowerCase())} en={en} />
             {silence.any && (
               <div className="rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-2.5">
                 <div className="text-xs font-semibold text-amber-700 dark:text-amber-400">🤲 {L.silTitle}</div>

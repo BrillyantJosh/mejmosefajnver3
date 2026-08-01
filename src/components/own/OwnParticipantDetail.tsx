@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { FreezeBadge } from "@/components/own/FreezeBadge";
+import type { PersonFreezeState } from "@/lib/ownFreeze";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -133,11 +135,14 @@ interface Props {
   participantName: string;
   phase?: string;
   onBack: () => void;
+  /** KIND 87057 freeze state per person, handed down so every surface on
+   *  /own reads ONE fetch and they can never disagree about who is frozen. */
+  freezes?: Map<string, PersonFreezeState>;
 }
 
 // The right-side detail (overseer view): one participant's timeline (all 87047
 // opinions over time) + the latest verdict from each being about them.
-export default function OwnParticipantDetail({ caseRoot, participantPubkey, participantName, phase, onBack }: Props) {
+export default function OwnParticipantDetail({ caseRoot, participantPubkey, participantName, phase, onBack, freezes }: Props) {
   const en = useLang() === "en";
   const L = en ? TXT.en : TXT.sl;
   const lang: "en" | "sl" = en ? "en" : "sl";
@@ -348,6 +353,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
       </div>
 
       <h3 className="text-base font-semibold">{participantName}</h3>
+        <FreezeBadge state={freezes?.get((participantPubkey || '').toLowerCase())} en={en} />
 
       {/* Bitja čakajo — čez cel pas, pred zavihki. Brez »spodnje ocene«: pod
           njim so zavihki, ne ocena; stale stoji pri vsaki oceni posebej. */}

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useProcessFreezes } from "@/hooks/useProcessFreezes";
+import { FreezeBadge } from "@/components/own/FreezeBadge";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -225,6 +227,10 @@ function CaseTodo({ caseRoot, title, me, phase, onOpen, onOpenSelf, L, lang, tra
   L: typeof TXT.sl; lang: "sl" | "en"; translateOn: boolean; myPubkey?: string;
 }) {
   const { ledgers, isLoading } = useOwnGrievances(caseRoot);
+  // KIND 87057 — the to-do list is a list of things to SAY, so a reader who has
+  // been frozen must see it here too rather than discover it at the composer.
+  const { states: freezeStates } = useProcessFreezes(caseRoot);
+  const myFreeze = freezeStates.get((myPubkey || me || '').toLowerCase());
   const items = useMemo(() => mergeTodo(ledgers, me), [ledgers, me]);
 
   // CHANGE — the commitment leg of "what waits for me". Three honest states:
@@ -393,6 +399,7 @@ function CaseTodo({ caseRoot, title, me, phase, onOpen, onOpenSelf, L, lang, tra
         <CardTitle className="text-base flex items-center justify-between gap-2 flex-wrap">
           <span className="leading-snug">{title}</span>
           <span className="inline-flex items-center gap-2">
+            <FreezeBadge state={myFreeze} en={lang === 'en'} />
             {translating && <span className="text-[11px] font-normal text-muted-foreground">{L.translating}</span>}
             {items.length > 0 && (
               <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/40">

@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
+import { useProcessFreezes } from "@/hooks/useProcessFreezes";
+import { FreezeBadge } from "@/components/own/FreezeBadge";
 import { splitLatestPerBeing, withFloatedGuidance, guidanceKindKey } from "@/lib/ownTimeline";
 import GrievanceStepTable from "@/components/own/GrievanceStepTable";
 import { useSearchParams } from "react-router-dom";
@@ -137,6 +139,7 @@ const TXT = {
     silBody: "Bitja so zaznala čustven izbruh, ki ruši odnose, in čakajo v tišini do {when}, preden nadaljujejo s procesom.",
     silBodyOpen: "Bitja so zaznala čustven izbruh, ki ruši odnose, in čakajo v tišini, preden nadaljujejo s procesom.",
     silStale: "Spodnja ocena je izpred tišine in se med njo ne posodablja.",
+    frzLegend: "Zamrznjen — fasilitator je osebo zamrznil; z vstopom v navedeni SPLIT zamrznitev sama preneha.",
     silLegend: "V tišini — bitja čakajo; proces za to osebo miruje.",
   },
   en: {
@@ -248,6 +251,7 @@ const TXT = {
     silBody: "The beings noticed an emotional outburst that damages relationships, and are waiting in silence until {when} before the process continues.",
     silBodyOpen: "The beings noticed an emotional outburst that damages relationships, and are waiting in silence before the process continues.",
     silStale: "The verdict below predates the silence and is not updated while it holds.",
+    frzLegend: "Frozen — the facilitator froze this person; entering the named SPLIT ends the freeze by itself.",
     silLegend: "In silence — the beings are waiting; the process rests for this person.",
   },
 };
@@ -310,6 +314,10 @@ export default function Matrix() {
   );
 
   const { entries, states, isLoading: loadingAssess } = useOwnAssessments(selectedCaseRoot);
+  // KIND 87057 — the facilitator's freezes for this case. The chip sits on the
+  // PERSON's row, never inside a being's cell: a freeze is a fact about them,
+  // not any being's reading of them.
+  const { states: freezeStates } = useProcessFreezes(selectedCaseRoot);
   const { ledgers, isLoading: loadingGriev } = useOwnGrievances(selectedCaseRoot);
   // A commitment answers grievances by ID ("g4"), which tells a reader nothing
   // on its own. Every being's ledger is already loaded on this page, so the
@@ -767,7 +775,7 @@ export default function Matrix() {
                   <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> {L.doneLeg}</span>
                   <span className="inline-flex items-center gap-1"><CircleDot className="h-3.5 w-3.5 text-amber-500" /> {L.inProgressLeg}</span>
                   <span className="inline-flex items-center gap-1"><Circle className="h-3.5 w-3.5 text-muted-foreground/40" /> {L.notYetLeg}</span>
-                  <span className="inline-flex items-center gap-1"><span aria-hidden>🤲</span> {L.silLegend}</span>
+                  <span className="inline-flex items-center gap-1"><span aria-hidden>❄️</span> {L.frzLegend}</span><span className="inline-flex items-center gap-1"><span aria-hidden>🤲</span> {L.silLegend}</span>
                 </div>
               </div>
 
@@ -787,7 +795,9 @@ export default function Matrix() {
                   <tbody>
                     {participants.map((p) => (
                       <tr key={p} className="border-b border-border/50 align-top">
-                        <td className="p-3 font-medium whitespace-nowrap">{nameOf(p)}</td>
+                        <td className="p-3 font-medium whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5">{nameOf(p)}<FreezeBadge state={freezeStates.get(p)} en={en} /></span>
+                        </td>
                         {beings.map((b) => {
                           const st = stateFor(b, p);
                           if (!st) return <td key={b} className="p-3 text-muted-foreground/50">—</td>;
@@ -808,7 +818,7 @@ export default function Matrix() {
                 {participants.map((p) => (
                   <Card key={p}>
                     <CardContent className="p-3 space-y-2.5">
-                      <div className="font-semibold text-sm">{nameOf(p)}</div>
+                      <div className="font-semibold text-sm inline-flex items-center gap-1.5 flex-wrap">{nameOf(p)}<FreezeBadge state={freezeStates.get(p)} en={en} /></div>
                       {beings.map((b) => {
                         const st = stateFor(b, p);
                         return (

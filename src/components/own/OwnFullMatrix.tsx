@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { FreezeBadge } from "@/components/own/FreezeBadge";
+import type { PersonFreezeState } from "@/lib/ownFreeze";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,12 +39,15 @@ interface Props {
   phase?: string;
   selectedParticipant?: string | null;
   onSelect: (pk: string) => void;
+  /** KIND 87057 freeze state per person, handed down so every surface on
+   *  /own reads ONE fetch and they can never disagree about who is frozen. */
+  freezes?: Map<string, PersonFreezeState>;
 }
 
 // The overseer (facilitator / guest) view: ONE condensed three-pillar card
 // per participant, aggregated across beings — no per-being rows. "More"
 // opens the full per-being detail (verdicts, grievances, emotions, smer).
-export default function OwnFullMatrix({ caseRoot, participants, phase, selectedParticipant, onSelect }: Props) {
+export default function OwnFullMatrix({ caseRoot, participants, phase, selectedParticipant, onSelect, freezes }: Props) {
   const en = useLang() === "en";
   const L = en ? TXT.en : TXT.sl;
   const lang: "en" | "sl" = en ? "en" : "sl";
@@ -88,7 +93,10 @@ export default function OwnFullMatrix({ caseRoot, participants, phase, selectedP
               <Card key={p} className={selectedParticipant === p ? "border-orange-500/60 ring-1 ring-orange-500/30" : ""}>
                 <CardContent className="p-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium truncate">{nameOf(p)}</span>
+                    <span className="text-sm font-medium truncate inline-flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{nameOf(p)}</span>
+                      <FreezeBadge state={freezes?.get(p)} en={en} />
+                    </span>
                     <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] text-orange-600 dark:text-orange-400 hover:text-orange-700 shrink-0" onClick={() => onSelect(p)}>
                       {L.more} <ChevronRight className="h-3 w-3" />
                     </Button>
