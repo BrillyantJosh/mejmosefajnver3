@@ -109,8 +109,14 @@ export interface SilenceRollup {
 // definitions of "in silence" on one screen is its own defect: the composer
 // would come back while the matrix beside it still announced that the beings
 // were waiting, and the reader has no way to tell which one to believe.
+// A guest being's silence is left OUT of this on purpose. What the notice says
+// — "the beings are waiting … before the process continues", "the verdict below
+// is not updated while it holds" — is a statement about the PROCESS, and only a
+// being that leads the case can make the process wait. Counting an opinion here
+// froze a participant on every board while the composer beside it was open:
+// two answers on one screen, and no way for the reader to tell which is true.
 export const silenceRollup = (states: PhaseState[], now: number = Date.now()): SilenceRollup => {
-  const waiting = states.filter((s) => silenceActiveAt(s.silence, now));
+  const waiting = states.filter((s) => s.silence?.binding !== false && silenceActiveAt(s.silence, now));
   let resumeAt: string | null = null;
   let openEnded = false;
   for (const s of waiting) {
