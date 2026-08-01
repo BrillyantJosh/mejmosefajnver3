@@ -178,15 +178,23 @@ export default function Own() {
     const id = setInterval(() => setSilenceNow(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
-  // Only a being the FACILITATOR actually put in this process may hold the
-  // gate. 37045 is unauthenticated, so without this a stranger could publish
-  // one and mute a named person. Facilitators and guests are the roles a being
-  // holds; participants are the ones being assessed, never the assessors.
+  // Only a being that LEADS this process may hold the gate — the facilitator
+  // or a co-facilitator, nobody else.
+  //
+  // Closing someone's composer is an act of facilitation, not of opinion. A
+  // being the facilitator invited in as a GUEST observes and publishes what it
+  // sees; it does not get to take a participant's voice away. That distinction
+  // was missing here: guests were in the allowlist, so a guest being's misread
+  // muted a participant for a week on 2026-07-30.
+  //
+  // 37045 is unauthenticated, so the roster — not anything the record claims
+  // about itself — is the authority on who leads the case.
   const silenceAuthors = useMemo(
-    () => [
-      ...(selectedProcess?.facilitators?.length ? selectedProcess.facilitators : [selectedProcess?.facilitator]),
-      ...(selectedProcess?.guests || []),
-    ].filter(Boolean) as string[],
+    () => (
+      selectedProcess?.facilitators?.length
+        ? selectedProcess.facilitators
+        : [selectedProcess?.facilitator]
+    ).filter(Boolean) as string[],
     [selectedProcess],
   );
   const mySilence = activeSilenceFor(assessmentStates, session?.nostrHexId, silenceNow, silenceAuthors);

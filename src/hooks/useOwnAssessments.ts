@@ -39,6 +39,15 @@ export interface SilenceState {
   reason: string;
   since: string;
   resume_at: string | null;
+  /**
+   * Does the publishing being LEAD this case? Stamped by the being itself, so
+   * it is an honest self-report and never proof — the roster allowlist is what
+   * actually decides. Kept as a second, independent lock: a guest being that
+   * correctly stamps `false` cannot close a composer even if a surface forgets
+   * to narrow its allowlist. Absent on records published before the rule
+   * existed, which must keep behaving as they did.
+   */
+  binding?: boolean;
 }
 
 // Steber 3 rollup mirrored from the being's 37047 palette.
@@ -180,9 +189,10 @@ export interface ActiveSilence {
 // gate is access control: without an allowlist any stranger could take away a
 // named person's ability to speak, and the state map keys on the author, so a
 // forgery never even has to outrace a real being's record.
-// `allowedAuthors` is the process's OWN roster — the pubkeys the facilitator
-// tagged as `facilitator`/`guest` in KIND 37044, which is where a being's
-// standing in a case comes from in the first place. Exactly the discipline
+// `allowedAuthors` is the process's LEADERSHIP — the pubkeys tagged
+// `facilitator` in KIND 37044, which is where standing in a case comes from.
+// Guest beings belong in the display but NOT here: they publish an opinion,
+// and an opinion must never cost someone their voice. Exactly the discipline
 // useNostrProcessPauseState already applies to 87056.
 // Pass an EMPTY/undefined list only where no gate depends on the answer: an
 // empty allowlist blocks nobody, which is the safe direction.
@@ -202,6 +212,11 @@ export const activeSilenceFor = (
   const running = states.filter(
     (s) => s.participantPubkey === me
       && (!allowed || allowed.has(String(s.beingPubkey || '').toLowerCase()))
+      // Second lock: a being that says of itself "I do not lead this case"
+      // is taken at its word in the SAFE direction only. Older records carry
+      // no `binding` at all and keep their previous behaviour; the allowlist
+      // above is what actually keeps a guest being out of the gate.
+      && s.silence?.binding !== false
       && silenceActiveAt(s.silence, now),
   );
   if (running.length === 0) return none;
