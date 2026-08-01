@@ -46,9 +46,8 @@ export const FreezeBadge = ({ state, en }: { state: PersonFreezeState | undefine
 /**
  * The full notice, for surfaces with room for the reason.
  *
- * Two things it must always say: the date comes from `effective_at` and never
- * from when the notice reached a relay, and this is a process-level fact — a
- * reader who is not told will assume it is about their money.
+ * The date always comes from `effective_at`, never from when the notice
+ * reached a relay.
  */
 export const FreezeNotice = ({ state, en }: { state: PersonFreezeState | undefined | null; en: boolean }) => {
   if (!state?.frozen) return null;
@@ -68,11 +67,6 @@ export const FreezeNotice = ({ state, en }: { state: PersonFreezeState | undefin
         {on && (en ? ` Frozen on ${on}.` : ` Zamrznjen dne ${on}.`)}
       </p>
       {reason && <p className="mt-1 italic text-blue-800 dark:text-blue-300">{reason}</p>}
-      <p className="mt-1 text-[11px] text-muted-foreground">
-        {en
-          ? 'A fact about this person’s standing in the process — whether any wallet is frozen is answered only by the registrar.'
-          : 'Dejstvo o položaju te osebe v procesu — ali je katera denarnica zamrznjena, odgovori izključno registrar.'}
-      </p>
     </div>
   );
 };

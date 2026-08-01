@@ -607,13 +607,6 @@ export default function ChatView({
             {freezeReason && (
               <p className="text-sm text-blue-800 dark:text-blue-300 max-w-md italic">{freezeReason}</p>
             )}
-            {/* 87057 is a process-level fact. Saying nothing here would let the
-                reader assume the obvious wrong thing about their money. */}
-            <p className="text-xs text-muted-foreground max-w-md">
-              {en
-                ? 'This is about your standing in this process — whether any wallet is frozen is answered only by the registrar.'
-                : 'To je dejstvo o tvojem položaju v tem procesu — ali je katera denarnica zamrznjena, odgovori izključno registrar.'}
-            </p>
           </div>
         </Card>
       ) : isSilencedForMe ? (

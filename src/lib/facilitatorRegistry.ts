@@ -2,13 +2,16 @@
  * The shared registry of ACTIVE facilitators — the second arm of freeze
  * authority (KIND 87057).
  *
- * WHY IT EXISTS. The published 87057 spec honours only facilitators of the
- * process itself. The process owner widened that: any registered facilitator
- * may freeze, not just the one leading that case. The publishing surface
- * (selfresponsible.life) already applies the union, so this app must apply the
- * SAME one — honouring only the per-case roster here would mean a freeze that
- * counts on one surface and not the other, which is the exact split-brain this
- * whole family of gates keeps producing.
+ * SWITCHED OFF. The widening — any ACTIVE registered facilitator may freeze, in
+ * any process — was tried on 2026-08-01 and REVERTED the same day on the
+ * publishing side (selfresponsible.life `6c1c56b`). Authority is the published
+ * spec's rule again: the roster of the case itself.
+ *
+ * The module stays because the only thing worse than the wrong rule is two
+ * surfaces running different ones. A reader more permissive than the publisher
+ * honours sanctions the publisher would refuse to create; a stricter one
+ * silently drops real ones. If the widening is revived, BOTH sides flip
+ * together: VITE_FACILITATOR_REGISTRY_ARM=1 here, and the revert undone there.
  *
  * WHERE IT LIVES. The registry is a table in selfresponsible.life's own
  * Supabase project — a DIFFERENT project from this app's, so it is read over
@@ -32,6 +35,8 @@ const REGISTRY_KEY =
   || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpZWpwd2p3cGNmcW91bWpleGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMTMzMjAsImV4cCI6MjA3ODY4OTMyMH0.jd87DISA3tY9pmTmIVZfDyFVoVHVlQD5SXi92nyZ6yY';
 
 const TTL_MS = 5 * 60 * 1000;
+// OFF by default — flip in lockstep with the publishing side, never alone.
+const REGISTRY_ARM = String(import.meta.env.VITE_FACILITATOR_REGISTRY_ARM || '0') === '1';
 const HEX64 = /^[0-9a-f]{64}$/;
 
 let cache: { at: number; set: Set<string> } | null = null;
@@ -40,6 +45,7 @@ let cache: { at: number; set: Set<string> } | null = null;
 export const fetchFacilitatorRegistry = async (
   { now = Date.now(), fetchImpl = fetch }: { now?: number; fetchImpl?: typeof fetch } = {},
 ): Promise<Set<string> | null> => {
+  if (!REGISTRY_ARM) return null;   // off: unknown, so the roster arm decides alone
   if (cache && now - cache.at < TTL_MS) return cache.set;
   try {
     const res = await fetchImpl(REGISTRY_URL, {
