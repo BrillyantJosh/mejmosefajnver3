@@ -236,7 +236,12 @@ const DonatePrivateKey = () => {
               supporterPubkey: session.nostrHexId,
               projectOwnerPubkey: project.ownerPubkey,
               amountLanoshis: projectLanoshis,
-              amountFiat: hasMentorSplit ? parseFloat(amount) * 0.90 : parseFloat(amount),
+              // Rounded to cents like the amount_fiat tag above: the mentor
+              // split is a float multiplication, which stored values such as
+              // 31.680000000000003.
+              amountFiat: hasMentorSplit
+                ? Number((parseFloat(amount) * 0.90).toFixed(2))
+                : parseFloat(amount),
               currency: project.currency,
               fromWallet: selectedWalletId,
               toWallet: project.wallet,

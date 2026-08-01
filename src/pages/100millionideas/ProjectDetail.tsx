@@ -480,7 +480,9 @@ const DonationItem = ({ donation }: { donation: any }) => {
             </div>
             <div className="text-right">
               <p className="font-bold text-green-500">
-                {donation.amountFiat} {donation.currency}
+                {/* Two decimals like every other amount on the page — the raw
+                    value is a float, so it could print as 31.680000000000003. */}
+                {(Number(donation.amountFiat) || 0).toFixed(2)} {donation.currency}
               </p>
             </div>
           </div>
