@@ -74,17 +74,23 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
   // Admin-configured module rules (maturing length, per-group caps).
   const { settings: ufSettings } = useUfSettings();
 
-  // Recipient always receives on their Main Wallet (canonical lookup).
-  // On an EDIT the wallet is NOT reconsidered: the request keeps the address it
-  // was published with, so correcting the text can never silently redirect
-  // where contributions arrive (the author's Main Wallet may have changed, and
-  // financiers gave to the request as it stood).
+  // The Main Wallet is only the DEFAULT choice now (canonical lookup).
   const mainWallet =
     wallets.find((w) => w.walletType === "Main Wallet") ||
     wallets.find((w) => w.walletType === "Wallet");
-  const walletFrozen = !!mainWallet?.freezeStatus;
+  // A new request may receive on ANY of the author's registered wallets
+  // (KIND 30889). Frozen ones are left out — financing cannot be properly
+  // received on them. On an EDIT the wallet is NOT reconsidered at all: the
+  // request keeps the address it was published with, so correcting the text can
+  // never silently redirect where contributions arrive.
+  const [chosenWalletId, setChosenWalletId] = useState("");
+  const selectableWallets = wallets.filter((w) => !w.freezeStatus);
+  const frozenWallets = wallets.filter((w) => !!w.freezeStatus);
+  const chosenWallet =
+    selectableWallets.find((w) => w.walletId === chosenWalletId) || mainWallet;
+
   /** Where the funds arrive: fixed at first publication, never changed by an edit. */
-  const receivingWallet = existing ? existing.wallet : mainWallet?.walletId || "";
+  const receivingWallet = existing ? existing.wallet : chosenWallet?.walletId || "";
 
   // ── Form state (prefilled from the request being edited) ──
   const [requestType, setRequestType] = useState<UfRequestType>(
@@ -146,6 +152,14 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
         : "A project, product, or service serving the common good; requires a prior crowdfunding project.",
     },
   ];
+
+  // Default to the Main Wallet as soon as the wallet list arrives, without
+  // overriding a choice the user has already made.
+  useEffect(() => {
+    if (isEdit || chosenWalletId) return;
+    if (mainWallet && !mainWallet.freezeStatus) setChosenWalletId(mainWallet.walletId);
+    else if (selectableWallets.length > 0) setChosenWalletId(selectableWallets[0].walletId);
+  }, [isEdit, chosenWalletId, mainWallet?.walletId, selectableWallets.length]);
 
   // Fetch the user's own crowdfunding projects when the wellbeing type is chosen.
   useEffect(() => {
@@ -365,19 +379,19 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
       );
       return;
     }
-    if (!isEdit && !mainWallet) {
+    if (!isEdit && !receivingWallet) {
       toast.error(
         sl
-          ? "Za prejem financiranja potrebuješ glavno denarnico (Main Wallet)"
-          : "You need a Main Wallet to receive financing"
+          ? "Izberi denarnico, na katero boš prejel financiranje"
+          : "Choose the wallet that will receive the financing"
       );
       return;
     }
-    if (!isEdit && walletFrozen) {
+    if (!isEdit && chosenWallet?.freezeStatus) {
       toast.error(
         sl
-          ? "Tvoja glavna denarnica je zamrznjena in ne more pravilno prejemati financiranja"
-          : "Your Main Wallet is frozen and cannot properly receive financing"
+          ? "Izbrana denarnica je zamrznjena in ne more pravilno prejemati financiranja"
+          : "The selected wallet is frozen and cannot properly receive financing"
       );
       return;
     }
@@ -534,7 +548,9 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
   // Publishing needs a usable Main Wallet; editing an existing request does not
   // — the address is already fixed, and the author must always be able to
   // correct their own text.
-  const submitBlocked = isEdit ? false : walletsLoading || !mainWallet || walletFrozen;
+  const submitBlocked = isEdit
+    ? false
+    : walletsLoading || !receivingWallet || !!chosenWallet?.freezeStatus;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -914,7 +930,7 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
         </Card>
       )}
 
-      {/* Receiving wallet — read-only, always the Main Wallet */}
+      {/* Receiving wallet — any of the author's registered (KIND 30889) wallets */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -938,34 +954,65 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
               <Loader2 className="h-4 w-4 animate-spin" />
               {sl ? "Nalaganje denarnic ..." : "Loading wallets..."}
             </div>
-          ) : mainWallet ? (
+          ) : selectableWallets.length > 0 ? (
             <>
+              <div className="space-y-2">
+                <Label htmlFor="receivingWallet">
+                  {sl ? "Izberi denarnico" : "Choose a wallet"}
+                </Label>
+                <Select value={chosenWallet?.walletId || ""} onValueChange={setChosenWalletId}>
+                  <SelectTrigger id="receivingWallet">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectableWallets.map((w) => (
+                      <SelectItem key={w.walletId} value={w.walletId}>
+                        <span className="flex flex-col items-start">
+                          <span className="text-sm">
+                            {w.walletType}
+                            {w.walletId === mainWallet?.walletId
+                              ? sl ? " · privzeta" : " · default"
+                              : ""}
+                            {w.note ? ` — ${w.note}` : ""}
+                          </span>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {w.walletId}
+                          </span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="rounded-lg border bg-muted/40 p-3">
-                <p className="font-mono text-sm break-all">{mainWallet.walletId}</p>
+                <p className="font-mono text-sm break-all">{receivingWallet}</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {sl
-                    ? "Glavna denarnica — sredstva boš prejemal nanjo."
-                    : "Main Wallet — you will receive the funds here."}
+                    ? "Prejeta sredstva bodo prišla na to denarnico. Po odprtju financiranja je ni več mogoče zamenjati."
+                    : "Contributions will arrive here. Once funding opens, this can no longer be changed."}
                 </p>
               </div>
-              {walletFrozen && (
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    {sl
-                      ? "Tvoja glavna denarnica je zamrznjena in ne more pravilno prejemati financiranja. Objava je onemogočena."
-                      : "Your Main Wallet is frozen and cannot properly receive financing. Publishing is disabled."}
-                  </AlertDescription>
-                </Alert>
+
+              {frozenWallets.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {sl
+                    ? `Zamrznjene denarnice niso na voljo (${frozenWallets.length}) — na njih financiranja ni mogoče pravilno prejeti.`
+                    : `Frozen wallets are not offered (${frozenWallets.length}) — financing cannot be properly received on them.`}
+                </p>
               )}
             </>
           ) : (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                {sl
-                  ? "Za prejem financiranja potrebuješ glavno denarnico (Main Wallet)."
-                  : "You need a Main Wallet to receive financing."}
+                {wallets.length > 0
+                  ? sl
+                    ? "Vse tvoje denarnice so zamrznjene, zato financiranja ni mogoče prejeti. Objava je onemogočena."
+                    : "All of your wallets are frozen, so financing cannot be received. Publishing is disabled."
+                  : sl
+                    ? "Za prejem financiranja potrebuješ registrirano denarnico."
+                    : "You need a registered wallet to receive financing."}
               </AlertDescription>
             </Alert>
           )}
