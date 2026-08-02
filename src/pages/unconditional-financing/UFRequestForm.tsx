@@ -47,6 +47,9 @@ const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 const CURRENCIES = ["EUR", "USD", "GBP"];
 
+/** Wallet types (KIND 30889) that may receive an Unconditional Financing. */
+const RECEIVING_WALLET_TYPES = ["Main Wallet", "Wallet", "Lana.Discount"];
+
 /** Minimal shape of the user's own crowdfunding projects (offered as refs). */
 interface MyCrowdProject {
   id: string;
@@ -84,8 +87,14 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
   // request keeps the address it was published with, so correcting the text can
   // never silently redirect where contributions arrive.
   const [chosenWalletId, setChosenWalletId] = useState("");
-  const selectableWallets = wallets.filter((w) => !w.freezeStatus);
-  const frozenWallets = wallets.filter((w) => !!w.freezeStatus);
+  // Only these types can receive a financing (same trio the wallet page treats
+  // as spendable everyday wallets) — LanaPays.Us, Retail, Knights and
+  // Lana8Wonder wallets serve other purposes and are not offered.
+  const eligibleWallets = wallets.filter((w) =>
+    RECEIVING_WALLET_TYPES.includes(w.walletType)
+  );
+  const selectableWallets = eligibleWallets.filter((w) => !w.freezeStatus);
+  const frozenWallets = eligibleWallets.filter((w) => !!w.freezeStatus);
   const chosenWallet =
     selectableWallets.find((w) => w.walletId === chosenWalletId) || mainWallet;
 
@@ -1006,13 +1015,13 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                {wallets.length > 0
+                {eligibleWallets.length > 0
                   ? sl
-                    ? "Vse tvoje denarnice so zamrznjene, zato financiranja ni mogoče prejeti. Objava je onemogočena."
-                    : "All of your wallets are frozen, so financing cannot be received. Publishing is disabled."
+                    ? "Vse tvoje denarnice, primerne za prejem, so zamrznjene. Objava je onemogočena."
+                    : "Every wallet that could receive the financing is frozen. Publishing is disabled."
                   : sl
-                    ? "Za prejem financiranja potrebuješ registrirano denarnico."
-                    : "You need a registered wallet to receive financing."}
+                    ? "Za prejem financiranja potrebuješ denarnico vrste Main Wallet, Wallet ali Lana.Discount."
+                    : "To receive financing you need a Main Wallet, Wallet or Lana.Discount wallet."}
               </AlertDescription>
             </Alert>
           )}
