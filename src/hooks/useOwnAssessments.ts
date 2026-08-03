@@ -26,7 +26,7 @@ export interface GrievanceSummary {
 }
 
 // The being's own statement that it is WAITING for this participant (an
-// emotional outburst that damages relationships was noticed). Absent on every
+// too little introspection and too much attention on others was noticed). Absent on every
 // 37045 published before the feature existed — absent means NOT silenced, and
 // the publisher may also emit an explicit `{ silenced: false }`, so the only
 // safe gate is `silenced === true` (see isSilenced below).

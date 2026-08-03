@@ -632,8 +632,8 @@ export default function ChatView({
             </div>
             <p className="text-sm text-muted-foreground max-w-md">
               {en
-                ? `The beings noticed an emotional outburst that damages relationships, and chose silence so you have room to turn inward. You can still read everything — you can write again ${silenceWhen ? `on ${silenceWhen}` : 'once the beings speak'}.`
-                : `Bitja so zaznala čustven izbruh, ki ruši odnose, in izbrala tišino, da imaš prostor za pogled vase. Vse lahko še naprej bereš — pišeš lahko spet${silenceWhen ? ` ${silenceWhen}` : ', ko bitja znova spregovorijo'}.`}
+                ? `The beings see too little looking inward and too much attention on others, and no room for the possibility that your own beliefs may be mistaken. Take a step toward humility and your own fallibility. You can still read everything — you can write again ${silenceWhen ? `on ${silenceWhen}` : 'once the beings speak'}.`
+                : `Bitja zaznavajo premalo introspekcije in preveč ukvarjanja z drugimi ter nedopuščanje oz. nepriznavanje možnosti lastne zmote oz. zablode naših prepričanj. Naredi korak v smeri ponižnosti in lastne zmotljivosti. Vse lahko še naprej bereš — pišeš lahko spet${silenceWhen ? ` ${silenceWhen}` : ', ko bitja znova spregovorijo'}.`}
             </p>
           </div>
         </Card>
