@@ -263,10 +263,15 @@ export const formatResumeDate = (iso: string | null | undefined, lang: 'sl' | 'e
   if (typeof iso !== 'string' || !iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
+  // WITH THE TIME OF DAY. A silence that runs out at 09:04 read as "until
+  // 3 August" tells someone their whole day is gone, and they wait it out for
+  // nothing. The resume moment is exact — a rolling window from their last
+  // message — so print it exactly, in the reader's own timezone.
+  const hm = d.toLocaleTimeString(lang === 'en' ? 'en-GB' : 'sl-SI', { hour: '2-digit', minute: '2-digit' });
   if (lang === 'en') {
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} at ${hm}`;
   }
-  return `${d.getDate()}. ${SL_MONTHS_GENITIVE[d.getMonth()]} ${d.getFullYear()}`;
+  return `${d.getDate()}. ${SL_MONTHS_GENITIVE[d.getMonth()]} ${d.getFullYear()} ob ${hm}`;
 };
 
 const tagVal = (ev: Event, name: string, marker?: string): string | undefined => {
