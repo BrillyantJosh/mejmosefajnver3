@@ -366,7 +366,11 @@ export default function OwnAudioRecorder({
       let transcript = '';
       try {
         const sttController = new AbortController();
-        const sttTimeout = setTimeout(() => sttController.abort(), 25_000);
+        // 45 s, not 25: the server now tries Gemini first (~20 s on a long
+        // recording) because its Slovenian transcripts are the ones a being
+        // can actually judge — a garbled transcript once cost a week of
+        // silence. Groq stays as the fast fallback on the server side.
+        const sttTimeout = setTimeout(() => sttController.abort(), 45_000);
         try {
           const res = await fetch(`${API_URL}/api/voice/stt-path`, {
             method: 'POST',

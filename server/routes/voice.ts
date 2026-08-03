@@ -92,6 +92,59 @@ async function transcribeWithGroq(data: Buffer, filename: string, cleanMime: str
   return text;
 }
 
+// Core: transcribe via Gemini audio understanding. QUALITY-FIRST for Slovenian:
+// on Rok's real recordings (2026-08-03) whisper-large-v3-turbo produced the
+// word salad that a week of silence was hung on ("za mojo roč" for "za moj
+// rojstni dan", "finčnega stika" for "fizičnega stika"), and the full
+// whisper-large-v3 silently DROPPED the first half of one recording — the very
+// sentences with the plea in them. Gemini transcribed both completely and
+// coherently. It is slower (~20 s vs ~2 s), which is why Groq stays as the
+// fallback and the client timeout is raised to accommodate this.
+async function transcribeWithGemini(data: Buffer, cleanMime: string, language: string): Promise<string> {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not configured');
+  const model = process.env.VOICE_STT_MODEL || 'gemini-flash-latest';
+  const startTime = Date.now();
+  const langName = language === 'sl' ? 'Slovenian' : language === 'en' ? 'English' : language;
+  const body = {
+    contents: [{ role: 'user', parts: [
+      { text: `Transcribe the speech in this audio recording verbatim in ${langName}. The speaker may use colloquial ${langName}. Output only the transcript, no commentary, no headings.` },
+      { inlineData: { mimeType: cleanMime, data: data.toString('base64') } },
+    ]}],
+    generationConfig: { maxOutputTokens: 4000, temperature: 0.0 },
+  };
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body), signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok) throw new Error(`Gemini STT error ${response.status}: ${(await response.text()).slice(0, 200)}`);
+  const json: any = await response.json();
+  const text = ((json?.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || '').join('') || '').trim();
+  if (!text) throw new Error(`Gemini STT empty (finish=${json?.candidates?.[0]?.finishReason || '?'})`);
+  console.log(`🎙 Voice STT gemini [${language}]: "${text.slice(0, 80)}..." (${Date.now() - startTime}ms)`);
+  try {
+    const db = getDb();
+    db.prepare(`
+      INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
+      VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)
+    `).run('voice-stt', model, 0, 0, 0, 0, 0);
+  } catch (err) { console.error('Failed to log Voice STT usage:', err); }
+  return text;
+}
+
+// Gemini first for quality, Groq turbo as the fast fallback — a transcript
+// that arrives mangled is worse than one that arrives late, but one that
+// does not arrive at all is worst, so neither path is allowed to be the
+// single point of failure.
+async function transcribeBest(data: Buffer, filename: string, cleanMime: string, language: string): Promise<string> {
+  try {
+    return await transcribeWithGemini(data, cleanMime, language);
+  } catch (err: any) {
+    console.warn(`🎙 Gemini STT failed (${err.message}) — falling back to Groq turbo`);
+    return await transcribeWithGroq(data, filename, cleanMime, language);
+  }
+}
+
 function mimeForExt(ext: string): string {
   switch (ext.toLowerCase()) {
     case '.mp4':
@@ -113,7 +166,7 @@ router.post('/stt', audioUpload.single('file'), async (req: Request, res: Respon
     const language = req.body?.language || 'sl';
     const cleanMime = (req.file.mimetype || 'audio/webm').split(';')[0];
     console.log(`🎙 Voice STT received: ${req.file.originalname}, size=${req.file.size} bytes, mime=${cleanMime}`);
-    const text = await transcribeWithGroq(req.file.buffer, req.file.originalname || 'audio.webm', cleanMime, language);
+    const text = await transcribeBest(req.file.buffer, req.file.originalname || 'audio.webm', cleanMime, language);
     return res.json({ text });
   } catch (error: any) {
     console.error('Voice STT error:', error.message);
@@ -148,7 +201,7 @@ router.post('/stt-path', async (req: Request, res: Response) => {
     const data = fs.readFileSync(filePath);
     const cleanMime = mimeForExt(path.extname(filePath));
     console.log(`🎙 Voice STT-path: ${bucket}/${safePath}, size=${data.length} bytes, mime=${cleanMime}`);
-    const text = await transcribeWithGroq(data, path.basename(filePath), cleanMime, language);
+    const text = await transcribeBest(data, path.basename(filePath), cleanMime, language);
     return res.json({ text });
   } catch (error: any) {
     console.error('Voice STT-path error:', error.message);
