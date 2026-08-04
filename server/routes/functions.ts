@@ -16,6 +16,7 @@ import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventTo
 import { sendPushToUser } from '../lib/pushNotification';
 import { verifyEvent } from 'nostr-tools';
 import { blockIfFrozen } from '../lib/walletFreeze';
+import { consolidationFee, MIN_INPUTS, MIN_NET } from '../../src/lib/consolidationPlan.js';
 import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -2181,6 +2182,16 @@ router.post('/consolidate-wallet', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Missing required parameters' });
     }
 
+    // A consolidation of ONE input spends a fee to produce one output — it
+    // removes no UTXO at all. The old value-only check accepted it happily, so a
+    // wallet with a single healthy UTXO could burn its balance one fee at a time.
+    if (selectedUtxos.length < MIN_INPUTS) {
+      return res.json({
+        success: false,
+        error: `A consolidation needs at least ${MIN_INPUTS} UTXOs — merging one input into one output removes nothing and only costs a fee.`
+      });
+    }
+
     console.log('📋 consolidate-wallet:', {
       senderAddress,
       utxoCount: selectedUtxos.length,
@@ -2217,9 +2228,11 @@ router.post('/consolidate-wallet', async (req: Request, res: Response) => {
           { host: 'electrum2.lanacoin.com', port: 5097 }
         ];
 
-    // Single output back to the same address (no change) → outputCount = 1
+    // Single output back to the same address (no change) → outputCount = 1.
+    // Fee formula shared with the page (src/lib/consolidationPlan.ts) so the two
+    // can never disagree about what a batch costs.
     const totalValue = selectedUtxos.reduce((sum: number, u: any) => sum + u.value, 0);
-    const fee = Math.floor((selectedUtxos.length * 180 + 1 * 34 + 10) * 100 * 1.5);
+    const fee = consolidationFee(selectedUtxos.length);
     const amountToSend = totalValue - fee;
 
     console.log(`💰 Consolidate: total=${totalValue}, fee=${fee}, sending=${amountToSend} back to ${senderAddress}`);
@@ -2228,7 +2241,7 @@ router.post('/consolidate-wallet', async (req: Request, res: Response) => {
     // otherwise the network rejects it as a dust output. A pure-dust batch (its
     // combined value is less than the fee to move it) can never satisfy this on its
     // own — it has to be merged with a funded UTXO.
-    const MIN_CONSOLIDATE_OUTPUT = 1000; // lanoshis
+    const MIN_CONSOLIDATE_OUTPUT = MIN_NET;
     if (amountToSend < MIN_CONSOLIDATE_OUTPUT) {
       return res.json({
         success: false,

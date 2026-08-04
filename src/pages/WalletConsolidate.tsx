@@ -12,6 +12,13 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { convertWifToIds } from "@/lib/crypto";
+import {
+  buildConsolidationPlan,
+  consolidationFee,
+  MAX_INPUTS,
+  type PlanUtxo,
+  type ConsolidationPlan,
+} from "@/lib/consolidationPlan";
 import { QRScanner } from "@/components/QRScanner";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
@@ -53,19 +60,14 @@ interface Batch {
   feeLana: string;
   net: number;
   netLana: string;
-  viable: boolean;
+  /** UTXOs this batch removes (inputs − 1). */
+  removes: number;
   isProcessing?: boolean;
   isCompleted?: boolean;
   txid?: string;
 }
 
-const BATCH_SIZE = 20;
-// A consolidated output must clear both the fee and the network's dust-output
-// floor, so a batch is only worth submitting when its combined value exceeds
-// the fee by at least this margin. Pure-dust batches fall below it and are
-// disabled rather than offered as a guaranteed-to-fail action.
-const MIN_NET = 1000; // lanoshis
-const consolidationFee = (inputs: number) => Math.floor((inputs * 180 + 1 * 34 + 10) * 100 * 1.5);
+const lana = (lanoshis: number) => (lanoshis / 100000000).toFixed(8);
 
 export default function WalletConsolidate() {
   const { walletId } = useParams(); // route param IS the wallet address
@@ -82,6 +84,7 @@ export default function WalletConsolidate() {
   const [analysis, setAnalysis] = useState<UTXOAnalysis | null>(null);
   const [privateKey, setPrivateKey] = useState("");
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [plan, setPlan] = useState<ConsolidationPlan | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isValidatingKey, setIsValidatingKey] = useState(false);
   const [isKeyValid, setIsKeyValid] = useState<boolean | null>(null);
@@ -116,43 +119,24 @@ export default function WalletConsolidate() {
     return () => clearTimeout(timeoutId);
   }, [privateKey, walletAddress]);
 
-  const buildBatches = (allUtxos: UTXO[]) => {
-    // Seed-based packing: each batch takes the LARGEST remaining UTXO as its
-    // fee-paying seed, then fills the rest of the batch with the SMALLEST
-    // remaining UTXOs (dust). This pairs every funded UTXO with a full load of
-    // dust (1 big + up to 19 dust per batch), so as many batches as there are
-    // funded UTXOs become viable and each one clears the maximum amount of dust.
-    // Once funded UTXOs run out, the leftover pure-dust batches are gated
-    // "Fee too high" and become consolidatable on the next round, after a funded
-    // batch's output lands and re-analysis pairs it with the remaining dust.
-    const pool = [...allUtxos].sort((a, b) => b.value - a.value); // descending
-    const bins: UTXO[][] = [];
-    while (pool.length > 0) {
-      const batch: UTXO[] = [pool.shift() as UTXO]; // largest remaining = the seed
-      while (batch.length < BATCH_SIZE && pool.length > 0) {
-        batch.push(pool.pop() as UTXO); // smallest remaining = dust
-      }
-      bins.push(batch);
-    }
-
-    return bins.map((utxos, idx) => {
-      const totalValue = utxos.reduce((sum, u) => sum + u.value, 0);
-      const dustCount = utxos.filter((u) => u.value < 10000).length;
-      const fee = consolidationFee(utxos.length);
-      const net = totalValue - fee;
-      return {
-        id: idx + 1,
-        utxos,
-        totalValue,
-        totalValueLana: (totalValue / 100000000).toFixed(8),
-        dustCount,
-        fee,
-        feeLana: (fee / 100000000).toFixed(8),
-        net,
-        netLana: (net / 100000000).toFixed(8),
-        viable: net >= MIN_NET,
-      } as Batch;
-    });
+  // Batch sizing is decided by the MONEY, not by a fixed count. See
+  // src/lib/consolidationPlan.ts — the old code always packed 20 inputs, whose
+  // fee (0.00546600 LANA) can easily exceed the whole wallet, so every batch it
+  // offered was refused. Only batches that can actually succeed are built now.
+  const buildBatches = (allUtxos: UTXO[]): Batch[] => {
+    const { batches } = buildConsolidationPlan(allUtxos as PlanUtxo[]);
+    return batches.map((b) => ({
+      id: b.id,
+      utxos: b.utxos as UTXO[],
+      totalValue: b.totalValue,
+      totalValueLana: lana(b.totalValue),
+      dustCount: b.dustCount,
+      fee: b.fee,
+      feeLana: lana(b.fee),
+      net: b.net,
+      netLana: lana(b.net),
+      removes: b.removes,
+    }));
   };
 
   const runAnalysis = async () => {
@@ -169,6 +153,7 @@ export default function WalletConsolidate() {
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Failed to analyze UTXOs");
       setAnalysis(data);
+      setPlan(buildConsolidationPlan((data.all_utxos || []) as PlanUtxo[]));
       setBatches(data.all_utxos?.length ? buildBatches(data.all_utxos) : []);
     } catch (err) {
       console.error("Error analyzing wallet UTXOs:", err);
@@ -190,10 +175,6 @@ export default function WalletConsolidate() {
     }
     const batch = batches.find((b) => b.id === batchId);
     if (!batch) return;
-    if (!batch.viable) {
-      toast.error("This batch's value is below the network fee — consolidate a funded batch first.");
-      return;
-    }
     // Re-entry guard: the button's `disabled` prop only takes effect on the next
     // render, so a fast double-tap can reach here twice before it greys out — and
     // the second call would spend the same UTXOs, which the Edge Function rejects
@@ -412,10 +393,11 @@ export default function WalletConsolidate() {
                       <div className="flex-1">
                         <CardTitle>Consolidation Batches</CardTitle>
                         <p className="text-sm text-muted-foreground">
-                          {batches.length} {batches.length === 1 ? "batch" : "batches"} of up to {BATCH_SIZE} UTXOs
-                          each — each merges into one output back to this wallet. A batch can only be
-                          consolidated when its value covers the network fee; pure-dust batches become
-                          consolidatable in the next round, once a funded batch's output lands.
+                          {batches.length} {batches.length === 1 ? "transaction" : "transactions"} — each
+                          merges its UTXOs into one output back to this wallet, removing{" "}
+                          {plan?.totalRemoved ?? 0} UTXOs in total for {lana(plan?.totalFee ?? 0)} LANA in
+                          fees. Every batch here is affordable: the size is chosen so the combined value
+                          covers the network fee.
                         </p>
                       </div>
                       <Button
@@ -455,20 +437,15 @@ export default function WalletConsolidate() {
                                   <span className="text-muted-foreground">Fee: </span>
                                   <span className="font-mono text-muted-foreground">{batch.feeLana} LANA</span>
                                 </span>
-                                {batch.viable && (
-                                  <span>
-                                    <span className="text-muted-foreground">You keep: </span>
-                                    <span className="font-mono font-semibold text-green-600">{batch.netLana} LANA</span>
-                                  </span>
-                                )}
+                                <span>
+                                  <span className="text-muted-foreground">You keep: </span>
+                                  <span className="font-mono font-semibold text-green-600">{batch.netLana} LANA</span>
+                                </span>
+                                <span>
+                                  <span className="text-muted-foreground">Removes: </span>
+                                  <span className="font-semibold">{batch.removes} UTXOs</span>
+                                </span>
                               </div>
-                              {!batch.viable && !batch.isCompleted && (
-                                <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400 mt-2">
-                                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                                  Worth less than the {batch.feeLana} LANA fee to move it. Consolidate a funded
-                                  batch first — re-analyze, and these will merge with its output.
-                                </p>
-                              )}
                               {batch.txid && (
                                 <a
                                   href={`https://chainz.cryptoid.info/lana/tx.dws?${batch.txid}`}
@@ -485,7 +462,6 @@ export default function WalletConsolidate() {
                               onClick={() => handleConsolidateBatch(batch.id)}
                               disabled={
                                 isFrozen ||
-                                !batch.viable ||
                                 !privateKey.trim() ||
                                 isKeyValid !== true ||
                                 batch.isProcessing ||
@@ -499,8 +475,6 @@ export default function WalletConsolidate() {
                                 </>
                               ) : batch.isCompleted ? (
                                 "✓ Completed"
-                              ) : !batch.viable ? (
-                                "Fee too high"
                               ) : (
                                 "Consolidate"
                               )}
@@ -509,6 +483,44 @@ export default function WalletConsolidate() {
                         </CardContent>
                       </Card>
                     ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Whatever no transaction can pay for. Reported plainly instead of
+                  rendered as buttons that the network would refuse. */}
+              {plan && plan.leftovers.length > 0 && (
+                <Card className="border-amber-500/40 bg-amber-500/5">
+                  <CardContent className="pt-6 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                      <div className="space-y-2">
+                        <h3 className="font-semibold">
+                          {plan.leftovers.length} {plan.leftovers.length === 1 ? "UTXO cannot" : "UTXOs cannot"} be
+                          moved
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Together they hold{" "}
+                          <span className="font-mono">
+                            {lana(plan.leftovers.reduce((sum, u) => sum + u.value, 0))} LANA
+                          </span>
+                          , which is less than the {lana(consolidationFee(2))} LANA fee for the smallest
+                          possible transaction. Moving them would cost more than they are worth.
+                        </p>
+                        {batches.length > 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            Consolidate above first — once that output confirms, re-analyze and these may
+                            merge with it.
+                          </p>
+                        ) : plan.depositToUnstick > 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            Nothing can be consolidated right now. An incoming payment of at least{" "}
+                            <span className="font-mono">{lana(plan.depositToUnstick)} LANA</span> to this
+                            address would cover the fee and let them be swept up.
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               )}
