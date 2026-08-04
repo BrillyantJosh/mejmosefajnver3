@@ -126,6 +126,10 @@ const TXT = {
     cmtTranslate: "Prevedi",
     cmtShowOriginal: "Pokaži izvirnik",
     cmtTranslating: "Prevajam …",
+    grievTranslate: "Prevedi očitke",
+    grievShowOriginal: "Pokaži izvirne očitke",
+    grievTranslating: "Prevajam …",
+    grievTranslatedNote: "Očitki so strojno prevedeni za to sejo. Zapis obdrži izvirne besede.",
     cmtMachineTx: "Strojni prevod — objavljeni zapis ostaja v izvirnih besedah.",
     grvGiven: "očitek, ki ga je dal",
     grvReceived: "očitek, ki ga je prejel",
@@ -238,6 +242,10 @@ const TXT = {
     cmtTranslate: "Translate",
     cmtShowOriginal: "Show original",
     cmtTranslating: "Translating …",
+    grievTranslate: "Translate grievances",
+    grievShowOriginal: "Show original grievances",
+    grievTranslating: "Translating …",
+    grievTranslatedNote: "The grievances are machine-translated for this session. The record keeps the original words.",
     cmtMachineTx: "Machine translation — the published record keeps the original words.",
     grvGiven: "grievance they gave",
     grvReceived: "grievance they received",
@@ -539,6 +547,19 @@ export default function Matrix() {
       return next;
     });
   }, [txCache, session?.nostrHexId]);
+  // The beings write the grievances themselves, in English. With the interface in
+  // Slovenian the reader met translated labels wrapped around untranslated
+  // content — exactly where the meaning matters most. This translates the
+  // grievance texts on the same terms as a commitment card: on demand, in this
+  // browser only, and one click returns to the words that were actually spoken.
+  const [txGriev, setTxGriev] = useState(false);
+  const [txGrievBusy, setTxGrievBusy] = useState(false);
+  /** Grievance text in the reader's language, falling back to the original. */
+  const txG = useCallback(
+    (t: string) => (txGriev ? (txCache[`${lang}::${(t || "").trim()}`] ?? t) : t),
+    [txGriev, txCache, lang]
+  );
+
   const [grievView, setGrievView] = useState<"matrix" | "mine" | "compare">("matrix");
   // »Zame« defaults to the logged-in user when they are in the process; the
   // overseer picks any participant from the same select.
@@ -898,6 +919,35 @@ export default function Matrix() {
             <Button size="sm" variant={grievView === "matrix" ? "default" : "outline"} onClick={() => setGrievView("matrix")}>{L.gvMatrix}</Button>
             <Button size="sm" variant={grievView === "compare" ? "default" : "outline"} onClick={() => setGrievView("compare")}>{L.gvCompare}</Button>
             <Button size="sm" variant={grievView === "mine" ? "default" : "outline"} onClick={() => setGrievView("mine")}>{L.gvMine}</Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="gap-1.5 text-xs"
+              disabled={txGrievBusy}
+              onClick={async () => {
+                if (txGriev) { setTxGriev(false); return; }
+                setTxGrievBusy(true);
+                try {
+                  // Every grievance text on this process, so switching views or
+                  // person afterwards never lands on an untranslated entry.
+                  await translateTexts(
+                    ledgers.flatMap((l) => l.grievances.map((g) => g.summary || "")).filter(Boolean),
+                    lang
+                  );
+                  setTxGriev(true);
+                } finally {
+                  setTxGrievBusy(false);
+                }
+              }}
+            >
+              <Languages className="h-3.5 w-3.5" />
+              {txGrievBusy ? L.grievTranslating : txGriev ? L.grievShowOriginal : L.grievTranslate}
+            </Button>
+            {txGriev && (
+              <span className="text-[11px] text-muted-foreground basis-full">
+                {L.grievTranslatedNote}
+              </span>
+            )}
             {grievView === "mine" && (
               <>
                 <span className="text-xs text-muted-foreground ml-1">{L.gvForPerson}</span>
@@ -1021,6 +1071,7 @@ export default function Matrix() {
                             corroboration={grievPairMsgIds}
                             beingsWithSources={grievBeingsWithSources}
                             fetchOriginal={grievFetchOriginal}
+                            renderText={txG}
                             labels={{ grievances: L.grievLabel, responded: L.colResponded, accepted: L.colAccepted, apologized: L.colApologized, owned: L.colOwned, colorHint: L.grievColorHint, doneWord: L.grievDone, openWord: L.grievOpen, sourceWord: L.grievSource, fromMessageWord: L.grievFromMessage, messageWord: L.grievMessage, copiedWord: L.grievCopied, openOriginalWord: L.grievOpenOrig, originalTitleWord: L.grievOrigTitle, originalErrorWord: L.grievOrigErr, copyIdWord: L.grievCopyId, unsourcedWord: L.grievUnsourced, sourceNotTargetWord: L.grievSrcNotTarget, sourcePartialWord: L.grievSrcPartial, disputedWord: L.grievDisputed, onlyThisBeingWord: L.grievOnlyBeing }}
                           />
                         )
@@ -1039,7 +1090,7 @@ export default function Matrix() {
                                     <div key={g.id} className="rounded-md bg-background/60 border border-border/50 p-2.5 flex items-start justify-between gap-2">
                                       <div className="text-xs">
                                         <span className="font-medium">{L.gvFrom} {nameOf(g.fromPubkey)}:</span>{" "}
-                                        <span className="text-muted-foreground">{g.summary}</span>
+                                        <span className="text-muted-foreground">{txG(g.summary)}</span>
                                       </div>
                                       <NextStep g={g} side="received" />
                                     </div>
@@ -1056,7 +1107,7 @@ export default function Matrix() {
                                     <div key={g.id} className="rounded-md bg-background/60 border border-border/50 p-2.5 flex items-start justify-between gap-2">
                                       <div className="text-xs">
                                         <span className="font-medium">{L.gvTo} {nameOf(g.toPubkey)}:</span>{" "}
-                                        <span className="text-muted-foreground">{g.summary}</span>
+                                        <span className="text-muted-foreground">{txG(g.summary)}</span>
                                       </div>
                                       <NextStep g={g} side="given" />
                                     </div>

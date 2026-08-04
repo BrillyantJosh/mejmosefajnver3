@@ -143,9 +143,15 @@ function OriginalMessageDialog({ msgId, fetchOriginal, nameOf, labels, onClose }
 
 export default function GrievanceStepTable({
   grievances, nameOf, labels, highlightPubkey, roster, sources, beingPubkey, corroboration, beingsWithSources, fetchOriginal,
+  renderText,
 }: {
   grievances: Grievance[];
   nameOf: (pk: string) => string;
+  /**
+   * Optional transform applied to every grievance text before it is shown —
+   * the reader's on-demand translation. Defaults to the original words.
+   */
+  renderText?: (text: string) => string;
   labels: GrievanceStepLabels;
   /** When set, this person's name is emphasized in every from → to pair. */
   highlightPubkey?: string;
@@ -402,7 +408,11 @@ export default function GrievanceStepTable({
             <tr key={g.id} className="border-b border-border/40 align-top">
               <td className="p-2 min-w-[12rem]">
                 <div>{party(g.fromPubkey)} → {party(g.toPubkey)}</div>
-                {g.summary && <div className="text-muted-foreground leading-snug mt-0.5">{g.summary}</div>}
+                {g.summary && (
+                  <div className="text-muted-foreground leading-snug mt-0.5">
+                    {(renderText ?? ((t: string) => t))(g.summary)}
+                  </div>
+                )}
                 <SourceBadges g={g} />
                 <SourceDisclosure g={g} />
               </td>
