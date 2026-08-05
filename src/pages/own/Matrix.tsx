@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { useProcessFreezes } from "@/hooks/useProcessFreezes";
 import { FreezeBadge } from "@/components/own/FreezeBadge";
 import { splitLatestPerBeing, withFloatedGuidance, guidanceKindKey } from "@/lib/ownTimeline";
@@ -521,7 +521,16 @@ export default function Matrix() {
   // NOTHING IS REWRITTEN AT THE SOURCE. The translation lives in this browser
   // for this visit; the published record keeps the words that were actually
   // spoken, and one click returns to them.
-  const [txCache, setTxCache] = useState<Record<string, string>>({});   // `${lang}::${text}` → translation
+  // Kept in localStorage: translating costs a paid API call per unique text, so
+  // a grievance is translated once per browser rather than once per page view.
+  const TX_STORE = "own-translation-cache-v1";
+  const [txCache, setTxCache] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem(TX_STORE);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, string>) : {};
+    } catch { return {}; }
+  });
   const [txCards, setTxCards] = useState<Set<string>>(new Set());       // cards currently showing a translation
   const [txBusy, setTxBusy] = useState<string | null>(null);
 
@@ -529,7 +538,7 @@ export default function Matrix() {
     const todo = [...new Set(texts.map((t) => (t || "").trim()).filter(Boolean))]
       .filter((t) => txCache[`${target}::${t}`] === undefined);
     if (!todo.length) return;
-    const results = await Promise.all(todo.map(async (text) => {
+    const one = async (text: string) => {
       try {
         const res = await fetch("/api/functions/translate-post", {
           method: "POST",
@@ -540,25 +549,60 @@ export default function Matrix() {
         const data = await res.json();
         return typeof data?.translatedText === "string" ? ([text, data.translatedText] as const) : null;
       } catch (_) { return null; }
-    }));
+    };
+    // A whole process can hold dozens of grievances; firing them all at once
+    // invites rate-limiting, and a rate-limited text falls back to English
+    // silently. Small waves keep that from happening.
+    const results: (readonly [string, string] | null)[] = [];
+    for (let i = 0; i < todo.length; i += 5) {
+      results.push(...(await Promise.all(todo.slice(i, i + 5).map(one))));
+    }
     setTxCache((prev) => {
       const next = { ...prev };
       for (const r of results) if (r) next[`${target}::${r[0]}`] = r[1];
+      try {
+        // Trim oldest-first if it ever grows unreasonable; the cache is a
+        // convenience, never a source of truth.
+        const keys = Object.keys(next);
+        const trimmed = keys.length > 800
+          ? Object.fromEntries(keys.slice(keys.length - 800).map((k) => [k, next[k]]))
+          : next;
+        localStorage.setItem(TX_STORE, JSON.stringify(trimmed));
+      } catch { /* private mode or quota — the in-memory cache still works */ }
       return next;
     });
   }, [txCache, session?.nostrHexId]);
   // The beings write the grievances themselves, in English. With the interface in
   // Slovenian the reader met translated labels wrapped around untranslated
-  // content — exactly where the meaning matters most. This translates the
-  // grievance texts on the same terms as a commitment card: on demand, in this
-  // browser only, and one click returns to the words that were actually spoken.
-  const [txGriev, setTxGriev] = useState(false);
+  // content — exactly where the meaning matters most, so this now happens on its
+  // own: pick Slovenian and the grievances arrive in Slovenian.
+  //
+  // NOTHING IS REWRITTEN AT THE SOURCE. The translation lives in this browser;
+  // the published record keeps the words that were actually spoken, and the
+  // toggle returns to them at any time.
+  const [txGriev, setTxGriev] = useState(!en);
   const [txGrievBusy, setTxGrievBusy] = useState(false);
   /** Grievance text in the reader's language, falling back to the original. */
   const txG = useCallback(
     (t: string) => (txGriev ? (txCache[`${lang}::${(t || "").trim()}`] ?? t) : t),
     [txGriev, txCache, lang]
   );
+
+  // Fetch the translations for whatever this process contains, as soon as it is
+  // loaded, so a Slovenian reader never meets an English grievance. Cached texts
+  // cost nothing; only genuinely new ones reach the API.
+  useEffect(() => {
+    if (en || !ledgers.length) return;
+    const texts = ledgers.flatMap((l) => l.grievances.map((g) => g.summary || "")).filter(Boolean);
+    if (!texts.length) return;
+    let alive = true;
+    setTxGrievBusy(true);
+    translateTexts(texts, "sl").finally(() => { if (alive) setTxGrievBusy(false); });
+    return () => { alive = false; };
+    // translateTexts is intentionally omitted: it changes identity on every
+    // cache write, which would re-enter this effect after each batch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [en, ledgers]);
 
   const [grievView, setGrievView] = useState<"matrix" | "mine" | "compare">("matrix");
   // »Zame« defaults to the logged-in user when they are in the process; the
@@ -939,6 +983,7 @@ export default function Matrix() {
                   setTxGrievBusy(false);
                 }
               }}
+              title={L.grievTranslatedNote}
             >
               <Languages className="h-3.5 w-3.5" />
               {txGrievBusy ? L.grievTranslating : txGriev ? L.grievShowOriginal : L.grievTranslate}
