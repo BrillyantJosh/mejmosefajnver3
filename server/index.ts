@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -19,6 +20,21 @@ import { processPendingTasks, setSSEHandlers } from './lib/aiTasks';
 import { syncUnregisteredLana } from './lib/unregisteredLana';
 
 const app = express();
+
+// Gzip every response — the fleet was shipping everything uncompressed
+// (see direct.lana.fund, 5.1 MB admin feed -> 524 KB).
+//
+// EXCEPT Server-Sent Events: this app streams live updates from
+// routes/sse.ts, and compression buffers a stream until it has enough to
+// emit — which would hold live events back or stall them entirely. Those
+// three handlers set Content-Type before writing, so the filter sees it.
+app.use(compression({
+  filter: (req, res) => {
+    const ct = String(res.getHeader('Content-Type') || '');
+    if (ct.includes('text/event-stream')) return false;
+    return compression.filter(req, res);
+  },
+}));
 const PORT = process.env.PORT || 3001;
 
 // Middleware
