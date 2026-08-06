@@ -3,6 +3,10 @@ name: Deploy to VPS
 on:
   push:
     branches: [main]
+  # GitHub occasionally drops a push event and no run is created for a commit
+  # that is already on main. This lets the deploy be started by hand from the
+  # Actions tab (or `gh workflow run "Deploy to VPS"`) without an empty commit.
+  workflow_dispatch:
 
 jobs:
   deploy:
