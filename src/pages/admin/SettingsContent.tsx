@@ -8,10 +8,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ThemeColors } from "@/types/admin";
 import { Settings, Users, Loader2, AlertTriangle } from "lucide-react";
 import { useNostrRooms } from "@/hooks/useNostrRooms";
+import { useSystemParameters } from "@/contexts/SystemParametersContext";
 
 export default function SettingsContent() {
-  const { appSettings, updateAppName, updateThemeColors, updateDefaultRooms, updateWarningBeforeSplit } = useAdmin();
+  const { appSettings, updateAppName, updateThemeColors, updateDefaultRooms } = useAdmin();
   const { rooms, loading: roomsLoading } = useNostrRooms();
+  // The freeze threshold and the approaching-Split flag are published by the
+  // authority in KIND 38888 — this screen only reports them.
+  const { parameters } = useSystemParameters();
   
   const [localName, setLocalName] = useState(appSettings?.app_name || "");
   const [localColors, setLocalColors] = useState<ThemeColors>(
@@ -29,16 +33,12 @@ export default function SettingsContent() {
   const [localDefaultRooms, setLocalDefaultRooms] = useState<string[]>(
     appSettings?.default_rooms || ["general"]
   );
-  const [localWarningBeforeSplit, setLocalWarningBeforeSplit] = useState<string>(
-    appSettings?.warning_before_split?.toString() || ""
-  );
 
   useEffect(() => {
     if (appSettings) {
       setLocalName(appSettings.app_name);
       setLocalColors(appSettings.theme_colors);
       setLocalDefaultRooms(appSettings.default_rooms);
-      setLocalWarningBeforeSplit(appSettings.warning_before_split?.toString() || "");
     }
   }, [appSettings]);
 
@@ -52,16 +52,6 @@ export default function SettingsContent() {
 
   const handleSaveDefaultRooms = async () => {
     await updateDefaultRooms(localDefaultRooms);
-  };
-
-  const handleSaveWarningBeforeSplit = async () => {
-    const val = parseFloat(localWarningBeforeSplit);
-    await updateWarningBeforeSplit(isNaN(val) || val <= 0 ? null : val);
-  };
-
-  const handleClearWarningBeforeSplit = async () => {
-    setLocalWarningBeforeSplit("");
-    await updateWarningBeforeSplit(null);
   };
 
   const handleColorChange = (key: keyof ThemeColors, value: string) => {
@@ -177,31 +167,51 @@ export default function SettingsContent() {
             Warning Before SPLIT
           </CardTitle>
           <CardDescription>
-            If set, users whose combined balance on Wallet + Main Wallet + Lana.Discount exceeds this amount will see a warning to reduce before SPLIT
+            Users whose combined Wallet + Main Wallet balance is above this amount are warned to
+            reduce it before the SPLIT, so their account is not frozen. Nothing to set here — the
+            figure comes from the authority's KIND 38888 event and updates on its own.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="warning-split">Max allowed LANA balance</Label>
-            <Input
-              id="warning-split"
-              type="number"
-              value={localWarningBeforeSplit}
-              onChange={(e) => setLocalWarningBeforeSplit(e.target.value)}
-              placeholder="e.g. 50000 (leave empty to disable)"
-              min="0"
-              step="1"
-            />
+        <CardContent className="space-y-3">
+          <div className="rounded-lg border bg-muted/40 p-3 space-y-1">
+            <p className="text-sm text-muted-foreground">Freeze threshold in force</p>
+            <p className="text-2xl font-semibold font-mono">
+              {parameters?.freezeAccountAbove
+                ? `${parameters.freezeAccountAbove.toLocaleString()} LANA`
+                : "—"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              KIND 38888 · <code>freeze_lana_account_above</code>
+              {parameters?.split ? ` · Split ${parameters.split}` : ""}
+            </p>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleSaveWarningBeforeSplit}>Save</Button>
-            <Button onClick={handleClearWarningBeforeSplit} variant="outline">Clear</Button>
-          </div>
-          {appSettings?.warning_before_split && (
+
+          {parameters?.splitApproaching ? (
+            <p className="flex items-start gap-1.5 text-sm text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              A SPLIT is approaching — the warnings are live across the app for everyone over the
+              threshold.
+            </p>
+          ) : (
             <p className="text-sm text-muted-foreground">
-              Currently set to: <strong>{appSettings.warning_before_split.toLocaleString()} LANA</strong>
+              No SPLIT flagged as approaching right now. Anyone over the threshold is still warned.
             </p>
           )}
+
+          {!parameters?.freezeAccountAbove && (
+            <p className="text-sm text-muted-foreground">
+              The authority has not published a threshold, so no warning is shown. It will appear
+              here by itself once it does.
+            </p>
+          )}
+
+          {parameters?.freezeRetailAccountAbove ? (
+            <p className="text-xs text-muted-foreground">
+              Retail wallets have their own threshold of{" "}
+              {parameters.freezeRetailAccountAbove.toLocaleString()} LANA, which this warning does
+              not cover.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 

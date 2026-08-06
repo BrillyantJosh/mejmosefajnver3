@@ -246,8 +246,10 @@ export default function Wallet() {
             <strong>{splitWarning.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LANA</strong>,
             which exceeds the maximum allowed balance of{' '}
             <strong>{splitWarning.limit.toLocaleString()} LANA</strong>.
-            You must reduce your balance before the next SPLIT to avoid your account being frozen.
-            Transfer or spend your LANA to bring your balance below the limit.
+            {splitWarning.splitApproaching
+              ? ' A SPLIT is approaching — reduce your balance now to avoid your account being frozen.'
+              : ' You must reduce your balance before the next SPLIT to avoid your account being frozen.'}
+            {' '}Transfer or spend your LANA to bring your balance below the limit.
           </AlertDescription>
         </Alert>
       )}

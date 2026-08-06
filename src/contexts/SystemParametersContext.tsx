@@ -40,6 +40,16 @@ interface SystemParameters {
   plan15Floor: number;
   plan15Price: Record<string, number>;
   plan15Round: string;
+  /**
+   * KIND 38888 v3.1 treasury thresholds. The balance above which an account is
+   * frozen at a Split — this is what the "before SPLIT" warning is about, and it
+   * now comes from the authority's event instead of an admin-typed number.
+   */
+  freezeAccountAbove: number;
+  freezeRetailAccountAbove: number;
+  maxCapLanasOnSplit: number;
+  /** The authority's early-warning flag that a Split is coming. */
+  splitApproaching: boolean;
   connectedRelays: number;
   isLoading: boolean;
   trustedSigners: TrustedSigners;
@@ -139,6 +149,19 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
       };
       const plan15Round = rawTags.find(t => t[0] === 'plan15_round')?.[1] || rawContent.plan15_round || '';
 
+      // Treasury thresholds (38888 v3.1). Same tags-first, content-fallback rule
+      // as PLAN15 above; the authority publishes them in both.
+      const num38888 = (name: string): number => {
+        const raw = rawTags.find(t => t[0] === name)?.[1] ?? rawContent[name];
+        const n = typeof raw === 'string' ? parseFloat(raw) : Number(raw);
+        return Number.isFinite(n) && n > 0 ? n : 0;
+      };
+      const freezeAccountAbove = num38888('freeze_lana_account_above');
+      const freezeRetailAccountAbove = num38888('freeze_lana_retail_account_above');
+      const maxCapLanasOnSplit = num38888('max_cap_lanas_on_split');
+      const rawApproaching = rawTags.find(t => t[0] === 'split_approaching')?.[1] ?? rawContent.split_approaching;
+      const splitApproaching = String(rawApproaching ?? '').toLowerCase() === 'true';
+
       // Create relay statuses - mark all as connected since we got data from DB
       // Server-side sync validates relay connectivity
       const relayStatuses: RelayStatus[] = relays.map(url => ({
@@ -160,6 +183,10 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
         plan15Floor,
         plan15Price,
         plan15Round,
+        freezeAccountAbove,
+        freezeRetailAccountAbove,
+        maxCapLanasOnSplit,
+        splitApproaching,
         connectedRelays: relays.length,
         isLoading: false,
         trustedSigners
