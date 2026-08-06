@@ -348,6 +348,21 @@ app.get('/{*path}', (req, res) => {
   if (req.url.startsWith('/api/')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
+
+  // A build replaces every hashed file under /assets/ and deletes the old ones.
+  // A browser still holding the previous index.html — or a service worker
+  // serving it — then asks for chunks that no longer exist. Answering those
+  // with index.html returns 200 and text/html where a JavaScript module is
+  // expected: the module fails to parse and the app renders a blank page, with
+  // nothing able to detect it because the request "succeeded". A real 404 lets
+  // the app (and Workbox) see the stale bundle and recover by reloading.
+  //
+  // Scoped to /assets/ deliberately: those are only ever build artefacts, so no
+  // application route can be caught by this.
+  if (req.path.startsWith('/assets/')) {
+    return res.status(404).type('text/plain').send('Not found');
+  }
+
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
