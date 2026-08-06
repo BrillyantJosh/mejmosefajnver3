@@ -167,21 +167,21 @@ export default function SettingsContent() {
             Warning Before SPLIT
           </CardTitle>
           <CardDescription>
-            Users whose combined Wallet + Main Wallet balance is above this amount are warned to
-            reduce it before the SPLIT, so their account is not frozen. Nothing to set here — the
-            figure comes from the authority's KIND 38888 event and updates on its own.
+            Two limits, both published in the authority's KIND 38888 event and both updating on
+            their own — nothing to set here. Anyone above either one is warned to reduce before the
+            SPLIT.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="rounded-lg border bg-muted/40 p-3 space-y-1">
-            <p className="text-sm text-muted-foreground">Freeze threshold in force</p>
+            <p className="text-sm text-muted-foreground">Maximum balance into a SPLIT</p>
             <p className="text-2xl font-semibold font-mono">
-              {parameters?.freezeAccountAbove
-                ? `${parameters.freezeAccountAbove.toLocaleString()} LANA`
+              {parameters?.maxCapLanasOnSplit
+                ? `${parameters.maxCapLanasOnSplit.toLocaleString()} LANA`
                 : "—"}
             </p>
             <p className="text-xs text-muted-foreground">
-              KIND 38888 · <code>freeze_lana_account_above</code>
+              KIND 38888 · <code>max_cap_lanas_on_split</code>
               {parameters?.split ? ` · Split ${parameters.split}` : ""}
             </p>
           </div>
@@ -198,18 +198,32 @@ export default function SettingsContent() {
             </p>
           )}
 
-          {!parameters?.freezeAccountAbove && (
+          {!parameters?.maxCapLanasOnSplit && (
             <p className="text-sm text-muted-foreground">
               The authority has not published a threshold, so no warning is shown. It will appear
               here by itself once it does.
             </p>
           )}
 
-          {parameters?.freezeRetailAccountAbove ? (
+          <div className="rounded-lg border bg-muted/40 p-3 space-y-1">
+            <p className="text-sm text-muted-foreground">Retail wallets, counted together</p>
+            <p className="text-2xl font-semibold font-mono">
+              {parameters?.freezeRetailAccountAbove
+                ? `${parameters.freezeRetailAccountAbove.toLocaleString()} LANA`
+                : "—"}
+            </p>
             <p className="text-xs text-muted-foreground">
-              Retail wallets have their own threshold of{" "}
-              {parameters.freezeRetailAccountAbove.toLocaleString()} LANA, which this warning does
-              not cover.
+              KIND 38888 · <code>freeze_lana_retail_account_above</code> · the sum of all of a
+              person's Retail wallets
+            </p>
+          </div>
+
+          {parameters?.freezeAccountAbove ? (
+            <p className="text-xs text-muted-foreground pt-1">
+              The authority also publishes <code>freeze_lana_account_above</code> —{" "}
+              {parameters.freezeAccountAbove.toLocaleString()} LANA, the balance at which an account
+              is frozen outright. That is a different, much lower figure and is not what these
+              warnings use.
             </p>
           ) : null}
         </CardContent>

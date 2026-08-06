@@ -352,11 +352,19 @@ export default function MainLayout() {
               </a>
             )}
 
-            {splitWarning.exceeded && (
+            {/* One signal for either limit — someone over the Retail limit but
+                fine on Wallet/Main would otherwise never see a prompt to look. */}
+            {splitWarning.anyExceeded && (
               <Link
                 to="/wallet"
                 className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-colors animate-pulse"
-                title={`Your total wallet balance (${splitWarning.totalBalance.toFixed(0)} LANA) exceeds the maximum allowed (${splitWarning.limit.toLocaleString()} LANA) — reduce before SPLIT to avoid account freeze`}
+                title={
+                  splitWarning.exceeded && splitWarning.retail.exceeded
+                    ? `Wallet + Main Wallet hold ${splitWarning.totalBalance.toFixed(0)} LANA (max ${splitWarning.limit.toLocaleString()}) and your Retail wallets hold ${splitWarning.retail.totalBalance.toFixed(0)} LANA (max ${splitWarning.retail.limit.toLocaleString()}) — reduce both before SPLIT`
+                    : splitWarning.retail.exceeded
+                      ? `Your Retail wallets hold ${splitWarning.retail.totalBalance.toFixed(0)} LANA in total, above the ${splitWarning.retail.limit.toLocaleString()} LANA Retail limit — reduce before SPLIT`
+                      : `Your total wallet balance (${splitWarning.totalBalance.toFixed(0)} LANA) exceeds the maximum allowed (${splitWarning.limit.toLocaleString()} LANA) — reduce before SPLIT to avoid account freeze`
+                }
               >
                 <span className="text-xs font-black text-red-500">CLEAR</span>
               </Link>

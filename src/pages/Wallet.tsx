@@ -254,6 +254,26 @@ export default function Wallet() {
         </Alert>
       )}
 
+      {/* Retail wallets carry their own, separate limit */}
+      {splitWarning.retail.exceeded && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Retail Wallet Limit Exceeded</AlertTitle>
+          <AlertDescription>
+            Your Retail wallets hold{' '}
+            <strong>
+              {splitWarning.retail.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LANA
+            </strong>{' '}
+            in total, above the {splitWarning.retail.limit.toLocaleString()} LANA allowed on Retail
+            wallets. This limit is counted across <strong>all</strong> your Retail wallets together,
+            separately from your Wallet and Main Wallet.
+            {splitWarning.splitApproaching
+              ? ' A SPLIT is approaching — bring the Retail total down now.'
+              : ' Bring the Retail total below the limit before the next SPLIT.'}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Total Balance Summary */}
       {!isLoading && walletsWithBalances.length > 0 && (
         <Card className="mb-6 bg-gradient-to-br from-primary/10 to-accent/10 border-primary/20">
@@ -370,8 +390,14 @@ export default function Wallet() {
                 </div>
               )}
 
-              {/* CLEAR overlay badge — wallet needs to be reduced before SPLIT */}
-              {splitWarning.exceeded && !wallet.freezeStatus && ['Wallet', 'Main Wallet', 'Lana.Discount'].includes(wallet.walletType) && (wallet.balance || 0) > 0 && (
+              {/* CLEAR overlay badge — this wallet counts toward a limit that is
+                  currently exceeded. Retail wallets answer to the Retail limit,
+                  everything else to the Split cap. */}
+              {!wallet.freezeStatus && (wallet.balance || 0) > 0 && (
+                wallet.walletType === 'Retail'
+                  ? splitWarning.retail.exceeded
+                  : splitWarning.exceeded && ['Wallet', 'Main Wallet', 'Lana.Discount'].includes(wallet.walletType)
+              ) && (
                 <div className="absolute top-0 right-0 z-20 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1 animate-pulse">
                   <AlertTriangle className="h-3 w-3" />
                   CLEAR
