@@ -17,6 +17,7 @@ import { useProcessFreezes } from "@/hooks/useProcessFreezes";
 import { useProcessFreezesBulk } from "@/hooks/useProcessFreezesBulk";
 import { freezeBlocksWriting } from "@/lib/ownFreeze";
 import { useLang } from "@/i18n/I18nContext";
+import { Button } from "@/components/ui/button";
 import { finalizeEvent, nip44 } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "sonner";
@@ -97,7 +98,7 @@ export default function Own() {
   }, []);
 
   // Fetch open processes
-  const { processes, isLoading: processesLoading } = useNostrOpenProcesses(session?.nostrHexId || null);
+  const { processes, isLoading: processesLoading, status: processesStatus, retry: retryProcesses } = useNostrOpenProcesses(session?.nostrHexId || null);
 
   // Deep link from the TO-DO page (and anywhere else): ?process=<eventId>
   // selects that process, &self=1 opens the detailed self view (Mnenja ·
@@ -878,9 +879,30 @@ export default function Own() {
         <div className="overflow-y-auto h-full max-w-2xl mx-auto px-4 md:px-0">
           <h2 className="text-xl font-semibold mb-4">Messages</h2>
           {conversations.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              No open processes found
-            </p>
+            // Three distinct states. "No open processes found" may only be said
+            // once a relay has genuinely answered — a failed read used to say it
+            // too, which is how an existing process looked like none.
+            processesStatus === 'unreachable' ? (
+              <div className="text-center py-8 space-y-3">
+                <p className="text-muted-foreground">
+                  {en
+                    ? "Couldn't reach the network, so your processes could not be loaded."
+                    : "Omrežja ni bilo mogoče doseči, zato procesov ni bilo mogoče naložiti."}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {en
+                    ? "This does not mean you have none — nothing could be checked."
+                    : "To ne pomeni, da jih nimaš — preveriti ni bilo mogoče ničesar."}
+                </p>
+                <Button variant="outline" size="sm" onClick={retryProcesses}>
+                  {en ? "Try again" : "Poskusi znova"}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center py-8">
+                {en ? "No open processes found" : "Ni odprtih procesov"}
+              </p>
+            )
           ) : (
             <ConversationList
               conversations={conversations}

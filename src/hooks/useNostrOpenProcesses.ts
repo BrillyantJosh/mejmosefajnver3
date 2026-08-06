@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SimplePool, Filter, Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { readFromRelays } from '@/lib/relayRead';
 
 export interface OpenProcess {
   id: string;
@@ -28,145 +29,218 @@ export interface OpenProcess {
   createdAt?: number;
 }
 
+
+/** Whether the app has actually heard from a relay yet. */
+export type OpenProcessStatus = 'loading' | 'ready' | 'unreachable';
+
+/** Growing per-attempt budgets: ~33s of genuine trying before it stops. */
+const ATTEMPT_BUDGETS_MS = [6_000, 10_000, 15_000];
+const BACKOFF_MS = [2_000, 4_000];
+/** Even if system parameters never arrive, resolve rather than spin forever. */
+const PARAMS_DEADLINE_MS = 12_000;
+
+/** Pure: relay events → the user's open processes. Unchanged from before. */
+function toOpenProcesses(events: Event[], userPubkey: string): OpenProcess[] {
+  return events
+    .map((event: Event) => {
+      const dTag = event.tags.find(t => t[0] === 'd')?.[1] || event.id;
+      const status = event.tags.find(t => t[0] === 'status')?.[1] || '';
+      const title = event.tags.find(t => t[0] === 'title')?.[1] || 'Untitled';
+      const phase = event.tags.find(t => t[0] === 'phase')?.[1] || 'opening';
+      const openedAt = parseInt(event.tags.find(t => t[0] === 'opened_at')?.[1] || '0');
+      const language = event.tags.find(t => t[0] === 'lang')?.[1] || 'en';
+      const topic = event.tags.find(t => t[0] === 'topic')?.[1];
+      
+      // Find process event reference (root event)
+      // Priority: 1) e-tag with 'process'/'root' marker, 2) d-tag (should equal KIND 87044 ID), 3) event.id
+      const eTagProcessId = event.tags.find(t => t[0] === 'e' && (t[3] === 'root' || t[2] === 'process'))?.[1];
+      const processEventId = eTagProcessId || dTag;
+      
+
+      // Extract roles - check both index 2 and 3 for compatibility
+      const getRole = (tag: string[]) => tag[3] || tag[2];
+      // Lowercase all pubkeys from tags — downstream assessment lookups
+      // key on lowercased hex, and role checks must be case-insensitive.
+      const initiator = (event.tags.find(t => t[0] === 'p' && (t[2] === 'initiator' || t[3] === 'initiator'))?.[1] || '').toLowerCase();
+      // ALL facilitators — a co-led process has more than one, and
+      // reading only the first would leave the co-facilitator with no
+      // role at all, so the .filter below would hide the process from
+      // the very person who leads it.
+      const facilitators = event.tags.filter(t => t[0] === 'p' && (t[2] === 'facilitator' || t[3] === 'facilitator')).map(t => (t[1] || '').toLowerCase()).filter(Boolean);
+      const facilitator = facilitators[0] || '';
+      const participants = event.tags.filter(t => t[0] === 'p' && (t[2] === 'participant' || t[3] === 'participant')).map(t => (t[1] || '').toLowerCase());
+      const guests = event.tags.filter(t => t[0] === 'p' && (t[2] === 'guest' || t[3] === 'guest')).map(t => (t[1] || '').toLowerCase());
+
+      // Check if user is in any role
+      const userPk = (userPubkey || '').toLowerCase();
+      let userRole: string | undefined;
+      if (initiator === userPk) userRole = 'initiator';
+      else if (facilitators.includes(userPk)) userRole = 'facilitator';
+      else if (participants.includes(userPk)) userRole = 'participant';
+      else if (guests.includes(userPk)) userRole = 'guest';
+
+      return {
+        id: dTag,
+        processEventId,
+        title,
+        status,
+        phase,
+        openedAt,
+        initiator,
+        facilitator,
+        facilitators,
+        participants,
+        guests,
+        language,
+        topic,
+        userRole,
+        handoverTo: event.tags.find(t => t[0] === 'handover_to')?.[1],
+        createdAt: event.created_at
+      };
+    })
+    .filter(process =>
+      process.status === 'open' &&
+      process.userRole !== undefined
+    )
+    // A facilitator handover (selfresponsible.life) leaves TWO same-d records:
+    // the outgoing facilitator's (carries handover_to) and the new one's
+    // (authoritative). Order them so the authoritative + newest wins the
+    // dedup below — otherwise which facilitator shows is relay-arrival luck.
+    .sort((a, b) => (a.handoverTo ? 1 : 0) - (b.handoverTo ? 1 : 0) || (b.createdAt || 0) - (a.createdAt || 0))
+    // Deduplicate by id - keep the preferred (first after the sort above) occurrence
+    .filter((process, index, self) =>
+      self.findIndex(p => p.id === process.id) === index
+    )
+    .sort((a, b) => b.openedAt - a.openedAt);
+}
+
+/**
+ * The user's OPEN processes (KIND 37044), read from the relays.
+ *
+ * The rule this hook exists to enforce: "I could not reach the relays" is NOT
+ * "you have no open processes". They used to be indistinguishable, for three
+ * separate reasons, each of which produced the reported false empty screen:
+ *
+ *  1. `parameters` starts as null, so the old effect hit its guard, set
+ *     isLoading=false BEFORE any query began, and the page rendered
+ *     "No open processes found" as the default view of every cold load.
+ *  2. `pool.querySync` cannot fail — it resolves `[]` on a dead network, so the
+ *     old `catch` was dead code and the empty result flowed down the happy path.
+ *  3. In `subscribeMany`, a relay that fails to CONNECT is counted as though it
+ *     had sent EOSE, so a total outage completed instantly and looked like a
+ *     successful empty read.
+ *
+ * Now: it waits for parameters, reads each relay honestly (see lib/relayRead),
+ * retries with growing budgets, and accumulates events across attempts — so a
+ * failed or partial refresh can only ever ADD, never blank what is on screen.
+ * `status` is only 'ready' once a relay has genuinely answered; nothing else
+ * licenses the empty state.
+ */
 export const useNostrOpenProcesses = (userPubkey: string | null) => {
   const [processes, setProcesses] = useState<OpenProcess[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [status, setStatus] = useState<OpenProcessStatus>('loading');
+  const [attempt, setAttempt] = useState(0);
   const { parameters } = useSystemParameters();
 
+  // By VALUE, so the SSE heartbeat re-minting parameters.relays with a new
+  // array identity cannot restart a read that is already in flight.
+  const relayKey = (parameters?.relays || []).join(',');
+  const relays = useMemo(() => (relayKey ? relayKey.split(',') : []), [relayKey]);
+
+  /** Union of everything any relay has ever given us this mount. */
+  const seenRef = useRef<Map<string, Event>>(new Map());
+
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+
   useEffect(() => {
-    if (!userPubkey || !parameters?.relays) {
-      setIsLoading(false);
-      return;
+    if (!userPubkey) { setStatus('ready'); return; }
+
+    const cancelled = { value: false };
+    let paramsTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Parameters have not arrived yet: stay in 'loading' — never claim the user
+    // has nothing before we are even able to ask.
+    if (relays.length === 0) {
+      setStatus('loading');
+      paramsTimer = setTimeout(() => {
+        if (!cancelled.value) setStatus('unreachable');
+      }, PARAMS_DEADLINE_MS);
+      return () => { cancelled.value = true; if (paramsTimer) clearTimeout(paramsTimer); };
     }
 
-    const fetchProcesses = async () => {
-      const pool = new SimplePool();
-      
-      try {
-        console.log('🔍 Fetching KIND 37044 (open processes)...', {
-          userPubkey: userPubkey.slice(0, 16) + '...',
-          relays: parameters.relays
-        });
-        
-        const filter: Filter = {
-          kinds: [37044],
-          limit: 100
-        };
+    const pool = new SimplePool();
+    setStatus((s) => (seenRef.current.size > 0 ? s : 'loading'));
 
-        const events = await pool.querySync(parameters.relays, filter);
-        
-        console.log(`📦 Found ${events.length} KIND 37044 events`);
-        
-        if (events.length === 0) {
-          console.warn('⚠️ No KIND 37044 events found on any relay. User may not have any open processes.');
-        }
-
-        // Process and filter events
-        const processedEvents: OpenProcess[] = events
-          .map((event: Event) => {
-            const dTag = event.tags.find(t => t[0] === 'd')?.[1] || event.id;
-            const status = event.tags.find(t => t[0] === 'status')?.[1] || '';
-            const title = event.tags.find(t => t[0] === 'title')?.[1] || 'Untitled';
-            const phase = event.tags.find(t => t[0] === 'phase')?.[1] || 'opening';
-            const openedAt = parseInt(event.tags.find(t => t[0] === 'opened_at')?.[1] || '0');
-            const language = event.tags.find(t => t[0] === 'lang')?.[1] || 'en';
-            const topic = event.tags.find(t => t[0] === 'topic')?.[1];
-            
-            // Find process event reference (root event)
-            // Priority: 1) e-tag with 'process'/'root' marker, 2) d-tag (should equal KIND 87044 ID), 3) event.id
-            const eTagProcessId = event.tags.find(t => t[0] === 'e' && (t[3] === 'root' || t[2] === 'process'))?.[1];
-            const processEventId = eTagProcessId || dTag;
-            
-            console.log('📋 Process event:', {
-              eventId: event.id.slice(0, 16),
-              dTag: dTag.slice(0, 16),
-              eTagProcessId: eTagProcessId ? eTagProcessId.slice(0, 16) : 'NONE',
-              finalProcessEventId: processEventId.slice(0, 16),
-              title: title || 'Untitled',
-              status
-            });
-
-            // Extract roles - check both index 2 and 3 for compatibility
-            const getRole = (tag: string[]) => tag[3] || tag[2];
-            // Lowercase all pubkeys from tags — downstream assessment lookups
-            // key on lowercased hex, and role checks must be case-insensitive.
-            const initiator = (event.tags.find(t => t[0] === 'p' && (t[2] === 'initiator' || t[3] === 'initiator'))?.[1] || '').toLowerCase();
-            // ALL facilitators — a co-led process has more than one, and
-            // reading only the first would leave the co-facilitator with no
-            // role at all, so the .filter below would hide the process from
-            // the very person who leads it.
-            const facilitators = event.tags.filter(t => t[0] === 'p' && (t[2] === 'facilitator' || t[3] === 'facilitator')).map(t => (t[1] || '').toLowerCase()).filter(Boolean);
-            const facilitator = facilitators[0] || '';
-            const participants = event.tags.filter(t => t[0] === 'p' && (t[2] === 'participant' || t[3] === 'participant')).map(t => (t[1] || '').toLowerCase());
-            const guests = event.tags.filter(t => t[0] === 'p' && (t[2] === 'guest' || t[3] === 'guest')).map(t => (t[1] || '').toLowerCase());
-
-            // Check if user is in any role
-            const userPk = (userPubkey || '').toLowerCase();
-            let userRole: string | undefined;
-            if (initiator === userPk) userRole = 'initiator';
-            else if (facilitators.includes(userPk)) userRole = 'facilitator';
-            else if (participants.includes(userPk)) userRole = 'participant';
-            else if (guests.includes(userPk)) userRole = 'guest';
-
-            return {
-              id: dTag,
-              processEventId,
-              title,
-              status,
-              phase,
-              openedAt,
-              initiator,
-              facilitator,
-              facilitators,
-              participants,
-              guests,
-              language,
-              topic,
-              userRole,
-              handoverTo: event.tags.find(t => t[0] === 'handover_to')?.[1],
-              createdAt: event.created_at
-            };
-          })
-          .filter(process =>
-            process.status === 'open' &&
-            process.userRole !== undefined
-          )
-          // A facilitator handover (selfresponsible.life) leaves TWO same-d records:
-          // the outgoing facilitator's (carries handover_to) and the new one's
-          // (authoritative). Order them so the authoritative + newest wins the
-          // dedup below — otherwise which facilitator shows is relay-arrival luck.
-          .sort((a, b) => (a.handoverTo ? 1 : 0) - (b.handoverTo ? 1 : 0) || (b.createdAt || 0) - (a.createdAt || 0))
-          // Deduplicate by id - keep the preferred (first after the sort above) occurrence
-          .filter((process, index, self) =>
-            self.findIndex(p => p.id === process.id) === index
-          )
-          .sort((a, b) => b.openedAt - a.openedAt);
-
-        console.log(`✅ Filtered to ${processedEvents.length} open processes where user is involved`);
-        
-        if (processedEvents.length === 0 && events.length > 0) {
-          console.warn('⚠️ Found KIND 37044 events but none where user has a role:', {
-            totalEvents: events.length,
-            userPubkey: userPubkey.slice(0, 16),
-            sampleEvent: events[0] ? {
-              id: events[0].id.slice(0, 16),
-              tags: events[0].tags.filter(t => t[0] === 'p')
-            } : null
-          });
-        }
-        
-        setProcesses(processedEvents);
-        
-      } catch (error) {
-        console.error('Error fetching open processes:', error);
-      } finally {
-        setIsLoading(false);
-        pool.close(parameters.relays);
+    const absorb = (events: Event[]) => {
+      let added = false;
+      for (const e of events) {
+        if (!seenRef.current.has(e.id)) { seenRef.current.set(e.id, e); added = true; }
+      }
+      if (added && !cancelled.value) {
+        setProcesses(toOpenProcesses([...seenRef.current.values()], userPubkey));
       }
     };
 
-    fetchProcesses();
-  }, [userPubkey, parameters?.relays]);
+    const run = async () => {
+      const filter: Filter = { kinds: [37044], limit: 500 };
+      let heardFromAnyone = false;
 
-  return { processes, isLoading };
+      for (let i = 0; i < ATTEMPT_BUDGETS_MS.length && !cancelled.value; i++) {
+        const result = await readFromRelays(pool, relays, filter, {
+          budgetMs: ATTEMPT_BUDGETS_MS[i],
+          cancelled,
+          // Paint the fast relay's answer without waiting for the slow one.
+          onRelayDone: (partial) => absorb(partial.events),
+        });
+        if (cancelled.value) return;
+        absorb(result.events);
+
+        if (result.answered.length > 0) {
+          heardFromAnyone = true;
+          // Every relay spoke — this is a complete read and the only thing that
+          // may license "you have none".
+          if (result.failed.length === 0) break;
+        }
+        if (i < BACKOFF_MS.length) {
+          await new Promise((r) => setTimeout(r, BACKOFF_MS[i]));
+        }
+      }
+
+      if (cancelled.value) return;
+      // Anything already on screen counts: a stale-but-real list beats claiming
+      // the network is down.
+      setStatus(heardFromAnyone || seenRef.current.size > 0 ? 'ready' : 'unreachable');
+    };
+
+    run();
+
+    return () => {
+      cancelled.value = true;
+      if (paramsTimer) clearTimeout(paramsTimer);
+      try { pool.close(relays); } catch { /* already gone */ }
+    };
+  }, [userPubkey, relayKey, relays, attempt]);
+
+  // Re-check when the device comes back online or the tab is looked at again,
+  // but only while we have nothing to show — never disturb a good list.
+  useEffect(() => {
+    const wake = () => {
+      if (document.visibilityState === 'hidden') return;
+      if (seenRef.current.size === 0) retry();
+    };
+    window.addEventListener('online', wake);
+    document.addEventListener('visibilitychange', wake);
+    return () => {
+      window.removeEventListener('online', wake);
+      document.removeEventListener('visibilitychange', wake);
+    };
+  }, [retry]);
+
+  return {
+    processes,
+    /** Kept for existing callers: true only while nothing can be shown yet. */
+    isLoading: status === 'loading' && processes.length === 0,
+    status,
+    retry,
+  };
 };
