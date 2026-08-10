@@ -3442,24 +3442,23 @@ router.post('/check-own-active', async (req: Request, res: Response) => {
 
 // =============================================
 // UNIFIED HEADER WARNINGS (ALL relay checks server-side)
-// Replaces browser SimplePool for OWN, SELL, Lana8Wonder
+// Replaces browser SimplePool for OWN and Lana8Wonder
 // =============================================
 router.post('/check-header-warnings', async (req: Request, res: Response) => {
   try {
     const { userPubkey } = req.body;
     if (!userPubkey) {
-      return res.json({ success: true, ownActive: false, sellCount: 0, lana8WonderEvents: [] });
+      return res.json({ success: true, ownActive: false, lana8WonderEvents: [] });
     }
 
     const relays = getRelaysFromDb();
     if (relays.length === 0) {
-      return res.json({ success: true, ownActive: false, sellCount: 0, lana8WonderEvents: [] });
+      return res.json({ success: true, ownActive: false, lana8WonderEvents: [] });
     }
 
     // Step 1: Run parallel queries that don't depend on each other
-    const [ownEvents, sellEventsRaw, lana8Events] = await Promise.all([
+    const [ownEvents, lana8Events] = await Promise.all([
       queryEventsFromRelays(relays, { kinds: [37044], limit: 100 }, 12000),
-      queryEventsFromRelays(relays, { kinds: [91991], authors: [userPubkey] }, 12000),
       queryEventsFromRelays(relays, { kinds: [88888], '#p': [userPubkey], limit: 50 }, 12000),
     ]);
 
@@ -3474,55 +3473,6 @@ router.post('/check-header-warnings', async (req: Request, res: Response) => {
       );
     });
 
-    // --- SELL: count SELLs that have BUY requests but NO CONFIRM ---
-    // Per P2P Exchange spec (KIND 91991→91992→91993):
-    //   SELL = open offer (no action needed until someone buys)
-    //   BUY = someone wants to buy (references SELL via 'e' tag)
-    //   CONFIRM = seller confirms a BUY (references SELL via 'sell' tag)
-    // Badge shows ONLY when: a SELL has at least one BUY but zero CONFIRMs
-    // Once ANY BUY is confirmed for a SELL, the SELL is complete (other BUYs are irrelevant)
-    // An open SELL with zero BUYs is normal and should NOT trigger the badge
-    const userSellEvents = sellEventsRaw.filter((e: any) => e.pubkey === userPubkey);
-
-    let sellCount = 0;
-    if (userSellEvents.length > 0) {
-      const sellEventIds = userSellEvents.map((e: any) => e.id);
-
-      // Fetch BUY events (91992) and CONFIRM events (91993) referencing user's SELLs
-      const [buyEvents, confirmEvents] = await Promise.all([
-        queryEventsFromRelays(relays, { kinds: [91992], '#e': sellEventIds }, 12000),
-        queryEventsFromRelays(relays, { kinds: [91993], '#e': sellEventIds }, 12000),
-      ]);
-
-      // Build set of SELL IDs that have at least one BUY
-      const sellsWithBuys = new Set<string>();
-      buyEvents.forEach((buyEvent: any) => {
-        const sellRef = buyEvent.tags?.find((t: string[]) => t[0] === 'e')?.[1];
-        if (sellRef) sellsWithBuys.add(sellRef);
-      });
-
-      // Build set of SELL IDs that have at least one CONFIRM
-      const confirmedSellIds = new Set<string>();
-      confirmEvents.forEach((event: any) => {
-        // Check ["sell", "<sell_event_id>"] tag
-        const sellTag = event.tags?.find((t: string[]) => t[0] === 'sell')?.[1];
-        if (sellTag) confirmedSellIds.add(sellTag);
-        // Also check ["e", id, "", "sell"] tag format
-        event.tags?.forEach((tag: string[]) => {
-          if (tag[0] === 'e' && tag[3] === 'sell') confirmedSellIds.add(tag[1]);
-        });
-      });
-
-      // Count SELLs that have BUYs but NO CONFIRMs
-      sellCount = userSellEvents.filter((e: any) =>
-        sellsWithBuys.has(e.id) && !confirmedSellIds.has(e.id)
-      ).length;
-
-      if (sellCount > 0) {
-        console.log(`[SELL badge] User ${userPubkey.slice(0, 16)}... has ${sellCount} unconfirmed SELLs with pending BUY requests`);
-      }
-    }
-
     // --- Lana8Wonder: return events for client-side cash-out processing ---
     // (client needs exchange rates + wallet balances which it already has)
     const lana8WonderEvents = lana8Events.map((e: any) => ({
@@ -3532,12 +3482,12 @@ router.post('/check-header-warnings', async (req: Request, res: Response) => {
       created_at: e.created_at,
     }));
 
-    console.log(`[check-header-warnings] User ${userPubkey.slice(0, 16)}... own=${ownActive}, sell=${sellCount}, lana8wonder=${lana8WonderEvents.length}`);
+    console.log(`[check-header-warnings] User ${userPubkey.slice(0, 16)}... own=${ownActive}, lana8wonder=${lana8WonderEvents.length}`);
 
-    res.json({ success: true, ownActive, sellCount, lana8WonderEvents });
+    res.json({ success: true, ownActive, lana8WonderEvents });
   } catch (error) {
     console.error('Error checking header warnings:', error);
-    res.json({ success: false, error: 'Internal error', ownActive: false, sellCount: 0, lana8WonderEvents: [] });
+    res.json({ success: false, error: 'Internal error', ownActive: false, lana8WonderEvents: [] });
   }
 });
 

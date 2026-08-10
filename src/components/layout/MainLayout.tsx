@@ -340,18 +340,6 @@ export default function MainLayout() {
               </Link>
             )}
 
-            {relayWarnings.sellCount > 0 && (
-              <a
-                href="https://www.selllana.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-colors animate-pulse"
-                title="You got paid send Lanas"
-              >
-                <span className="text-xs font-black text-red-500">SELL</span>
-              </a>
-            )}
-
             {/* One signal for either limit — someone over the Retail limit but
                 fine on Wallet/Main would otherwise never see a prompt to look. */}
             {splitWarning.anyExceeded && (

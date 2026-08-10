@@ -7,7 +7,6 @@ const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 interface HeaderWarnings {
   ownActive: boolean;
-  sellCount: number;
   cashOutCount: number;
 }
 
@@ -21,7 +20,6 @@ export function useHeaderRelayWarnings() {
   const { parameters } = useSystemParameters();
   const [warnings, setWarnings] = useState<HeaderWarnings>({
     ownActive: false,
-    sellCount: 0,
     cashOutCount: 0,
   });
   const [loading, setLoading] = useState(true);
@@ -51,7 +49,6 @@ export function useHeaderRelayWarnings() {
         if (cancelled || !data?.success) return;
 
         const ownActive = data.ownActive || false;
-        const sellCount = data.sellCount || 0;
 
         // --- Lana8Wonder cash-out: process server-fetched events client-side ---
         // (needs exchange rates + wallet balances which are available here)
@@ -111,8 +108,8 @@ export function useHeaderRelayWarnings() {
         }
 
         if (!cancelled) {
-          console.log('[HeaderWarnings] Results:', { ownActive, sellCount, cashOutCount });
-          setWarnings({ ownActive, sellCount, cashOutCount });
+          console.log('[HeaderWarnings] Results:', { ownActive, cashOutCount });
+          setWarnings({ ownActive, cashOutCount });
           setLoading(false);
         }
       } catch (err) {
