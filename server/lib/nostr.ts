@@ -1096,14 +1096,24 @@ export async function indexLanacrowdFromRelays(db: any): Promise<void> {
         const title = getTag('title');
         if (!title) continue; // skip malformed events
 
-        const ownerTag = evt.tags?.find((t: string[]) => t[0] === 'p' && t[2] === 'owner');
+        // The 'owner' marker sits at tag index 2 in this app's own events
+        // (['p', pk, 'owner']) but at index 3 in events published from
+        // being3 (['p', pk, '', 'owner']). Accept either, then fall back to
+        // the event author — for self-signed projects author === owner.
+        const ownerTag = evt.tags?.find((t: string[]) => t[0] === 'p' && (t[2] === 'owner' || t[3] === 'owner'));
         const ownerPubkey = ownerTag?.[1] || evt.pubkey;
+        // The recipient wallet is a content field on the event. This line was
+        // missing (the sibling indexer defines it) — its absence threw a
+        // ReferenceError per project, so this relay indexer silently indexed
+        // NOTHING, and projects published straight to relays (e.g. from
+        // being3, which never calls the upsert endpoint) never reached SQLite.
+        const wallet = getTag('wallet') || '';
         const imageTags = getAllTags('img');
         const coverImage = imageTags.find((t: string[]) => t[2] === 'cover')?.[1] || null;
         const galleryImages = imageTags.filter((t: string[]) => t[2] === 'gallery').map((t: string[]) => t[1]);
         const videos = getAllTags('video').map((t: string[]) => t[1]);
         const files = getAllTags('file').map((t: string[]) => t[1]);
-        const participants = getAllTags('p').filter((t: string[]) => t[2] === 'participant').map((t: string[]) => t[1]);
+        const participants = getAllTags('p').filter((t: string[]) => (t[2] === 'participant' || t[3] === 'participant')).map((t: string[]) => t[1]);
 
         // Fetch existing admin overrides to preserve them
         const existing = db.prepare('SELECT is_hidden, is_approved, is_funded, is_completed, completion_comment FROM lanacrowd_projects WHERE id = ?').get(evt.dTag) as any;

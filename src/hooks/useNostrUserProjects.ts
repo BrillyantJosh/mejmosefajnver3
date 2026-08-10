@@ -252,9 +252,11 @@ function parseProjectWithDonations(
 
     if (!title || !shortDesc || !fiatGoal || !currency || !wallet) return null;
 
-    const ownerTag = event.tags.find(t => t[0] === 'p' && t[2] === 'owner');
+    // 'owner' marker is at index 2 in this app's events but index 3 in
+    // being3-published events (['p', pk, '', 'owner']). Accept either.
+    const ownerTag = event.tags.find(t => t[0] === 'p' && (t[2] === 'owner' || t[3] === 'owner'));
     const ownerPubkey = ownerTag?.[1] || event.pubkey;
-    const participantTags = getAllTags('p').filter(t => t[2] === 'participant');
+    const participantTags = getAllTags('p').filter(t => t[2] === 'participant' || t[3] === 'participant');
     const participants = participantTags.map(t => t[1]);
 
     const isBlocked = blockedProjects.has(dTag);

@@ -57,12 +57,13 @@ const parseProjectEvent = (event: Event): ProjectData | null => {
       return null;
     }
 
-    // Get owner pubkey
-    const ownerTag = event.tags.find(t => t[0] === 'p' && t[2] === 'owner');
+    // Get owner pubkey — 'owner' marker is at index 2 in this app's events
+    // but index 3 in being3-published events (['p', pk, '', 'owner']).
+    const ownerTag = event.tags.find(t => t[0] === 'p' && (t[2] === 'owner' || t[3] === 'owner'));
     const ownerPubkey = ownerTag?.[1] || event.pubkey;
 
     // Get participants
-    const participantTags = getAllTags('p').filter(t => t[2] === 'participant');
+    const participantTags = getAllTags('p').filter(t => t[2] === 'participant' || t[3] === 'participant');
     const participants = participantTags.map(t => t[1]);
 
     // Get images
