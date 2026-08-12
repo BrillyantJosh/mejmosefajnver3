@@ -54,10 +54,20 @@ const confirmation = (tag: Record<string, string> = {}, over: Partial<Confirmati
 };
 
 console.log('— d-tag → subscription month —');
-check('sub:lana → month', billingMonthOfDTag('sub:lana:1780016130869:c895854') === '2026-05', billingMonthOfDTag('sub:lana:1780016130869:c895854'));
-check('pay:lana → month', billingMonthOfDTag('pay:lana:1763827817626:b1f4a8a9') === '2025-11', billingMonthOfDTag('pay:lana:1763827817626:b1f4a8a9'));
+check('legacy sub:lana:<ms> → month', billingMonthOfDTag('sub:lana:1780016130869:c895854') === '2026-05', billingMonthOfDTag('sub:lana:1780016130869:c895854'));
+check('legacy pay:lana:<ms> → month', billingMonthOfDTag('pay:lana:1763827817626:b1f4a8a9') === '2025-11', billingMonthOfDTag('pay:lana:1763827817626:b1f4a8a9'));
+// The deterministic form the generator emits now: sub:lana:<YYYY-MM>:<payer8>:<service12>
+check('deterministic sub:lana:<YYYY-MM> → month', billingMonthOfDTag('sub:lana:2026-08:9b1267aa:a1b2c3d4e5f6') === '2026-08', billingMonthOfDTag('sub:lana:2026-08:9b1267aa:a1b2c3d4e5f6'));
 check('registrar d-tag → unknown', billingMonthOfDTag('registrar:subscription:9b1267aa:2026') === '');
 check('empty → unknown', billingMonthOfDTag('') === '');
+{
+  // A legacy proposal and a deterministic one for the same month must be
+  // recognised as the same obligation — that is the migration month.
+  const legacy = obligation({ proposalDTag: 'sub:lana:1786234692018:9b1267aa', proposalCreatedAt: 0 }); // 2026-08
+  const deterministic = confirmation({ proposal: 'sub:lana:2026-08:9b1267aa:a1b2c3d4e5f6' });
+  check('legacy and deterministic d-tags meet in the same month',
+    findDuplicateConfirmations([legacy], [deterministic]).length === 1);
+}
 
 console.log('— real double payment: same proposal, two transactions 31 min apart (c895854d) —');
 {

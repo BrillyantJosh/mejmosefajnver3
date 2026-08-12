@@ -61,13 +61,21 @@ export function billingMonthOf(epochSeconds: number): string {
 }
 
 /**
- * The subscription month a proposal d-tag belongs to, read from the epoch-ms
- * both generators embed: `sub:lana:<ms>:<payer8>` (lana-subscriptions) and
- * `pay:lana:<ms>:<payer8>` (the older self-responsibility one). Returns "" for
- * any other shape (e.g. `registrar:subscription:…`), which makes Rule B stand
- * down for it — Rule A still covers those exactly.
+ * The subscription month a proposal d-tag belongs to. Two shapes:
+ *
+ *  - `sub:lana:<YYYY-MM>:<payer8>:<service12>` — current lana-subscriptions,
+ *    where the month is stated outright;
+ *  - `sub:lana:<ms>:<payer8>` / `pay:lana:<ms>:<payer8>` — the older
+ *    timestamp form (lana-subscriptions before the deterministic d-tag, and
+ *    the self-responsibility generator), where it is the epoch-ms of the run.
+ *
+ * Returns "" for anything else (e.g. `registrar:subscription:…`), which makes
+ * Rule B stand down for it — Rule A still covers those exactly.
  */
 export function billingMonthOfDTag(dTag: string): string {
+  const stated = /^(?:sub|pay):lana:(\d{4}-\d{2}):/.exec(dTag || '')?.[1];
+  if (stated) return stated;
+
   const ms = /^(?:sub|pay):lana:(\d{12,14}):/.exec(dTag || '')?.[1];
   if (!ms) return '';
   const seconds = Math.floor(Number(ms) / 1000);
