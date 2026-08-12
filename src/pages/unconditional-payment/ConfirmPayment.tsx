@@ -12,6 +12,8 @@ import { convertWifToIds } from "@/lib/crypto";
 import { formatLana } from "@/lib/currencyConversion";
 import { supabase } from "@/integrations/supabase/client";
 import { SimplePool, finalizeEvent } from 'nostr-tools';
+import { readFromRelays } from "@/lib/relayRead";
+import { findDuplicateConfirmations } from "@/lib/unconditionalPaymentGuard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
@@ -24,6 +26,10 @@ interface PaymentRecipient {
   lanaAmount: number;
   lanoshiAmount: number;
   service: string;
+  /** The 90900's billing_day tag ('' when absent) — copied onto the 90901 for audits. */
+  billingDay?: string;
+  /** created_at of the 90900 — mint time of this proposal set; drives the duplicate guard. */
+  proposalCreatedAt?: number;
 }
 
 interface RecipientSummaryWithPubkey {
@@ -148,6 +154,75 @@ export default function ConfirmPayment() {
     try {
       console.log('🚀 Processing unconditional payment...');
 
+      // ── Duplicate guard — runs BEFORE anything is broadcast ─────────────
+      // A fresh, verified 90901 read for this payer, matched by the shared
+      // matcher (src/lib/unconditionalPaymentGuard.ts): exact proposal
+      // reference, or same service+wallet paid since this proposal set was
+      // minted (the generator re-mints settled obligations under new d-tags).
+      // Fails CLOSED: if no relay answers, we cannot verify — so we do not pay.
+      if (relays.length === 0) {
+        throw new Error('Could not verify previous payments — relay list unavailable. Please try again.');
+      }
+
+      const guardPool = new SimplePool();
+      let priorConfirmations;
+      try {
+        priorConfirmations = await readFromRelays(
+          guardPool,
+          relays,
+          { kinds: [90901], authors: [session.nostrHexId], limit: 500 },
+          { budgetMs: 8000 },
+        );
+      } finally {
+        try { guardPool.close(relays); } catch { /* sockets already gone */ }
+      }
+
+      if (priorConfirmations.answered.length === 0) {
+        throw new Error('Could not verify previous payments — no relay answered. Please try again.');
+      }
+
+      const alreadyPaid = findDuplicateConfirmations(
+        paymentData.selectedProposals.map((item) => ({
+          proposalId: item.proposalId,
+          proposalDTag: item.proposalDTag,
+          recipientWallet: item.recipientWallet,
+          service: item.service,
+          // Snapshots written before this change carry no mint time; 0 makes
+          // Rule B match ANY prior confirmation for the service+wallet —
+          // the fail-closed direction for stale data.
+          proposalCreatedAt: item.proposalCreatedAt || 0,
+        })),
+        priorConfirmations.events,
+      );
+
+      if (alreadyPaid.length > 0) {
+        // Abort the WHOLE batch — nothing is broadcast on this attempt. The
+        // matched items are removed from the pending set; what remains can be
+        // re-confirmed by the user with a fresh click.
+        const remaining = paymentData.selectedProposals.filter(
+          (p) => !alreadyPaid.some((d) => d.obligation.proposalId === p.proposalId),
+        );
+        for (const d of alreadyPaid) {
+          const txNote = d.txId ? ` (tx ${d.txId.substring(0, 12)}…)` : '';
+          toast.error(`"${d.obligation.service}" was already paid${txNote} — removed from this batch.`, { duration: 10000 });
+          console.warn(`⛔ Duplicate blocked [${d.via}]: ${d.obligation.service} → ${d.obligation.recipientWallet}, existing tx ${d.txId || 'unknown'}`);
+        }
+        if (remaining.length === 0) {
+          sessionStorage.removeItem('pendingUnconditionalPayment');
+          navigate('/unconditional-payment');
+        } else {
+          const updated = {
+            ...paymentData,
+            selectedProposals: remaining,
+            totalLana: remaining.reduce((sum, p) => sum + p.lanaAmount, 0),
+          };
+          sessionStorage.setItem('pendingUnconditionalPayment', JSON.stringify(updated));
+          setPaymentData(updated);
+        }
+        return;
+      }
+      // ── End duplicate guard ──────────────────────────────────────────────
+
       // Fetch fee wallet for service fee (10%)
       const { data: feeWalletSetting } = await supabase
         .from('app_settings')
@@ -197,13 +272,23 @@ export default function ConfirmPayment() {
         electrum_servers: electrum_servers
       });
 
-      // Call the edge function
+      // Call the edge function. payer_pubkey + proposals let the SERVER run
+      // the same duplicate guard as the chokepoint before broadcasting —
+      // protection against stale bundles and direct API callers.
       const { data, error } = await supabase.functions.invoke('send-unconditional-payment', {
         body: {
           sender_address: paymentData.senderWallet,
           recipients: recipients,
           private_key: privateKey,
-          electrum_servers: electrum_servers
+          electrum_servers: electrum_servers,
+          payer_pubkey: session.nostrHexId,
+          proposals: paymentData.selectedProposals.map((p) => ({
+            proposalId: p.proposalId,
+            proposalDTag: p.proposalDTag,
+            recipientWallet: p.recipientWallet,
+            service: p.service,
+            proposalCreatedAt: p.proposalCreatedAt || 0
+          }))
         }
       });
 
@@ -247,6 +332,12 @@ export default function ConfirmPayment() {
             ['e', proposal.proposalId, '', 'proposal'],
             ['type', 'unconditional_payment_confirmation']
           ];
+
+          // Obligation cycle identity — lets future duplicate guards match this
+          // confirmation even against a REGENERATED proposal set (new d-tag).
+          if (proposal.billingDay) {
+            tags.push(['billing_day', proposal.billingDay]);
+          }
 
           // Only add p-tag if pubkey is valid 64-char hex (NIP-01 requirement)
           if (proposal.recipientPubkey && isValidHexPubkey(proposal.recipientPubkey)) {

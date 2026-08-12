@@ -26,7 +26,7 @@ interface DonationSelection {
 export default function Pending() {
   const { session } = useAuth();
   const navigate = useNavigate();
-  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(session?.nostrHexId);
+  const { proposals, isLoading: proposalsLoading, paidStateUnknown } = useNostrDonationProposals(session?.nostrHexId);
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(session?.nostrHexId || null);
 
   const [selectedProposals, setSelectedProposals] = useState<Set<string>>(new Set());
@@ -100,11 +100,18 @@ export default function Pending() {
   }, []);
 
   const handleProceedToPayment = () => {
+    // Fail closed: if the 90901 confirmation read could not be verified, an
+    // "unpaid" proposal here might already be paid — never let it proceed.
+    if (paidStateUnknown) {
+      toast.error("Payment status could not be verified — please try again in a moment");
+      return;
+    }
+
     if (selectedProposals.size === 0) {
       toast.error("Please select at least one payment");
       return;
     }
-    
+
     if (!selectedWallet) {
       toast.error("Please select a wallet to pay from");
       return;
@@ -136,7 +143,12 @@ export default function Pending() {
           recipientPubkey: proposal!.recipientPubkey,
           lanaAmount,
           lanoshiAmount: lanaToLanoshi(lanaAmount),
-          service: proposal!.service
+          service: proposal!.service,
+          // Copied onto the 90901 for audits (day-of-month of the generator run).
+          billingDay: proposal!.billingDay || '',
+          // Mint time of this proposal set — the confirm page's duplicate
+          // guard blocks when a 90901 for the same service+wallet postdates it.
+          proposalCreatedAt: proposal!.createdAt
         };
       }),
       senderWallet: selectedWallet,
@@ -163,18 +175,45 @@ export default function Pending() {
     );
   }
 
+  // "Paid-state unknown" blocks everything below: an unverified read must
+  // never license a payment, and an unverified EMPTY list must not claim
+  // "nothing pending" either.
+  const paidStateBanner = paidStateUnknown ? (
+    <Alert variant="destructive">
+      <AlertTriangle className="h-4 w-4" />
+      <AlertDescription>
+        <p className="font-medium mb-1">Payment status could not be verified</p>
+        <p>
+          The relays holding payment confirmations did not answer, so a proposal shown
+          as unpaid might already be paid. To protect you from paying twice, selection
+          is disabled until the check succeeds. It retries automatically — please wait
+          a moment.
+        </p>
+      </AlertDescription>
+    </Alert>
+  ) : null;
+
   if (pendingProposals.length === 0) {
     return (
-      <Card>
-        <CardContent className="p-12 text-center">
-          <p className="text-muted-foreground">No pending payment proposals at the moment.</p>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        {paidStateBanner}
+        <Card>
+          <CardContent className="p-12 text-center">
+            <p className="text-muted-foreground">
+              {paidStateUnknown
+                ? "Proposals cannot be shown reliably right now."
+                : "No pending payment proposals at the moment."}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {paidStateBanner}
+
       {/* Wallet Selection */}
       <Card>
         <CardHeader>
@@ -234,6 +273,7 @@ export default function Pending() {
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={() => handleToggleProposal(proposal.eventId)}
+                    disabled={paidStateUnknown}
                     className="mt-1 flex-shrink-0"
                   />
 
@@ -420,7 +460,7 @@ export default function Pending() {
                 </div>
                 <Button
                   onClick={handleProceedToPayment}
-                  disabled={!selectedWallet || remainingBalance < 0}
+                  disabled={!selectedWallet || remainingBalance < 0 || paidStateUnknown}
                   size="lg"
                   className="w-full sm:w-auto"
                 >

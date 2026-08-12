@@ -14,6 +14,8 @@ export interface DonationProposal {
   lanoshiAmount: string;
   service: string;
   type: string;
+  /** From the 90900's billing_day tag — the obligation's cycle identity. */
+  billingDay?: string;
   ref?: string;
   expires?: number;
   url?: string;
@@ -22,6 +24,8 @@ export interface DonationProposal {
   eventId: string;
   isPaid?: boolean;
   paymentTxId?: string;
+  /** Set when isPaid was inherited from an older regenerated proposal set. */
+  paidViaDTag?: string;
 }
 
 export interface UseNostrDonationProposalsOptions {
@@ -37,6 +41,8 @@ export const useNostrDonationProposals = (
   const { poll = true, pollIntervalMs = 10000, enabled = true } = options;
   const [proposals, setProposals] = useState<DonationProposal[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // Fail-closed default: paid-state is unknown until a verified read says otherwise.
+  const [paidStateUnknown, setPaidStateUnknown] = useState(true);
   const hasLoadedOnceRef = useRef(false);
   const fetchStartedRef = useRef(false);
 
@@ -59,6 +65,15 @@ export const useNostrDonationProposals = (
 
       if (error) throw error;
 
+      // The server distinguishes "relays said empty" from "relays did not
+      // answer": paidStateUnknown means the 90901 confirmation read was NOT
+      // verified, so isPaid on these proposals cannot be trusted.
+      const unknown = !!data?.paidStateUnknown;
+      setPaidStateUnknown(unknown);
+      if (unknown) {
+        console.warn(`⚠ Paid-state unknown: ${data?.paidStateUnknownReason || 'relays unreachable'}`);
+      }
+
       if (data?.proposals && data.proposals.length > 0) {
         console.log(`✅ Found ${data.proposals.length} donation proposals`);
 
@@ -66,12 +81,15 @@ export const useNostrDonationProposals = (
 
         // Only update state if data actually changed
         setProposals(prev => arraysEqual(parsedProposals, prev) ? prev : parsedProposals);
-      } else {
-        // Server returned empty — always clear (condition resolved)
+      } else if (!unknown) {
+        // VERIFIED empty — clear (condition resolved)
         setProposals([]);
       }
+      // unknown && empty → keep last known state; the flag blocks the UI anyway
     } catch (error) {
       console.error('❌ Error fetching donation proposals:', error);
+      // Server unreachable — paid-state is unverifiable. Fail closed.
+      setPaidStateUnknown(true);
       // Network error — keep last known good state after first load
       if (!hasLoadedOnceRef.current) {
         setProposals([]);
@@ -120,6 +138,12 @@ export const useNostrDonationProposals = (
   return {
     proposals,
     isLoading: enabled ? isLoading : false,
+    /**
+     * True when the paid-state of the returned proposals could NOT be verified
+     * (relays did not answer, or the server was unreachable). While true, no
+     * proposal may be treated as payable — an unpaid look-alike might be paid.
+     */
+    paidStateUnknown,
     refetch: fetchProposals
   };
 };

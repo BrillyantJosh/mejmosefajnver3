@@ -16,6 +16,8 @@ import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventTo
 import { sendPushToUser } from '../lib/pushNotification';
 import { verifyEvent } from 'nostr-tools';
 import { blockIfFrozen } from '../lib/walletFreeze';
+import { readFromRelaysServer } from '../lib/relayReadServer.js';
+import { findDuplicateConfirmations } from '../../src/lib/unconditionalPaymentGuard.js';
 import { consolidationFee, MIN_INPUTS, MIN_NET } from '../../src/lib/consolidationPlan.js';
 import multer from 'multer';
 
@@ -2315,29 +2317,39 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
       proposalFilter['#p'] = [userPubkey];
     }
 
-    // Step 1: Fetch proposals
-    const proposalEvents = await queryEventsFromRelays(relays, proposalFilter, 15000);
+    // Step 1: Fetch proposals — through the honest reader, so a failed read is
+    // distinguishable from an empty one. `answered` lists relays that sent a
+    // real EOSE; zero answered relays means we learned NOTHING, not "no events".
+    const proposalRead = await readFromRelaysServer(relays, proposalFilter as any, 15000);
+    const proposalEvents = proposalRead.events as any[];
+    const proposalsVerified = proposalRead.answered.length > 0;
 
     // Step 2: Fetch confirmations TARGETED to these specific proposals
     // OLD: { kinds: [90901], limit: 200 } — fetched random 200 from ALL users, missed user's confirmations
     // NEW: #e filter gets confirmations for THESE proposals + authors filter as fallback
-    let confirmationEvents: any[] = [];
+    //
+    // Paid-state is VERIFIED only if every confirmation query got at least one
+    // answered relay. An unverified paid-state must never mark anything unpaid:
+    // that is exactly how an already-paid batch gets paid again.
+    const confirmationEvents: any[] = [];
+    let confirmationsVerified = true; // vacuously true when there is nothing to confirm
     if (proposalEvents.length > 0) {
       const proposalEventIds = proposalEvents.map((e: any) => e.id);
 
-      const confirmQueries: Promise<any[]>[] = [
-        queryEventsFromRelays(relays, { kinds: [90901], '#e': proposalEventIds }, 15000),
+      const confirmReads = [
+        readFromRelaysServer(relays, { kinds: [90901], '#e': proposalEventIds } as any, 15000),
       ];
       if (userPubkey) {
-        confirmQueries.push(
-          queryEventsFromRelays(relays, { kinds: [90901], authors: [userPubkey], limit: 200 }, 15000)
+        confirmReads.push(
+          readFromRelaysServer(relays, { kinds: [90901], authors: [userPubkey], limit: 200 } as any, 15000)
         );
       }
 
-      const results = await Promise.all(confirmQueries);
+      const results = await Promise.all(confirmReads);
+      confirmationsVerified = results.every(r => r.answered.length > 0);
       const seenIds = new Set<string>();
-      for (const events of results) {
-        for (const event of events) {
+      for (const r of results) {
+        for (const event of r.events as any[]) {
           if (!seenIds.has(event.id)) {
             seenIds.add(event.id);
             confirmationEvents.push(event);
@@ -2345,19 +2357,32 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
         }
       }
     }
-    console.log(`✅ Found ${proposalEvents.length} KIND 90900 proposals, ${confirmationEvents.length} KIND 90901 confirmations`);
+
+    const paidStateUnknown = !proposalsVerified || !confirmationsVerified;
+    const paidStateUnknownReason = !proposalsVerified
+      ? 'no relay answered the proposal query'
+      : !confirmationsVerified
+        ? 'no relay answered the payment-confirmation query'
+        : undefined;
+    console.log(`✅ Found ${proposalEvents.length} KIND 90900 proposals, ${confirmationEvents.length} KIND 90901 confirmations${paidStateUnknown ? ` ⚠ PAID-STATE UNKNOWN (${paidStateUnknownReason})` : ''}`);
 
     // Parse confirmations into a lookup map
     // Match by: proposal tag (d-tag) OR e tag with marker "proposal" (event ID)
+    // paidAt/author feed the paid-state inheritance across regenerated proposal
+    // sets; timestamp_paid beats created_at because the relay-retry queue
+    // re-signs queued confirmations with a fresh created_at.
     const paidByDTag = new Map<string, any>();
     const paidByEventId = new Map<string, any>();
     for (const event of confirmationEvents) {
       const proposalDTag = event.tags.find((t: string[]) => t[0] === 'proposal')?.[1] || '';
       const proposalEventId = event.tags.find((t: string[]) => t[0] === 'e' && t[3] === 'proposal')?.[1] || '';
       const txId = event.tags.find((t: string[]) => t[0] === 'tx')?.[1] || '';
+      const stampedPaid = parseInt(event.tags.find((t: string[]) => t[0] === 'timestamp_paid')?.[1] || '', 10);
+      const paidAt = Number.isFinite(stampedPaid) && stampedPaid > 0 ? stampedPaid : event.created_at;
+      const match = { txId, confirmationId: event.id, paidAt, author: event.pubkey };
 
-      if (proposalDTag) paidByDTag.set(proposalDTag, { txId, confirmationId: event.id });
-      if (proposalEventId) paidByEventId.set(proposalEventId, { txId, confirmationId: event.id });
+      if (proposalDTag) paidByDTag.set(proposalDTag, match);
+      if (proposalEventId) paidByEventId.set(proposalEventId, match);
     }
 
     // Parse proposals and match with confirmations
@@ -2403,6 +2428,7 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
       const lanoshiTag = event.tags.find((t: string[]) => t[0] === 'lanoshi')?.[1] || '';
       const typeTag = event.tags.find((t: string[]) => t[0] === 'type')?.[1] || '';
       const serviceTag = event.tags.find((t: string[]) => t[0] === 'service')?.[1] || '';
+      const billingDayTag = event.tags.find((t: string[]) => t[0] === 'billing_day')?.[1] || '';
       const refTag = event.tags.find((t: string[]) => t[0] === 'ref')?.[1];
       const expiresTag = event.tags.find((t: string[]) => t[0] === 'expires')?.[1];
       const urlTag = event.tags.find((t: string[]) => t[0] === 'url')?.[1];
@@ -2424,6 +2450,7 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
         lanoshiAmount: lanoshiTag,
         type: typeTag,
         service: serviceTag,
+        billingDay: billingDayTag,
         ref: refTag,
         expires: expiresTag ? parseInt(expiresTag) : undefined,
         url: urlTag,
@@ -2431,7 +2458,9 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
         createdAt: event.created_at,
         eventId: event.id,
         isPaid: !!match,
-        paymentTxId: match?.txId || undefined
+        paymentTxId: match?.txId || undefined,
+        paidAt: match?.paidAt || undefined,
+        paidBy: match?.author || undefined
       };
     });
 
@@ -2450,7 +2479,7 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
     // Different payers to the same service+wallet are separate subscriptions.
     // Already sorted newest-first, so first occurrence wins.
     const deduped: any[] = [];
-    const seenKeys = new Set<string>();
+    const keptByKey = new Map<string, any>();
     const seenDTags = new Set<string>();
     for (const p of filteredProposals) {
       // d-tag dedup (keep newest per d-tag)
@@ -2461,8 +2490,33 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
 
       // Deduplicate by payer+service+wallet (same subscription from same payer)
       const key = `${p.payerPubkey}|${p.service}|${p.wallet}`;
-      if (seenKeys.has(key)) continue;
-      seenKeys.add(key);
+      const kept = keptByKey.get(key);
+      if (kept) {
+        // The generator mints a NEW timestamp-based d-tag on every run, so a
+        // regenerated proposal set shadows the paid one here — the newest event
+        // wins the dedup while the 90901 points at the older d. Inherit the
+        // older set's paid state when its PAYMENT postdates (or closely
+        // precedes) the kept set's mint: in the 2026-08 incident the payer
+        // settled the July set 9 hours BEFORE the generator re-minted it. A
+        // genuinely new cycle arrives 21–28 days after the previous run, so a
+        // payment inside the margin can only mean the obligation is settled.
+        // billing_day is deliberately NOT used — it is the day-of-month of the
+        // generator run and collides across months (Feb 1 vs Mar 1).
+        // The author check keeps a third party's forged 90901 from marking
+        // someone else's bill as paid at this obligation level.
+        const REGENERATION_MARGIN_SECONDS = 3 * 24 * 3600;
+        if (
+          !kept.isPaid && p.isPaid &&
+          p.paidBy === p.payerPubkey &&
+          p.paidAt >= kept.createdAt - REGENERATION_MARGIN_SECONDS
+        ) {
+          kept.isPaid = true;
+          kept.paymentTxId = p.paymentTxId;
+          kept.paidViaDTag = p.d;
+        }
+        continue;
+      }
+      keptByKey.set(key, p);
 
       deduped.push(p);
     }
@@ -2471,10 +2525,19 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
     const paidCount = deduped.filter((p: any) => p.isPaid).length;
     console.log(`📊 Proposals for user: ${deduped.length} total (${pendingCount} pending, ${paidCount} paid)${deduped.length < filteredProposals.length ? ` [deduped from ${filteredProposals.length}]` : ''}`);
 
-    return res.json({ success: true, proposals: deduped });
+    return res.json({
+      success: true,
+      proposals: deduped,
+      paidStateUnknown,
+      paidStateUnknownReason,
+      relayHealth: {
+        proposals: { answered: proposalRead.answered.length, failed: proposalRead.failed.length },
+      },
+    });
   } catch (error: any) {
     console.error('❌ Error fetching donation proposals:', error);
-    return res.status(500).json({ success: false, error: error.message, proposals: [] });
+    // A code-level failure is also an unknown paid-state — fail closed.
+    return res.status(500).json({ success: false, error: error.message, proposals: [], paidStateUnknown: true, paidStateUnknownReason: 'server error' });
   }
 });
 
@@ -2873,12 +2936,68 @@ router.post('/send-batch-lana-transaction', async (req: Request, res: Response) 
 });
 
 // send-unconditional-payment (multi-recipient format)
+//
+// The route is the one mandatory chokepoint before the LanaCoin broadcast, so
+// the duplicate guard lives HERE as well as in the ConfirmPayment page — a
+// stale pre-guard bundle in a long-lived tab (or a direct API call) must not
+// be able to re-pay a settled obligation. The transaction builder itself
+// (sendBatchLanaTransaction) and the fee logic are untouched.
 router.post('/send-unconditional-payment', async (req: Request, res: Response) => {
   try {
-    const { sender_address, recipients, private_key, electrum_servers } = req.body;
+    const { sender_address, recipients, private_key, electrum_servers, payer_pubkey, proposals: proposalRefs } = req.body;
 
     if (!sender_address || !recipients || !private_key || recipients.length === 0) {
       return res.status(400).json({ success: false, error: 'Missing required parameters' });
+    }
+
+    // Fail closed on clients that predate the duplicate guard: without the
+    // obligation metadata we cannot verify anything, and an unverifiable
+    // payment is exactly how the 2026-08 double payment happened.
+    if (!payer_pubkey || !Array.isArray(proposalRefs) || proposalRefs.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'This app version cannot verify previous payments — please reload the page and try again.',
+      });
+    }
+
+    const guardRelays = getRelaysFromDb();
+    if (guardRelays.length === 0) {
+      return res.status(503).json({ success: false, error: 'Could not verify previous payments — no relays configured. Try again.' });
+    }
+    const priorRead = await readFromRelaysServer(
+      guardRelays,
+      { kinds: [90901], authors: [payer_pubkey], limit: 500 } as any,
+      12000,
+    );
+    if (priorRead.answered.length === 0) {
+      return res.status(503).json({ success: false, error: 'Could not verify previous payments — no relay answered. Try again.' });
+    }
+
+    const duplicates = findDuplicateConfirmations(
+      proposalRefs.map((p: any) => ({
+        proposalId: String(p.proposalId || ''),
+        proposalDTag: String(p.proposalDTag || ''),
+        recipientWallet: String(p.recipientWallet || ''),
+        service: String(p.service || ''),
+        proposalCreatedAt: Number(p.proposalCreatedAt) || 0,
+      })),
+      priorRead.events as any[],
+    );
+    if (duplicates.length > 0) {
+      const lines = duplicates.map((d) =>
+        `"${d.obligation.service}" (tx ${d.txId ? d.txId.substring(0, 12) + '…' : 'unknown'})`);
+      console.warn(`⛔ send-unconditional-payment blocked for ${payer_pubkey.slice(0, 16)}…: ${lines.join(', ')}`);
+      return res.status(409).json({
+        success: false,
+        error: `Already paid: ${lines.join(', ')} — refresh the pending list before paying.`,
+        duplicates: duplicates.map((d) => ({
+          proposalId: d.obligation.proposalId,
+          proposalDTag: d.obligation.proposalDTag,
+          service: d.obligation.service,
+          txId: d.txId,
+          via: d.via,
+        })),
+      });
     }
 
     // Convert amounts from LANA to lanoshis (same as Supabase edge function)

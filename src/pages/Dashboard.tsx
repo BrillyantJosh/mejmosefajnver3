@@ -38,9 +38,9 @@ export default function Dashboard() {
   });
 
   // SECTION 2: Account data - enabled after wallet stage completes
-  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(
-    session?.nostrHexId, 
-    { 
+  const { proposals, isLoading: proposalsLoading, paidStateUnknown } = useNostrDonationProposals(
+    session?.nostrHexId,
+    {
       poll: false,
       enabled: stage === 'account' || stage === 'platform'
     }
@@ -63,15 +63,19 @@ export default function Dashboard() {
     enabled: stage === 'platform'
   });
 
-  // Calculate pending proposals
+  // Calculate pending proposals. The server's isPaid carries the 90901
+  // matching AND the cross-set inheritance for regenerated proposals, so it
+  // is honored alongside the local join. While paidStateUnknown (relays did
+  // not answer the confirmation read) nothing may be claimed as owed.
   const pendingProposals = useMemo(() => {
+    if (paidStateUnknown) return [];
     return proposals.filter(proposal => {
-      const isPaid = payments.some(p => 
+      const isPaid = proposal.isPaid || payments.some(p =>
         p.proposalDTag === proposal.d || p.proposalEventId === proposal.eventId
       );
       return !isPaid;
     });
-  }, [proposals, payments]);
+  }, [proposals, payments, paidStateUnknown]);
 
   // Stage 1 -> Stage 2 transition: when wallet loading is done
   useEffect(() => {

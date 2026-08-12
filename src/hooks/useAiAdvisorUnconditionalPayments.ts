@@ -41,7 +41,7 @@ export function useAiAdvisorUnconditionalPayments() {
   const { session } = useAuth();
   
   // Fetch proposals for the current user (with polling for fresh data)
-  const { proposals, isLoading: proposalsLoading } = useNostrDonationProposals(
+  const { proposals, isLoading: proposalsLoading, paidStateUnknown } = useNostrDonationProposals(
     session?.nostrHexId,
     { poll: true, pollIntervalMs: 15000, enabled: !!session?.nostrHexId }
   );
@@ -86,16 +86,20 @@ export function useAiAdvisorUnconditionalPayments() {
     console.log(`📋 Unconditional Payments: ${proposals.length} proposals, ${relevantPayments.length} relevant payments (of ${payments.length} total)`);
     
     // Filter for pending (unpaid) where user is the PAYER (not recipient)
-    // This matches Pending.tsx behavior — only show what the user needs to pay
+    // This matches Pending.tsx behavior — only show what the user needs to pay.
+    // The server's isPaid (90901 matching + regenerated-set inheritance) is
+    // honored alongside the local join, and while paidStateUnknown the AI must
+    // not claim the user owes anything — steering a user to "pay the open
+    // bill" on unverified data is exactly the incident pattern.
     const userPubkey = session?.nostrHexId;
-    const pendingProposals = proposals.filter(p => {
-      const isPaid = paidProposalDTags.has(p.d) || paidProposalEventIds.has(p.eventId);
+    const pendingProposals = paidStateUnknown ? [] : proposals.filter(p => {
+      const isPaid = p.isPaid || paidProposalDTags.has(p.d) || paidProposalEventIds.has(p.eventId);
       return !isPaid && p.payerPubkey === userPubkey;
     });
 
     // Count completed (paid)
-    const completedCount = proposals.filter(p => 
-      paidProposalDTags.has(p.d) || paidProposalEventIds.has(p.eventId)
+    const completedCount = proposals.filter(p =>
+      p.isPaid || paidProposalDTags.has(p.d) || paidProposalEventIds.has(p.eventId)
     ).length;
 
     // Map to summary format
@@ -148,7 +152,7 @@ export function useAiAdvisorUnconditionalPayments() {
       pendingPayments,
       completedCount,
     };
-  }, [proposals, payments, profiles]);
+  }, [proposals, payments, profiles, paidStateUnknown, session?.nostrHexId]);
 
   const isLoading = proposalsLoading || paymentsLoading;
 

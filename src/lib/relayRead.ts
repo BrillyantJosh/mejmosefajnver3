@@ -88,6 +88,10 @@ export async function readFromRelays(
             // Above budgetMs on purpose: the library must never synthesise an
             // EOSE inside our window, or a silent relay would look answered.
             eoseTimeout: Math.min(opts.budgetMs + 5000, 20_000),
+            // Cross-relay duplicates are dropped BEFORE the library parses and
+            // schnorr-verifies them — with N relays serving the same events
+            // this cuts verification work roughly N-fold.
+            alreadyHaveEvent: (id: string) => byId.has(id),
             onevent: (e: Event) => { if (!byId.has(e.id)) byId.set(e.id, e); },
             oneose: () => done(true),
             onclose: (reason?: string) => done(false, reason || 'closed'),
