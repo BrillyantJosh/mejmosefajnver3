@@ -2,127 +2,150 @@
  * Pure-logic tests for the shared duplicate matcher.
  *   npx tsx scripts/testUnconditionalPaymentGuard.ts
  *
- * Scenarios come from the 2026-08 double-payment incident (payer 9b1267aa…,
- * txs bbea05f8… / d3714d99…) and from the adversarial review of the guard.
+ * The scenarios are real ones read off the relays (14 108 KIND 90900 /
+ * 8 157 KIND 90901, 377 payers), not invented:
+ *   - payer c895854d paid five 2026-05 proposals twice, 31 minutes apart,
+ *     the second transaction quoting the SAME d-tags → must block;
+ *   - payer 6ae127d1 had two proposals for lanaheartvoice in 2026-02 and paid
+ *     each separately → must block;
+ *   - payer 9b1267aa paid the 2026-07 bill late on 2026-08-08 15:09 and the
+ *     2026-08 bill at 06:06 next morning → two legitimate months, must NOT
+ *     block. This one is why "paid recently" cannot be the rule.
  */
 import {
   findDuplicateConfirmations,
   confirmationPaidAt,
-  REGENERATION_MARGIN_SECONDS,
+  billingMonthOfDTag,
   type SelectedObligation,
   type ConfirmationEvent,
 } from '../src/lib/unconditionalPaymentGuard.js';
 
 let failures = 0;
 const check = (name: string, cond: boolean, detail?: unknown) => {
-  console.log(`  ${cond ? '✓' : '✗'} ${name}${cond ? '' : ' — ' + JSON.stringify(detail).slice(0, 220)}`);
+  console.log(`  ${cond ? '✓' : '✗'} ${name}${cond ? '' : ' — ' + JSON.stringify(detail).slice(0, 240)}`);
   if (!cond) failures++;
 };
 
-const DAY = 24 * 3600;
-const T0 = 1786230000; // arbitrary epoch anchor near the incident
+const secondsOf = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 
 const obligation = (over: Partial<SelectedObligation> = {}): SelectedObligation => ({
   proposalId: 'ev-new',
-  proposalDTag: 'sub:lana:222:9b1267aa',
-  recipientWallet: 'LaqqtQ',
-  service: 'Lana Realm',
-  proposalCreatedAt: T0,
+  proposalDTag: 'sub:lana:1780016130869:c895854', // 2026-05
+  recipientWallet: 'LYWG1EkE6gCMMLSg13xY3SwVy8kWJqEbVJ',
+  service: 'https://selfresponsible.life/',
+  proposalCreatedAt: secondsOf('2026-05-29T01:35:00Z'),
   ...over,
 });
 
-const confirmation = (over: Partial<ConfirmationEvent> & { tag?: Record<string, string> } = {}): ConfirmationEvent => {
-  const { tag = {}, ...rest } = over;
+const confirmation = (tag: Record<string, string> = {}, over: Partial<ConfirmationEvent> = {}): ConfirmationEvent => {
   const base: Record<string, string> = {
-    proposal: 'sub:lana:111:9b1267aa',
-    to_wallet: 'LaqqtQ',
-    service: 'Lana Realm',
-    tx: 'bbea05f8'.padEnd(64, '0'),
+    proposal: 'sub:lana:1780016130869:c895854',
+    to_wallet: 'LYWG1EkE6gCMMLSg13xY3SwVy8kWJqEbVJ',
+    service: 'https://selfresponsible.life/',
+    tx: '42b03f220d130a19'.padEnd(64, '0'),
     ...tag,
   };
   return {
     id: 'conf-1',
-    created_at: T0 - 9 * 3600, // incident shape: paid 9h before the re-mint
+    created_at: secondsOf('2026-06-19T18:43:00Z'),
     tags: Object.entries(base).map(([k, v]) => (k === 'e' ? ['e', v, '', 'proposal'] : [k, v])),
-    ...rest,
+    ...over,
   };
 };
 
-console.log('— Rule A: exact reference —');
-{
-  const m = findDuplicateConfirmations([obligation({ proposalDTag: 'sub:lana:111:9b1267aa' })], [confirmation()]);
-  check('same d-tag → duplicate', m.length === 1 && m[0].via === 'proposal reference', m);
-}
-{
-  const m = findDuplicateConfirmations([obligation({ proposalId: 'ev-old' })], [confirmation({ tag: { e: 'ev-old' } })]);
-  check('same proposal event id → duplicate', m.length === 1 && m[0].via === 'proposal reference', m);
-}
+console.log('— d-tag → subscription month —');
+check('sub:lana → month', billingMonthOfDTag('sub:lana:1780016130869:c895854') === '2026-05', billingMonthOfDTag('sub:lana:1780016130869:c895854'));
+check('pay:lana → month', billingMonthOfDTag('pay:lana:1763827817626:b1f4a8a9') === '2025-11', billingMonthOfDTag('pay:lana:1763827817626:b1f4a8a9'));
+check('registrar d-tag → unknown', billingMonthOfDTag('registrar:subscription:9b1267aa:2026') === '');
+check('empty → unknown', billingMonthOfDTag('') === '');
 
-console.log('— Rule B: the incident (regenerated set, paid 9h before the mint) —');
+console.log('— real double payment: same proposal, two transactions 31 min apart (c895854d) —');
 {
   const m = findDuplicateConfirmations([obligation()], [confirmation()]);
-  check('re-minted obligation → blocked', m.length === 1 && m[0].via.includes('same service + wallet'), m);
-  check('match carries the existing txid', m[0]?.txId.startsWith('bbea05f8'), m[0]?.txId);
+  check('second attempt blocked', m.length === 1 && m[0].via === 'proposal reference', m);
+  check('reports the existing txid', m[0]?.txId.startsWith('42b03f22'), m[0]?.txId);
 }
 {
-  // >2% rate drift / custom amount: irrelevant — no amount in the rule
-  const m = findDuplicateConfirmations([obligation()], [confirmation({ tag: { amount_lanoshi: '1' } })]);
-  check('amount drift cannot bypass the block', m.length === 1, m);
-}
-{
-  // payment AFTER the mint (stale-tab payment of an older set of the same cycle)
-  const m = findDuplicateConfirmations([obligation()], [confirmation({ created_at: T0 + DAY })]);
-  check('payment after the mint → still blocked', m.length === 1, m);
+  const m = findDuplicateConfirmations([obligation({ proposalDTag: 'x', proposalId: 'ev-old' })], [confirmation({ e: 'ev-old' })]);
+  check('matched by proposal event id too', m.length === 1, m);
 }
 
-console.log('— Rule B must NOT block legitimate bills —');
+console.log('— real double payment: two proposals for ONE month (6ae127d1, 2026-02) —');
 {
-  // next cycle: previous payment 10 days before this mint
-  const m = findDuplicateConfirmations([obligation()], [confirmation({ created_at: T0 - 10 * DAY })]);
-  check('payment 10 days before the mint → next cycle payable', m.length === 0, m);
+  const feb = { service: 'wss://relay.lanaheartvoice.com', wallet: 'LiAE7g1XUzXVYfT8KPCJNLYFjyieLYVbxe' };
+  const second = obligation({
+    proposalDTag: 'sub:lana:1771376255406:6ae127d1', // 2026-02-18
+    proposalCreatedAt: secondsOf('2026-02-18T00:57:00Z'),
+    service: feb.service,
+    recipientWallet: feb.wallet,
+  });
+  const paidFirst = confirmation({
+    proposal: 'sub:lana:1771318399276:6ae127d1', // 2026-02-17, same month
+    service: feb.service,
+    to_wallet: feb.wallet,
+    tx: '3a786a94229e0918'.padEnd(64, '0'),
+  }, { created_at: secondsOf('2026-02-17T09:00:00Z') });
+
+  const m = findDuplicateConfirmations([second], [paidFirst]);
+  check('duplicate proposal for the same month blocked', m.length === 1 && m[0].via.includes('same subscription month'), m);
+}
+
+console.log('— MUST NOT block: last month paid late, this month minted hours later (9b1267aa) —');
+{
+  const august = obligation({
+    proposalDTag: 'sub:lana:1786234692018:9b1267aa', // 2026-08-09 00:18
+    proposalCreatedAt: secondsOf('2026-08-09T00:18:12Z'),
+    service: 'Lana Realm',
+    recipientWallet: 'LaqqtQDvBmEaUFEbkvqvsLGxUChBYJJ7D9',
+  });
+  const julyPaid = confirmation({
+    proposal: 'sub:lana:1784420178390:9b1267aa', // 2026-07-19 proposal
+    service: 'Lana Realm',
+    to_wallet: 'LaqqtQDvBmEaUFEbkvqvsLGxUChBYJJ7D9',
+    tx: 'bbea05f8035007cc'.padEnd(64, '0'),
+  }, { created_at: secondsOf('2026-08-08T15:09:40Z') }); // paid 9h BEFORE the August mint
+
+  const m = findDuplicateConfirmations([august], [julyPaid]);
+  check("August bill stays payable after July's late payment", m.length === 0, m);
+}
+
+console.log('— other legitimate cases must stay payable —');
+// These probe Rule B only, so the confirmation must reference a DIFFERENT
+// proposal (same month) — otherwise Rule A rightly matches on the d-tag.
+const OTHER_D_SAME_MONTH = 'sub:lana:1780016199853:c895854'; // also 2026-05
+{
+  const m = findDuplicateConfirmations([obligation()], [confirmation({ proposal: OTHER_D_SAME_MONTH, service: 'lanawatch.us' })]);
+  check('different service on the same wallet', m.length === 0, m);
 }
 {
-  // review F1: same day-of-month a month later — no billing_day in the rule at all
-  const m = findDuplicateConfirmations([obligation()], [confirmation({ created_at: T0 - 28 * DAY, tag: { billing_day: '1' } })]);
-  check('month-old payment (same billing_day) → payable', m.length === 0, m);
+  const m = findDuplicateConfirmations([obligation()], [confirmation({ proposal: OTHER_D_SAME_MONTH, to_wallet: 'LTpv5j4NYmzVF4LPKC6irwc4xvAZkfXjEg' })]);
+  check('different wallet, same service', m.length === 0, m);
 }
 {
-  // several services share one wallet with equal amounts (seen on-chain)
-  const m = findDuplicateConfirmations([obligation({ service: 'lanawatch.us' })], [confirmation()]);
-  check('different service, same wallet → payable', m.length === 0, m);
-}
-{
-  const m = findDuplicateConfirmations([obligation({ recipientWallet: 'LTpv5j' })], [confirmation()]);
-  check('different wallet, same service → payable', m.length === 0, m);
-}
-{
-  // missing identity on the selection: Rule B requires both fields
-  const m = findDuplicateConfirmations([obligation({ service: '' })], [confirmation({ tag: { service: '' } })]);
+  const m = findDuplicateConfirmations([obligation({ service: '' })], [confirmation({ proposal: OTHER_D_SAME_MONTH, service: '' })]);
   check('empty service never matches Rule B', m.length === 0, m);
+}
+{
+  const m = findDuplicateConfirmations([obligation()], [confirmation({ proposal: OTHER_D_SAME_MONTH })]);
+  check('duplicate proposal, same month, same service+wallet → blocked', m.length === 1, m);
+}
+{
+  const undatable = confirmation({ proposal: 'registrar:subscription:c895854:2026' });
+  const m = findDuplicateConfirmations([obligation({ proposalDTag: 'other' })], [undatable]);
+  check('undatable d-tag stands down instead of blocking', m.length === 0, m);
 }
 
 console.log('— timestamp_paid beats a re-signed created_at —');
 {
-  const ev = confirmation({ created_at: T0 + 5 * DAY, tag: { timestamp_paid: String(T0 - 10 * DAY) } });
-  check('confirmationPaidAt prefers timestamp_paid', confirmationPaidAt(ev) === T0 - 10 * DAY, confirmationPaidAt(ev));
-  // RetryEvents re-signed an OLD payment yesterday: real pay time 10 days pre-mint → not a duplicate
-  const m = findDuplicateConfirmations([obligation()], [ev]);
-  check('re-signed old payment does not block the new cycle', m.length === 0, m);
-}
-
-console.log('— margin boundary —');
-{
-  const atEdge = confirmation({ created_at: T0 - REGENERATION_MARGIN_SECONDS });
-  check('payment exactly at mint−margin → blocked', findDuplicateConfirmations([obligation()], [atEdge]).length === 1);
-  const past = confirmation({ created_at: T0 - REGENERATION_MARGIN_SECONDS - 1 });
-  check('payment just past the margin → payable', findDuplicateConfirmations([obligation()], [past]).length === 0);
+  const ev = confirmation({ timestamp_paid: String(secondsOf('2026-06-19T18:43:00Z')) }, { created_at: secondsOf('2026-06-25T10:00:00Z') });
+  check('confirmationPaidAt prefers timestamp_paid', confirmationPaidAt(ev) === secondsOf('2026-06-19T18:43:00Z'), confirmationPaidAt(ev));
 }
 
 console.log('— batch semantics —');
 {
-  const items = [obligation(), obligation({ proposalId: 'ev-other', service: 'lanawatch.us', recipientWallet: 'LTpv5j' })];
+  const items = [obligation(), obligation({ proposalId: 'ev-other', proposalDTag: 'sub:lana:1780016145573:c895854', service: 'wss://relay.lanaheartvoice.com', recipientWallet: 'LiAE7g1XUz' })];
   const m = findDuplicateConfirmations(items, [confirmation()]);
-  check('only the settled item matches; the rest of the batch is untouched', m.length === 1 && m[0].obligation.proposalId === 'ev-new', m);
+  check('only the settled item matches; the rest of the batch survives', m.length === 1 && m[0].obligation.proposalId === 'ev-new', m);
 }
 
 console.log(failures ? `\n❌ ${failures} FAILED` : '\n✅ all passed');

@@ -2492,23 +2492,19 @@ router.post('/fetch-donation-proposals', async (req: Request, res: Response) => 
       const key = `${p.payerPubkey}|${p.service}|${p.wallet}`;
       const kept = keptByKey.get(key);
       if (kept) {
-        // The generator mints a NEW timestamp-based d-tag on every run, so a
-        // regenerated proposal set shadows the paid one here — the newest event
-        // wins the dedup while the 90901 points at the older d. Inherit the
-        // older set's paid state when its PAYMENT postdates (or closely
-        // precedes) the kept set's mint: in the 2026-08 incident the payer
-        // settled the July set 9 hours BEFORE the generator re-minted it. A
-        // genuinely new cycle arrives 21–28 days after the previous run, so a
-        // payment inside the margin can only mean the obligation is settled.
-        // billing_day is deliberately NOT used — it is the day-of-month of the
-        // generator run and collides across months (Feb 1 vs Mar 1).
+        // Two proposals for the SAME subscription month are the same debt —
+        // the generator has done this 17 times across the fleet. The newest
+        // wins the dedup, so without this the paid twin would be hidden and
+        // the unpaid duplicate would invite a second payment for one month.
+        // Strictly same-month: a later month is a NEW bill and must stay
+        // visible and payable, even when last month was paid hours ago.
         // The author check keeps a third party's forged 90901 from marking
         // someone else's bill as paid at this obligation level.
-        const REGENERATION_MARGIN_SECONDS = 3 * 24 * 3600;
+        const monthOf = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 7);
         if (
           !kept.isPaid && p.isPaid &&
           p.paidBy === p.payerPubkey &&
-          p.paidAt >= kept.createdAt - REGENERATION_MARGIN_SECONDS
+          monthOf(p.createdAt) === monthOf(kept.createdAt)
         ) {
           kept.isPaid = true;
           kept.paymentTxId = p.paymentTxId;

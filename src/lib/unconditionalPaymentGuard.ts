@@ -3,26 +3,27 @@
  * the ConfirmPayment page (pre-broadcast guard) and the server's
  * /send-unconditional-payment route (chokepoint guard for stale bundles).
  *
- * Why matching is time-anchored and NOT amount- or billing_day-based:
- *  - the proposal generator mints a NEW timestamp d-tag every run, so an
- *    already-paid obligation reappears under a d no 90901 references;
- *  - `billing_day` is the day-of-month OF THE RUN (the 2026-07-19 set carries
- *    "19", the 2026-08-09 set carries "9") — equality across runs proves
- *    nothing and collides across months (Feb 1 vs Mar 1);
+ * An obligation is one SUBSCRIPTION MONTH of one service. The generator
+ * (lana-subscriptions) bills at most once per (subscriber, service,
+ * billing_month) — so two proposals in the same month are the same debt, and
+ * proposals in different months are different debts, however alike they look.
+ *
+ * That month identity is what the rules key on. Things that look tempting and
+ * are NOT usable:
+ *  - `billing_day` is the day-of-month of the generator RUN (the 2026-07 set
+ *    carries "19", the 2026-08 set "9"), so it identifies neither cycle nor
+ *    obligation, and collides across months;
  *  - LANA amounts are recomputed from fiat at pay time and are user-editable,
- *    so amount equality breaks on rate drift or a rounded custom amount.
+ *    so amount equality breaks on rate drift or a rounded custom amount;
+ *  - "paid recently" is wrong in both directions: a payer who settles LAST
+ *    month's bill late, hours before this month's bill is minted, is making
+ *    two legitimate payments (this is exactly what payer 9b1267aa did on
+ *    2026-08-08/09 and must never be blocked).
  *
- * What does hold: in the observed incident the payer settled the July set at
- * 2026-08-08 15:09 and the generator re-minted the same obligations at
- * 2026-08-09 00:18 — payment BEFORE the mint, by hours. A genuinely new
- * billing cycle arrives 21–28 days after the previous run, so a payment for
- * the same service+wallet made within the margin BEFORE this proposal set was
- * minted (or any time after it) can only mean the obligation is settled.
- *
- * Known ambiguity, accepted as fail-closed: a payment made within the margin
- * before a genuinely new cycle's mint blocks that cycle's card until the NEXT
- * generator run re-mints it (≤28 days). A wrong block self-heals; a wrong
- * payment does not.
+ * Verified against the relays (14 108 proposals / 8 157 confirmations, 377
+ * payers): the real double payments are one obligation-month settled twice —
+ * either the same proposal paid by two transactions 31 minutes apart, or two
+ * duplicate proposals for one month paid separately. Both are caught here.
  */
 
 export interface SelectedObligation {
@@ -51,11 +52,27 @@ export interface DuplicateMatch {
   confirmationId: string;
 }
 
-/** A payment this close BEFORE the mint means the mint re-issued a settled obligation. */
-export const REGENERATION_MARGIN_SECONDS = 3 * 24 * 3600;
-
 const tagOf = (ev: ConfirmationEvent, name: string): string =>
   ev.tags.find((t) => t[0] === name)?.[1] || '';
+
+/** "YYYY-MM" of an epoch-seconds timestamp, in UTC. */
+export function billingMonthOf(epochSeconds: number): string {
+  return new Date(epochSeconds * 1000).toISOString().slice(0, 7);
+}
+
+/**
+ * The subscription month a proposal d-tag belongs to, read from the epoch-ms
+ * both generators embed: `sub:lana:<ms>:<payer8>` (lana-subscriptions) and
+ * `pay:lana:<ms>:<payer8>` (the older self-responsibility one). Returns "" for
+ * any other shape (e.g. `registrar:subscription:…`), which makes Rule B stand
+ * down for it — Rule A still covers those exactly.
+ */
+export function billingMonthOfDTag(dTag: string): string {
+  const ms = /^(?:sub|pay):lana:(\d{12,14}):/.exec(dTag || '')?.[1];
+  if (!ms) return '';
+  const seconds = Math.floor(Number(ms) / 1000);
+  return Number.isFinite(seconds) && seconds > 0 ? billingMonthOf(seconds) : '';
+}
 
 /**
  * The true payment time of a 90901: the timestamp_paid tag when present and
@@ -71,12 +88,16 @@ export function confirmationPaidAt(ev: ConfirmationEvent): number {
  * Which of the selected obligations does an existing 90901 already settle?
  *
  *  Rule A (exact): the confirmation references the selected proposal's d-tag
- *  (`proposal` tag) or event id (`e` tag with marker "proposal").
+ *  (`proposal` tag) or event id (`e` tag with marker "proposal") — that
+ *  proposal is paid, whatever a pending list says.
  *
- *  Rule B (obligation): same service AND same to_wallet, paid at or after
- *  `proposalCreatedAt - REGENERATION_MARGIN_SECONDS`. Service equality is
- *  required because one wallet legitimately hosts several services with
- *  equal amounts.
+ *  Rule B (duplicate proposal): the confirmation settles a DIFFERENT proposal
+ *  for the same service, same to_wallet and the same subscription month. The
+ *  generator has produced two proposals for one month before (17 times across
+ *  the fleet), and paying both is a real double payment.
+ *
+ * Different months never match: last month's bill paid late, hours before this
+ * month's is minted, is two legitimate payments.
  */
 export function findDuplicateConfirmations(
   selected: SelectedObligation[],
@@ -85,6 +106,10 @@ export function findDuplicateConfirmations(
   const matches: DuplicateMatch[] = [];
 
   for (const obligation of selected) {
+    const obligationMonth = obligation.proposalCreatedAt
+      ? billingMonthOf(obligation.proposalCreatedAt)
+      : billingMonthOfDTag(obligation.proposalDTag);
+
     for (const ev of confirmations) {
       const proposalRef = tagOf(ev, 'proposal');
       const eventRef = ev.tags.find((t) => t[0] === 'e' && t[3] === 'proposal')?.[1] || '';
@@ -97,18 +122,19 @@ export function findDuplicateConfirmations(
         break;
       }
 
-      if (!obligation.service || !obligation.recipientWallet) continue;
+      if (!obligation.service || !obligation.recipientWallet || !obligationMonth) continue;
       if (tagOf(ev, 'service') !== obligation.service) continue;
       if (tagOf(ev, 'to_wallet') !== obligation.recipientWallet) continue;
-      if (confirmationPaidAt(ev) >= obligation.proposalCreatedAt - REGENERATION_MARGIN_SECONDS) {
-        matches.push({
-          obligation,
-          txId: tagOf(ev, 'tx'),
-          via: 'same service + wallet, paid since this proposal set was minted',
-          confirmationId: ev.id,
-        });
-        break;
-      }
+      // Only a confirmation whose own proposal is datable to the same month
+      // counts; an undatable d-tag stands down rather than block a real bill.
+      if (billingMonthOfDTag(proposalRef) !== obligationMonth) continue;
+      matches.push({
+        obligation,
+        txId: tagOf(ev, 'tx'),
+        via: 'duplicate proposal for the same subscription month',
+        confirmationId: ev.id,
+      });
+      break;
     }
   }
 
