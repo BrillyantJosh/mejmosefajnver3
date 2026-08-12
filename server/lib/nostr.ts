@@ -219,36 +219,59 @@ export async function fetchKind38888(): Promise<Kind38888Data | null> {
  * Generic function to query events from relays with a custom filter
  * Returns all matching events from all relays (deduplicated by event id)
  */
-export async function queryEventsFromRelays(
+/** Which relays actually answered a query, and why the others did not. */
+export interface RelayQueryStatus {
+  /** Relays that sent a real EOSE frame within the timeout. */
+  answered: string[];
+  /** Relays that errored, closed early, or ran out of time. */
+  failed: { url: string; reason: string }[];
+}
+
+/**
+ * The same query as queryEventsFromRelays, but it also reports WHICH relays
+ * answered — the distinction between "the relay said there is nothing" and
+ * "we never heard back". Payment paths need it: treating an unreadable
+ * paid-state as unpaid is how the same obligation gets paid twice.
+ *
+ * EOSE is the only success signal. A close without EOSE is a failure, because
+ * a relay that drops the socket has told us nothing about what it holds.
+ *
+ * Never rejects: a total outage resolves with answered: [].
+ */
+export async function queryEventsWithRelayStatus(
   relays: string[],
   filter: Record<string, any>,
   timeout = 10000
-): Promise<NostrEvent[]> {
+): Promise<{ events: NostrEvent[] } & RelayQueryStatus> {
   const allEvents: NostrEvent[] = [];
   const seenIds = new Set<string>();
+  const answered: string[] = [];
+  const failed: { url: string; reason: string }[] = [];
 
   const fetchEventsFromRelay = (relayUrl: string): Promise<NostrEvent[]> => {
     return new Promise((resolve) => {
       const events: NostrEvent[] = [];
       let resolved = false;
-      const safeResolve = (result: NostrEvent[]) => {
+      const safeResolve = (result: NostrEvent[], ok: boolean, reason = '') => {
         if (!resolved) {
           resolved = true;
+          if (ok) answered.push(relayUrl);
+          else failed.push({ url: relayUrl, reason });
           resolve(result);
         }
       };
 
       const timeoutId = setTimeout(() => {
         try { ws.close(); } catch {}
-        safeResolve(events);
+        safeResolve(events, false, 'timeout');
       }, timeout);
 
       let ws: WebSocket;
       try {
         ws = new WebSocket(relayUrl);
-      } catch (error) {
+      } catch (error: any) {
         clearTimeout(timeoutId);
-        safeResolve([]);
+        safeResolve([], false, error?.message || 'socket construction failed');
         return;
       }
 
@@ -269,23 +292,24 @@ export async function queryEventsFromRelays(
             // All stored events received, close connection
             clearTimeout(timeoutId);
             try { ws.close(); } catch {}
-            safeResolve(events);
+            safeResolve(events, true);
           }
         } catch (error) {
           // Ignore parse errors
         }
       });
 
-      ws.on('error', () => {
+      ws.on('error', (error: any) => {
         clearTimeout(timeoutId);
-        safeResolve(events);
+        safeResolve(events, false, error?.message || 'socket error');
       });
 
       ws.on('close', () => {
         clearTimeout(timeoutId);
         // CRITICAL: resolve on close too — if relay drops connection without
-        // error event, the promise would hang forever without this
-        safeResolve(events);
+        // error event, the promise would hang forever without this.
+        // Closing BEFORE an EOSE is a failure: the relay told us nothing.
+        safeResolve(events, false, 'closed before EOSE');
       });
     });
   };
@@ -325,10 +349,25 @@ export async function queryEventsFromRelays(
     }
 
     result.push(...replaceableMap.values());
-    return result;
+    return { events: result, answered, failed };
   }
 
-  return allEvents;
+  return { events: allEvents, answered, failed };
+}
+
+/**
+ * Events only — the long-standing signature every non-payment caller uses.
+ * Delegates to queryEventsWithRelayStatus so there is exactly ONE relay
+ * reader on the server; callers that must tell a failed read from an empty
+ * one call that function directly.
+ */
+export async function queryEventsFromRelays(
+  relays: string[],
+  filter: Record<string, any>,
+  timeout = 10000
+): Promise<NostrEvent[]> {
+  const { events } = await queryEventsWithRelayStatus(relays, filter, timeout);
+  return events;
 }
 
 /**
