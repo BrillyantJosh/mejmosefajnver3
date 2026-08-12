@@ -587,8 +587,8 @@ export function foodCornerWeekRange(
 
 export function describeFoodCornerPause(node: FoodCornerNode): string {
   const parts: string[] = [];
-  if (node.pause.from) parts.push(`od ${node.pause.from}`);
-  if (node.pause.until) parts.push(`do ${node.pause.until}`);
+  if (node.pause.from) parts.push(`from ${node.pause.from}`);
+  if (node.pause.until) parts.push(`to ${node.pause.until}`);
   const period = parts.join(" ");
   return [period, node.pause.note].filter(Boolean).join(" · ");
 }
