@@ -51,6 +51,7 @@ const TransparencyWallets = lazy(() => import("./pages/transparency/Wallets"));
 const TransparencyUnregisteredWallets = lazy(() => import("./pages/transparency/UnregisteredWallets"));
 const TransparencyLast30 = lazy(() => import("./pages/transparency/Last30"));
 const TransparencySearchByWallet = lazy(() => import("./pages/transparency/SearchByWallet"));
+const TransparencyFinancialFlow = lazy(() => import("./pages/transparency/FinancialFlow"));
 const DirectFundLayout = lazy(() => import("./pages/direct-fund/DirectFundLayout"));
 const DirectFundPayments = lazy(() => import("./pages/direct-fund/PaymentsPage"));
 const DirectFundBudgets = lazy(() => import("./pages/direct-fund/BudgetsPage"));
@@ -275,6 +276,7 @@ const App = () => (
                     <Route path="search-wallet" element={<TransparencySearchByWallet />} />
                     <Route path="wallets" element={<TransparencyWallets />} />
                     <Route path="unregistered-wallets" element={<TransparencyUnregisteredWallets />} />
+                    <Route path="flow" element={<TransparencyFinancialFlow />} />
                   </Route>
                   <Route path="/unconditional-payment" element={<UnconditionalPaymentLayout />}>
                     <Route index element={<UnconditionalPaymentPending />} />
