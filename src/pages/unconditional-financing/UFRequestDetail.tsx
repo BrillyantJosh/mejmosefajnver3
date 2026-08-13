@@ -26,6 +26,7 @@ import {
   ufMaturingDaysLeft,
   ufTypeLabel,
   useUfRequest,
+  type UfContribution,
   type UfFinancier,
   type UfRepayment,
 } from "@/hooks/useUFData";
@@ -51,6 +52,21 @@ const UFRequestDetail = () => {
   const repayments: UfRepayment[] = detail?.repayments || [];
   const totalFunded = detail?.totalFunded ?? 0;
   const totalRepaid = detail?.totalRepaid ?? 0;
+
+  // Messages financiers wrote for the recipient while contributing. A
+  // financier card aggregates all of that person's contributions, so collect
+  // their messages the same way — newest first, blanks dropped.
+  const messagesByFinancier = useMemo(() => {
+    const map = new Map<string, UfContribution[]>();
+    for (const c of detail?.contributions || []) {
+      if (!c.message?.trim()) continue;
+      const list = map.get(c.supporterPubkey);
+      if (list) list.push(c);
+      else map.set(c.supporterPubkey, [c]);
+    }
+    for (const list of map.values()) list.sort((a, b) => b.nostrCreatedAt - a.nostrCreatedAt);
+    return map;
+  }, [detail?.contributions]);
 
   // Requester + financiers profiles in one bulk lookup
   const profilePubkeys = useMemo(() => {
@@ -402,6 +418,7 @@ const UFRequestDetail = () => {
             <div className="space-y-3">
               {financiers.map((financier) => {
                 const p = profiles.get(financier.pubkey);
+                const messages = messagesByFinancier.get(financier.pubkey) || [];
                 return (
                   <Card key={financier.pubkey} className="p-4">
                     <div className="flex items-center gap-4">
@@ -424,6 +441,28 @@ const UFRequestDetail = () => {
                         </p>
                       </div>
                     </div>
+
+                    {messages.length > 0 && (
+                      <div className="mt-3 space-y-2 border-t pt-3">
+                        {messages.map((c) => (
+                          <blockquote
+                            key={c.id}
+                            className="border-l-2 border-muted-foreground/30 pl-3"
+                          >
+                            <p className="text-sm whitespace-pre-wrap break-words">
+                              {c.message}
+                            </p>
+                            <footer className="mt-1 text-xs text-muted-foreground">
+                              {/* the contribution's own currency, not the request's */}
+                              {c.amountFiat.toFixed(2)} {c.currency || request.currency}
+                              {c.nostrCreatedAt > 0 && (
+                                <> · {format(new Date(c.nostrCreatedAt * 1000), "d MMM yyyy")}</>
+                              )}
+                            </footer>
+                          </blockquote>
+                        ))}
+                      </div>
+                    )}
                   </Card>
                 );
               })}
