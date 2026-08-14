@@ -12,6 +12,7 @@ import {
   PiggyBank,
   Search,
   ShoppingCart,
+  Store,
   TrendingDown,
   Wallet as WalletIcon,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import {
   addCurrency,
   analyzeAnnuityPlan,
   bucketWallets,
+  monthlySplit,
   newestPerD,
   parseLanaFundUnits,
   perCurrencyEntries,
@@ -153,6 +155,30 @@ async function fetchBalancesMap(addresses: string[], electrumServers: unknown): 
 const fmtLana = (n: number) =>
   `${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LANA`;
 
+const fmtFiat = (n: number, currency: string) =>
+  `${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+
+/** The viewed user's own currency, and the rate that converts LANA into it. */
+interface FiatView { currency: string; rate: number }
+
+/**
+ * A LANA amount with its fiat equivalent underneath. The rate comes from
+ * KIND 38888 and can be 0 (unpublished) — then only LANA is shown rather
+ * than a fake 0.00.
+ */
+function LanaWithFiat({ lana, fiat, bold = false }: { lana: number; fiat: FiatView; bold?: boolean }) {
+  return (
+    <span className="inline-block text-right">
+      <span className={bold ? "font-bold" : ""}>{fmtLana(lana)}</span>
+      {fiat.rate > 0 && (
+        <span className="block text-xs font-normal text-muted-foreground">
+          ≈ {fmtFiat(lana * fiat.rate, fiat.currency)}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function FiatList({ pc, prefix = "", muted = false }: { pc: PerCurrency; prefix?: string; muted?: boolean }) {
   const entries = perCurrencyEntries(pc);
   if (entries.length === 0) return <span className={muted ? "text-muted-foreground" : ""}>—</span>;
@@ -229,7 +255,7 @@ function Section({ icon: Icon, title, loading, error, children }: {
 
 // ── sections ────────────────────────────────────────────────────────────
 
-function BalancesSection({ pubkey, fiatRate, fiatCurrency }: { pubkey: string; fiatRate: number; fiatCurrency: string }) {
+function BalancesSection({ pubkey, fiat }: { pubkey: string; fiat: FiatView }) {
   const { parameters } = useSystemParameters();
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(pubkey || null);
   const ready = !walletsLoading && !!parameters;
@@ -240,15 +266,17 @@ function BalancesSection({ pubkey, fiatRate, fiatCurrency }: { pubkey: string; f
 
   const renderBucket = (bucket: WalletBucket) => (
     <div key={bucket.label} className="rounded-lg border p-3">
-      <div className="flex items-baseline justify-between gap-2">
+      <div className="flex items-start justify-between gap-2">
         <p className="font-semibold">{bucket.label}</p>
-        <p className="font-bold text-green-500">{fmtLana(bucket.totalLana)}</p>
+        <div className="text-right">
+          <p className="font-bold text-green-500">{fmtLana(bucket.totalLana)}</p>
+          {fiat.rate > 0 && (
+            <p className="text-xs text-muted-foreground">
+              ≈ {fmtFiat(bucket.totalLana * fiat.rate, fiat.currency)}
+            </p>
+          )}
+        </div>
       </div>
-      {fiatRate > 0 && (
-        <p className="text-right text-xs text-muted-foreground">
-          ≈ {(bucket.totalLana * fiatRate).toFixed(2)} {fiatCurrency}
-        </p>
-      )}
       <div className="mt-2 space-y-1">
         {bucket.wallets.map((w) => (
           <div key={w.walletId} className="flex items-center justify-between gap-2 text-xs">
@@ -257,7 +285,14 @@ function BalancesSection({ pubkey, fiatRate, fiatCurrency }: { pubkey: string; f
               {w.note ? ` · ${w.note}` : ""}
               {w.freezeStatus ? " ❄" : ""}
             </span>
-            <span className="shrink-0">{fmtLana(w.balance)}</span>
+            <span className="shrink-0 text-right">
+              {fmtLana(w.balance)}
+              {fiat.rate > 0 && (
+                <span className="block text-muted-foreground">
+                  ≈ {fmtFiat(w.balance * fiat.rate, fiat.currency)}
+                </span>
+              )}
+            </span>
           </div>
         ))}
         {bucket.wallets.length === 0 && <p className="text-xs text-muted-foreground">No wallets of this type.</p>}
@@ -273,9 +308,16 @@ function BalancesSection({ pubkey, fiatRate, fiatCurrency }: { pubkey: string; f
           {renderBucket(state.data.spending)}
           {renderBucket(state.data.lanapays)}
           {state.data.other.wallets.length > 0 && renderBucket(state.data.other)}
-          <div className="flex items-baseline justify-between border-t pt-2">
+          <div className="flex items-start justify-between border-t pt-2">
             <p className="font-semibold">Total registered</p>
-            <p className="text-lg font-bold">{fmtLana(state.data.totalLana)}</p>
+            <div className="text-right">
+              <p className="text-lg font-bold">{fmtLana(state.data.totalLana)}</p>
+              {fiat.rate > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  ≈ {fmtFiat(state.data.totalLana * fiat.rate, fiat.currency)}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -313,7 +355,8 @@ function ProjectsSection({ pubkey }: { pubkey: string }) {
         <p className="text-sm text-muted-foreground">No projects submitted.</p>
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+          {/* Full page width, so many projects stay readable */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {state.data.projects.map((p) => {
               const pct = p.fiatGoal > 0 ? Math.min((p.totalRaised / p.fiatGoal) * 100, 100) : 0;
               return (
@@ -339,8 +382,10 @@ function ProjectsSection({ pubkey }: { pubkey: string }) {
               );
             })}
           </div>
-          <div className="space-y-1 border-t pt-3">
-            <StatRow label="Received across projects"><FiatList pc={state.data.raisedFiat} /></StatRow>
+          <div className="grid gap-x-8 gap-y-1 border-t pt-3 sm:grid-cols-2">
+            <StatRow label={`Received across ${state.data.projects.length} projects`}>
+              <FiatList pc={state.data.raisedFiat} />
+            </StatRow>
             <StatRow label="Still waiting (goal − received)"><FiatList pc={state.data.remainingFiat} /></StatRow>
             <StatRow label="Received this month"><FiatList pc={state.data.monthly.thisMonth} /></StatRow>
             <StatRow label="Received last month"><FiatList pc={state.data.monthly.lastMonth} /></StatRow>
@@ -351,29 +396,74 @@ function ProjectsSection({ pubkey }: { pubkey: string }) {
   );
 }
 
-function LanaFundSection({ pubkey, spending }: { pubkey: string; spending: SectionState<SpendingSummary> }) {
+/**
+ * The user's KIND 30901 merchant units, split into LanaFund.Me fundraisers and
+ * ordinary shops. Fetched on its own (one indexed query by author) so it
+ * resolves immediately instead of waiting on the full purchase sweep — the
+ * answer "you have no fundraiser" should not take as long as the answer
+ * "here is what they earned".
+ *
+ * Same rule the lanafund.me service itself applies: a fundraiser is a 30901
+ * carrying unit_type='lanafund.me'.
+ */
+function useMerchantUnits(pubkey: string) {
   const { parameters } = useSystemParameters();
-  // Donations received come from the shared purchase set — without it there is
-  // nothing to say, so wait for it rather than render every fundraiser at zero.
-  const ready = !!parameters?.relays?.length && !!spending.data;
-  const state = useSection<LanaFundSummary>(pubkey, ready, async () => {
-    const unitEvents = await relayQuery(parameters!.relays, { kinds: [30901], authors: [pubkey], limit: 200 });
-    const units = parseLanaFundUnits(unitEvents as FlowEvent[]);
-    return summarizeLanaFund(units, spending.data?.merchantRows || [], new Date());
-  }, [spending.data]);
+  return useSection<{ fundraisers: ReturnType<typeof parseLanaFundUnits>; shops: FlowEvent[] }>(
+    pubkey,
+    !!parameters?.relays?.length,
+    async () => {
+      const events = (await relayQuery(parameters!.relays, { kinds: [30901], authors: [pubkey], limit: 200 })) as FlowEvent[];
+      const latest = newestPerD(events);
+      return {
+        fundraisers: parseLanaFundUnits(latest),
+        shops: latest.filter((ev) => tagOf(ev, "unit_type") !== "lanafund.me"),
+      };
+    },
+  );
+}
+
+function LanaFundSection({
+  pubkey, spending, units,
+}: {
+  pubkey: string;
+  spending: SectionState<SpendingSummary>;
+  units: ReturnType<typeof useMerchantUnits>;
+}) {
+  const fundraisers = units.data?.fundraisers || [];
+  // Donation totals need the purchase sweep; the unit list does not.
+  const totals = useMemo<LanaFundSummary | null>(
+    () => (spending.data ? summarizeLanaFund(fundraisers, spending.data.merchantRows, new Date()) : null),
+    [fundraisers, spending.data],
+  );
 
   return (
-    <Section
-      icon={PiggyBank}
-      title="LanaFund.Me"
-      loading={(state.loading || spending.loading) && !spending.error}
-      error={spending.error ? `purchase records unavailable (${spending.error})` : state.error}
-    >
-      {state.data && (state.data.units.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No LanaFund.Me fundraisers.</p>
+    <Section icon={PiggyBank} title="LanaFund.Me" loading={units.loading} error={units.error}>
+      {units.data && (fundraisers.length === 0 ? (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">No LanaFund.Me fundraiser registered for this user.</p>
+          {units.data.shops.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              This pubkey does have {units.data.shops.length} merchant unit
+              {units.data.shops.length === 1 ? "" : "s"} — those are shops, not fundraisers, and
+              their income is under “Merchant income”.
+            </p>
+          )}
+        </div>
+      ) : !totals ? (
+        <div className="space-y-2">
+          {fundraisers.map((u) => (
+            <div key={u.unitId} className="flex items-baseline justify-between gap-2 rounded-lg border p-3">
+              <p className="font-semibold">{u.name}</p>
+              <Badge variant={u.status === "active" ? "default" : "secondary"}>{u.status || "?"}</Badge>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            {spending.error ? `Donation totals unavailable: ${spending.error}` : "Loading donation totals…"}
+          </p>
+        </div>
       ) : (
         <div className="space-y-3">
-          {state.data.units.map((u) => (
+          {totals.units.map((u) => (
             <div key={u.unitId} className="rounded-lg border p-3">
               <div className="flex items-baseline justify-between gap-2">
                 <p className="font-semibold">{u.name}</p>
@@ -385,9 +475,9 @@ function LanaFundSection({ pubkey, spending }: { pubkey: string; spending: Secti
             </div>
           ))}
           <div className="space-y-1 border-t pt-2">
-            <StatRow label="Total received"><FiatList pc={state.data.totalFiat} /></StatRow>
-            <StatRow label="This month"><FiatList pc={state.data.monthly.thisMonth} /></StatRow>
-            <StatRow label="Last month"><FiatList pc={state.data.monthly.lastMonth} /></StatRow>
+            <StatRow label="Total received"><FiatList pc={totals.totalFiat} /></StatRow>
+            <StatRow label="This month"><FiatList pc={totals.monthly.thisMonth} /></StatRow>
+            <StatRow label="Last month"><FiatList pc={totals.monthly.lastMonth} /></StatRow>
           </div>
           <p className="text-[11px] text-muted-foreground">
             Donations arrive as LANA; the principal is settled to the fundraiser's bank off-chain by investors.
@@ -398,7 +488,71 @@ function LanaFundSection({ pubkey, spending }: { pubkey: string; spending: Secti
   );
 }
 
-function SpendingSection({ spending }: { spending: SectionState<SpendingSummary> }) {
+/**
+ * Money taken IN as a merchant — the other side of the same purchase records.
+ * Without this the shop income sitting in merchantRows would be computed and
+ * then thrown away for anyone whose units are shops rather than fundraisers.
+ */
+function MerchantIncomeSection({
+  spending, units, fiat,
+}: {
+  spending: SectionState<SpendingSummary>;
+  units: ReturnType<typeof useMerchantUnits>;
+  fiat: FiatView;
+}) {
+  const summary = useMemo(() => {
+    if (!spending.data) return null;
+    const fundraiserIds = new Set((units.data?.fundraisers || []).map((u) => u.unitId));
+    // Fundraiser income has its own section — don't double-report it here.
+    const rows = spending.data.merchantRows.filter((r) => !fundraiserIds.has(r.unitId));
+    const totalFiat: PerCurrency = {};
+    let totalLana = 0;
+    const byUnit = new Map<string, { name: string; fiat: PerCurrency; count: number }>();
+    for (const r of rows) {
+      addCurrency(totalFiat, r.currency, r.amountFiat);
+      totalLana += r.lana;
+      const key = r.unitId || r.merchantName || "—";
+      const entry = byUnit.get(key) || { name: r.merchantName || key, fiat: {}, count: 0 };
+      addCurrency(entry.fiat, r.currency, r.amountFiat);
+      entry.count += 1;
+      byUnit.set(key, entry);
+    }
+    return {
+      count: rows.length,
+      totalFiat,
+      totalLana,
+      units: [...byUnit.values()].sort((a, b) => b.count - a.count),
+      monthly: monthlySplit(rows.map((r) => ({ ts: r.ts, currency: r.currency, amount: r.amountFiat })), new Date()),
+    };
+  }, [spending.data, units.data]);
+
+  return (
+    <Section icon={Store} title="Merchant income (shops)" loading={spending.loading} error={spending.error}>
+      {summary && (summary.count === 0 ? (
+        <p className="text-sm text-muted-foreground">No sales recorded as a merchant.</p>
+      ) : (
+        <div className="space-y-1">
+          <StatRow label={`Received (${summary.count} sales)`}><FiatList pc={summary.totalFiat} /></StatRow>
+          <StatRow label="…as LANA">
+            <LanaWithFiat lana={summary.totalLana} fiat={fiat} />
+          </StatRow>
+          <StatRow label="This month"><FiatList pc={summary.monthly.thisMonth} /></StatRow>
+          <StatRow label="Last month"><FiatList pc={summary.monthly.lastMonth} /></StatRow>
+          <div className="space-y-1 border-t pt-2">
+            {summary.units.slice(0, 6).map((u) => (
+              <div key={u.name} className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span className="truncate">{u.name} · {u.count}×</span>
+                <span className="shrink-0"><FiatList pc={u.fiat} /></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </Section>
+  );
+}
+
+function SpendingSection({ spending, fiat }: { spending: SectionState<SpendingSummary>; fiat: FiatView }) {
   return (
     <Section icon={ShoppingCart} title="Spending (LanaPays purchases)" loading={spending.loading} error={spending.error}>
       {spending.data && (spending.data.count === 0 ? (
@@ -406,7 +560,7 @@ function SpendingSection({ spending }: { spending: SectionState<SpendingSummary>
       ) : (
         <div className="space-y-1">
           <StatRow label={`Total spent (${spending.data.count} purchases)`}><FiatList pc={spending.data.totalFiat} /></StatRow>
-          <StatRow label="…as LANA">{fmtLana(spending.data.totalLana)}</StatRow>
+          <StatRow label="…as LANA"><LanaWithFiat lana={spending.data.totalLana} fiat={fiat} /></StatRow>
           <StatRow label="Paid with cash"><FiatList pc={spending.data.byCashFiat} muted /></StatRow>
           <StatRow label="Paid with LANA"><FiatList pc={spending.data.byLanaFiat} muted /></StatRow>
           <StatRow label="Obilje cashback earned"><FiatList pc={spending.data.cashbackFiat} /></StatRow>
@@ -428,7 +582,7 @@ function SpendingSection({ spending }: { spending: SectionState<SpendingSummary>
   );
 }
 
-function DiscountSection({ pubkey }: { pubkey: string }) {
+function DiscountSection({ pubkey, fiat }: { pubkey: string; fiat: FiatView }) {
   const { parameters } = useSystemParameters();
   const ready = !!parameters?.relays?.length;
   const state = useSection<DiscountSummary>(pubkey, ready, async () => {
@@ -445,7 +599,7 @@ function DiscountSection({ pubkey }: { pubkey: string }) {
         <p className="text-sm text-muted-foreground">No buyback sales.</p>
       ) : (
         <div className="space-y-1">
-          <StatRow label={`LANA sold (${state.data.sales.length} sales)`}>{fmtLana(state.data.lanaSold)}</StatRow>
+          <StatRow label={`LANA sold (${state.data.sales.length} sales)`}><LanaWithFiat lana={state.data.lanaSold} fiat={fiat} /></StatRow>
           <StatRow label="Gross value"><FiatList pc={state.data.grossFiat} muted /></StatRow>
           <StatRow label="Commission"><FiatList pc={state.data.commissionFiat} muted /></StatRow>
           <StatRow label="Net owed"><FiatList pc={state.data.netFiat} /></StatRow>
@@ -470,7 +624,7 @@ function DiscountSection({ pubkey }: { pubkey: string }) {
   );
 }
 
-function Lana8WonderSection({ pubkey }: { pubkey: string }) {
+function Lana8WonderSection({ pubkey, fiat }: { pubkey: string; fiat: FiatView }) {
   const { parameters } = useSystemParameters();
   const ready = !!parameters?.relays?.length;
   const state = useSection<L8WSummary | null>(pubkey, ready, async () => {
@@ -498,17 +652,17 @@ function Lana8WonderSection({ pubkey }: { pubkey: string }) {
         <p className="text-sm text-muted-foreground">No Lana8Wonder annuity plan.</p>
       ) : state.data ? (
         <div className="space-y-1">
-          <StatRow label="Withdrawn so far">{fmtLana(state.data.totalWithdrawnLana)}</StatRow>
+          <StatRow label="Withdrawn so far"><LanaWithFiat lana={state.data.totalWithdrawnLana} fiat={fiat} /></StatRow>
           <StatRow label="…planned value of those levels">
             {state.data.totalPlannedFiatOut.toFixed(2)} {state.data.currency}
           </StatRow>
-          <StatRow label="Pending cash-out now">{fmtLana(state.data.totalPendingLana)}</StatRow>
+          <StatRow label="Pending cash-out now"><LanaWithFiat lana={state.data.totalPendingLana} fiat={fiat} /></StatRow>
           {state.data.totalPendingLana > 0 && (
             <StatRow label="…at today's rate">
               ≈ {state.data.totalPendingFiat.toFixed(2)} {state.data.currency}
             </StatRow>
           )}
-          <StatRow label="Held in plan accounts">{fmtLana(state.data.totalBalance)}</StatRow>
+          <StatRow label="Held in plan accounts"><LanaWithFiat lana={state.data.totalBalance} fiat={fiat} /></StatRow>
           {state.data.unknownBalanceCount > 0 && (
             <Alert variant="destructive" className="mt-2">
               <AlertDescription className="text-xs">
@@ -563,7 +717,7 @@ function UnconditionalPaymentsSection({ pubkey }: { pubkey: string }) {
   );
 }
 
-function Plan15Section({ pubkey }: { pubkey: string }) {
+function Plan15Section({ pubkey, fiat }: { pubkey: string; fiat: FiatView }) {
   const { parameters } = useSystemParameters();
   const ready = !!parameters?.relays?.length;
   const state = useSection<Plan15Summary>(pubkey, ready, async () => {
@@ -601,15 +755,15 @@ function Plan15Section({ pubkey }: { pubkey: string }) {
               {state.data.status}{state.data.isStaker ? " · staker" : ""}
             </Badge>
           </StatRow>
-          <StatRow label="Holdings (PLAN15 + staker wallet)">{fmtLana(state.data.holdingsLana)}</StatRow>
+          <StatRow label="Holdings (PLAN15 + staker wallet)"><LanaWithFiat lana={state.data.holdingsLana} fiat={fiat} /></StatRow>
           <StatRow label={`Bought (${state.data.purchasesCount})`}>
             {fmtLana(state.data.boughtUnregLana)} unregistered
           </StatRow>
-          <StatRow label="…paid for it">{fmtLana(state.data.paidRegLana)}</StatRow>
+          <StatRow label="…paid for it"><LanaWithFiat lana={state.data.paidRegLana} fiat={fiat} /></StatRow>
           <StatRow label={`Sold (${state.data.salesCount})`}>
             {fmtLana(state.data.soldUnregLana)} unregistered
           </StatRow>
-          <StatRow label="…received for it">{fmtLana(state.data.receivedRegLana)}</StatRow>
+          <StatRow label="…received for it"><LanaWithFiat lana={state.data.receivedRegLana} fiat={fiat} /></StatRow>
           <StatRow label={`Active offers (${state.data.activeOffersCount})`}>{fmtLana(state.data.activeOffersLana)}</StatRow>
         </div>
       ))}
@@ -624,7 +778,7 @@ interface UfSupportRow {
   outstandingToMe: number;
 }
 
-function DonationsSection({ pubkey }: { pubkey: string }) {
+function DonationsSection({ pubkey, fiat }: { pubkey: string; fiat: FiatView }) {
   const { parameters } = useSystemParameters();
   const ready = !!parameters?.relays?.length;
   const state = useSection<{ made: DonationsSummary; uf: { supported: PerCurrency; repaid: PerCurrency; outstanding: PerCurrency; count: number } }>(
@@ -662,7 +816,7 @@ function DonationsSection({ pubkey }: { pubkey: string }) {
           <StatRow label={`100 Million Ideas donations (${state.data.made.crowdCount})`}>
             <FiatList pc={state.data.made.crowdFiat} />
           </StatRow>
-          <StatRow label="…as LANA">{fmtLana(state.data.made.crowdLana)}</StatRow>
+          <StatRow label="…as LANA"><LanaWithFiat lana={state.data.made.crowdLana} fiat={fiat} /></StatRow>
           <StatRow label="This month"><FiatList pc={state.data.made.monthly.thisMonth} muted /></StatRow>
           <StatRow label="Last month"><FiatList pc={state.data.made.monthly.lastMonth} muted /></StatRow>
           <div className="border-t pt-2" />
@@ -676,9 +830,9 @@ function DonationsSection({ pubkey }: { pubkey: string }) {
             <FiatList pc={state.data.uf.outstanding} muted />
           </StatRow>
           <div className="border-t pt-2" />
-          <StatRow label={`Event donations (${state.data.made.eventsCount})`}>{fmtLana(state.data.made.eventsLana)}</StatRow>
-          <StatRow label={`LASH given (${state.data.made.lashSentCount})`}>{fmtLana(state.data.made.lashSentLana)}</StatRow>
-          <StatRow label={`LASH received (${state.data.made.lashReceivedCount})`}>{fmtLana(state.data.made.lashReceivedLana)}</StatRow>
+          <StatRow label={`Event donations (${state.data.made.eventsCount})`}><LanaWithFiat lana={state.data.made.eventsLana} fiat={fiat} /></StatRow>
+          <StatRow label={`LASH given (${state.data.made.lashSentCount})`}><LanaWithFiat lana={state.data.made.lashSentLana} fiat={fiat} /></StatRow>
+          <StatRow label={`LASH received (${state.data.made.lashReceivedCount})`}><LanaWithFiat lana={state.data.made.lashReceivedLana} fiat={fiat} /></StatRow>
         </div>
       )}
     </Section>
@@ -771,6 +925,9 @@ export default function FinancialFlow() {
     return summarizeSpending([...byId.values()], pubkey, processorSigners, new Date());
   });
 
+  // Merchant units feed both the LanaFund and Merchant-income sections.
+  const units = useMerchantUnits(pubkey);
+
   const selectProfile = (pk: string) => {
     setSearchParams({ pubkey: pk });
     setSearchTerm("");
@@ -781,9 +938,14 @@ export default function FinancialFlow() {
   // otherwise the header would name A above B's pubkey and convert B's
   // balances at A's currency.
   const shownProfile = profile?.nostr_hex_id === pubkey ? profile : null;
+  // The viewed user's OWN currency (their KIND 0 `currency`), so balances read
+  // in the money that person thinks in — not the viewer's.
   const metaCurrency = shownProfile?.raw_metadata?.currency;
   const fiatCurrency = (typeof metaCurrency === "string" && metaCurrency ? metaCurrency.toUpperCase() : "EUR");
-  const fiatRate = parameters?.exchangeRates?.[fiatCurrency as "EUR" | "USD" | "GBP"] || 0;
+  const fiat: FiatView = {
+    currency: fiatCurrency,
+    rate: parameters?.exchangeRates?.[fiatCurrency as "EUR" | "USD" | "GBP"] || 0,
+  };
 
   return (
     <div className="container mx-auto max-w-5xl space-y-6 p-4">
@@ -857,15 +1019,22 @@ export default function FinancialFlow() {
           </Card>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <BalancesSection pubkey={pubkey} fiatRate={fiatRate} fiatCurrency={fiatCurrency} />
-            <Lana8WonderSection pubkey={pubkey} />
-            <ProjectsSection pubkey={pubkey} />
-            <LanaFundSection pubkey={pubkey} spending={spending} />
-            <SpendingSection spending={spending} />
-            <DiscountSection pubkey={pubkey} />
+            <BalancesSection pubkey={pubkey} fiat={fiat} />
+            <Lana8WonderSection pubkey={pubkey} fiat={fiat} />
+          </div>
+
+          {/* Projects get the full width: there can be many, and sharing a
+              column with a short section wastes the space they need. */}
+          <ProjectsSection pubkey={pubkey} />
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <LanaFundSection pubkey={pubkey} spending={spending} units={units} />
+            <MerchantIncomeSection spending={spending} units={units} fiat={fiat} />
+            <SpendingSection spending={spending} fiat={fiat} />
+            <DiscountSection pubkey={pubkey} fiat={fiat} />
             <UnconditionalPaymentsSection pubkey={pubkey} />
-            <Plan15Section pubkey={pubkey} />
-            <DonationsSection pubkey={pubkey} />
+            <Plan15Section pubkey={pubkey} fiat={fiat} />
+            <DonationsSection pubkey={pubkey} fiat={fiat} />
             <DirectFundSection pubkey={pubkey} />
           </div>
 
