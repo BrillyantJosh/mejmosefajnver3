@@ -20,6 +20,7 @@ import {
   summarizePlan15,
   summarizeProjects,
   summarizeSpending,
+  summarizeUfFinancings,
   summarizeUnconditionalPayments,
   type FlowEvent,
 } from '../src/lib/financialFlowData.js';
@@ -288,6 +289,21 @@ console.log('— LanaFund.Me —');
   const s = summarizeLanaFund(units, merchantRows, NOW);
   check('shop income excluded from LanaFund totals', (s.totalFiat as any).EUR === 25 && s.totalCount === 1, s.totalFiat);
   check('monthly attribution', (s.monthly.thisMonth as any).EUR === 25 && Object.keys(s.monthly.lastMonth).length === 0);
+}
+
+console.log('— unconditional financing: own requests —');
+{
+  const rows = [
+    // the real shape from /my-financings: partially funded, nothing repaid
+    { request: { id: 'uf:1', title: 'LanaFund.Me (Testni Primer)', fiatGoal: 100, currency: 'EUR', phase: 'repaying' }, totalFunded: 45, totalRepaid: 0, outstanding: 45 },
+    { request: { id: 'uf:2', title: 'Overfunded', fiatGoal: 50, currency: 'EUR' }, totalFunded: 60, totalRepaid: 10, outstanding: 50 },
+    { request: { id: 'uf:3', title: 'Other currency', fiatGoal: 80, currency: 'GBP' }, totalFunded: 20, totalRepaid: 0, outstanding: 20 },
+  ];
+  const s = summarizeUfFinancings(rows);
+  check('funded and goal per currency', (s.fundedFiat as any).EUR === 105 && (s.goalFiat as any).GBP === 80, s);
+  check('still waiting clamps overfunded to 0', (s.stillWaitingFiat as any).EUR === 55, s.stillWaitingFiat);
+  check('repaid and outstanding carried through', (s.repaidFiat as any).EUR === 10 && (s.outstandingFiat as any).EUR === 95);
+  check('currencies never merged', (s.stillWaitingFiat as any).GBP === 60, s.stillWaitingFiat);
 }
 
 console.log('— projects summary —');

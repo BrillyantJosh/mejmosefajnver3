@@ -7,6 +7,7 @@ import {
   Coins,
   Gift,
   HandCoins,
+  HeartHandshake,
   Landmark,
   Lightbulb,
   PiggyBank,
@@ -43,6 +44,7 @@ import {
   summarizePlan15,
   summarizeProjects,
   summarizeSpending,
+  summarizeUfFinancings,
   summarizeUnconditionalPayments,
   tagOf,
   type AnnuityPlan,
@@ -56,6 +58,7 @@ import {
   type Plan15Summary,
   type ProjectsSummary,
   type SpendingSummary,
+  type UfFinancingsSummary,
   type UpSummary,
   type WalletBucket,
 } from "@/lib/financialFlowData";
@@ -389,6 +392,62 @@ function ProjectsSection({ pubkey }: { pubkey: string }) {
             <StatRow label="Still waiting (goal − received)"><FiatList pc={state.data.remainingFiat} /></StatRow>
             <StatRow label="Received this month"><FiatList pc={state.data.monthly.thisMonth} /></StatRow>
             <StatRow label="Received last month"><FiatList pc={state.data.monthly.lastMonth} /></StatRow>
+          </div>
+        </div>
+      ))}
+    </Section>
+  );
+}
+
+/**
+ * Requests the user raised themselves under Unconditional Financing — their
+ * own fundraising projects, the counterpart to the supports they gave others.
+ */
+function UfFinancingsSection({ pubkey }: { pubkey: string }) {
+  const state = useSection<UfFinancingsSummary>(pubkey, true, async () => {
+    const res = await getJson(`${API_URL}/api/unconditional-financing/my-financings/${pubkey}`);
+    return summarizeUfFinancings(res?.financings || []);
+  });
+
+  return (
+    <Section icon={HeartHandshake} title="Unconditional Financing — my requests" loading={state.loading} error={state.error}>
+      {state.data && (state.data.financings.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No financing requests raised.</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {state.data.financings.map(({ request: r, totalFunded, totalRepaid, outstanding }) => {
+              const pct = r.fiatGoal > 0 ? Math.min((totalFunded / r.fiatGoal) * 100, 100) : 0;
+              return (
+                <div key={r.id} className="overflow-hidden rounded-lg border">
+                  {r.coverImage && (
+                    <img src={r.coverImage} alt={r.title} className="h-28 w-full object-cover" loading="lazy" />
+                  )}
+                  <div className="space-y-2 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold leading-tight">{r.title}</p>
+                      {r.phase && <Badge variant="secondary">{r.phase}</Badge>}
+                    </div>
+                    <Progress value={pct} />
+                    <p className="text-xs text-muted-foreground">
+                      {totalFunded.toFixed(2)} / {r.fiatGoal.toFixed(2)} {r.currency}
+                      {r.financierCount ? ` · ${r.financierCount} financiers` : ""}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      repaid {totalRepaid.toFixed(2)} · outstanding {outstanding.toFixed(2)} {r.currency}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="grid gap-x-8 gap-y-1 border-t pt-3 sm:grid-cols-2">
+            <StatRow label={`Financed across ${state.data.financings.length} request(s)`}>
+              <FiatList pc={state.data.fundedFiat} />
+            </StatRow>
+            <StatRow label="Still waiting (goal − financed)"><FiatList pc={state.data.stillWaitingFiat} /></StatRow>
+            <StatRow label="Repaid by me"><FiatList pc={state.data.repaidFiat} /></StatRow>
+            <StatRow label="Still to repay"><FiatList pc={state.data.outstandingFiat} /></StatRow>
           </div>
         </div>
       ))}
@@ -1023,9 +1082,10 @@ export default function FinancialFlow() {
             <Lana8WonderSection pubkey={pubkey} fiat={fiat} />
           </div>
 
-          {/* Projects get the full width: there can be many, and sharing a
-              column with a short section wastes the space they need. */}
+          {/* Projects and own financing requests get the full width: there
+              can be many, and sharing a column wastes the space they need. */}
           <ProjectsSection pubkey={pubkey} />
+          <UfFinancingsSection pubkey={pubkey} />
 
           <div className="grid gap-4 lg:grid-cols-2">
             <LanaFundSection pubkey={pubkey} spending={spending} units={units} />

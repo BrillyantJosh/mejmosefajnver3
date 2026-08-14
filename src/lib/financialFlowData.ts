@@ -670,6 +670,52 @@ export function summarizeLanaFund(
   return { units: [...byUnit.values()], totalFiat, totalLana, totalCount, monthly: monthlySplit(dated, now) };
 }
 
+// ── Unconditional Financing: requests the user raised themselves ────────
+
+export interface UfFinancingRow {
+  request: {
+    id: string;
+    title: string;
+    coverImage?: string | null;
+    fiatGoal: number;
+    currency: string;
+    phase?: string;
+    contributionCount?: number;
+    financierCount?: number;
+  };
+  totalFunded: number;
+  totalRepaid: number;
+  outstanding: number;
+}
+
+export interface UfFinancingsSummary {
+  financings: UfFinancingRow[];
+  goalFiat: PerCurrency;
+  fundedFiat: PerCurrency;
+  /** goal − funded, per request, never negative — "koliko se še čaka". */
+  stillWaitingFiat: PerCurrency;
+  repaidFiat: PerCurrency;
+  outstandingFiat: PerCurrency;
+}
+
+export function summarizeUfFinancings(rows: UfFinancingRow[]): UfFinancingsSummary {
+  const goalFiat: PerCurrency = {};
+  const fundedFiat: PerCurrency = {};
+  const stillWaitingFiat: PerCurrency = {};
+  const repaidFiat: PerCurrency = {};
+  const outstandingFiat: PerCurrency = {};
+  for (const row of rows) {
+    const currency = row.request?.currency || 'EUR';
+    const goal = row.request?.fiatGoal || 0;
+    addCurrency(goalFiat, currency, goal);
+    addCurrency(fundedFiat, currency, row.totalFunded || 0);
+    addCurrency(stillWaitingFiat, currency, Math.max(goal - (row.totalFunded || 0), 0));
+    addCurrency(repaidFiat, currency, row.totalRepaid || 0);
+    addCurrency(outstandingFiat, currency, row.outstanding || 0);
+  }
+  return { financings: rows, goalFiat, fundedFiat, stillWaitingFiat, repaidFiat, outstandingFiat };
+}
+
 // ── 100 Million Ideas projects (lanacrowd REST rows) ────────────────────
 
 export interface LanacrowdProjectRow {
