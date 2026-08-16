@@ -120,7 +120,8 @@ const TXT = {
     cmtAttrForming: "Zaveza udeleženca {name} — nastaja z lastnimi besedami v procesu; zapisuje in preverja bitje {being}.",
     cmtAttrComplete: "Zaveza udeleženca {name} — izrečena z lastnimi besedami v procesu; zapisalo in preverilo bitje {being}.",
     cmtEmptyStatement: "Zaveza še ni ubesedena — spodaj je, kar bitje še potrebuje.",
-    cmtTasksTitle: "Da bo zaveza popolna, bitje {being} vabi k pojasnilu:",
+    cmtStandsTitle: "To že stoji — udeleženčeve zapisane točke",
+    cmtWaitsTitle: "To še čaka — bitje {being} vabi k pojasnilu",
     cmtUncovered: "Očitki, ki jih točke izrecno ne omenjajo (informativno)",
     cmtAnswers: "Odgovarja na",
     cmtTranslate: "Prevedi",
@@ -242,7 +243,8 @@ const TXT = {
     cmtAttrForming: "Commitment of {name} — taking shape in their own words in the process; being {being} is recording and verifying it.",
     cmtAttrComplete: "Commitment of {name} — stated in their own words in the process; recorded and verified by being {being}.",
     cmtEmptyStatement: "The commitment has not been put into words yet — below is what the being still needs.",
-    cmtTasksTitle: "To make the commitment whole, being {being} invites you to clarify:",
+    cmtStandsTitle: "This already stands — the participant's stated points",
+    cmtWaitsTitle: "This is still waiting — {being} invites clarification",
     cmtUncovered: "Grievances the points do not explicitly name (informational)",
     cmtAnswers: "Answers",
     cmtTranslate: "Translate",
@@ -1441,60 +1443,76 @@ export default function Matrix() {
                               ) : (
                                 <p className="text-xs text-muted-foreground border-l-4 border-dashed border-amber-500/40 pl-3 py-1.5">{L.cmtEmptyStatement}</p>
                               )}
-                              {!done && cm.tasks.length > 0 && (
-                                <div className="space-y-1">
-                                  <div className="text-[11px] font-medium text-muted-foreground">{L.cmtTasksTitle.replace("{being}", beingName)}</div>
-                                  <ul className="space-y-1">
-                                    {cm.tasks.map((t) => (
-                                      <li key={t.id} className="text-xs text-muted-foreground">• {tx(t.text)}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
+                              {/* TWO BLOCKS, TWO COLOURS. Before, the being's open
+                                  invitations and the participant's already-stated points
+                                  were the same tiny grey bullet, one list after the other,
+                                  under a heading that said "invites clarification" — so the
+                                  heading appeared to cover the points below it too and a
+                                  reader could not tell what was settled from what was
+                                  asked. Green = stands. Amber = still waiting. */}
                               {cm.points.length > 0 && (
-                                <ul className="space-y-2">
-                                  {cm.points.map((pt, i) => {
-                                    const refs = [
-                                      ...pt.addresses.received.map((id) => ({ id, dir: "received" as const })),
-                                      ...pt.addresses.given.map((id) => ({ id, dir: "given" as const })),
-                                    ];
-                                    return (
-                                      <li key={i} className="text-xs">
-                                        <span>• {tx(pt.text)}</span>
-                                        {refs.length > 0 && (
-                                          <>
-                                            <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">{L.cmtAnswers}</div>
-                                            <ul className="mt-1 space-y-1">
-                                              {refs.map(({ id, dir }, j) => (
-                                                <GrievanceLine key={`${id}-${j}`} g={gOf(id)} id={id} dir={dir} L={L} nameOf={nameOf} tx={tx} />
-                                              ))}
-                                            </ul>
-                                          </>
-                                        )}
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              )}
-                              {uncovered.length > 0 && (
-                                <div className="space-y-1">
-                                  <div className="text-[10px] uppercase tracking-wider text-amber-600">{L.cmtUncovered}</div>
-                                  <ul className="space-y-1">
-                                    {uncovered.map((id, j) => (
-                                      <GrievanceLine
-                                        key={`${id}-${j}`}
-                                        g={gOf(id)}
-                                        id={id}
-                                        dir={(cm.coverage?.uncovered_received || []).includes(id) ? "received" : "given"}
-                                        L={L}
-                                        nameOf={nameOf}
-                                        tx={tx}
-                                        warn
-                                      />
-                                    ))}
+                                <div className="rounded-md border border-emerald-500/30 bg-emerald-500/[0.05] p-2.5 space-y-2">
+                                  <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1.5">
+                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />{L.cmtStandsTitle}
+                                  </div>
+                                  <ul className="space-y-2.5">
+                                    {cm.points.map((pt, i) => {
+                                      const refs = [
+                                        ...pt.addresses.received.map((id) => ({ id, dir: "received" as const })),
+                                        ...pt.addresses.given.map((id) => ({ id, dir: "given" as const })),
+                                      ];
+                                      return (
+                                        <li key={i}>
+                                          <p className="text-sm leading-snug">{tx(pt.text)}</p>
+                                          {refs.length > 0 && (
+                                            <>
+                                              <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">{L.cmtAnswers}</div>
+                                              <ul className="mt-1 space-y-1">
+                                                {refs.map(({ id, dir }, j) => (
+                                                  <GrievanceLine key={`${id}-${j}`} g={gOf(id)} id={id} dir={dir} L={L} nameOf={nameOf} tx={tx} />
+                                                ))}
+                                              </ul>
+                                            </>
+                                          )}
+                                        </li>
+                                      );
+                                    })}
                                   </ul>
                                 </div>
                               )}
+                              {(!done && cm.tasks.length > 0) || uncovered.length > 0 ? (
+                                <div className="rounded-md border border-amber-500/40 bg-amber-500/[0.07] p-2.5 space-y-2">
+                                  <div className="text-xs font-semibold text-amber-700 dark:text-amber-400 inline-flex items-center gap-1.5">
+                                    <CircleDot className="h-3.5 w-3.5 shrink-0" />{L.cmtWaitsTitle.replace("{being}", beingName)}
+                                  </div>
+                                  {!done && cm.tasks.length > 0 && (
+                                    <ul className="space-y-1.5">
+                                      {cm.tasks.map((t) => (
+                                        <li key={t.id} className="text-sm leading-snug">{tx(t.text)}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  {uncovered.length > 0 && (
+                                    <div className="space-y-1 pt-0.5">
+                                      <div className="text-[10px] uppercase tracking-wider text-amber-600">{L.cmtUncovered}</div>
+                                      <ul className="space-y-1">
+                                        {uncovered.map((id, j) => (
+                                          <GrievanceLine
+                                            key={`${id}-${j}`}
+                                            g={gOf(id)}
+                                            id={id}
+                                            dir={(cm.coverage?.uncovered_received || []).includes(id) ? "received" : "given"}
+                                            L={L}
+                                            nameOf={nameOf}
+                                            tx={tx}
+                                            warn
+                                          />
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : null}
                               {showTx && <p className="text-[10px] italic text-muted-foreground">{L.cmtMachineTx}</p>}
                               <div className="text-[10px] text-muted-foreground">
                                 {L.cmtRev} {cm.revision}
