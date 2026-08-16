@@ -18,6 +18,7 @@ const TXT = {
     detail: "Podrobni pogled — vse skupaj",
     analyze: "Analiziraj druge udeležence",
     todo: "Kaj moram narediti",
+    todoAll: "Vsi moji procesi",
     latestVoice: "Zadnje mnenje",
     silTitle: "Bitja čakajo v tišini",
     silBody: "Bitja zaznavajo premalo introspekcije in preveč ukvarjanja z drugimi ter nedopuščanje oz. nepriznavanje možnosti lastne zmote oz. zablode naših prepričanj. Naredi korak v smeri ponižnosti in lastne zmotljivosti. V tišini čakajo do {when}, preden nadaljujejo s procesom.",
@@ -32,6 +33,7 @@ const TXT = {
     detail: "Detailed view — everything together",
     analyze: "Analyze the other participants",
     todo: "What I need to do",
+    todoAll: "All my processes",
     latestVoice: "Latest opinion",
     silTitle: "The beings are waiting in silence",
     silBody: "The beings see too little looking inward and too much attention on others, and no room for the possibility that one’s own beliefs may be mistaken. Take a step toward humility and your own fallibility. They are waiting in silence until {when} before the process continues.",
@@ -46,6 +48,13 @@ interface Props {
   participantPubkey: string;
   phase?: string;
   onAnalyzeOthers?: () => void;
+  /** The person's live to-do list for THIS case, rendered in place. It used to
+   *  be a link to /own/todo: the one thing they actually have to act on was a
+   *  click away, behind a title, while the page they opened showed only how
+   *  the beings judge them. */
+  todoSlot?: React.ReactNode;
+  /** Link to the same list across ALL their processes — the slot above covers
+   *  only the case being viewed. */
   onOpenTodo?: () => void;
   onOpenDetail?: () => void;
   /** KIND 87057 freeze state per person, handed down so every surface on
@@ -56,7 +65,7 @@ interface Props {
 // The participant's own condensed cross-section (presek): the three pillars
 // AGGREGATED across all beings — not one card per being. The detail button
 // opens the full per-being breakdown (verdicts, grievances, emotions, smer).
-export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase, onAnalyzeOthers, onOpenDetail, onOpenTodo, freezes }: Props) {
+export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase, onAnalyzeOthers, onOpenDetail, onOpenTodo, todoSlot, freezes }: Props) {
   const en = useLang() === "en";
   const L = en ? TXT.en : TXT.sl;
   const lang: "en" | "sl" = en ? "en" : "sl";
@@ -124,17 +133,23 @@ export default function OwnSelfMatrix({ caseRoot, participantPubkey, phase, onAn
         </Card>
       )}
 
-      {onOpenTodo && (
-        <button
-          onClick={onOpenTodo}
-          className="w-full flex items-center justify-between gap-2 rounded-lg border border-amber-500/50 bg-amber-500/[0.08] hover:bg-amber-500/15 hover:border-amber-500/70 transition-colors p-3 text-left"
-        >
-          <span className="text-sm font-medium inline-flex items-center gap-2">
+      {(todoSlot || onOpenTodo) && (
+        <div className="space-y-2">
+          <div className="text-sm font-medium inline-flex items-center gap-2">
             <ListChecks className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
             {L.todo}
-          </span>
-          <ChevronRight className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-        </button>
+          </div>
+          {todoSlot}
+          {onOpenTodo && (
+            <button
+              onClick={onOpenTodo}
+              className="w-full flex items-center justify-between gap-2 rounded-lg border border-amber-500/50 bg-amber-500/[0.08] hover:bg-amber-500/15 hover:border-amber-500/70 transition-colors p-2.5 text-left"
+            >
+              <span className="text-xs font-medium">{L.todoAll}</span>
+              <ChevronRight className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            </button>
+          )}
+        </div>
       )}
 
       {onOpenDetail && myStates.length > 0 && (

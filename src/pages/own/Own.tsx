@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import ConversationList from "@/components/own/ConversationList";
 import ChatView from "@/components/own/ChatView";
 import OwnSelfMatrix from "@/components/own/OwnSelfMatrix";
+import { CaseTodo, TODO_TXT } from "@/pages/own/Todo";
 import OwnFullMatrix from "@/components/own/OwnFullMatrix";
 import OwnParticipantDetail from "@/components/own/OwnParticipantDetail";
 import { useAuth } from "@/contexts/AuthContext";
@@ -924,6 +925,20 @@ export default function Own() {
               phase={selectedProcess?.phase}
               onAnalyzeOthers={caseRoot ? () => navigate(`/own/matrix?process=${encodeURIComponent(caseRoot)}`) : undefined}
               onOpenTodo={() => navigate('/own/todo')}
+              todoSlot={caseRoot && session?.nostrHexId ? (
+                <CaseTodo
+                  caseRoot={caseRoot}
+                  title={selectedProcess?.title || (en ? "This process" : "Ta proces")}
+                  me={session.nostrHexId.toLowerCase()}
+                  phase={selectedProcess?.phase || ""}
+                  onOpen={() => setSelfDetail(false)}
+                  onOpenSelf={() => setSelfDetail(true)}
+                  L={en ? TODO_TXT.en : TODO_TXT.sl}
+                  lang={en ? "en" : "sl"}
+                  translateOn={false}
+                  myPubkey={session.nostrHexId}
+                />
+              ) : undefined}
               onOpenDetail={() => setSelfDetail(true)}
             />
           </div>

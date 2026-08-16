@@ -32,7 +32,7 @@ import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 //  it pending — and say how many beings still wait for it.
 // ─────────────────────────────────────────────────────────────────
 
-const TXT = {
+export const TODO_TXT = {
   sl: {
     title: "Kaj moram narediti",
     lead: "Zbrani koraki, ki čakajo nate pri očitkih — po procesih. Ko korak narediš v pogovoru, bitja to zaznajo sama in vrstica izgine.",
@@ -222,9 +222,11 @@ const STEP_ICON: Record<StepKey, typeof MessageSquare> = {
   own: CheckCircle2,
 };
 
-function CaseTodo({ caseRoot, title, me, phase, onOpen, onOpenSelf, L, lang, translateOn, myPubkey }: {
+// Also rendered inline on /own, so the person sees what waits for them the
+// moment the page opens instead of having to find a link to this page.
+export function CaseTodo({ caseRoot, title, me, phase, onOpen, onOpenSelf, L, lang, translateOn, myPubkey }: {
   caseRoot: string; title: string; me: string; phase: string; onOpen: () => void; onOpenSelf: () => void;
-  L: typeof TXT.sl; lang: "sl" | "en"; translateOn: boolean; myPubkey?: string;
+  L: typeof TODO_TXT.sl; lang: "sl" | "en"; translateOn: boolean; myPubkey?: string;
 }) {
   const { ledgers, isLoading } = useOwnGrievances(caseRoot);
   // KIND 87057 — the to-do list is a list of things to SAY, so a reader who has
@@ -518,7 +520,7 @@ export default function OwnTodo() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const en = useLang() === "en";
-  const L = en ? TXT.en : TXT.sl;
+  const L = en ? TODO_TXT.en : TODO_TXT.sl;
   const me = (session?.nostrHexId || "").toLowerCase();
   const { processes, isLoading } = useNostrOpenProcesses(session?.nostrHexId || null);
   const [translateOn, setTranslateOn] = useState(false);

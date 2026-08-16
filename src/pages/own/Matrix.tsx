@@ -12,14 +12,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Bot, CheckCircle2, CircleDot, Circle, Users, Telescope, Archive, ChevronDown, Languages } from "lucide-react";
 import { useAllOwnProcesses } from "@/hooks/useAllOwnProcesses";
-import { useOwnAssessments, isSilenced, formatResumeDate, type PhaseState } from "@/hooks/useOwnAssessments";
+import { useOwnAssessments, isSilenced, formatResumeDate, silenceRollup, type PhaseState } from "@/hooks/useOwnAssessments";
 import { useOwnGrievances, type Grievance } from "@/hooks/useOwnGrievances";
 import { LangPicker } from "@/components/own/LangPicker";
 import { useOwnGrievanceSources, buildPairMsgIdMap } from "@/hooks/useOwnGrievanceSources";
 import { useOwnGuidance, type GuidanceEntry } from "@/hooks/useOwnGuidance";
 import { useOwnEmotions, HEAVY_EMOTIONS, LIGHT_EMOTIONS, EMOTION_LABELS, type EmotionPalette } from "@/hooks/useOwnEmotions";
 import { useOwnProposals } from "@/hooks/useOwnProposals";
-import { useOwnCommitments } from "@/hooks/useOwnCommitments";
+import { useOwnCommitments, type ChangeCommitment } from "@/hooks/useOwnCommitments";
 import { useAuth } from "@/contexts/AuthContext";
 import EmotionJourneySparkline from "@/components/own/EmotionJourneySparkline";
 import EgoPathBar from "@/components/own/EgoPathBar";
@@ -142,7 +142,13 @@ const TXT = {
     silTitle: "Bitja čakajo v tišini",
     silBody: "Bitja zaznavajo premalo introspekcije in preveč ukvarjanja z drugimi ter nedopuščanje oz. nepriznavanje možnosti lastne zmote oz. zablode naših prepričanj. Naredi korak v smeri ponižnosti in lastne zmotljivosti. V tišini čakajo do {when}, preden nadaljujejo s procesom.",
     silBodyOpen: "Bitja zaznavajo premalo introspekcije in preveč ukvarjanja z drugimi ter nedopuščanje oz. nepriznavanje možnosti lastne zmote oz. zablode naših prepričanj. Naredi korak v smeri ponižnosti in lastne zmotljivosti. V tišini čakajo, preden nadaljujejo s procesom.",
-    silStale: "Spodnja ocena je izpred tišine in se med njo ne posodablja.",
+    silStale: "Ocene spodaj so izpred tišine in se med njo ne posodabljajo.",
+    silChip: "v tišini",
+    silOfBeings: "Proces miruje po presoji {n} od {total} bitij.",
+    cmtCell: "Zaveza",
+    cmtCellComplete: "dokončana",
+    cmtCellForming: "v nastajanju",
+    cmtCellNone: "še ni zapisana",
     frzLegend: "Zamrznjen — fasilitator je osebo zamrznil; z vstopom v navedeni SPLIT zamrznitev sama preneha.",
     silLegend: "V tišini — bitja čakajo; proces za to osebo miruje.",
   },
@@ -258,7 +264,13 @@ const TXT = {
     silTitle: "The beings are waiting in silence",
     silBody: "The beings see too little looking inward and too much attention on others, and no room for the possibility that one’s own beliefs may be mistaken. Take a step toward humility and your own fallibility. They are waiting in silence until {when} before the process continues.",
     silBodyOpen: "The beings see too little looking inward and too much attention on others, and no room for the possibility that one’s own beliefs may be mistaken. Take a step toward humility and your own fallibility. They are waiting in silence before the process continues.",
-    silStale: "The verdict below predates the silence and is not updated while it holds.",
+    silStale: "The verdicts below predate the silence and are not updated while it holds.",
+    silChip: "in silence",
+    silOfBeings: "The process rests on the judgement of {n} of {total} beings.",
+    cmtCell: "Commitment",
+    cmtCellComplete: "complete",
+    cmtCellForming: "forming",
+    cmtCellNone: "not stated yet",
     frzLegend: "Frozen — the facilitator froze this person; entering the named SPLIT ends the freeze by itself.",
     silLegend: "In silence — the beings are waiting; the process rests for this person.",
   },
@@ -447,6 +459,8 @@ export default function Matrix() {
 
   const stateFor = (being: string, participant: string) =>
     states.find((s) => s.beingPubkey === being && s.participantPubkey === participant) || null;
+  const commitmentFor = (being: string, participant: string) =>
+    commitments.find((c) => c.beingPubkey === being && c.participantPubkey === participant) || null;
   const phaseStatus = (st: PhaseState, ph: "reflection" | "alignment" | "change"): "done" | "current" | "todo" => {
     const met = ph === "reflection" ? st.reflectionComplete : ph === "alignment" ? st.alignmentComplete : st.changeComplete;
     if (met) return "done";
@@ -464,44 +478,75 @@ export default function Matrix() {
       <div className="flex items-center gap-1.5"><Circle className="h-4 w-4 text-muted-foreground/30 shrink-0" /><span className="text-xs text-muted-foreground/60">{label} · {L.notYet}</span></div>
     );
   };
+  // The beings' silence toward ONE participant, as the ROW states it.
+  // The notice used to sit inside every cell: the same constant paragraph
+  // repeated per being, several hundred pixels tall, and only in the cells of
+  // beings that had declared it — so the phase blocks in one row no longer
+  // began at the same height and the row could not be read across. It is a
+  // statement about the PROCESS, so it belongs to the row, once.
+  // `silenceRollup` counts only BINDING silences (a guest being's waiting is
+  // its own position, not a pause of the process) — the per-being chip below
+  // still shows every being that is waiting.
+  const rowSilence = (participant: string) =>
+    silenceRollup(beings.map((b) => stateFor(b, participant)).filter(Boolean) as PhaseState[]);
+
+  const SilenceBand = ({ participant }: { participant: string }) => {
+    const roll = rowSilence(participant);
+    if (!roll.any) return null;
+    const when = formatResumeDate(roll.resumeAt, lang);
+    return (
+      <div className="rounded-md border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2">
+        <div className="text-xs font-medium text-amber-700 dark:text-amber-400">🤲 {L.silTitle}</div>
+        <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
+          {when && !roll.openEnded ? L.silBody.replace("{when}", when) : L.silBodyOpen}
+        </p>
+        <p className="text-[11px] text-muted-foreground/80 leading-snug mt-0.5">
+          {L.silOfBeings.replace("{n}", String(roll.waiting)).replace("{total}", String(roll.total))}
+        </p>
+        <p className="text-[10px] text-muted-foreground/80 italic leading-snug mt-1">{L.silStale}</p>
+      </div>
+    );
+  };
+
   // The body of one assessment cell — shared between the desktop table and the
   // mobile stacked cards, so both read identically.
-  const AssessmentCellBody = ({ st }: { st: PhaseState }) => {
+  const AssessmentCellBody = ({ st, cmt }: { st: PhaseState; cmt?: ChangeCommitment | null }) => {
     // This cell belongs to ONE being, so it shows THAT being's own silence —
-    // never a merged verdict across beings (they diverge by design).
+    // never a merged verdict across beings (they diverge by design). One line
+    // only: the explanation is stated once for the whole row, above.
     const silent = isSilenced(st.silence);
-    const when = formatResumeDate(st.silence?.resume_at, lang);
     return (
-      <>
+      /* Med tišino bitje ničesar ne ocenjuje — VSE spodaj je izpred nje,
+         vključno z značko faze. Ta pravi »zdaj«, in prav to je trditev, ki
+         jo tišina razveljavi; ostra barvna značka pod napisom bi se brala
+         kot sveža sodba. */
+      <div className={silent ? "opacity-60" : undefined}>
         {silent && (
-          <div className="mb-2 rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-2">
-            <div className="text-xs font-medium text-amber-700 dark:text-amber-400">🤲 {L.silTitle}</div>
-            <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">
-              {when ? L.silBody.replace("{when}", when) : L.silBodyOpen}
-            </p>
-            {/* Nad oceno, ker besedilo govori o »spodnji oceni«. */}
-            <p className="text-[10px] text-muted-foreground/80 italic leading-snug mt-1">{L.silStale}</p>
+          <div className="text-[10px] text-amber-700 dark:text-amber-400 mb-1">🤲 {L.silChip}</div>
+        )}
+        <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">{L.currentlyIn}</div>
+        <Badge variant="outline" className={`${getPhaseColor(st.currentPhaseEstimate)} mb-2`}>{getPhaseLabel(st.currentPhaseEstimate, lang)}</Badge>
+        <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{L.reqMet}</div>
+        <div className="space-y-1">
+          <PhaseRow status={phaseStatus(st, "reflection")} label={L.reflection} />
+          <PhaseRow status={phaseStatus(st, "alignment")} label={L.alignment} />
+          <PhaseRow status={phaseStatus(st, "change")} label={L.change} />
+        </div>
+        {st.grievanceSummary && (
+          <div className="text-[10px] text-muted-foreground mt-1.5">{L.grievLabel}: {st.grievanceSummary.received_accepted}/{st.grievanceSummary.received} {L.grievAcceptedWord}</div>
+        )}
+        {/* Whether THIS being calls the commitment finished. It is the one
+            green light a reader looks for and it lived only in the Zaveza tab,
+            so a board showing three unfinished Change pillars read as three
+            beings refusing — when one of them had in fact signed it off. */}
+        {cmt && (
+          <div className={`text-[10px] mt-1 inline-flex items-center gap-1 ${cmt.status === "complete" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+            {cmt.status === "complete" ? <CheckCircle2 className="h-3 w-3 shrink-0" /> : <CircleDot className="h-3 w-3 shrink-0" />}
+            {L.cmtCell}: {cmt.status === "complete" ? L.cmtCellComplete : L.cmtCellForming}
           </div>
         )}
-        {/* Med tišino bitje ničesar ne ocenjuje — VSE spodaj je izpred nje,
-            vključno z značko faze. Ta pravi »zdaj«, in prav to je trditev, ki
-            jo tišina razveljavi; ostra barvna značka pod napisom bi se brala
-            kot sveža sodba. */}
-        <div className={silent ? "opacity-60" : undefined}>
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">{L.currentlyIn}</div>
-          <Badge variant="outline" className={`${getPhaseColor(st.currentPhaseEstimate)} mb-2`}>{getPhaseLabel(st.currentPhaseEstimate, lang)}</Badge>
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{L.reqMet}</div>
-          <div className="space-y-1">
-            <PhaseRow status={phaseStatus(st, "reflection")} label={L.reflection} />
-            <PhaseRow status={phaseStatus(st, "alignment")} label={L.alignment} />
-            <PhaseRow status={phaseStatus(st, "change")} label={L.change} />
-          </div>
-          {st.grievanceSummary && (
-            <div className="text-[10px] text-muted-foreground mt-1.5">{L.grievLabel}: {st.grievanceSummary.received_accepted}/{st.grievanceSummary.received} {L.grievAcceptedWord}</div>
-          )}
-          <div className="text-[10px] text-muted-foreground mt-1.5">{L.confidence} {(st.overallConfidence).toFixed(2)}</div>
-        </div>
-      </>
+        <div className="text-[10px] text-muted-foreground mt-1.5">{L.confidence} {(st.overallConfidence).toFixed(2)}</div>
+      </div>
     );
   };
 
@@ -857,20 +902,30 @@ export default function Matrix() {
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
-                    {participants.map((p) => (
-                      <tr key={p} className="border-b border-border/50 align-top">
+                  {/* One tbody per participant so the row-wide silence notice
+                      can sit above that person's cells without pushing any one
+                      column out of line with the others. */}
+                  {participants.map((p) => (
+                    <tbody key={p}>
+                      {rowSilence(p).any && (
+                        <tr>
+                          <td colSpan={1 + beings.length} className="px-3 pt-3">
+                            <SilenceBand participant={p} />
+                          </td>
+                        </tr>
+                      )}
+                      <tr className="border-b border-border/50 align-top">
                         <td className="p-3 font-medium whitespace-nowrap">
                           <span className="inline-flex items-center gap-1.5">{nameOf(p)}<FreezeBadge state={freezeStates.get(p)} en={en} /></span>
                         </td>
                         {beings.map((b) => {
                           const st = stateFor(b, p);
                           if (!st) return <td key={b} className="p-3 text-muted-foreground/50">—</td>;
-                          return <td key={b} className="p-3"><AssessmentCellBody st={st} /></td>;
+                          return <td key={b} className="p-3"><AssessmentCellBody st={st} cmt={commitmentFor(b, p)} /></td>;
                         })}
                       </tr>
-                    ))}
-                  </tbody>
+                    </tbody>
+                  ))}
                 </table>
               </div>
 
@@ -884,6 +939,7 @@ export default function Matrix() {
                   <Card key={p}>
                     <CardContent className="p-3 space-y-2.5">
                       <div className="font-semibold text-sm inline-flex items-center gap-1.5 flex-wrap">{nameOf(p)}<FreezeBadge state={freezeStates.get(p)} en={en} /></div>
+                      <SilenceBand participant={p} />
                       {beings.map((b) => {
                         const st = stateFor(b, p);
                         return (
@@ -891,7 +947,7 @@ export default function Matrix() {
                             <div className="inline-flex items-center gap-1 text-xs font-medium mb-1.5">
                               <Bot className="h-3.5 w-3.5 text-orange-500" />{nameOf(b)}
                             </div>
-                            {st ? <AssessmentCellBody st={st} /> : <div className="text-xs text-muted-foreground/50">{L.noAssessYetBeing}</div>}
+                            {st ? <AssessmentCellBody st={st} cmt={commitmentFor(b, p)} /> : <div className="text-xs text-muted-foreground/50">{L.noAssessYetBeing}</div>}
                           </div>
                         );
                       })}
