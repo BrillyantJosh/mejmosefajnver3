@@ -143,9 +143,11 @@ export default function Plan15Followers() {
           amount: payLana,
           privateKey: wif.trim(),
           electrumServers: parameters?.electrumServers || [],
-          // Omit userPubkey for a FROZEN wallet so the server skips its freeze block;
-          // the 50% / €100 limit is enforced client-side (overFrozenLimit) above.
-          userPubkey: payingFrozen ? undefined : session?.nostrHexId,
+          // The 50% / €100 limit shown above is re-checked server-side against
+          // the wallet's own balance; this used to withhold userPubkey to dodge
+          // the freeze guard, which stopped working once the guard started
+          // resolving the wallet from the sender address.
+          userPubkey: session?.nostrHexId,
         },
       });
       if (error) throw error;

@@ -2904,7 +2904,16 @@ router.post('/send-lana-transaction', async (req: Request, res: Response) => {
     // Freeze check, resolved from the sender ADDRESS so it runs for every
     // caller — it used to depend on the caller volunteering userPubkey, which
     // most payment screens never did.
-    const frozenError = await blockIfFrozen(req.body.senderAddress, 'send-lana-transaction');
+    //
+    // A frozen wallet keeps a capped allowance on THIS path: PLAN15 lets it buy
+    // unregistered LANA with up to half its funds and never more than €100, and
+    // that purchase is a single send. Closing the userPubkey loophole had made
+    // the guard absolute and silently killed that feature. The cap is worked out
+    // inside the guard from the wallet's own balance, not from anything the
+    // caller sends. Batch sends and consolidation stay blocked outright.
+    const frozenError = await blockIfFrozen(req.body.senderAddress, 'send-lana-transaction', {
+      cappedSpendLana: Number(req.body.amount),
+    });
     if (frozenError) return res.json({ success: false, error: frozenError });
 
     const result = await sendLanaTransaction(req.body);
