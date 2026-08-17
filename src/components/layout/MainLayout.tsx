@@ -1,11 +1,12 @@
 // VERSION: 2.2 - PWA Cache Fix + Version Display - 2026-01-22
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, User, Settings, LogOut, Shield, Heart, Download, Grid, Bot, ExternalLink, PlayCircle, Bug, Home as HomeIcon, AlertTriangle, HandCoins, Snowflake } from "lucide-react";
 import logoDayImage from "@/assets/lana-logo-dark.png";
 import logoNightImage from "@/assets/lana-logo-white.png";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { groupMenuModules } from "@/lib/menuOrder";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,12 +45,14 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+/**
+ * Group 1 of the standard menu. Admin (when applicable) and Logout follow
+ * these two in the same block — see the menu render.
+ */
 const fixedMenuItems = [
   { title: "Home", icon: HomeIcon, path: "/" },
-  { title: "Enlightened AI", icon: Bot, path: "/ai-advisor" },
-  { title: "Modules", icon: Grid, path: "/modules" },
   { title: "Profile", icon: User, path: "/profile" },
-  { title: "Settings", icon: Settings, path: "/settings" },
+  { title: "Modules", icon: Grid, path: "/modules" },
 ];
 
 export default function MainLayout() {
@@ -74,6 +77,9 @@ export default function MainLayout() {
   const [menuTop, setMenuTop] = useState(64);
 
   const dynamicModules = getEnabledModules();
+  // Fixed grouping — the sequence comes from code, not from the user's
+  // module settings; settings still decide what is enabled at all.
+  const menuGroups = useMemo(() => groupMenuModules(dynamicModules), [dynamicModules]);
   const appVersion = import.meta.env.VITE_APP_VERSION || 'dev';
 
   // Self-healing update check: compare this client's baked-in BUILD_ID against the
@@ -450,7 +456,51 @@ export default function MainLayout() {
                   <span>Logout</span>
                 </DropdownMenuItem>
 
-                {/* Info & Help Links */}
+                {/* Groups 2, 3 and the remainder — order fixed in menuOrder.ts */}
+                {[menuGroups.core, menuGroups.community, menuGroups.rest].map((group, groupIndex) =>
+                  group.length === 0 ? null : (
+                    <div key={groupIndex}>
+                      <DropdownMenuSeparator />
+                      {group.map((module) => (
+                        <DropdownMenuItem key={module.path} asChild>
+                          {module.externalUrl ? (
+                            <a href={module.externalUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 cursor-pointer">
+                              <module.icon className="h-4 w-4" />
+                              <span>{moduleTitle(module, lang)}</span>
+                              {!UNREGISTERED_MODULE_IDS.has(module.id) && (
+                                <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+                                  Reg
+                                </Badge>
+                              )}
+                              {UNR_MODULE_IDS.has(module.id) && (
+                                <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                                  UNR
+                                </Badge>
+                              )}
+                            </a>
+                          ) : (
+                            <Link to={module.path} className="flex items-center gap-2 cursor-pointer">
+                              <module.icon className="h-4 w-4" />
+                              <span>{moduleTitle(module, lang)}</span>
+                              {!UNREGISTERED_MODULE_IDS.has(module.id) && (
+                                <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+                                  Reg
+                                </Badge>
+                              )}
+                              {UNR_MODULE_IDS.has(module.id) && (
+                                <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                                  UNR
+                                </Badge>
+                              )}
+                            </Link>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  ),
+                )}
+
+                {/* Info & Help — below the modules, so the three groups stay together */}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <a href="https://www.whatislana.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 cursor-pointer">
@@ -470,46 +520,6 @@ export default function MainLayout() {
                     <span>Report Bug</span>
                   </Link>
                 </DropdownMenuItem>
-
-                {/* Separator */}
-                {dynamicModules.length > 0 && <DropdownMenuSeparator />}
-
-                {/* Dynamic Module Items */}
-                {dynamicModules.map((module) => (
-                  <DropdownMenuItem key={module.path} asChild>
-                    {module.externalUrl ? (
-                      <a href={module.externalUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 cursor-pointer">
-                        <module.icon className="h-4 w-4" />
-                        <span>{moduleTitle(module, lang)}</span>
-                        {!UNREGISTERED_MODULE_IDS.has(module.id) && (
-                          <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
-                            Reg
-                          </Badge>
-                        )}
-                        {UNR_MODULE_IDS.has(module.id) && (
-                          <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
-                            UNR
-                          </Badge>
-                        )}
-                      </a>
-                    ) : (
-                      <Link to={module.path} className="flex items-center gap-2 cursor-pointer">
-                        <module.icon className="h-4 w-4" />
-                        <span>{moduleTitle(module, lang)}</span>
-                        {!UNREGISTERED_MODULE_IDS.has(module.id) && (
-                          <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
-                            Reg
-                          </Badge>
-                        )}
-                        {UNR_MODULE_IDS.has(module.id) && (
-                          <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
-                            UNR
-                          </Badge>
-                        )}
-                      </Link>
-                    )}
-                  </DropdownMenuItem>
-                ))}
 
               </DropdownMenuContent>
             </DropdownMenu>
@@ -588,6 +598,64 @@ export default function MainLayout() {
                 <span>Logout</span>
               </button>
 
+              {/* Groups 2, 3 and the remainder — order fixed in menuOrder.ts */}
+              {[menuGroups.core, menuGroups.community, menuGroups.rest].map((group, groupIndex) =>
+                group.length === 0 ? null : (
+                  <div key={groupIndex}>
+                    <div className="border-t my-2" />
+                    {group.map((module) => (
+                      module.externalUrl ? (
+                        <a
+                          key={module.path}
+                          href={module.externalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-secondary/50"
+                        >
+                          <module.icon className="h-5 w-5" />
+                          <span>{moduleTitle(module, lang)}</span>
+                          {!UNREGISTERED_MODULE_IDS.has(module.id) && (
+                            <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+                              Reg
+                            </Badge>
+                          )}
+                          {UNR_MODULE_IDS.has(module.id) && (
+                            <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                              UNR
+                            </Badge>
+                          )}
+                        </a>
+                      ) : (
+                        <Link
+                          key={module.path}
+                          to={module.path}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                            location.pathname.startsWith(module.path)
+                              ? "bg-orange-500 text-white font-medium"
+                              : "hover:bg-secondary/50"
+                          }`}
+                        >
+                          <module.icon className="h-5 w-5" />
+                          <span>{moduleTitle(module, lang)}</span>
+                          {!UNREGISTERED_MODULE_IDS.has(module.id) && (
+                            <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+                              Reg
+                            </Badge>
+                          )}
+                          {UNR_MODULE_IDS.has(module.id) && (
+                            <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
+                              UNR
+                            </Badge>
+                          )}
+                        </Link>
+                      )
+                    ))}
+                  </div>
+                ),
+              )}
+
               {/* Info & Help Links */}
               <div className="border-t my-2" />
               <a
@@ -624,60 +692,6 @@ export default function MainLayout() {
                 <Bug className="h-5 w-5" />
                 <span>Report Bug</span>
               </Link>
-
-              {/* Separator */}
-              {dynamicModules.length > 0 && <div className="border-t my-2" />}
-
-              {/* Dynamic Module Items */}
-              {dynamicModules.map((module) => (
-                module.externalUrl ? (
-                  <a
-                    key={module.path}
-                    href={module.externalUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-secondary/50"
-                  >
-                    <module.icon className="h-5 w-5" />
-                    <span>{moduleTitle(module, lang)}</span>
-                    {!UNREGISTERED_MODULE_IDS.has(module.id) && (
-                      <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
-                        Reg
-                      </Badge>
-                    )}
-                    {UNR_MODULE_IDS.has(module.id) && (
-                      <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
-                        UNR
-                      </Badge>
-                    )}
-                  </a>
-                ) : (
-                  <Link
-                    key={module.path}
-                    to={module.path}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                      location.pathname.startsWith(module.path)
-                        ? "bg-orange-500 text-white font-medium"
-                        : "hover:bg-secondary/50"
-                    }`}
-                  >
-                    <module.icon className="h-5 w-5" />
-                    <span>{moduleTitle(module, lang)}</span>
-                    {!UNREGISTERED_MODULE_IDS.has(module.id) && (
-                      <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300">
-                        Reg
-                      </Badge>
-                    )}
-                    {UNR_MODULE_IDS.has(module.id) && (
-                      <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300">
-                        UNR
-                      </Badge>
-                    )}
-                  </Link>
-                )
-              ))}
 
           </nav>
         </div>
