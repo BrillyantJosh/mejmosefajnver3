@@ -4,7 +4,7 @@
  *   npx tsx scripts/testMenuOrder.ts
  */
 import { readFileSync } from 'node:fs';
-import { groupMenuModules, MENU_GROUP_CORE, MENU_GROUP_COMMUNITY } from '../src/lib/menuOrder.js';
+import { groupMenuModules, MENU_GROUP_CORE, MENU_GROUP_COMMUNITY, MENU_GROUP_REST_LEAD } from '../src/lib/menuOrder.js';
 
 /**
  * The registry imports image assets, so it cannot be imported outside Vite —
@@ -67,8 +67,13 @@ console.log('— nothing disappears —');
     { expected: expected.size, shown: shown.size });
   const overlap = ids(g.rest).filter((id) => shown.has(id) && (MENU_GROUP_CORE.includes(id) || MENU_GROUP_COMMUNITY.includes(id)));
   check('the trailing group never repeats a named module', overlap.length === 0, overlap);
-  check('the trailing group keeps the registry order',
-    ids(g.rest).join() === ids(DEFAULT_MODULES.filter((m) => m.enabled && !MENU_GROUP_CORE.includes(m.id) && !MENU_GROUP_COMMUNITY.includes(m.id))).join());
+  const trailing = DEFAULT_MODULES.filter((m) => m.enabled && !MENU_GROUP_CORE.includes(m.id) && !MENU_GROUP_COMMUNITY.includes(m.id));
+  check('the trailing group leads with the pinned module, then registry order',
+    ids(g.rest).join() === [...MENU_GROUP_REST_LEAD, ...ids(trailing).filter((id) => !MENU_GROUP_REST_LEAD.includes(id))].join(),
+    ids(g.rest));
+  check('Transparency leads it, not Enlightened AI',
+    ids(g.rest)[0] === 'lanatransparency' && ids(g.rest)[1] === 'aiadvisor', ids(g.rest).slice(0, 2));
+  check('Enlightened AI is still reachable', ids(g.rest).includes('aiadvisor'));
 }
 
 console.log('— every named id exists in the registry —');
@@ -99,6 +104,13 @@ console.log('— a module missing from the registry just closes the gap —');
   const withoutWallet = MENU_GROUP_CORE.filter((id) => id !== 'wallet').map((id) => ({ id }));
   const g = groupMenuModules(withoutWallet);
   check('no hole, no crash', ids(g.core).join() === 'unconditionalpayment,lana8wonder,plan15', ids(g.core));
+}
+
+console.log('— the pinned lead still obeys enabled —');
+{
+  const g = groupMenuModules(DEFAULT_MODULES.map((m) => (m.id === 'lanatransparency' ? { ...m, enabled: false } : m)));
+  check('switching Transparency off drops it from the trailing group', !ids(g.rest).includes('lanatransparency'), ids(g.rest).slice(0, 3));
+  check('and Enlightened AI leads again', ids(g.rest)[0] === 'aiadvisor', ids(g.rest)[0]);
 }
 
 console.log(failures ? `\n❌ ${failures} FAILED` : '\n✅ all passed');

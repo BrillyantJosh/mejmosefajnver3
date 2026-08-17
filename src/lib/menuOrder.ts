@@ -34,6 +34,15 @@ export const MENU_GROUP_COMMUNITY: string[] = [
 ];
 
 /**
+ * Pinned to the head of the trailing group. Without this the trailing group
+ * is plain registry order, which put Enlightened AI first purely because it
+ * happens to be declared first.
+ */
+export const MENU_GROUP_REST_LEAD: string[] = [
+  'lanatransparency',
+];
+
+/**
  * The only fields the grouping needs. Deliberately no index signature — an
  * interface without one cannot satisfy it, and the generic would silently
  * widen to this type instead of the caller's richer module type.
@@ -48,7 +57,10 @@ export interface GroupedMenu<T> {
   core: T[];
   /** Group 3, in the order declared above, regardless of the enabled flag. */
   community: T[];
-  /** Everything else the user has enabled, keeping the registry's own order. */
+  /**
+   * Everything else the user has enabled: the pinned lead first, then the
+   * registry's own order.
+   */
   rest: T[];
 }
 
@@ -70,7 +82,13 @@ export function groupMenuModules<T extends MenuModule>(modules: T[]): GroupedMen
   const community = pick(MENU_GROUP_COMMUNITY);
 
   const claimed = new Set<string>([...MENU_GROUP_CORE, ...MENU_GROUP_COMMUNITY]);
-  const rest = modules.filter((m) => !claimed.has(m.id) && m.enabled !== false);
+  // The trailing group honours `enabled`, including for its pinned lead.
+  const trailing = modules.filter((m) => !claimed.has(m.id) && m.enabled !== false);
+  const lead = MENU_GROUP_REST_LEAD
+    .map((id) => trailing.find((m) => m.id === id))
+    .filter((m): m is T => !!m);
+  const leadIds = new Set(lead.map((m) => m.id));
+  const rest = [...lead, ...trailing.filter((m) => !leadIds.has(m.id))];
 
   return { core, community, rest };
 }
