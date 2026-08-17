@@ -59,7 +59,7 @@ export default function MainLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { getEnabledModules } = useModules();
+  const { modules } = useModules();
   const lang = useLang();
   const { isAdmin, appSettings } = useAdmin();
   const { logout: authLogout, refreshSession } = useAuth();
@@ -76,10 +76,11 @@ export default function MainLayout() {
   const headerRef = useRef<HTMLElement>(null);
   const [menuTop, setMenuTop] = useState(64);
 
-  const dynamicModules = getEnabledModules();
-  // Fixed grouping — the sequence comes from code, not from the user's
-  // module settings; settings still decide what is enabled at all.
-  const menuGroups = useMemo(() => groupMenuModules(dynamicModules), [dynamicModules]);
+  // The whole registry, not just the enabled set: the two named groups are the
+  // standard menu and must appear whatever a person's saved settings say
+  // (a stale `enabled: false` was quietly emptying Lana8Wonder out of it).
+  // groupMenuModules applies `enabled` to the trailing group only.
+  const menuGroups = useMemo(() => groupMenuModules(modules), [modules]);
   const appVersion = import.meta.env.VITE_APP_VERSION || 'dev';
 
   // Self-healing update check: compare this client's baked-in BUILD_ID against the

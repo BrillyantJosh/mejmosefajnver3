@@ -56,15 +56,19 @@ console.log('— settings cannot reorder it —');
 
 console.log('— nothing disappears —');
 {
-  const enabled = DEFAULT_MODULES.filter((m) => m.enabled);
-  const g = groupMenuModules(enabled);
+  const g = groupMenuModules(DEFAULT_MODULES);
   const shown = new Set([...ids(g.core), ...ids(g.community), ...ids(g.rest)]);
-  check('every enabled module is in exactly one group',
-    shown.size === enabled.length, { enabled: enabled.length, shown: shown.size });
+  const expected = new Set([
+    ...DEFAULT_MODULES.filter((m) => m.enabled).map((m) => m.id),
+    ...MENU_GROUP_CORE, ...MENU_GROUP_COMMUNITY,
+  ]);
+  check('every enabled module, plus every named one, appears exactly once',
+    shown.size === expected.size && [...expected].every((id) => shown.has(id)),
+    { expected: expected.size, shown: shown.size });
   const overlap = ids(g.rest).filter((id) => shown.has(id) && (MENU_GROUP_CORE.includes(id) || MENU_GROUP_COMMUNITY.includes(id)));
   check('the trailing group never repeats a named module', overlap.length === 0, overlap);
   check('the trailing group keeps the registry order',
-    ids(g.rest).join() === ids(enabled.filter((m) => !MENU_GROUP_CORE.includes(m.id) && !MENU_GROUP_COMMUNITY.includes(m.id))).join());
+    ids(g.rest).join() === ids(DEFAULT_MODULES.filter((m) => m.enabled && !MENU_GROUP_CORE.includes(m.id) && !MENU_GROUP_COMMUNITY.includes(m.id))).join());
 }
 
 console.log('— every named id exists in the registry —');
@@ -75,7 +79,22 @@ console.log('— every named id exists in the registry —');
   }
 }
 
-console.log('— a switched-off module just closes the gap —');
+console.log('— settings cannot empty the standard groups —');
+{
+  // The reported case: this person's saved KIND 37334 carries
+  // {"id":"Lana8Wonder","enabled":false}, which used to remove it from the menu.
+  const g = groupMenuModules(DEFAULT_MODULES.map((m) => (m.id === 'lana8wonder' ? { ...m, enabled: false } : m)));
+  check('a disabled named module still shows', ids(g.core).includes('lana8wonder'), ids(g.core));
+  check('and keeps its place in the order',
+    ids(g.core).join() === MENU_GROUP_CORE.join(), ids(g.core));
+}
+{
+  // …while a disabled module OUTSIDE the named groups stays hidden.
+  const g = groupMenuModules(DEFAULT_MODULES.map((m) => (m.id === 'own' ? { ...m, enabled: false } : m)));
+  check('a disabled unnamed module stays hidden', !ids(g.rest).includes('own'), ids(g.rest));
+}
+
+console.log('— a module missing from the registry just closes the gap —');
 {
   const withoutWallet = MENU_GROUP_CORE.filter((id) => id !== 'wallet').map((id) => ({ id }));
   const g = groupMenuModules(withoutWallet);
