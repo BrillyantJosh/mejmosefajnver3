@@ -3710,37 +3710,9 @@ router.get('/active-voting', async (_req: Request, res: Response) => {
   }
 });
 
-// =============================================
-// Lana.Discount API Proxy (avoids CORS issues)
-// =============================================
-
-router.post('/discount-external-sale', async (req: Request, res: Response) => {
-  try {
-    const { apiUrl, apiKey, ...saleData } = req.body;
-    const discountUrl = apiUrl || 'https://www.lana.discount';
-
-    if (!apiKey) {
-      return res.status(400).json({ error: 'API key is required' });
-    }
-
-    const response = await fetch(`${discountUrl}/api/external/sale`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(saleData),
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      return res.status(response.status).json(data);
-    }
-    res.json(data);
-  } catch (error: any) {
-    console.error('Discount API proxy error:', error.message);
-    res.status(500).json({ error: 'Failed to reach Lana.Discount API: ' + error.message });
-  }
-});
+// The Lana.Discount external-sale proxy used to live here. It forwarded a sale
+// straight to /api/external/sale with a rate this app chose. Lana.discount now
+// decides whether to acquire before any LANA moves, so there is nothing here to
+// forward: selling starts at https://lana.discount/offer.
 
 export default router;
