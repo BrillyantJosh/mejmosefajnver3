@@ -123,6 +123,7 @@ async function fetchFromRelay(relayUrl: string, timeout = 15000): Promise<NostrE
     ws.on('close', () => {
       console.log(`🔌 Disconnected from ${relayUrl}`);
       clearTimeout(timeoutId);
+      resolve(null);
     });
   });
 }
