@@ -3202,7 +3202,7 @@ router.post('/register-virgin-wallet', async (req: Request, res: Response) => {
 
     console.log(`📝 Registering ${wallets.length} virgin wallet(s) for ${nostr_id_hex.slice(0, 8)}...`);
 
-    const response = await fetch('https://laluxmwarlejdwyboudz.supabase.co/functions/v1/register-virgin-wallets', {
+    const response = await fetch(`${process.env.REGISTRAR_URL || 'https://lanatrace.us'}/functions/v1/register-virgin-wallets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3243,7 +3243,7 @@ router.post('/check-wallet-registration', async (req: Request, res: Response) =>
       return res.status(500).json({ success: false, error: 'LANAWATCH_API_KEY not configured' });
     }
 
-    const response = await fetch('https://laluxmwarlejdwyboudz.supabase.co/functions/v1/check', {
+    const response = await fetch(`${process.env.REGISTRAR_URL || 'https://lanatrace.us'}/functions/v1/check`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
