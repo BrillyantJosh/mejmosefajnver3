@@ -213,6 +213,19 @@ router.post('/stt-path', async (req: Request, res: Response) => {
 // POST /api/voice/translate — Translate text/transcript to English via Groq (LLM)
 // So participants who don't speak the source language can follow the process.
 // =============================================
+/**
+ * Groq retires models without warning: 'llama-3.3-70b-versatile' was pinned
+ * here until it vanished from the API, and every translation began failing
+ * with "Groq translate error 404" — the feature was simply dead in the UI.
+ *
+ * So try these in order. A model the API no longer knows is skipped rather
+ * than fatal, which turns the next retirement into slightly worse wording
+ * instead of a broken button. Both were checked against live Slovenian chat
+ * text; reasoning models are deliberately absent, as they emit their own
+ * thinking into the reply.
+ */
+const TRANSLATE_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+
 router.post('/translate', async (req: Request, res: Response) => {
   try {
     const GROQ_API_KEY = process.env.GROQ_API_KEY;
@@ -223,35 +236,56 @@ router.post('/translate', async (req: Request, res: Response) => {
     if (!text) return res.json({ translation: '' });
     const capped = text.slice(0, 8000); // safety cap
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.2,
-        max_tokens: 2048,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are a professional translator. Translate the user message into natural, fluent English. Output ONLY the translation — no quotes, no explanations, no notes. If the text is already in English, return it unchanged.',
-          },
-          { role: 'user', content: capped },
-        ],
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
+    // `Response` in this file is Express's, so name the fetch one explicitly.
+    let response: Awaited<ReturnType<typeof fetch>> | null = null;
+    let usedModel = '';
+    let lastStatus = 0;
+    let lastError = '';
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error(`🌐 Groq translate error ${response.status}: ${errText.slice(0, 300)}`);
-      throw new Error(`Groq translate error ${response.status}`);
+    for (const model of TRANSLATE_MODELS) {
+      const attempt = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          max_tokens: 2048,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a professional translator. Translate the user message into natural, fluent English. Output ONLY the translation — no quotes, no explanations, no notes. If the text is already in English, return it unchanged.',
+            },
+            { role: 'user', content: capped },
+          ],
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (attempt.ok) {
+        response = attempt;
+        usedModel = model;
+        break;
+      }
+
+      lastStatus = attempt.status;
+      lastError = await attempt.text();
+      console.error(`🌐 Groq translate error ${attempt.status} on ${model}: ${lastError.slice(0, 300)}`);
+
+      // A retired or unknown model is worth trying the next one for; anything
+      // else (bad key, rate limit, upstream fault) would fail the same way.
+      const retired = attempt.status === 404 || /model/i.test(lastError);
+      if (!retired) break;
     }
 
-    const data = await response.json();
+    if (!response) {
+      throw new Error(`Groq translate error ${lastStatus}`);
+    }
+
+    const data = (await response.json()) as any;
     const translation = (data?.choices?.[0]?.message?.content || '').trim();
 
     try {
@@ -265,7 +299,7 @@ router.post('/translate', async (req: Request, res: Response) => {
       db.prepare(`
         INSERT INTO ai_usage_logs (id, nostr_hex_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_lana)
         VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?)
-      `).run('voice-translate', 'groq-llama-3.3-70b', promptTokens, completionTokens, totalTokens, costUsd, costLana);
+      `).run('voice-translate', `groq-${usedModel}`, promptTokens, completionTokens, totalTokens, costUsd, costLana);
     } catch (err) {
       console.error('Failed to log translate usage:', err);
     }
