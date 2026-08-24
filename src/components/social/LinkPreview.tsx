@@ -14,6 +14,25 @@ interface OpenGraphData {
   siteName?: string;
 }
 
+
+/**
+ * The host to show for a link, or the raw text when it is not a URL at all.
+ *
+ * Anything a person types can reach here: chat runs a loose regex over message
+ * text, so "https://a:b" or a link with markdown stuck to it arrives looking
+ * like a URL. `new URL()` throws on those, and this runs during render, so one
+ * such message took the whole page down with "Failed to construct 'URL':
+ * Invalid URL" — and it did so from the branch that handles links whose
+ * preview could not be fetched, which is exactly where a malformed one lands.
+ */
+export function linkLabel(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
 export function LinkPreview({ url }: LinkPreviewProps) {
   const [ogData, setOgData] = useState<OpenGraphData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,7 +171,7 @@ export function LinkPreview({ url }: LinkPreviewProps) {
         className="inline-flex items-center gap-1 text-primary hover:underline my-2 break-all"
       >
         <ExternalLink className="h-3 w-3 flex-shrink-0" />
-        <span className="text-sm">{new URL(url).hostname}</span>
+        <span className="text-sm">{linkLabel(url)}</span>
       </a>
     );
   }
