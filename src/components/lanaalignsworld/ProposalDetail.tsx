@@ -47,6 +47,8 @@ import VoteDialog from "./VoteDialog";
 
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { useNostrRealLifeCredential } from "@/hooks/useNostrRealLifeCredential";
+import { useNostrWallets } from '@/hooks/useNostrWallets';
+import { evaluateFreezeGate, canVoteWith, freezeGateExplanation } from '@/lib/voteEligibility';
 import { toast } from "sonner";
 
 interface ProposalDetailProps {
@@ -83,6 +85,7 @@ function getTimeRemaining(endTimestamp: number): { text: string; isEnded: boolea
 export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps) {
   const { status: lana8WonderStatus, isLoading: isLoadingLana8Wonder } = useNostrLana8Wonder();
   const { status: credentialStatus, isLoading: isLoadingCredentials } = useNostrRealLifeCredential();
+  const { wallets, isLoading: isLoadingWallets, resolved: walletsResolved } = useNostrWallets();
   const { acknowledgement, isLoading: isLoadingAck, submitVote, refetch } = useNostrUserAcknowledgement(proposal.dTag, proposal.id);
   
   const [voteDialogOpen, setVoteDialogOpen] = useState(false);
@@ -90,15 +93,25 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const timeRemaining = getTimeRemaining(proposal.end);
-  const isLoadingPermissions = isLoadingLana8Wonder || isLoadingCredentials;
+  const isLoadingPermissions = isLoadingLana8Wonder || isLoadingCredentials || isLoadingWallets;
   
-  // Can vote if in quorum (Profile, Registry, Self Responsibility are OK by default)
-  const canVote = true;
-  
-  // Can resist if has Lana8Wonder AND 3+ credentials
-  const canResist = lana8WonderStatus.exists && (credentialStatus?.referenceCount || 0) >= 3;
+  // A frozen person does not vote (Brilly, 2026-08-25). Same rule as
+  // /lana-aligns-world/my-status — both read it from src/lib/voteEligibility.
+  const freezeGate = useMemo(
+    () => evaluateFreezeGate(wallets, walletsResolved),
+    [wallets, walletsResolved]
+  );
+  const canVote = canVoteWith(freezeGate);
+  const freezeExplanation = freezeGateExplanation(freezeGate);
+
+  // Can resist if allowed to vote at all, AND has Lana8Wonder AND 3+ credentials
+  const canResist = canVote && lana8WonderStatus.exists && (credentialStatus?.referenceCount || 0) >= 3;
 
   const handleOpenVoteDialog = (type: 'yes' | 'resistance') => {
+    if (!canVote) {
+      toast.error(freezeExplanation || 'You cannot vote right now.');
+      return;
+    }
     if (type === 'resistance' && !canResist) {
       toast.error("You need Lana8Wonder and at least 3 real-life credentials to resist a proposal");
       return;
@@ -353,7 +366,7 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
               <Button 
                 onClick={() => handleOpenVoteDialog('yes')}
                 className="w-full bg-green-600 hover:bg-green-700 h-10 sm:h-11 text-sm sm:text-base"
-                disabled={isLoadingPermissions || isLoadingAck}
+                disabled={isLoadingPermissions || isLoadingAck || !canVote}
               >
                 <CheckCircle className="h-4 w-4 mr-1.5 sm:mr-2" />
                 {acknowledgement?.ack === 'yes' ? 'Change Acceptance' : 'Accept Proposal'}
@@ -370,7 +383,13 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
               </Button>
             </div>
             
-            {!canResist && !isLoadingPermissions && (
+            {!canVote && !isLoadingPermissions && (
+              <p className="text-[10px] sm:text-sm text-destructive">
+                {freezeExplanation}
+              </p>
+            )}
+
+            {canVote && !canResist && !isLoadingPermissions && (
               <p className="text-[10px] sm:text-sm text-muted-foreground">
                 You can vote to accept, but cannot resist proposals. To resist, you need a Lana8Wonder plan and at least 3 real-life credentials.
               </p>

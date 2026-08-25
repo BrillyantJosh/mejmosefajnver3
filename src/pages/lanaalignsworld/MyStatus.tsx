@@ -1,12 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, Wallet, User, FileCheck, Shield, Star, Clock, AlertCircle, Info } from "lucide-react";
+import { CheckCircle, XCircle, Wallet, User, FileCheck, Shield, Star, Clock, AlertCircle, Info, Snowflake } from "lucide-react";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { useNostrRealLifeCredential } from "@/hooks/useNostrRealLifeCredential";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { useMemo } from "react";
+import { evaluateFreezeGate, canVoteWith, freezeGateExplanation } from "@/lib/voteEligibility";
 
 interface StatusItemProps {
   label: string;
@@ -47,7 +48,7 @@ const formatLana = (balance: number): string => {
 
 export default function MyStatus() {
   // Fetch wallets (KIND 30889)
-  const { wallets, isLoading: walletsLoading } = useNostrWallets();
+  const { wallets, isLoading: walletsLoading, resolved: walletsResolved } = useNostrWallets();
   
   // Get wallet addresses for balance fetch
   const walletAddresses = useMemo(() => wallets.map(w => w.walletId), [wallets]);
@@ -63,11 +64,22 @@ export default function MyStatus() {
 
   const isLoading = walletsLoading || balancesLoading || credentialsLoading || lana8WonderLoading;
 
-  // In Quorum = Profile OK, Registry OK, Self Responsibility OK (all default true)
-  const isInQuorum = true; // All defaults are OK
+  // A frozen person does not vote (Brilly, 2026-08-25). Shared with the
+  // proposal page so both screens answer the same question the same way.
+  const freezeGate = useMemo(
+    () => evaluateFreezeGate(wallets, walletsResolved),
+    [wallets, walletsResolved]
+  );
+  const canVote = canVoteWith(freezeGate);
+  const freezeExplanation = freezeGateExplanation(freezeGate);
 
-  // Can Resist = In Lana8Wonder AND has at least 3 real-life credentials
-  const canResist = lana8WonderStatus.exists && credentialStatus.referenceCount >= 3;
+  // In Quorum finally means something. Profile / Registry / Self Responsibility
+  // below are still carried as defaults — nothing measures them yet — so the
+  // freeze is the one requirement this page can actually verify.
+  const isInQuorum = canVote;
+
+  // Can Resist = allowed to vote at all, AND Lana8Wonder, AND 3+ credentials
+  const canResist = canVote && lana8WonderStatus.exists && credentialStatus.referenceCount >= 3;
 
   if (isLoading) {
     return (
@@ -108,9 +120,9 @@ export default function MyStatus() {
               {isInQuorum ? "In Quorum" : "Not In Quorum"}
             </Badge>
             <p className="text-xs sm:text-sm text-muted-foreground">
-              {isInQuorum 
-                ? "All requirements are met. You can participate in alignment decisions." 
-                : "Some requirements are not met. Complete them to join the quorum."}
+              {isInQuorum
+                ? "All requirements are met. You can participate in alignment decisions."
+                : freezeExplanation || "Some requirements are not met. Complete them to join the quorum."}
             </p>
           </div>
 
@@ -123,9 +135,11 @@ export default function MyStatus() {
               <div className="min-w-0">
                 <p className="font-medium text-sm sm:text-base">Resist Capability</p>
                 <p className="text-[10px] sm:text-sm text-muted-foreground">
-                  {canResist 
-                    ? "You can vote and resist proposals." 
-                    : "You can vote, but cannot resist proposals. Register in Lana8Wonder and get at least 3 real-life credentials to unlock."}
+                  {canResist
+                    ? "You can vote and resist proposals."
+                    : !canVote
+                      ? freezeExplanation
+                      : "You can vote, but cannot resist proposals. Register in Lana8Wonder and get at least 3 real-life credentials to unlock."}
                 </p>
               </div>
             </div>
@@ -198,6 +212,24 @@ export default function MyStatus() {
             icon={<Shield className="h-5 w-5" />}
             isOk={true}
             detail="Default: accepted"
+          />
+
+          <StatusItem
+            label="Account Freeze"
+            value={
+              freezeGate.state === 'clear'
+                ? "None"
+                : freezeGate.state === 'frozen'
+                  ? "Frozen"
+                  : "Unverified"
+            }
+            icon={<Snowflake className="h-5 w-5" />}
+            isOk={freezeGate.state === 'clear'}
+            detail={
+              freezeGate.state === 'clear'
+                ? `${freezeGate.totalWallets} wallet${freezeGate.totalWallets === 1 ? '' : 's'} checked, none frozen (KIND 30889)`
+                : freezeExplanation || undefined
+            }
           />
           
           <StatusItem

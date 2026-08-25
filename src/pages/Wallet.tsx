@@ -27,6 +27,7 @@ function getFreezeReasonLabel(freezeStatus: string): string {
     case 'frozen_max_cap': return 'Maximum balance cap exceeded';
     case 'frozen_too_wild': return 'Irregular or suspicious activity';
     case 'frozen_unreg_Lanas': return 'Received unregistered LANA exceeding threshold';
+    case 'frozen_own_person': return 'Frozen by the self-responsibility process';
     case 'frozen': return 'All accounts frozen by registrar';
     default: return 'Account frozen';
   }

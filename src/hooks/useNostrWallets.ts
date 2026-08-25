@@ -18,6 +18,10 @@ export const useNostrWallets = () => {
   const { session } = useAuth();
   const [wallets, setWallets] = useState<NostrWallet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // True only after the registrar's list was actually read. An outage hands
+  // back an empty array that looks exactly like "this person has no wallets",
+  // and callers that gate on a freeze must not read that silence as "clean".
+  const [resolved, setResolved] = useState(false);
 
   const fetchWallets = useCallback(async () => {
     if (!session?.nostrHexId) {
@@ -35,19 +39,23 @@ export const useNostrWallets = () => {
       if (error) {
         console.error('❌ Edge function error:', error);
         setWallets([]);
+        setResolved(false);
         return;
       }
 
       if (data?.success && data?.wallets) {
         console.log('✅ Wallets loaded via server:', data.wallets.length);
         setWallets(data.wallets);
+        setResolved(true);
       } else {
         console.log('⚠️ No wallets returned:', data?.error);
         setWallets([]);
+        setResolved(false);
       }
     } catch (error) {
       console.error('❌ Error fetching wallets:', error);
       setWallets([]);
+      setResolved(false);
     } finally {
       setIsLoading(false);
     }
@@ -60,6 +68,7 @@ export const useNostrWallets = () => {
   return {
     wallets,
     isLoading,
+    resolved,
     refetch: fetchWallets
   };
 };
