@@ -244,15 +244,20 @@ export default function MyStatus() {
             }
           />
           
+          {/* "Missing" is a verdict about this person; the relays going quiet is
+              not. Until one of them answers, this row says so rather than
+              reporting an absence nobody established. */}
           <StatusItem
             label="Lana8Wonder"
-            value={lana8WonderStatus.exists ? "OK" : "Missing"}
+            value={lana8WonderStatus.exists ? "OK" : lana8WonderStatus.unreachable ? "Unknown" : "Missing"}
             icon={<Star className="h-5 w-5" />}
             isOk={lana8WonderStatus.exists}
             detail={
-              lana8WonderStatus.exists 
+              lana8WonderStatus.exists
                 ? `Plan registered (KIND 88888)`
-                : "No Lana8Wonder plan found - required for resist capability"
+                : lana8WonderStatus.unreachable
+                  ? "No relay answered, so we could not check whether you have a plan - this is not a finding about you"
+                  : "No Lana8Wonder plan found - required for resist capability"
             }
           />
           

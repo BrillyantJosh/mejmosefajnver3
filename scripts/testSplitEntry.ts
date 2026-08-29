@@ -26,7 +26,12 @@ import {
   type PlanLike,
   type SplitPriceRow,
 } from '../src/lib/splitEntry.js';
-import { choosePlanEvent } from '../src/lib/planRead.js';
+import {
+  choosePlanEvent,
+  planGateStatus,
+  choosePlanScreen,
+  type PlanGateStatus,
+} from '../src/lib/planRead.js';
 
 let failures = 0;
 function check(name: string, cond: boolean, detail?: unknown) {
@@ -271,9 +276,91 @@ console.log('\n— a silent network must not retire a holder\'s plan —');
   check('a missing read is UNREACHABLE, never absence', choosePlanEvent(null).status === 'unreachable');
 }
 
+console.log('\n— a silent relay must not lock a holder out of what the plan unlocks —');
+{
+  // The same empty array, read a second way. `useNostrLana8Wonder` is not a
+  // display: it is the gate on resisting a proposal, on creating a LanaCrowd
+  // project, and on opening an Abundance point. It answered `exists: false`
+  // whenever `querySync` came back empty — so a relay that never connected
+  // told a real plan holder, in four different screens, that they are not one.
+  // Nothing said the relays had been silent; the refusal read as a verdict.
+  const planEvent = (created_at: number, d: string, id: string) =>
+    ({ id, created_at, content: '{}', kind: 88888, pubkey: '', sig: '',
+       tags: [['d', d], ['p', 'holder']] }) as never;
+
+  const NOTHING_KNOWN: PlanGateStatus = { exists: false, unreachable: false };
+
+  const outage = planGateStatus({ answered: [], events: [] }, NOTHING_KNOWN);
+  check('no relay answered → the gate says UNKNOWN, never "no plan"',
+    outage.exists === false && outage.unreachable === true, outage);
+
+  const held: PlanGateStatus = {
+    exists: true, planId: 'main', eventId: 'abc', createdAt: 1761484769, unreachable: false,
+  };
+  const keptThroughOutage = planGateStatus({ answered: [], events: [] }, held);
+  check('a plan already established is NOT retired by silence',
+    keptThroughOutage.exists === true && keptThroughOutage.planId === 'main'
+      && keptThroughOutage.unreachable === true, keptThroughOutage);
+
+  // The other half of the promise: this must not become a gate that opens for
+  // everyone the moment a relay is slow. A relay that ANSWERED is authority.
+  const genuinelyNone = planGateStatus({ answered: ['wss://relay.lanavault.space'], events: [] }, held);
+  check('a relay that answered with nothing DOES retire the plan — the gate never fails open',
+    genuinelyNone.exists === false && genuinelyNone.unreachable === false, genuinelyNone);
+
+  // `querySync` merged every relay's events and the hook took `events[0]` —
+  // whichever copy happened to land first. Two relays a moment apart could
+  // therefore have the gate reporting the SUPERSEDED plan id and event id.
+  const twoCopies = planGateStatus({
+    answered: ['wss://a', 'wss://b'],
+    events: [planEvent(1700000000, 'superseded', 'old'), planEvent(1761484769, 'main', 'new')],
+  }, NOTHING_KNOWN);
+  check('two relays a moment apart → the NEWEST plan is reported, not the first to arrive',
+    twoCopies.exists === true && twoCopies.planId === 'main' && twoCopies.eventId === 'new'
+      && twoCopies.createdAt === 1761484769, twoCopies);
+
+  const noEose = planGateStatus({ answered: [], events: [planEvent(1761484769, 'main', 'new')] }, NOTHING_KNOWN);
+  check('a plan in hand counts even if no EOSE arrived in the budget',
+    noEose.exists === true && noEose.unreachable === false, noEose);
+
+  check('a read that never happened is UNKNOWN, never absence',
+    planGateStatus(null, NOTHING_KNOWN).unreachable === true);
+}
+
+console.log('\n— the SPLIT forecast must not answer a question the relays refused —');
+{
+  // /lana8wonder/splits had the same `querySync` and a harsher fallback: with
+  // no plan it states "You don't have an annuity plan", points the holder at
+  // lana8wonder.com to buy one, and then prints sixteen doubling price rungs
+  // that belong to nobody. A holder with eight funded accounts, hit by one
+  // silent moment, was told he owned nothing and handed a stranger's ladder.
+  const plan = { accounts: [] };
+
+  check('relays silent and nothing in hand → the UNREADABLE screen, not "you have no plan"',
+    choosePlanScreen({ plan: null, lastRead: 'unreachable' }) === 'unreachable',
+    choosePlanScreen({ plan: null, lastRead: 'unreachable' }));
+
+  check('  so the sixteen-rung forecast is never shown in place of a plan we could not read',
+    choosePlanScreen({ plan: null, lastRead: 'unreachable' }) !== 'no-plan');
+
+  check('relays silent but the plan already on screen → the forecast STAYS',
+    choosePlanScreen({ plan, lastRead: 'unreachable' }) === 'forecast',
+    choosePlanScreen({ plan, lastRead: 'unreachable' }));
+
+  check('a relay answered with nothing → the honest "you have no plan" screen',
+    choosePlanScreen({ plan: null, lastRead: 'none' }) === 'no-plan');
+
+  check('a plan that was read → the forecast',
+    choosePlanScreen({ plan, lastRead: 'found' }) === 'forecast');
+
+  check('nobody signed in, so nothing was ever asked → the page is left as it was',
+    choosePlanScreen({ plan: null, lastRead: null }) === 'no-plan');
+}
+
+
 if (failures > 0) {
   console.error(`\n❌ ${failures} FAILED`);
   process.exit(1);
 }
-console.log('\n✅ the entry SPLIT is either a fact or a refusal — never a guess, and never lost to a quiet relay');
+console.log('\n✅ the entry SPLIT is either a fact or a refusal — never a guess, and a quiet relay\n   can neither take a plan off the screen nor take away what it unlocks');
 process.exit(0);

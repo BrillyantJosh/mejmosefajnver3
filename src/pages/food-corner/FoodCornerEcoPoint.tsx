@@ -52,6 +52,9 @@ export default function FoodCornerEcoPoint() {
   const { session } = useAuth();
   const { t, lang } = useTranslation(foodCornerTranslations);
   const { status: lana8WonderStatus, isLoading: lana8WonderLoading } = useNostrLana8Wonder();
+  // No relay answered, so we do not know. The button stays shut — an Abundance
+  // point is published to the relays — but the reason given is the true one.
+  const lana8WonderUnknown = !lana8WonderStatus.exists && lana8WonderStatus.unreachable;
   const { nodes, producers, orders, isLoading, refetch, deliveries } = useFoodCornerData();
   const { publishEvent, isPublishing } = useFoodCornerPublisher();
 
@@ -209,7 +212,7 @@ export default function FoodCornerEcoPoint() {
 
   const saveNode = async () => {
     if (!lana8WonderStatus.exists) {
-      toast.error(t("ecoPoint.toast.needLana8Wonder"));
+      toast.error(t(lana8WonderUnknown ? "ecoPoint.toast.lana8WonderUnknown" : "ecoPoint.toast.needLana8Wonder"));
       return;
     }
     if (!name.trim()) {
@@ -688,7 +691,9 @@ export default function FoodCornerEcoPoint() {
       {!lana8WonderStatus.exists && (
         <Alert>
           <Sparkles className="h-4 w-4" />
-          <AlertDescription>{t("ecoPoint.alert.lana8WonderOnly")}</AlertDescription>
+          <AlertDescription>
+            {t(lana8WonderUnknown ? "ecoPoint.alert.lana8WonderUnknown" : "ecoPoint.alert.lana8WonderOnly")}
+          </AlertDescription>
         </Alert>
       )}
 

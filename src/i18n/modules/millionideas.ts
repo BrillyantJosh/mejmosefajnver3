@@ -109,6 +109,8 @@ const millionideas = {
   "create.openLana8Wonder": "Open Lana8Wonder",
   "create.planRequiredDesc": "Creating crowdfunding projects on LanaCrowd is reserved for members with an active Lana8Wonder plan. Activate your plan first and then return here to publish your project.",
   "create.planRequiredTitle": "Lana8Wonder plan required",
+  "create.planUnknownTitle": "We could not check your plan",
+  "create.planUnknownDesc": "No relay answered, so we could not check whether you hold a Lana8Wonder plan. This is not a finding about your plan — please try again in a moment.",
 
   // ── detail ──
   "detail.anonymous": "Anonymous",
@@ -525,6 +527,8 @@ const translations: TranslationDict<MillionideasKey> = {
     "create.openLana8Wonder": "Odpri Lana8Wonder",
     "create.planRequiredDesc": "Ustvarjanje množičnih projektov na LanaCrowd je namenjeno članom z aktivnim načrtom Lana8Wonder. Najprej aktiviraj svoj načrt in se nato vrni sem, da objaviš svoj projekt.",
     "create.planRequiredTitle": "Potreben je načrt Lana8Wonder",
+    "create.planUnknownTitle": "Tvojega načrta nismo mogli preveriti",
+    "create.planUnknownDesc": "Noben rele se ni odzval, zato nismo mogli preveriti, ali imaš načrt Lana8Wonder. To ni ugotovitev o tvojem načrtu — poskusi znova čez trenutek.",
 
     // ── detail ──
     "detail.anonymous": "Anonimno",

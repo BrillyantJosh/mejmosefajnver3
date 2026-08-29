@@ -104,8 +104,11 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
   const canVote = canVoteWith(freezeGate);
   const freezeExplanation = freezeGateExplanation(freezeGate);
 
-  // Can resist if allowed to vote at all, AND has Lana8Wonder AND 3+ credentials
+  // Can resist if allowed to vote at all, AND has Lana8Wonder AND 3+ credentials.
+  // A vote is published to the relays, so this stays shut when we do not know —
+  // but an unknown must not be announced to the person as "you do not qualify".
   const canResist = canVote && lana8WonderStatus.exists && (credentialStatus?.referenceCount || 0) >= 3;
+  const lana8WonderUnknown = !lana8WonderStatus.exists && lana8WonderStatus.unreachable;
 
   const handleOpenVoteDialog = (type: 'yes' | 'resistance') => {
     if (!canVote) {
@@ -113,7 +116,11 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
       return;
     }
     if (type === 'resistance' && !canResist) {
-      toast.error("You need Lana8Wonder and at least 3 real-life credentials to resist a proposal");
+      toast.error(
+        lana8WonderUnknown
+          ? "No relay answered, so we could not check your Lana8Wonder plan. Please try again in a moment."
+          : "You need Lana8Wonder and at least 3 real-life credentials to resist a proposal"
+      );
       return;
     }
     setVoteType(type);
@@ -391,7 +398,9 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
 
             {canVote && !canResist && !isLoadingPermissions && (
               <p className="text-[10px] sm:text-sm text-muted-foreground">
-                You can vote to accept, but cannot resist proposals. To resist, you need a Lana8Wonder plan and at least 3 real-life credentials.
+                {lana8WonderUnknown
+                  ? "Resisting is unavailable right now: no relay answered, so your Lana8Wonder plan could not be checked. This says nothing about your plan - please try again in a moment."
+                  : "You can vote to accept, but cannot resist proposals. To resist, you need a Lana8Wonder plan and at least 3 real-life credentials."}
               </p>
             )}
 

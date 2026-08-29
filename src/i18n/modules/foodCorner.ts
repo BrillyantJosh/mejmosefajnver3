@@ -75,6 +75,7 @@ const foodCorner = {
 
   // ── Abundance point (owner) ──
   'ecoPoint.toast.needLana8Wonder': 'You need a Lana8Wonder record to create an Abundance point',
+  'ecoPoint.toast.lana8WonderUnknown': 'No relay answered, so your Lana8Wonder record could not be checked. Please try again in a moment.',
   'ecoPoint.toast.enterName': 'Enter the Abundance point name',
   'ecoPoint.toast.enterPickup': 'Enter the pickup location',
   'ecoPoint.toast.pickLocation': 'Pick a location on the map or via address search',
@@ -86,6 +87,7 @@ const foodCorner = {
   'ecoPoint.heading.manage': 'Manage Abundance point',
   'ecoPoint.subtitle.manage': 'An Abundance point publishes KIND 30905 and curates suppliers and their KIND 36500 offers.',
   'ecoPoint.alert.lana8WonderOnly': 'Creating an Abundance point is available only to users with a Lana8Wonder KIND 88888 record.',
+  'ecoPoint.alert.lana8WonderUnknown': 'No relay answered, so we could not check your Lana8Wonder KIND 88888 record. This is not a finding about your record — please try again in a moment.',
   'ecoPoint.badge.suppliers': '{count} suppliers',
   'ecoPoint.badge.offers': '{count} offers',
   'ecoPoint.label.pause': 'Pause',
@@ -297,6 +299,7 @@ const translations: TranslationDict<FoodCornerKey> = {
     'order.deadline.closed': 'Za to Točko obilja ni nastavljenega roka naročanja.',
 
     'ecoPoint.toast.needLana8Wonder': 'Za ustvarjanje Točke obilja potrebuješ Lana8Wonder zapis',
+    'ecoPoint.toast.lana8WonderUnknown': 'Noben rele se ni odzval, zato tvojega zapisa Lana8Wonder nismo mogli preveriti. Poskusi znova čez trenutek.',
     'ecoPoint.toast.enterName': 'Vnesi ime Točke obilja',
     'ecoPoint.toast.enterPickup': 'Vnesi lokacijo prevzema',
     'ecoPoint.toast.pickLocation': 'Izberi lokacijo na zemljevidu ali z iskanjem naslova',
@@ -308,6 +311,7 @@ const translations: TranslationDict<FoodCornerKey> = {
     'ecoPoint.heading.manage': 'Upravljanje Točke obilja',
     'ecoPoint.subtitle.manage': 'Točka obilja objavi KIND 30905 in kurira dobavitelje ter njihove KIND 36500 ponudbe.',
     'ecoPoint.alert.lana8WonderOnly': 'Ustvarjanje Točke obilja je omogočeno samo uporabnikom z Lana8Wonder zapisom KIND 88888.',
+    'ecoPoint.alert.lana8WonderUnknown': 'Noben rele se ni odzval, zato tvojega zapisa Lana8Wonder KIND 88888 nismo mogli preveriti. To ni ugotovitev o tvojem zapisu — poskusi znova čez trenutek.',
     'ecoPoint.badge.suppliers': '{count} dobaviteljev',
     'ecoPoint.badge.offers': '{count} ponudb',
     'ecoPoint.label.pause': 'Pavza',

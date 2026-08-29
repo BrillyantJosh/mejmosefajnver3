@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, PlusCircle, Ban, Sparkles, Loader2, Copy } from "lucide-react";
+import { ArrowLeft, PlusCircle, Ban, Sparkles, Loader2, Copy, WifiOff } from "lucide-react";
 import ProjectForm, { ProjectFormInitialData } from "@/components/100millionideas/ProjectForm";
 import CreateProjectGate from "@/components/100millionideas/CreateProjectGate";
 import { useAdmin } from "@/contexts/AdminContext";
@@ -98,6 +98,35 @@ export default function CreateProject() {
       <div className="container mx-auto p-6 max-w-2xl pb-24">
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  // The gate could not be checked: no relay answered. Refusing is right — a
+  // project is published — but telling someone they lack a plan we never
+  // managed to look for is not.
+  if (!lana8WonderStatus.exists && lana8WonderStatus.unreachable) {
+    return (
+      <div className="container mx-auto p-6 max-w-2xl pb-24">
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
+            <WifiOff className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h2 className="text-lg font-semibold">{t("create.planUnknownTitle")}</h2>
+          <p className="text-sm text-muted-foreground mt-2 max-w-sm">
+            {t("create.planUnknownDesc")}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => navigate("/100millionideas/projects")}
+              className="gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              {t("create.backToProjects")}
+            </Button>
+          </div>
         </div>
       </div>
     );

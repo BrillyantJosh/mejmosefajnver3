@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { supabase } from '@/integrations/supabase/client';
-import { SimplePool, Event } from 'nostr-tools';
+import { SimplePool } from 'nostr-tools';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, TrendingUp, AlertCircle, Euro, Wallet } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, TrendingUp, AlertCircle, Euro, Wallet, WifiOff } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useTranslation } from '@/i18n/I18nContext';
 import lana8wonderTranslations from '@/i18n/modules/lana8wonder';
+import { readFromRelays } from '@/lib/relayRead';
+import { choosePlanEvent, choosePlanScreen } from '@/lib/planRead';
 
 interface AnnuityLevel {
   row_id: string;
@@ -71,6 +73,9 @@ const Lana8WonderSplits = () => {
   const { t } = useTranslation(lana8wonderTranslations);
   const [isLoading, setIsLoading] = useState(true);
   const [annuityPlan, setAnnuityPlan] = useState<AnnuityPlan | null>(null);
+  // What the relays last actually said — as opposed to what we happen to hold.
+  // `null` until anything has been asked at all.
+  const [lastRead, setLastRead] = useState<'found' | 'none' | 'unreachable' | null>(null);
   const [accountBalances, setAccountBalances] = useState<Record<string, number>>({});
   const [loadingBalances, setLoadingBalances] = useState(false);
 
@@ -78,45 +83,74 @@ const Lana8WonderSplits = () => {
   const exchangeRates = parameters?.exchangeRates;
   const currentPrice = exchangeRates?.EUR || 0;
   const currentSplit = parameters?.split ? parseInt(parameters.split) : 0;
+  // `parameters.relays` is parsed into a NEW array on every system-parameters
+  // refresh while naming the very same relays, so depending on the array itself
+  // re-ran this read on every heartbeat and every republished KIND 38888 — each
+  // one another chance for a quiet moment to wipe the forecast. Watch the LIST.
+  const relayKey = relays.join(',');
 
   // Fetch annuity plan (KIND 88888)
   useEffect(() => {
+    const relayList = relayKey ? relayKey.split(',') : [];
+    const cancelled = { value: false };
+
     const fetchAnnuityPlan = async () => {
-      if (!session?.nostrHexId || relays.length === 0) {
+      if (!session?.nostrHexId) {
+        setIsLoading(false);
+        return;
+      }
+      if (relayList.length === 0) {
+        // No KIND 38888, so no relays to ask. Unread, not absent.
+        setLastRead('unreachable');
         setIsLoading(false);
         return;
       }
 
       const pool = new SimplePool();
       try {
-        const events = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [88888],
-            '#p': [session.nostrHexId],
-          }),
-          new Promise<Event[]>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), 10000)
-          )
-        ]) as Event[];
+        // readFromRelays, not pool.querySync + a Promise.race timeout. Both of
+        // the old paths ended at `setAnnuityPlan(null)`: querySync counts a
+        // relay that never connected as one that answered with nothing, and
+        // the race rejected on a slow network. Either turned a holder with
+        // eight funded accounts into someone told he owns nothing — and then
+        // handed him sixteen price rungs belonging to no one.
+        const read = await readFromRelays(
+          pool,
+          relayList,
+          { kinds: [88888], '#p': [session.nostrHexId] },
+          { budgetMs: 10000, cancelled },
+        );
+        if (cancelled.value) return;
 
-        if (events && events.length > 0) {
-          const latestEvent = events.sort((a, b) => b.created_at - a.created_at)[0];
-          const plan = JSON.parse(latestEvent.content) as AnnuityPlan;
-          setAnnuityPlan(plan);
-        } else {
+        const outcome = choosePlanEvent(read);
+        setLastRead(outcome.status);
+
+        if (outcome.status === 'unreachable') {
+          // Not one relay spoke. Keep whatever plan is already on screen and
+          // say so; if there is none to keep, the page shows that it could not
+          // read rather than inventing an answer.
+          console.warn(
+            `📡 No relay answered for KIND 88888 (${read.failed.map(f => `${f.url}: ${f.reason}`).join(' | ')}) — keeping the forecast already on screen`
+          );
+        } else if (outcome.status === 'none') {
           setAnnuityPlan(null);
+        } else {
+          setAnnuityPlan(JSON.parse(outcome.event.content) as AnnuityPlan);
         }
       } catch (error) {
+        // A parse failure is about THIS event, not about the network, so it may
+        // clear the plan. readFromRelays itself never rejects.
         console.error('Error fetching annuity plan:', error);
-        setAnnuityPlan(null);
+        if (!cancelled.value) { setAnnuityPlan(null); setLastRead('none'); }
       } finally {
-        setIsLoading(false);
-        pool.close(relays);
+        if (!cancelled.value) setIsLoading(false);
+        try { pool.close(relayList); } catch { /* sockets already gone */ }
       }
     };
 
     fetchAnnuityPlan();
-  }, [session?.nostrHexId, relays]);
+    return () => { cancelled.value = true; };
+  }, [session?.nostrHexId, relayKey]);
 
   // Fetch balances
   useEffect(() => {
@@ -233,8 +267,37 @@ const Lana8WonderSplits = () => {
     );
   }
 
-  // No annuity plan
-  if (!annuityPlan) {
+  const screen = choosePlanScreen({ plan: annuityPlan, lastRead });
+
+  // The relays did not answer. We know nothing about this person's plan, so we
+  // say nothing about it — and in particular do not print a price ladder that
+  // would read as their projection.
+  if (screen === 'unreachable') {
+    return (
+      <div className="container mx-auto p-3 md:p-4 space-y-4">
+        <div className="flex items-center gap-2 md:gap-3 mb-4">
+          <TrendingUp className="h-6 w-6 md:h-8 md:w-8 text-primary flex-shrink-0" />
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold">{t('splits.title')}</h1>
+            <p className="text-sm md:text-base text-muted-foreground">{t('splits.priceProjection')}</p>
+          </div>
+        </div>
+
+        <Alert>
+          <WifiOff className="h-4 w-4" />
+          <AlertTitle>{t('splits.unreadableTitle')}</AlertTitle>
+          <AlertDescription>
+            {t('splits.unreadableBody')}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // No annuity plan — a relay actually said so. (The `!annuityPlan` half is
+  // what narrows the type below; choosePlanScreen only answers 'forecast' with
+  // a plan in hand, so the two can never disagree.)
+  if (screen === 'no-plan' || !annuityPlan) {
     return (
       <div className="container mx-auto p-3 md:p-4 space-y-4">
         <div className="flex items-center gap-2 md:gap-3 mb-4">
