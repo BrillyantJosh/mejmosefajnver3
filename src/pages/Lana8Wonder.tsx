@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrWallets } from '@/hooks/useNostrWallets';
 import { supabase } from '@/integrations/supabase/client';
-import { SimplePool, Event } from 'nostr-tools';
+import { SimplePool } from 'nostr-tools';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +14,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/I18nContext';
 import EntrySplitCard from '@/components/lana8wonder/EntrySplitCard';
+import { readFromRelays } from '@/lib/relayRead';
+import { choosePlanEvent } from '@/lib/planRead';
 
 // Error boundary to catch render crashes and show error instead of white screen
 class Lana8WonderErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
@@ -120,10 +122,20 @@ const Lana8Wonder = () => {
   const relays = parameters?.relays || [];
   const exchangeRates = parameters?.exchangeRates;
   const currentPrice = exchangeRates?.EUR || 0;
+  // A new KIND 38888 is parsed into a NEW object on every system-parameters
+  // refresh, so `parameters.relays` changes identity while naming the very same
+  // relays. Depending on the array itself re-ran this whole read every time the
+  // authority republished 38888 — including the republish that corrected the
+  // SPLIT prices, which is the one moment a holder is looking at this page.
+  // The relay LIST is what this read depends on, so that is what it watches.
+  const relayKey = relays.join(',');
 
   useEffect(() => {
+    const relayList = relayKey ? relayKey.split(',') : [];
+    const cancelled = { value: false };
+
     const fetchAnnuityPlan = async () => {
-      if (!session?.nostrHexId || relays.length === 0) {
+      if (!session?.nostrHexId || relayList.length === 0) {
         setIsLoading(false);
         return;
       }
@@ -133,20 +145,31 @@ const Lana8Wonder = () => {
       try {
         console.log('Fetching KIND 88888 for user:', session.nostrHexId);
 
-        const events = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [88888],
-            '#p': [session.nostrHexId],
-          }),
-          new Promise<Event[]>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), 10000)
-          )
-        ]) as Event[];
+        // readFromRelays, not pool.querySync: querySync counts a relay that
+        // never connected as one that answered with nothing, so an outage and
+        // "this holder has no plan" arrive as the same empty array. Telling
+        // those apart is the whole point here — see choosePlanEvent.
+        const read = await readFromRelays(
+          pool,
+          relayList,
+          { kinds: [88888], '#p': [session.nostrHexId] },
+          { budgetMs: 10000, cancelled },
+        );
+        if (cancelled.value) return;
 
-        if (events && events.length > 0) {
-          // Get the latest event
-          const latestEvent = events.sort((a, b) => b.created_at - a.created_at)[0];
-          const plan = JSON.parse(latestEvent.content) as AnnuityPlan;
+        const outcome = choosePlanEvent(read);
+
+        if (outcome.status === 'unreachable') {
+          // Not one relay spoke. That says nothing about this holder, so we say
+          // nothing either: whatever plan is already on screen stays on screen.
+          console.warn(
+            `📡 No relay answered for KIND 88888 (${read.failed.map(f => `${f.url}: ${f.reason}`).join(' | ')}) — keeping the plan already loaded`
+          );
+        } else if (outcome.status === 'none') {
+          setAnnuityPlan(null);
+          console.log('No annuity plan found');
+        } else {
+          const plan = JSON.parse(outcome.event.content) as AnnuityPlan;
           // Defensive: ensure accounts is a valid array with levels
           if (!plan || !Array.isArray(plan.accounts)) {
             console.error('🔴 Invalid annuity plan structure:', plan);
@@ -160,21 +183,21 @@ const Lana8Wonder = () => {
             setAnnuityPlan(plan);
             console.log('Annuity plan found:', plan);
           }
-        } else {
-          setAnnuityPlan(null);
-          console.log('No annuity plan found');
         }
       } catch (error) {
+        // A parse failure is about THIS event, not about the network, so it may
+        // still clear the plan. readFromRelays itself never rejects.
         console.error('Error fetching annuity plan:', error);
-        setAnnuityPlan(null);
+        if (!cancelled.value) setAnnuityPlan(null);
       } finally {
-        setIsLoading(false);
-        pool.close(relays);
+        if (!cancelled.value) setIsLoading(false);
+        try { pool.close(relayList); } catch { /* sockets already gone */ }
       }
     };
 
     fetchAnnuityPlan();
-  }, [session?.nostrHexId, relays]);
+    return () => { cancelled.value = true; };
+  }, [session?.nostrHexId, relayKey]);
 
   // Fetch wallet balances (for annuity plan accounts OR user wallets)
   useEffect(() => {
