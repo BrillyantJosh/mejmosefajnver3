@@ -42,13 +42,20 @@ export interface PlanLike {
   accounts: PlanAccountLike[];
 }
 
-/** What the plan itself says about the holder's entry — no system data needed. */
+/**
+ * What the plan itself says about the holder's entry — no system data needed.
+ *
+ * Deliberately NOT here: "what 100 of your currency bought". Dividing 100 by
+ * the starting price is arithmetic anyone can do, but on a plan page it reads
+ * as "what you paid", and it is not: a plan is funded at its SPLIT's reference
+ * price, the starting price carries a premium on top of that, and commission
+ * comes off the fiat first. A holder who paid 100 EUR for 88,004.67 LANA was
+ * being shown 76,923.08 by that formula. So the number is not offered.
+ */
 export interface EntryTerms {
   /** Currency per 1 LANA the plan was built from, premium included. */
   startPrice: number;
   currency: string;
-  /** What 100 units of that currency came to at that starting price. */
-  lanaPerHundred: number;
 }
 
 /** Why a published ladder cannot be used to place someone's entry. */
@@ -208,10 +215,9 @@ export interface ResolveInput {
 }
 
 /**
- * Everything the screen needs. The plan's own terms (starting price, and what
- * 100 of the holder's currency came to at it) come straight from their plan
- * and never depend on system parameters. The SPLIT number does, and degrades
- * to a stated reason rather than a guess.
+ * Everything the screen needs. The plan's own starting price comes straight
+ * from their plan and never depends on system parameters. The SPLIT number
+ * does, and degrades to a stated reason rather than a guess.
  */
 export function resolveEntry({
   plan,
@@ -224,7 +230,7 @@ export function resolveEntry({
   const currency = String(plan?.currency ?? '').toUpperCase();
   if (startPrice == null || !currency) return { plan: 'unreadable' };
 
-  const terms: EntryTerms = { startPrice, currency, lanaPerHundred: 100 / startPrice };
+  const terms: EntryTerms = { startPrice, currency };
 
   if (splitPrices == null) return { plan: 'readable', terms, ladder: { status: 'no-parameters' } };
 

@@ -127,6 +127,39 @@ console.log('\n— every real starting price lands on exactly one SPLIT —');
     matchSplit(0.2559, ladder)?.split === 8);
 }
 
+console.log('\n— the holder who said we had it wrong —');
+{
+  // Joshua Andrej Brilly, KIND 88888 event 3b56f957..., read off the Lana
+  // relays on 2026-08-29. His plan's account-1/level-1 trigger is 0.0013 EUR,
+  // and the eight accounts it names were funded with 88,004.6653 LANA — a
+  // figure the chain still corroborates (accounts 3-8 hold their original
+  // ~11,000 each; 1 and 2 have run down exactly along the plan's own
+  // schedule). At the coherent ladder's SPLIT 1 reference of 0.001 EUR that
+  // is 88.00 EUR of LANA, or 100.01 EUR once the 12% commission is added
+  // back — which is the purchase he described. Nothing else reconciles:
+  // at 0.0001 the same coins would have cost him 8.80 EUR, and at the
+  // published SPLIT 1 price of 0.0128 they would have cost 1,126.46 EUR.
+  const his = resolveEntry({
+    plan: planAt(0.0013), splitPrices: COHERENT, splitHistory: HISTORY,
+    currentSplit: 8, fxRate: 0.128,
+  });
+  check('his 0.0013 EUR plan is SPLIT 1, the cheapest, not SPLIT 5',
+    his.plan === 'readable' && his.ladder.status === 'determined' && his.ladder.split === 1, his);
+  check('  at a 30% premium over the 0.001 EUR reference',
+    his.plan === 'readable' && his.ladder.status === 'determined'
+      && Math.abs(his.ladder.splitPrice - 0.001) < 1e-9
+      && Math.abs(his.ladder.premiumPercent - 30) < 1e-6,
+    his.plan === 'readable' && his.ladder.status === 'determined' ? his.ladder : null);
+
+  // The reason the card refuses rather than answering from the published rows:
+  // believed, they mirror every holder onto the wrong SPLIT.
+  const mirrored = matchSplit(0.0013, buildLadder(PUBLISHED_TODAY, 'EUR'));
+  check('  the ladder published today would have called it SPLIT 5',
+    mirrored?.split === 5, mirrored);
+  check('  which is why an inconsistent ladder is refused outright',
+    checkLadder(buildLadder(PUBLISHED_TODAY, 'EUR'), 8, 0.128) !== null);
+}
+
 console.log('\n— what the screen is handed —');
 {
   const ok = resolveEntry({
@@ -137,9 +170,6 @@ console.log('\n— what the screen is handed —');
     ok.plan === 'readable' && ok.ladder.status === 'determined' && ok.ladder.split === 8, ok);
   check('  and reports the SPLIT date it was published with',
     ok.plan === 'readable' && ok.ladder.status === 'determined' && ok.ladder.happenedAt === 1782950400);
-  check('  and 100 EUR at that starting price is 723.38 LANA',
-    ok.plan === 'readable' && Math.abs(ok.terms.lanaPerHundred - 723.3796) < 0.0001,
-    ok.plan === 'readable' ? ok.terms.lanaPerHundred : null);
 
   const today = resolveEntry({
     plan: planAt(0.13824), splitPrices: PUBLISHED_TODAY, splitHistory: HISTORY,
@@ -149,8 +179,6 @@ console.log('\n— what the screen is handed —');
     today.plan === 'readable' && today.ladder.status === 'ladder-inconsistent', today);
   check('  but the holder is still told their own starting price',
     today.plan === 'readable' && today.terms.startPrice === 0.13824);
-  check('  and what 100 EUR came to at it',
-    today.plan === 'readable' && Math.abs(today.terms.lanaPerHundred - 723.3796) < 0.0001);
 
   const noParams = resolveEntry({
     plan: planAt(0.13824), splitPrices: null, splitHistory: null, currentSplit: null, fxRate: null,
