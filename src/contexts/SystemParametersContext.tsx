@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { SplitPriceRow, SplitHistoryRow } from '@/lib/splitEntry';
 
 const AUTHORIZED_PUBKEY = '9eb71bf1e9c3189c78800e4c3831c1c1a93ab43b61118818c32e4490891a35b3';
 
@@ -50,6 +51,15 @@ interface SystemParameters {
   maxCapLanasOnSplit: number;
   /** The authority's early-warning flag that a Split is coming. */
   splitApproaching: boolean;
+  /**
+   * KIND 38888 v4 `split_price` — published reference value of 1 LANA in a
+   * given currency AT a past Split, the historical counterpart of `fx`. This
+   * is what lets a plan holder's starting price be matched back to the Split
+   * they entered at. Empty when the authority has published none.
+   */
+  splitPrices: SplitPriceRow[];
+  /** KIND 38888 v4 `split_history` — when each past Split happened. */
+  splitHistory: SplitHistoryRow[];
   connectedRelays: number;
   isLoading: boolean;
   trustedSigners: TrustedSigners;
@@ -162,6 +172,47 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
       const rawApproaching = rawTags.find(t => t[0] === 'split_approaching')?.[1] ?? rawContent.split_approaching;
       const splitApproaching = String(rawApproaching ?? '').toLowerCase() === 'true';
 
+      // KIND 38888 v4 split ladder. Tags first, content fallback — the authority
+      // publishes both. Kept verbatim: whoever reads this must be able to see
+      // exactly what was published, including when it is wrong.
+      const splitPrices: SplitPriceRow[] = [];
+      for (const tag of rawTags) {
+        if (tag[0] !== 'split_price' || tag.length < 4) continue;
+        const split = parseInt(tag[1], 10);
+        const price = parseFloat(tag[3]);
+        if (Number.isInteger(split) && Number.isFinite(price)) {
+          splitPrices.push({ split, currency: String(tag[2]).toUpperCase(), price });
+        }
+      }
+      if (splitPrices.length === 0 && Array.isArray(rawContent.split_prices)) {
+        for (const row of rawContent.split_prices) {
+          const split = Number(row?.split);
+          const price = Number(row?.price);
+          if (Number.isInteger(split) && Number.isFinite(price) && row?.currency) {
+            splitPrices.push({ split, currency: String(row.currency).toUpperCase(), price });
+          }
+        }
+      }
+
+      const splitHistory: SplitHistoryRow[] = [];
+      for (const tag of rawTags) {
+        if (tag[0] !== 'split_history' || tag.length < 3) continue;
+        const split = parseInt(tag[1], 10);
+        const happenedAt = parseInt(tag[2], 10);
+        if (Number.isInteger(split) && Number.isFinite(happenedAt)) {
+          splitHistory.push({ split, happenedAt });
+        }
+      }
+      if (splitHistory.length === 0 && Array.isArray(rawContent.split_history)) {
+        for (const row of rawContent.split_history) {
+          const split = Number(row?.split);
+          const happenedAt = Number(row?.happened_at);
+          if (Number.isInteger(split) && Number.isFinite(happenedAt)) {
+            splitHistory.push({ split, happenedAt });
+          }
+        }
+      }
+
       // Create relay statuses - mark all as connected since we got data from DB
       // Server-side sync validates relay connectivity
       const relayStatuses: RelayStatus[] = relays.map(url => ({
@@ -187,6 +238,8 @@ export const SystemParametersProvider: React.FC<{ children: React.ReactNode }> =
         freezeRetailAccountAbove,
         maxCapLanasOnSplit,
         splitApproaching,
+        splitPrices,
+        splitHistory,
         connectedRelays: relays.length,
         isLoading: false,
         trustedSigners

@@ -13,6 +13,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/I18nContext';
+import EntrySplitCard from '@/components/lana8wonder/EntrySplitCard';
 
 // Error boundary to catch render crashes and show error instead of white screen
 class Lana8WonderErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
@@ -347,6 +348,17 @@ const Lana8Wonder = () => {
             <p className="text-sm md:text-base text-muted-foreground">{t('plan.subtitle')}</p>
           </div>
         </div>
+
+        {/* When the holder entered the SPLIT and on what terms — matched by
+            price, because a plan's KIND 88888 event is re-published on change
+            and its created_at is not the enrolment date. */}
+        <EntrySplitCard
+          plan={annuityPlan}
+          splitPrices={parameters?.splitPrices ?? null}
+          splitHistory={parameters?.splitHistory ?? null}
+          currentSplit={Number.isFinite(parseInt(parameters?.split ?? '', 10)) ? parseInt(parameters!.split, 10) : null}
+          fxRate={exchangeRates?.[annuityPlan.currency?.toUpperCase() as keyof typeof exchangeRates] ?? null}
+        />
 
         <Card>
           <CardHeader className="p-4 md:p-6">
