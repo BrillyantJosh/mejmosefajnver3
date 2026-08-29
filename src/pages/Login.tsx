@@ -12,6 +12,7 @@ import { NostrStatus } from '@/components/NostrStatus';
 import { QRScanner } from '@/components/QRScanner';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import loginHero from '@/assets/login-hero.png';
+import loginHeroLoop from '@/assets/login-hero-loop.mp4';
 
 const Login = () => {
   const [wif, setWif] = useState('');
@@ -87,13 +88,21 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      {/* Hero Image - full width */}
+      {/* Hero animation — the still remains the poster/fallback while the loop loads. */}
       <div className="w-full">
-        <img 
-          src={loginHero}
-          alt="Login Hero"
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          poster={loginHero}
+          aria-label="Magical Lana hero animation"
           className="w-full h-auto"
-        />
+        >
+          <source src={loginHeroLoop} type="video/mp4" />
+          <img src={loginHero} alt="Login Hero" className="w-full h-auto" />
+        </video>
       </div>
       
       {/* Login Card */}
