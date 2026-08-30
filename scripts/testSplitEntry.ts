@@ -32,6 +32,12 @@ import {
   choosePlanScreen,
   type PlanGateStatus,
 } from '../src/lib/planRead.js';
+import {
+  readWalletList,
+  readWalletTags,
+  mayPublishWalletList,
+  baseWalletsFor,
+} from '../src/lib/walletListRead.js';
 
 let failures = 0;
 function check(name: string, cond: boolean, detail?: unknown) {
@@ -358,9 +364,81 @@ console.log('\n— the SPLIT forecast must not answer a question the relays refu
 }
 
 
+console.log('\n— a silent relay must not erase the wallets somebody recorded —');
+{
+  // The same empty array, read a third way — and this one destroys data
+  // rather than mis-drawing a screen. KIND 30289 is addressable: one event per
+  // person, republished IN FULL on every edit. AddWalletDialog read the list
+  // with `pool.querySync`, appended, and republished. Against relays that
+  // cannot be reached that read returns `[]` in ~26ms with no error and no
+  // catch, so the republished event carried the new wallet ALONE and the
+  // relays replaced the real list with it. The toast said "Wallet added
+  // successfully!". Every address the person had recorded was gone.
+  const listEvent = (created_at: number, ws: string[][]) =>
+    ({ id: String(created_at), created_at, content: '', kind: 30289, pubkey: 'holder', sig: '',
+       tags: [['d', 'holder'], ['p', 'holder'], ['status', 'active'], ...ws] }) as never;
+
+  const THREE = [['w', 'LcpMain', 'main'], ['w', 'LcpLost', 'lost keys'], ['w', 'LcpOld', '']];
+
+  const outage = readWalletList({ answered: [], events: [] });
+  check('no relay answered → UNREACHABLE, not "you have recorded no wallets"',
+    outage.status === 'unreachable', outage);
+  check('  so nothing may be published — the list is fail-CLOSED',
+    mayPublishWalletList(outage) === false, mayPublishWalletList(outage));
+  check('  and there is no empty list to append the new wallet to',
+    baseWalletsFor(outage) === null, baseWalletsFor(outage));
+
+  const firstEver = readWalletList({ answered: ['wss://relay.lanavault.space'], events: [] });
+  check('a relay answered with nothing → genuinely no list yet',
+    firstEver.status === 'empty', firstEver);
+  check('  so a first-time user CAN add their first wallet — it never fails closed on them',
+    mayPublishWalletList(firstEver) === true && baseWalletsFor(firstEver)?.length === 0,
+    baseWalletsFor(firstEver));
+
+  const found = readWalletList({ answered: ['wss://a'], events: [listEvent(1761484769, THREE)] });
+  check('a list that came back is appended to, not replaced',
+    found.status === 'found' && baseWalletsFor(found)?.length === 3, found);
+  check('  with every address and note carried across',
+    JSON.stringify(baseWalletsFor(found)) ===
+      JSON.stringify([{ address: 'LcpMain', note: 'main' },
+                      { address: 'LcpLost', note: 'lost keys' },
+                      { address: 'LcpOld', note: '' }]),
+    baseWalletsFor(found));
+
+  // The second way the old code could lose a wallet, with every relay up:
+  // `events[0]` off a merged multi-relay array is whichever copy landed first.
+  // A relay a minute behind hands back the list as it was BEFORE the last
+  // addition — and republishing that deletes the newer wallet for good.
+  const twoCopies = readWalletList({
+    answered: ['wss://a', 'wss://b'],
+    events: [listEvent(1700000000, THREE.slice(0, 2)), listEvent(1761484769, THREE)],
+  });
+  check('two relays a moment apart → the NEWEST list wins, not the first to arrive',
+    twoCopies.status === 'found' && baseWalletsFor(twoCopies)?.length === 3, twoCopies);
+
+  const noEose = readWalletList({ answered: [], events: [listEvent(1761484769, THREE)] });
+  check('a list in hand counts even if no EOSE arrived in the budget',
+    noEose.status === 'found' && mayPublishWalletList(noEose) === true, noEose);
+
+  check('a read that never happened is UNREACHABLE, never absence',
+    readWalletList(null).status === 'unreachable');
+
+  // A `w` tag written with no note is still a wallet somebody recorded. The
+  // old `length >= 3` filter dropped it from the rebuilt list as silently as
+  // the outage did — a merge may never be the reason an entry disappears.
+  const sparse = listEvent(1761484769, [['w', 'LcpNoNote'], ...THREE]);
+  check('a w tag with no note survives the republish',
+    readWalletTags(sparse).length === 4 && readWalletTags(sparse)[0].note === '',
+    readWalletTags(sparse));
+  check('  but a w tag with no address is not a wallet',
+    readWalletTags(listEvent(1761484769, [['w'], ['w', ''], ...THREE])).length === 3,
+    readWalletTags(listEvent(1761484769, [['w'], ['w', ''], ...THREE])));
+}
+
+
 if (failures > 0) {
   console.error(`\n❌ ${failures} FAILED`);
   process.exit(1);
 }
-console.log('\n✅ the entry SPLIT is either a fact or a refusal — never a guess, and a quiet relay\n   can neither take a plan off the screen nor take away what it unlocks');
+console.log('\n✅ the entry SPLIT is either a fact or a refusal — never a guess, and a quiet relay\n   can neither take a plan off the screen, nor take away what it unlocks,\n   nor erase the wallets somebody recorded');
 process.exit(0);

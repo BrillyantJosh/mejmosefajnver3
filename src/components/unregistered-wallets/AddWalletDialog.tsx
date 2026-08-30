@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { SimplePool, EventTemplate, finalizeEvent, Filter } from 'nostr-tools';
+import { readFromRelays } from '@/lib/relayRead';
+import { readWalletList, mayPublishWalletList, baseWalletsFor, type WalletListOutcome } from '@/lib/walletListRead';
 import { QRScanner } from '@/components/QRScanner';
 import { z } from 'zod';
 
@@ -23,11 +25,6 @@ const walletSchema = z.object({
     .max(200, { message: "Note must be less than 200 characters" })
     .default('')
 });
-
-interface ExistingWallet {
-  address: string;
-  note: string;
-}
 
 function hexToBytes(hex: string): Uint8Array {
   if (hex.length % 2) throw new Error('Invalid hex string');
@@ -68,8 +65,28 @@ export default function AddWalletDialog({ onSuccess }: { onSuccess: () => void }
     setShowScanner(true);
   };
 
-  const fetchExistingWallets = async (): Promise<ExistingWallet[]> => {
-    if (!parameters?.relays || !session?.nostrHexId) return [];
+  /**
+   * Read the list this republish will be built on — and report honestly when
+   * it could not be read.
+   *
+   * This was `pool.querySync` + a `Promise.race` timeout, and both of those
+   * ended at the same `return []`. In nostr-tools 2.17.0 a relay that never
+   * CONNECTS is counted as having sent EOSE, so a total outage resolves to
+   * `[]` in about 26 milliseconds, no error is thrown and the `catch` never
+   * runs. KIND 30289 is republished IN FULL on every edit, so that `[]` went
+   * on to publish a list containing the new wallet ALONE — the relays replaced
+   * the person's real list with it, the toast said "Wallet added
+   * successfully!", and every address they had recorded was gone.
+   *
+   * `readFromRelays` reports WHICH relays answered, so silence is a distinct
+   * outcome from an empty list; `readWalletList` turns that into the rule. See
+   * src/lib/walletListRead.ts.
+   */
+  const readExistingList = async (): Promise<WalletListOutcome> => {
+    if (!parameters?.relays?.length || !session?.nostrHexId) {
+      // Nobody to ask. That is not evidence that the list is empty either.
+      return { status: 'unreachable' };
+    }
 
     const pool = new SimplePool();
     const relays = parameters.relays;
@@ -82,31 +99,22 @@ export default function AddWalletDialog({ onSuccess }: { onSuccess: () => void }
         limit: 1
       };
 
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Query timeout')), 10000)
-      );
-
-      const events = await Promise.race([
-        pool.querySync(relays, filter),
-        timeout
-      ]);
-
-      if (events.length === 0) return [];
-
-      const event = events[0];
-      const wallets: ExistingWallet[] = event.tags
-        .filter(t => t[0] === 'w' && t.length >= 3)
-        .map(t => ({
-          address: t[1],
-          note: t[2] || ''
-        }));
-
-      return wallets;
+      // `limit: 1` stays: it is each relay's OWN newest copy, and
+      // readWalletList takes the newest across relays. The old bug was
+      // `events[0]` off the merged array, not the limit.
+      const read = await readFromRelays(pool, relays, filter, { budgetMs: 10000 });
+      console.log(`📋 KIND 30289: ${read.events.length} event(s) from ${read.answered.length}/${relays.length} relays`);
+      if (read.answered.length === 0 && read.events.length === 0) {
+        console.warn(`📡 No relay answered for KIND 30289 (${read.failed.map(f => `${f.url}: ${f.reason}`).join(' | ')})`);
+      }
+      return readWalletList(read);
     } catch (error) {
+      // readFromRelays never rejects, so anything landing here is a fault on
+      // our side — still not evidence about what this person has recorded.
       console.error('Error fetching existing wallets:', error);
-      return [];
+      return { status: 'unreachable' };
     } finally {
-      pool.close(relays);
+      try { pool.close(relays); } catch { /* sockets already gone */ }
     }
   };
 
@@ -129,22 +137,34 @@ export default function AddWalletDialog({ onSuccess }: { onSuccess: () => void }
     setIsPublishing(true);
 
     try {
-      // 1. Fetch existing wallets
+      // 1. Read the list this republish will be built on
       console.log('🔄 Fetching existing wallet list...');
-      const existingWallets = await fetchExistingWallets();
+      const outcome = await readExistingList();
+
+      // 2. Fail CLOSED. Adding a wallet rewrites the whole KIND 30289 event,
+      //    so a list we could not read is a list we must not rewrite: publish
+      //    on silence and the new wallet replaces every wallet already there.
+      //    WalletCard's delete path has always refused this way when it found
+      //    no list to edit; this is the same refusal on the add path.
+      const existingWallets = baseWalletsFor(outcome);
+      if (!mayPublishWalletList(outcome) || existingWallets === null) {
+        toast.error('Could not read your wallet list — no relay answered. Nothing was changed. Please try again.');
+        setIsPublishing(false);
+        return;
+      }
       console.log(`📊 Found ${existingWallets.length} existing wallets`);
 
-      // 2. Check for duplicate
+      // 3. Check for duplicate
       if (existingWallets.some(w => w.address === address)) {
         toast.error('This wallet is already in your list');
         setIsPublishing(false);
         return;
       }
 
-      // 3. Create new wallet list with added wallet
+      // 4. Create new wallet list with added wallet
       const updatedWallets = [...existingWallets, { address, note }];
 
-      // 4. Create event template
+      // 5. Create event template
       const eventTemplate: EventTemplate = {
         kind: 30289,
         created_at: Math.floor(Date.now() / 1000),
@@ -157,7 +177,7 @@ export default function AddWalletDialog({ onSuccess }: { onSuccess: () => void }
         content: ''
       };
 
-      // 5. Sign event
+      // 6. Sign event
       const privateKeyBytes = hexToBytes(session.nostrPrivateKey);
       const signedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
 
@@ -167,7 +187,7 @@ export default function AddWalletDialog({ onSuccess }: { onSuccess: () => void }
         wallets: updatedWallets.length
       });
 
-      // 6. Publish to relays
+      // 7. Publish to relays
       const pool = new SimplePool();
       const relays = parameters.relays;
       const results: Array<{ relay: string; success: boolean; error?: string }> = [];
