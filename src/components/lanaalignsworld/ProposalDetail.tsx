@@ -49,6 +49,7 @@ import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { useNostrRealLifeCredential } from "@/hooks/useNostrRealLifeCredential";
 import { useNostrWallets } from '@/hooks/useNostrWallets';
 import { evaluateFreezeGate, canVoteWith, freezeGateExplanation } from '@/lib/voteEligibility';
+import { resolveProposalVideo } from '@/lib/youtube';
 import { toast } from "sonner";
 
 interface ProposalDetailProps {
@@ -94,6 +95,11 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
   
   const timeRemaining = getTimeRemaining(proposal.end);
   const isLoadingPermissions = isLoadingLana8Wonder || isLoadingCredentials || isLoadingWallets;
+
+  // Authors often paste the video into the plain "link" field, so look for a
+  // YouTube URL there (and in doc) too — and drop that field from Resources so
+  // the same video isn't repeated as a bare link.
+  const video = resolveProposalVideo(proposal);
   
   // A frozen person does not vote (Brilly, 2026-08-25). Same rule as
   // /lana-aligns-world/my-status — both read it from src/lib/voteEligibility.
@@ -273,7 +279,7 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
       </Card>
 
       {/* YouTube Embed */}
-      {proposal.youtube && (
+      {video && (
         <Card className="mb-4 sm:mb-6">
           <CardHeader className="p-3 sm:p-4 pb-2">
             <CardTitle className="text-sm sm:text-base flex items-center gap-1.5 sm:gap-2">
@@ -284,7 +290,7 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
           <CardContent className="p-3 sm:p-4 pt-0">
             <div className="aspect-video rounded-lg overflow-hidden">
               <iframe
-                src={proposal.youtube.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
+                src={video.embedUrl}
                 title="YouTube video"
                 className="w-full h-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -296,13 +302,13 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
       )}
 
       {/* Other Resources */}
-      {(proposal.doc || proposal.link || proposal.donationWallet) && (
+      {((proposal.doc && video?.source !== 'doc') || (proposal.link && video?.source !== 'link') || proposal.donationWallet) && (
         <Card className="mb-4 sm:mb-6">
           <CardHeader className="p-3 sm:p-4 pb-2">
             <CardTitle className="text-sm sm:text-base">Resources</CardTitle>
           </CardHeader>
           <CardContent className="p-3 sm:p-4 pt-0 space-y-2 sm:space-y-3">
-            {proposal.doc && (
+            {proposal.doc && video?.source !== 'doc' && (
               <a 
                 href={proposal.doc} 
                 target="_blank" 
@@ -313,10 +319,10 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
                 View Document
               </a>
             )}
-            {proposal.link && (
-              <a 
-                href={proposal.link} 
-                target="_blank" 
+            {proposal.link && video?.source !== 'link' && (
+              <a
+                href={proposal.link}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-primary hover:underline"
               >

@@ -4,6 +4,7 @@ import { useNostrUserAcknowledgement } from "@/hooks/useNostrUserAcknowledgement
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { resolveProposalVideo } from "@/lib/youtube";
 import { toast } from "sonner";
 
 function getTimeRemaining(endTimestamp: number): string {
@@ -23,6 +24,7 @@ interface ProposalCardProps {
 
 export default function ProposalCard({ proposal, onClick }: ProposalCardProps) {
   const { acknowledgement, isLoading: isLoadingAck } = useNostrUserAcknowledgement(proposal.dTag, proposal.id);
+  const video = resolveProposalVideo(proposal);
   const hasMedia = proposal.img || proposal.youtube || proposal.doc || proposal.link;
 
   const handleShare = async (e: React.MouseEvent) => {
@@ -96,9 +98,9 @@ export default function ProposalCard({ proposal, onClick }: ProposalCardProps) {
           </div>
           {hasMedia && (
             <div className="flex items-center gap-1.5 sm:gap-2">
-              {proposal.youtube && <Youtube className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
-              {proposal.doc && <FileText className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
-              {proposal.link && <ExternalLink className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
+              {video && <Youtube className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
+              {proposal.doc && video?.source !== 'doc' && <FileText className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
+              {proposal.link && video?.source !== 'link' && <ExternalLink className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
               {proposal.img && <Image className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
             </div>
           )}

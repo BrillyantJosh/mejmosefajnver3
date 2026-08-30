@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useNostrPublicProposal } from "@/hooks/useNostrPublicProposal";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "@/hooks/use-toast";
+import { resolveProposalVideo } from "@/lib/youtube";
 
 // Helper to format text with line breaks and bold
 function FormattedText({ text }: { text: string }) {
@@ -83,6 +84,10 @@ export default function PublicProposal() {
     : undefined;
 
   const { proposal, loading, error } = useNostrPublicProposal(decodedDTag, relays);
+
+  // A YouTube URL may sit in the plain "link" (or doc) field — embed it as a
+  // player and omit that field from Resources so it isn't shown twice.
+  const video = proposal ? resolveProposalVideo(proposal) : null;
 
   const handleShare = async () => {
     const shareUrl = `${window.location.origin}/proposal/${encodeURIComponent(proposal?.dTag || decodedDTag)}`;
@@ -245,7 +250,7 @@ export default function PublicProposal() {
             </div>
 
             {/* YouTube Embed */}
-            {proposal.youtube && (
+            {video && (
               <div className="border rounded-lg p-4">
                 <div className="flex items-center gap-2 font-medium mb-3">
                   <Youtube className="h-4 w-4" />
@@ -253,7 +258,7 @@ export default function PublicProposal() {
                 </div>
                 <div className="aspect-video rounded-lg overflow-hidden">
                   <iframe
-                    src={proposal.youtube.replace('watch?v=', 'embed/').replace('youtu.be/', 'www.youtube.com/embed/')}
+                    src={video.embedUrl}
                     title="YouTube video"
                     className="w-full h-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -264,11 +269,11 @@ export default function PublicProposal() {
             )}
 
             {/* Resources */}
-            {(proposal.doc || proposal.link || proposal.donationWallet) && (
+            {((proposal.doc && video?.source !== 'doc') || (proposal.link && video?.source !== 'link') || proposal.donationWallet) && (
               <div className="border rounded-lg p-4">
                 <h3 className="font-medium mb-3">Resources</h3>
                 <div className="space-y-3">
-                  {proposal.doc && (
+                  {proposal.doc && video?.source !== 'doc' && (
                     <a 
                       href={proposal.doc} 
                       target="_blank" 
@@ -279,10 +284,10 @@ export default function PublicProposal() {
                       View Document
                     </a>
                   )}
-                  {proposal.link && (
-                    <a 
-                      href={proposal.link} 
-                      target="_blank" 
+                  {proposal.link && video?.source !== 'link' && (
+                    <a
+                      href={proposal.link}
+                      target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 text-sm text-primary hover:underline"
                     >
