@@ -14,6 +14,7 @@ interface Conversation {
   phase?: string;
   lastActivity: string;
   pausedUntil?: number | null; // unix seconds — set while the facilitator has paused it
+  paused?: boolean;            // the 37044 status itself says paused (may carry no end date)
   /** How many people in this case are frozen (KIND 87057). 0 = nobody, or unverified. */
   frozenCount?: number;
 }
@@ -52,7 +53,7 @@ export default function ConversationList({ conversations, selectedId, onSelect }
             key={conv.id}
             className={`p-3 md:p-4 cursor-pointer transition-colors hover:bg-accent/50 active:scale-[0.98] ${
               selectedId === conv.id ? 'border-orange-500 bg-orange-500/15' : ''
-            } ${conv.pausedUntil ? 'ring-1 ring-amber-400/60' : ''} ${phaseInfo.bgCard}`}
+            } ${(conv.pausedUntil || conv.paused) ? 'ring-1 ring-amber-400/60' : ''} ${phaseInfo.bgCard}`}
             onClick={() => onSelect(conv.id)}
           >
             <div className="flex flex-col gap-2 mb-2">
@@ -90,12 +91,14 @@ export default function ConversationList({ conversations, selectedId, onSelect }
                     : (en ? `${conv.frozenCount} people frozen` : `${conv.frozenCount} zamrznjenih`)}
                 </Badge>
               )}
-              {conv.pausedUntil && (
+              {(conv.pausedUntil || conv.paused) && (
                 <Badge className="text-xs gap-1 border bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300">
                   <Lock className="w-3 h-3" />
-                  {en
-                    ? `Paused until ${new Date(conv.pausedUntil * 1000).toLocaleString()}`
-                    : `V premoru do ${new Date(conv.pausedUntil * 1000).toLocaleString()}`}
+                  {conv.pausedUntil
+                    ? (en
+                      ? `Paused until ${new Date(conv.pausedUntil * 1000).toLocaleString()}`
+                      : `V premoru do ${new Date(conv.pausedUntil * 1000).toLocaleString()}`)
+                    : (en ? 'Paused' : 'V premoru')}
                 </Badge>
               )}
             </div>

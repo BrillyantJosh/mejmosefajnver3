@@ -99,7 +99,12 @@ function toOpenProcesses(events: Event[], userPubkey: string): OpenProcess[] {
       };
     })
     .filter(process =>
-      process.status === 'open' &&
+      // A PAUSED process is still the person's process. Filtering to 'open'
+      // only made a facilitator's pause look like deletion: on 30.8.2026 the
+      // Mojca case went to status 'paused' at 05:47 and the whole community
+      // saw it vanish from /own. Only 'closed' leaves the list — a pause is
+      // shown (amber badge), never hidden.
+      (process.status === 'open' || process.status === 'paused') &&
       process.userRole !== undefined
     )
     // A facilitator handover (selfresponsible.life) leaves TWO same-d records:

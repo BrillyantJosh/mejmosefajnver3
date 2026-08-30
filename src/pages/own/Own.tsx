@@ -367,6 +367,10 @@ export default function Own() {
     phase: process.phase,
     lastActivity: new Date(process.openedAt * 1000).toLocaleDateString(),
     pausedUntil: pauseStatuses.get(process.processEventId)?.lockedUntil ?? null,
+    // The 37044 status itself can say paused (the facilitator's republish) —
+    // with or without an 87056 end date. The badge must not depend on which
+    // of the two mechanisms the pause travelled by.
+    paused: process.status === 'paused' || !!pauseStatuses.get(process.processEventId)?.lockedUntil,
     // How many people in this case are frozen right now (0 = nobody, and an
     // unverified read yields 0 too — the list never asserts a sanction it
     // could not check).
@@ -392,7 +396,7 @@ export default function Own() {
 
     // Fail closed while the process is paused (or while the pause state is still
     // resolving) so a stale-UI send can't slip a message through the pause.
-    if (isLocked) {
+    if (isLocked || selectedProcess.status === 'paused') {
       toast.error(en ? 'The process is paused — you cannot post' : 'Proces je v premoru — objavljanje ni mogoče');
       return false;
     }
