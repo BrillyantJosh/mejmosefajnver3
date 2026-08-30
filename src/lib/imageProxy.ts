@@ -15,16 +15,21 @@ export function getProxiedImageUrl(originalUrl: string | undefined, cacheBuster?
     return originalUrl;
   }
 
-  // Transform lanaknows.us URLs to direct Supabase storage URLs
+  // lanaknows.us avatars are GONE — treat them as "no picture".
+  //
+  // These URLs used to be rewritten to a Supabase storage bucket, but that
+  // project has been deleted (its host no longer resolves) and lanaknows.us
+  // itself no longer answers either. The images exist in neither place and in
+  // no local bucket, so they are unrecoverable.
+  //
+  // Returning undefined is what makes this a fix rather than a cosmetic
+  // change: UserAvatar then falls back to the generated avatar, and finally to
+  // the person's initials. Handing back a dead URL instead left a broken image
+  // AND a request that hangs until it times out on every render.
   if (originalUrl.includes('lanaknows.us')) {
-    // Extract hex ID from URL (last segment after /)
-    const hexId = originalUrl.split('/').pop();
-    if (hexId) {
-      const baseUrl = `https://bjkejpfmnofnllknphhr.supabase.co/storage/v1/object/public/nostr-avatars/${hexId}.jpg`;
-      // Add cache busting parameter if provided
-      return cacheBuster ? `${baseUrl}?t=${cacheBuster}` : baseUrl;
-    }
+    return undefined;
   }
+
   
   // For other URLs, add cache busting parameter if provided
   if (cacheBuster) {
