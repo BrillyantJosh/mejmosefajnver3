@@ -574,7 +574,7 @@ export default function Own() {
   // Publish a KIND 87056 pause/reopen event (signed by the facilitator, public).
   // 'pause' carries an `until` unix timestamp after which the process auto-reopens;
   // 'resume' reopens early. Unencrypted so every participant can read the lock.
-  const publishPauseEvent = async (action: 'pause' | 'resume', until: number, note = ''): Promise<boolean> => {
+  const publishPauseEvent = async (action: 'pause' | 'resume', until: number, note = '', subject: string | null = null): Promise<boolean> => {
     if (!session?.nostrPrivateKey || !session?.nostrHexId || !selectedProcess) {
       toast.error("Missing authentication");
       return false;
@@ -587,6 +587,9 @@ export default function Own() {
         ['client', 'lana-own'],
       ];
       if (action === 'pause') tags.push(['until', String(until)]);
+      // Person-scoped pause: the beings and the pause hook key on this tag —
+      // WITHOUT it the event locks the whole room.
+      if (subject) tags.push(['p', subject, '', 'subject']);
       if (selectedProcess.initiator) tags.push(['p', selectedProcess.initiator, '', 'initiator']);
       if (selectedProcess.facilitator) tags.push(['p', selectedProcess.facilitator, '', 'facilitator']);
 
@@ -844,11 +847,15 @@ export default function Own() {
       silenceTotal={assessmentStates.filter((s) => s.participantPubkey === (session?.nostrHexId || '').toLowerCase()).length}
       silenceResumeAt={mySilence.openEnded ? null : mySilence.resumeAt}
       canPause={canPause}
-      onPause={async (until: number, note: string) => {
-        const ok = await publishPauseEvent('pause', until, note);
-        if (ok) toast.success(en ? 'Process paused' : 'Proces v premoru');
-        else toast.error(en ? 'Failed to pause the process' : 'Premor ni uspel');
+      onPause={async (until: number, note: string, subject?: string | null) => {
+        const ok = await publishPauseEvent('pause', until, note, subject ?? null);
+        if (ok) toast.success(subject ? (en ? 'Person put on a break' : 'Oseba na premoru') : (en ? 'Process paused' : 'Proces v premoru'));
+        else toast.error(en ? 'Failed to pause' : 'Premor ni uspel');
       }}
+      pauseParticipants={(selectedProcess?.participants || []).map((p) => ({
+        pubkey: p,
+        name: profiles.get(p)?.full_name || p.slice(0, 8),
+      }))}
       onReopen={async () => {
         const ok = await publishPauseEvent('resume', 0);
         if (ok) toast.success(en ? 'Process reopened' : 'Proces znova odprt');

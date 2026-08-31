@@ -171,7 +171,8 @@ interface ChatViewProps {
   silenceTotal?: number;     // …of how many that published about me
   silenceResumeAt?: string | null; // ISO 8601 STRING (not unix seconds); null = no end named
   canPause?: boolean;
-  onPause?: (until: number, note: string) => Promise<void>;
+  onPause?: (until: number, note: string, subject?: string | null) => Promise<void>;
+  pauseParticipants?: { pubkey: string; name: string }[];
   onReopen?: () => Promise<void>;
   // LASH props
   lashedEventIds?: Set<string>;
@@ -207,6 +208,7 @@ export default function ChatView({
   silenceResumeAt = null,
   canPause = false,
   onPause,
+  pauseParticipants = [],
   onReopen,
   lashedEventIds = new Set(),
   onGiveLash,
@@ -745,7 +747,8 @@ export default function ChatView({
       <PauseProcessDialog
         open={pauseDialogOpen}
         onOpenChange={setPauseDialogOpen}
-        onConfirm={async (until, note) => { if (onPause) await onPause(until, note); }}
+        onConfirm={async (until, note, subject) => { if (onPause) await onPause(until, note, subject); }}
+        participants={pauseParticipants}
         en={en}
       />
     </div>

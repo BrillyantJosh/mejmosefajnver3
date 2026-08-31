@@ -72,6 +72,10 @@ export const useNostrProcessPauseState = (
     const pool = new SimplePool();
 
     const parse = (event: Event): ProcessPauseEvent | null => {
+      // A person-scoped pause (['p', pk, '', 'subject']) pauses ONE
+      // participant, not the room — treating it as a process lock would let a
+      // three-month personal break close the composer for everyone.
+      if (event.tags.some((t) => t[0] === 'p' && t[3] === 'subject')) return null;
       const actionTag = event.tags.find((t) => t[0] === 'action')?.[1];
       if (actionTag !== 'pause' && actionTag !== 'resume') return null;
       const untilRaw = event.tags.find((t) => t[0] === 'until')?.[1];
@@ -200,6 +204,8 @@ export const useNostrProcessPauseStatesBulk = (
       { kinds: [PROCESS_PAUSE_KIND], '#e': eventIds, limit: 2000 } as any,
       {
         onevent(event: Event) {
+          // Person-scoped pauses pause one participant, never the room.
+          if (event.tags.some((t) => t[0] === 'p' && t[3] === 'subject')) return;
           const actionTag = event.tags.find((t) => t[0] === 'action')?.[1];
           if (actionTag !== 'pause' && actionTag !== 'resume') return;
           const eTag = event.tags.find((t) => t[0] === 'e')?.[1];
