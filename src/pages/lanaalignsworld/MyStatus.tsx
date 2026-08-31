@@ -78,8 +78,9 @@ export default function MyStatus() {
   // freeze is the one requirement this page can actually verify.
   const isInQuorum = canVote;
 
-  // Can Resist = allowed to vote at all, AND Lana8Wonder, AND 3+ credentials
-  const canResist = canVote && lana8WonderStatus.exists && credentialStatus.referenceCount >= 3;
+  // Can Resist = allowed to vote at all, AND in Lana8Wonder.
+  // The three-real-life-credentials threshold was dropped (Brilly, 2026-08-27).
+  const canResist = canVote && lana8WonderStatus.exists;
 
   if (isLoading) {
     return (
@@ -139,7 +140,7 @@ export default function MyStatus() {
                     ? "You can vote and resist proposals."
                     : !canVote
                       ? freezeExplanation
-                      : "You can vote, but cannot resist proposals. Register in Lana8Wonder and get at least 3 real-life credentials to unlock."}
+                      : "You can vote, but cannot resist proposals. Register in Lana8Wonder to unlock."}
                 </p>
               </div>
             </div>
@@ -234,14 +235,10 @@ export default function MyStatus() {
           
           <StatusItem
             label="Credentials"
-            value={credentialStatus.hasRealLifeReference ? `${credentialStatus.referenceCount}` : "0"}
+            value={`${credentialStatus.referenceCount}`}
             icon={<CheckCircle className="h-5 w-5" />}
-            isOk={credentialStatus.referenceCount >= 3}
-            detail={
-              credentialStatus.referenceCount >= 3 
-                ? `${credentialStatus.referenceCount} real-life references (KIND 87033) - meets requirement`
-                : `Need at least 3 real-life references for resist capability (have ${credentialStatus.referenceCount})`
-            }
+            isOk={true}
+            detail={`${credentialStatus.referenceCount} real-life reference${credentialStatus.referenceCount === 1 ? '' : 's'} (KIND 87033) — shown for information, not required`}
           />
           
           {/* "Missing" is a verdict about this person; the relays going quiet is

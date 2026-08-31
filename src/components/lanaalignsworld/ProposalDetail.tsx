@@ -46,7 +46,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import VoteDialog from "./VoteDialog";
 
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
-import { useNostrRealLifeCredential } from "@/hooks/useNostrRealLifeCredential";
 import { useNostrWallets } from '@/hooks/useNostrWallets';
 import { evaluateFreezeGate, canVoteWith, freezeGateExplanation } from '@/lib/voteEligibility';
 import { resolveProposalVideo } from '@/lib/youtube';
@@ -85,7 +84,6 @@ function getTimeRemaining(endTimestamp: number): { text: string; isEnded: boolea
 
 export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps) {
   const { status: lana8WonderStatus, isLoading: isLoadingLana8Wonder } = useNostrLana8Wonder();
-  const { status: credentialStatus, isLoading: isLoadingCredentials } = useNostrRealLifeCredential();
   const { wallets, isLoading: isLoadingWallets, resolved: walletsResolved } = useNostrWallets();
   const { acknowledgement, isLoading: isLoadingAck, submitVote, refetch } = useNostrUserAcknowledgement(proposal.dTag, proposal.id);
   
@@ -94,7 +92,7 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const timeRemaining = getTimeRemaining(proposal.end);
-  const isLoadingPermissions = isLoadingLana8Wonder || isLoadingCredentials || isLoadingWallets;
+  const isLoadingPermissions = isLoadingLana8Wonder || isLoadingWallets;
 
   // Authors often paste the video into the plain "link" field, so look for a
   // YouTube URL there (and in doc) too — and drop that field from Resources so
@@ -110,10 +108,11 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
   const canVote = canVoteWith(freezeGate);
   const freezeExplanation = freezeGateExplanation(freezeGate);
 
-  // Can resist if allowed to vote at all, AND has Lana8Wonder AND 3+ credentials.
+  // Can resist if allowed to vote at all AND holding a Lana8Wonder plan. The
+  // three-real-life-credentials threshold was dropped (Brilly, 2026-08-27).
   // A vote is published to the relays, so this stays shut when we do not know —
   // but an unknown must not be announced to the person as "you do not qualify".
-  const canResist = canVote && lana8WonderStatus.exists && (credentialStatus?.referenceCount || 0) >= 3;
+  const canResist = canVote && lana8WonderStatus.exists;
   const lana8WonderUnknown = !lana8WonderStatus.exists && lana8WonderStatus.unreachable;
 
   const handleOpenVoteDialog = (type: 'yes' | 'resistance') => {
@@ -125,7 +124,7 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
       toast.error(
         lana8WonderUnknown
           ? "No relay answered, so we could not check your Lana8Wonder plan. Please try again in a moment."
-          : "You need Lana8Wonder and at least 3 real-life credentials to resist a proposal"
+          : "You need a Lana8Wonder plan to resist a proposal"
       );
       return;
     }
@@ -406,7 +405,7 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
               <p className="text-[10px] sm:text-sm text-muted-foreground">
                 {lana8WonderUnknown
                   ? "Resisting is unavailable right now: no relay answered, so your Lana8Wonder plan could not be checked. This says nothing about your plan - please try again in a moment."
-                  : "You can vote to accept, but cannot resist proposals. To resist, you need a Lana8Wonder plan and at least 3 real-life credentials."}
+                  : "You can vote to accept, but cannot resist proposals. To resist, you need a Lana8Wonder plan."}
               </p>
             )}
 
