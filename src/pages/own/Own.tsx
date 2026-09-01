@@ -18,6 +18,7 @@ import { useProcessFreezes } from "@/hooks/useProcessFreezes";
 import { useProcessFreezesBulk } from "@/hooks/useProcessFreezesBulk";
 import { freezeBlocksWriting } from "@/lib/ownFreeze";
 import { useLang } from "@/i18n/I18nContext";
+import type { OwnAudioSendMeta } from "@/components/own/OwnAudioRecorder";
 import { Button } from "@/components/ui/button";
 import { finalizeEvent, nip44 } from "nostr-tools";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
@@ -383,7 +384,9 @@ export default function Own() {
 
   // Send OWN message (text or audio). replyTo = event id of the message being
   // replied to (kept INSIDE the encrypted payload, never as a public e-tag).
-  const sendOwnMessage = async (content: string, replyTo?: string): Promise<boolean> => {
+  // meta comes only from the audio recorder: its consent stamp is what lets a
+  // being read the audio, so it travels inside the ciphertext, never as a tag.
+  const sendOwnMessage = async (content: string, replyTo?: string, meta?: OwnAudioSendMeta): Promise<boolean> => {
     if (!session?.nostrPrivateKey || !session?.nostrHexId || !groupKey || !selectedProcess) {
       toast.error("Missing authentication or group key");
       return false;
@@ -442,10 +445,12 @@ export default function Own() {
         replyTo?: string;
         replyToSender?: string;
         replyToSnippet?: string;
+        consent?: 'voice-notice-v2';
       } = {
         text: content.trim(),
         timestamp: Math.floor(Date.now() / 1000)
       };
+      if (meta?.consent === 'voice-notice-v2') messagePayload.consent = meta.consent;
       if (replyTo) {
         messagePayload.replyTo = replyTo;
         // Embed the quote (sender + snippet) IN the encrypted payload so every
@@ -862,8 +867,8 @@ export default function Own() {
         else toast.error(en ? 'Failed to reopen the process' : 'Odpiranje ni uspelo');
       }}
       onBack={() => setSelectedProcessId(undefined)}
-      onSendAudio={async (audioPath: string, replyTo?: string) => {
-        return await sendOwnMessage(audioPath, replyTo);
+      onSendAudio={async (audioPath: string, replyTo?: string, meta?: OwnAudioSendMeta) => {
+        return await sendOwnMessage(audioPath, replyTo, meta);
       }}
       onSendMessage={async (text: string, replyTo?: string) => {
         return await sendOwnMessage(text, replyTo);

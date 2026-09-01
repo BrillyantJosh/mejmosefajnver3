@@ -13,6 +13,7 @@
     "start": "node --import tsx server/index.ts",
     "start:prod": "NODE_ENV=production node --import tsx server/index.ts",
     "lint": "eslint .",
+    "test:voice": "node --import tsx --test server/test/dm-audio-cleanup.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

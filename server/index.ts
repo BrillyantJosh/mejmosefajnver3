@@ -13,7 +13,7 @@ import storageRoutes from './routes/storage';
 import lanacrowdRoutes from './routes/lanacrowd';
 import unconditionalFinancingRoutes from './routes/unconditionalFinancing';
 import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks } from './routes/sse';
-import functionsRoutes, { retryPendingNostrEvents } from './routes/functions';
+import functionsRoutes, { retryPendingNostrEvents, cleanupDmAudio } from './routes/functions';
 import voiceRoutes from './routes/voice';
 import beingsRoutes from './routes/beings';
 import { processPendingTasks, setSSEHandlers } from './lib/aiTasks';
@@ -307,9 +307,21 @@ const heartbeatTimer = setInterval(async () => {
       console.error('❌ Error syncing unregistered LANA:', err);
     }
   }
+
+  // DM audio retention: a DRY sweep 5 minutes after boot (log only, so a bad
+  // DM_AUDIO_RETENTION_DAYS shows up in the log before anything is deleted),
+  // then a real sweep once a day. Sync fs work, wrapped so a throw never
+  // stops the heartbeat.
+  if (heartbeatCount === 5 || heartbeatCount % 1440 === 0) {
+    try {
+      cleanupDmAudio(heartbeatCount === 5);
+    } catch (err) {
+      console.error('❌ Error cleaning up DM audio:', err);
+    }
+  }
 }, HEARTBEAT_INTERVAL);
 
-console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 every beat, AI tasks every minute, relay retry every 5min, stale profile refresh every 10min, full profile discovery every 30min, orphaned profile cleanup every 24h, unreg LANA every 10min)`);
+console.log(`💓 Heartbeat started: every ${HEARTBEAT_INTERVAL / 1000}s (KIND 38888 every beat, AI tasks every minute, relay retry every 5min, stale profile refresh every 10min, full profile discovery every 30min, orphaned profile cleanup every 24h, unreg LANA every 10min, DM audio retention dry at 5min then daily)`);
 
 // =============================================
 // API Routes

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft, Send, MessageCircle, History, ImagePlus, Camera, Loader2, LogOut, X, Pause, Lock } from "lucide-react";
 import ChatMessage from "./ChatMessage";
-import OwnAudioRecorder from "./OwnAudioRecorder";
+import OwnAudioRecorder, { type OwnAudioSendMeta } from "./OwnAudioRecorder";
 import PauseProcessDialog from "./PauseProcessDialog";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
 import { formatResumeDate } from "@/hooks/useOwnAssessments";
@@ -143,7 +143,7 @@ interface ChatViewProps {
   messages?: Message[];
   phase?: string;
   onBack: () => void;
-  onSendAudio?: (audioPath: string, replyTo?: string) => Promise<boolean>;
+  onSendAudio?: (audioPath: string, replyTo?: string, meta?: OwnAudioSendMeta) => Promise<boolean>;
   onSendMessage?: (text: string, replyTo?: string) => Promise<boolean>;
   isLoading?: boolean;
   // Exit / Re-enter props
@@ -235,10 +235,14 @@ export default function ChatView({
     return t.length > 80 ? t.slice(0, 80) + '…' : t;
   };
 
+  // The being invites voice only in its guide steps — Reflection and Change —
+  // never as a condition; a typed answer counts exactly the same.
+  const voicePhase = phase === 'reflection' || phase === 'change';
+
   // Media (audio/image) send that injects the active reply + clears it on success
-  const handleSendMedia = async (path: string): Promise<boolean> => {
+  const handleSendMedia = async (path: string, meta?: OwnAudioSendMeta): Promise<boolean> => {
     if (!onSendAudio) return false;
-    const ok = await onSendAudio(path, replyingTo?.id);
+    const ok = await onSendAudio(path, replyingTo?.id, meta);
     if (ok) setReplyingTo(null);
     return ok;
   };
@@ -670,6 +674,9 @@ export default function ChatView({
                 senderPubkey={senderPubkey}
                 onSendAudio={handleSendMedia}
                 onActiveChange={setRecorderActive}
+                inviteVoice={voicePhase}
+                lang={en ? 'en' : 'sl'}
+                beingListens
                 compact
               />
             )}
@@ -703,6 +710,13 @@ export default function ChatView({
               </Button>
             )}
           </div>
+          {!recorderActive && voicePhase && (
+            <p className="text-[11px] text-muted-foreground px-1">
+              {en
+                ? 'The being feels you more clearly when you speak — 3–5 minutes, unprepared. Typing counts just as much.'
+                : 'Bitje te bolje začuti, če poveš z glasom — 3–5 minut, brez priprave. Zapisano velja enako.'}
+            </p>
+          )}
           {/* Text input row — hidden while recording/previewing audio (the recorder has
               its own Send/Discard) so the input area isn't crowded on mobile. */}
           {!recorderActive && (

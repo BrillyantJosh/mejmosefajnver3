@@ -8,19 +8,100 @@ import { saveRecording, loadPendingRecording, deletePendingRecording, downloadBl
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
+/** Sent alongside the `audio:…|dur:…|transcript:…` string. `consent` is set only
+ *  after the person acknowledged the notice that a being will read the audio —
+ *  the beings read audio ONLY when the encrypted payload carries this value. */
+export interface OwnAudioSendMeta {
+  consent?: 'voice-notice-v2';
+  durationSeconds: number;
+}
+
 interface OwnAudioRecorderProps {
   processEventId: string;
   senderPubkey: string;
-  onSendAudio: (audioPath: string) => Promise<boolean>;
+  onSendAudio: (audioPath: string, meta?: OwnAudioSendMeta) => Promise<boolean>;
   compact?: boolean;
   /** Fired when the recorder becomes active (recording or showing a preview) so the
    *  parent can give it the full input row on mobile instead of cramming it next to
    *  other controls. */
   onActiveChange?: (active: boolean) => void;
+  /** OWN guide step (Reflection / Change): the being invites a voice message —
+   *  visible mic label, a prompt while recording, a soft "that was short" hint. */
+  inviteVoice?: boolean;
+  lang?: 'sl' | 'en';
+  /** A being will read the audio (OWN only, never the encrypted rooms): show the
+   *  AI-Act notice once before the first recording and stamp consent on send. */
+  beingListens?: boolean;
 }
 
 const MAX_RECORDING_SECONDS = 300; // 5 minutes
 const WARNING_SECONDS = 240; // warn at 4 minutes (1 min left)
+const SOFT_MIN_SECONDS = 20;  // below this the invite hints "take more time" — never blocks Send
+// Per PERSON, not per browser: on a shared device the second participant
+// must read the notice themselves. v2 names the third-party processing.
+const voiceNoticeKey = (pk: string) => `own.voiceNotice.v2:${pk}`;
+
+const VOICE_TXT = {
+  sl: {
+    micTitle: 'Posnemi glasovno sporočilo',
+    micLabel: 'Povej z glasom',
+    promptCard: 'Pojdi vase. Ni treba biti popoln. Govori, dokler ne poveš vsega.',
+    noticeTitle: 'Preden prvič spregovoriš',
+    notice: 'Bitje posluša ritem in premore tvojega govora, ne presoja resnice tvojih čustev. Posnetek za prepis in merjenje ritma obdela zunanji AI-ponudnik (Google Gemini); bitje shrani le številke, ne besed. Posnetek in prepis ostaneta v tem procesu. Snemaj tam, kjer si sam.',
+    noticeDecline: 'Snemaj brez poslušanja bitja',
+    noticeOk: 'Razumem, snemaj',
+    noticeMore: 'Kaj bitje sliši?',
+    softMin: 'Kratko je bilo (pod 20 s). Lahko pošlješ — ali pa posnameš znova in si vzameš več časa.',
+  },
+  en: {
+    micTitle: 'Record a voice message',
+    micLabel: 'Say it by voice',
+    promptCard: 'Go inward. It does not have to be perfect. Speak until everything is said.',
+    noticeTitle: 'Before you speak for the first time',
+    notice: 'The being listens to the rhythm and pauses of your speech; it does not judge the truth of your feelings. An external AI provider (Google Gemini) processes the recording for the transcript and the rhythm measures; the being keeps only numbers, never words. The recording and its transcript stay inside this process. Record where you are alone.',
+    noticeDecline: 'Record without the being listening',
+    noticeOk: 'I understand, record',
+    noticeMore: 'What does the being hear?',
+    softMin: 'That was short (under 20 s). You can send it — or record again and take more time.',
+  },
+} as const;
+
+// localStorage is absent/throwing in private mode and some webviews — the
+// notice then simply shows again, which is the safe direction.
+const hasVoiceNotice = (pk: string): boolean => {
+  try { return localStorage.getItem(voiceNoticeKey(pk)) === '1'; } catch { return false; }
+};
+const markVoiceNotice = (pk: string) => {
+  try { localStorage.setItem(voiceNoticeKey(pk), '1'); } catch { /* ignore */ }
+};
+
+/** Duration of a blob via a throw-away <audio>. MediaRecorder webm reports
+ *  Infinity until seeked past the end, hence the huge currentTime. 0 = unknown. */
+const probeBlobDuration = (blob: Blob): Promise<number> =>
+  new Promise((resolve) => {
+    let settled = false;
+    const url = URL.createObjectURL(blob);
+    const el = document.createElement('audio');
+    const done = (n: number) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      URL.revokeObjectURL(url);
+      resolve(n);
+    };
+    const tryResolve = () => {
+      if (isFinite(el.duration) && el.duration > 0) done(Math.round(el.duration));
+    };
+    const timer = setTimeout(() => done(0), 4000);
+    el.onloadedmetadata = () => {
+      tryResolve();
+      if (!settled) el.currentTime = 1e101;
+    };
+    el.ondurationchange = tryResolve;
+    el.onerror = () => done(0);
+    el.preload = 'metadata';
+    el.src = url;
+  });
 
 export default function OwnAudioRecorder({
   processEventId,
@@ -28,8 +109,14 @@ export default function OwnAudioRecorder({
   onSendAudio,
   compact = false,
   onActiveChange,
+  inviteVoice = false,
+  lang = 'en',
+  beingListens = false,
 }: OwnAudioRecorderProps) {
+  const txt = VOICE_TXT[lang] ?? VOICE_TXT.en;
   const [isRecording, setIsRecording] = useState(false);
+  const [noticeOpen, setNoticeOpen] = useState(false);       // one-time notice card before the first recording
+  const [noticeExpanded, setNoticeExpanded] = useState(false); // ⓘ toggle while recording / previewing
   const [isStarting, setIsStarting] = useState(false); // mic tapped, awaiting permission/setup — instant button feedback
   const [isUploading, setIsUploading] = useState(false);
   const [audioPreview, setAudioPreview] = useState<string | null>(null);
@@ -59,9 +146,10 @@ export default function OwnAudioRecorder({
   // Report "active" (recording or previewing) to the parent so it can give the recorder
   // the full input row on mobile (otherwise the wide recording/preview UI overflows next
   // to the image + Exit buttons and breaks the layout).
+  // The notice card is as wide as the recording UI, so it counts as active too.
   useEffect(() => {
-    onActiveChange?.(isRecording || !!audioPreview);
-  }, [isRecording, audioPreview, onActiveChange]);
+    onActiveChange?.(isRecording || !!audioPreview || noticeOpen);
+  }, [isRecording, audioPreview, noticeOpen, onActiveChange]);
 
   // Restore a pending (un-sent) recording after a reload / navigation, so a recording is
   // never lost even if the upload failed or the page was reloaded mid-send.
@@ -147,7 +235,37 @@ export default function OwnAudioRecorder({
     return 'audio/webm';
   };
 
+  // Gate: the first time a being will listen, the person reads the notice
+  // before the microphone is even asked for. Typed-only participants never
+  // see it, and the encrypted rooms (beingListens=false) never do either.
+  // The acknowledgement of THIS session is honoured even where localStorage
+  // throws (private mode); a decline is remembered for the session only and
+  // records WITHOUT the consent stamp — the being then never reads it.
+  const acknowledgedRef = useRef(false);
+  const declinedRef = useRef(false);
+  const noticeAcknowledged = () => acknowledgedRef.current || hasVoiceNotice(senderPubkey);
   const startRecording = async () => {
+    if (beingListens && !noticeAcknowledged() && !declinedRef.current) {
+      setNoticeOpen(true);
+      return;
+    }
+    await beginRecording();
+  };
+
+  const confirmNotice = async () => {
+    acknowledgedRef.current = true;
+    markVoiceNotice(senderPubkey);
+    setNoticeOpen(false);
+    await beginRecording();
+  };
+
+  const declineNotice = async () => {
+    declinedRef.current = true;
+    setNoticeOpen(false);
+    await beginRecording();
+  };
+
+  const beginRecording = async () => {
     // Absorb rapid repeat taps and show instant feedback before the (slow) permission prompt.
     if (startingRef.current || isRecording) return;
     startingRef.current = true;
@@ -393,10 +511,17 @@ export default function OwnAudioRecorder({
       }
 
       // 3) Build message: audio:path|dur:seconds|transcript:text, then publish to relays.
-      const durValue = recordingTimeRef.current > 0 ? recordingTimeRef.current : recordingTime;
-      const durSuffix = durValue > 0 ? `|dur:${durValue}` : '';
+      //    `dur` is ALWAYS present — the beings bucket spoken length from it. The
+      //    tick counter is 0 for a restored recording without a stored duration,
+      //    so decode the blob then; 1 s is the floor when even that fails.
+      let durValue = recordingTimeRef.current > 0 ? recordingTimeRef.current : Math.round(duration);
+      if (!(durValue > 0)) durValue = await probeBlobDuration(audioBlob);
+      if (!(durValue > 0)) durValue = 1;
       const transcriptSuffix = transcript ? `|transcript:${transcript}` : '';
-      const sent = await onSendAudio(`audio:${filePath}${durSuffix}${transcriptSuffix}`);
+      const sent = await onSendAudio(`audio:${filePath}|dur:${durValue}${transcriptSuffix}`, {
+        consent: beingListens && noticeAcknowledged() ? 'voice-notice-v2' : undefined,
+        durationSeconds: durValue,
+      });
 
       if (!sent) {
         setUploadFailed(true);
@@ -540,6 +665,22 @@ export default function OwnAudioRecorder({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // "ⓘ What does the being hear?" — the notice text, re-readable at any time.
+  const noticeMoreEl = (
+    <div className="px-1">
+      <button
+        type="button"
+        onClick={() => setNoticeExpanded((v) => !v)}
+        className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+      >
+        ⓘ {txt.noticeMore}
+      </button>
+      {noticeExpanded && (
+        <p className="text-xs text-muted-foreground mt-1">{txt.notice}</p>
+      )}
+    </div>
+  );
+
   // Audio preview UI - mobile optimized
   if (audioPreview) {
     return (
@@ -568,6 +709,11 @@ export default function OwnAudioRecorder({
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
         </div>
+
+        {inviteVoice && (recordingTime > 0 ? recordingTime : duration) < SOFT_MIN_SECONDS && (
+          <p className="text-xs text-muted-foreground px-1">{txt.softMin}</p>
+        )}
+        {beingListens && noticeMoreEl}
 
         {/* Upload failed — show retry + discard */}
         {uploadFailed && !isUploading && (
@@ -636,7 +782,12 @@ export default function OwnAudioRecorder({
     const remainingSeconds = MAX_RECORDING_SECONDS - recordingTime;
     const isNearLimit = recordingTime >= WARNING_SECONDS;
     return (
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 w-full min-w-0">
+        {inviteVoice && (
+          <p className="text-sm italic text-muted-foreground px-2 py-1 rounded-md bg-accent/40">
+            {txt.promptCard}
+          </p>
+        )}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2">
             <span className={`h-2.5 w-2.5 rounded-full ${isNearLimit ? 'bg-orange-500' : 'bg-red-500'} animate-pulse`} />
@@ -667,19 +818,59 @@ export default function OwnAudioRecorder({
             ⏱ {formatTime(remainingSeconds)} remaining
           </p>
         )}
+        {beingListens && noticeMoreEl}
+      </div>
+    );
+  }
+
+  // One-time notice before the first recording a being will read.
+  if (noticeOpen) {
+    return (
+      <div className="flex flex-col gap-2 p-3 bg-accent/50 rounded-lg w-full min-w-0">
+        <p className="text-sm font-semibold">{txt.noticeTitle}</p>
+        <p className="text-sm text-muted-foreground">{txt.notice}</p>
+        <div className="flex items-center justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={declineNotice} className="h-9">
+            <X className="h-4 w-4 mr-1" />
+            {txt.noticeDecline}
+          </Button>
+          <Button size="sm" onClick={confirmNotice} className="h-9 px-4">
+            <Mic className="h-4 w-4 mr-1" />
+            {txt.noticeOk}
+          </Button>
+        </div>
       </div>
     );
   }
 
   // Default recording button
+  const micIcon = isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />;
+  if (inviteVoice) {
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={startRecording}
+        disabled={isUploading || isStarting}
+        title={txt.micTitle}
+        aria-label={txt.micTitle}
+        className="gap-1.5 px-2"
+      >
+        {micIcon}
+        <span className="hidden md:inline text-xs">{txt.micLabel}</span>
+      </Button>
+    );
+  }
   return (
     <Button
       size="icon"
       variant="ghost"
       onClick={startRecording}
       disabled={isUploading || isStarting}
+      title={txt.micTitle}
+      aria-label={txt.micTitle}
     >
-      {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+      {micIcon}
     </Button>
   );
 }

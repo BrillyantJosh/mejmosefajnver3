@@ -43,7 +43,7 @@ function YouTubeEmbed({ videoId }: YouTubeEmbedProps) {
   );
 }
 
-function TranscriptToggle({ text }: { text: string }) {
+function TranscriptToggle({ text, en }: { text: string; en: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="mt-2 pt-2 border-t border-border/50">
@@ -53,7 +53,7 @@ function TranscriptToggle({ text }: { text: string }) {
         className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
       >
         <FileText className="h-3.5 w-3.5 flex-shrink-0" />
-        <span>Transcription</span>
+        <span>{en ? 'Transcription' : 'Prepis'}</span>
         {open ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
       </button>
       {open && (
@@ -234,7 +234,7 @@ export default function ChatMessage({
           <Card className={`p-2 md:p-3 flex-1 min-w-0 md:max-w-2xl lg:max-w-4xl xl:max-w-6xl ${isCurrentUser ? 'bg-green-500/20 border-green-500/30' : 'bg-muted/50'}`}>
             <QuotedReply />
             <AudioPlayer audioUrl={audioUrl} initialDuration={audioDuration} />
-            {transcript && <TranscriptToggle text={transcript} />}
+            {transcript && <TranscriptToggle text={transcript} en={en} />}
           </Card>
         </div>
       </div>

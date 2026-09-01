@@ -1902,26 +1902,93 @@ router.post('/poll-dm-notifications', async (req: Request, res: Response) => {
   }
 });
 
-// cleanup-dm-audio
-router.post('/cleanup-dm-audio', async (req: Request, res: Response) => {
-  try {
-    // fs and path imported at top of file
-    const audioDir = path.resolve(__dirname, '../uploads/dm-audio');
-    // Delete files older than 30 days
-    let deleted = 0;
-    if (fs.existsSync(audioDir)) {
-      const files = fs.readdirSync(audioDir);
-      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      for (const file of files) {
-        const filePath = path.join(audioDir, file);
-        const stat = fs.statSync(filePath);
-        if (stat.mtimeMs < thirtyDaysAgo) {
-          fs.unlinkSync(filePath);
-          deleted++;
-        }
+// =============================================
+// DM AUDIO RETENTION
+// =============================================
+
+const DM_AUDIO_DIR = path.resolve(__dirname, '../uploads/dm-audio');
+const DM_AUDIO_RETENTION_DAYS = (() => {
+  const n = Number(process.env.DM_AUDIO_RETENTION_DAYS);
+  return Number.isFinite(n) && n > 0 ? n : 365;
+})();
+
+export interface DmAudioCleanupResult {
+  candidates: number; // files older than the retention window
+  bytes: number;      // their total size
+  deleted: number;    // 0 in dry mode
+  dry: boolean;
+}
+
+/**
+ * Walk `dir` recursively and remove FILES whose mtime is older than
+ * `retentionDays`; directories are never deleted by age, only pruned once
+ * empty (never the root). Symlinks are skipped: a link out of the tree must
+ * not be able to make the walk delete anything outside it.
+ *
+ * Uploads are laid out as <sender>-<process>/<ts>_<rand>.<ext>, which the old
+ * flat readdir never reached — it stat'ed the folders and, being younger than
+ * the files inside, silently deleted nothing for a year.
+ */
+export function cleanupDmAudioDir(
+  dir: string,
+  opts: { retentionDays?: number; dry?: boolean; now?: number } = {},
+): DmAudioCleanupResult {
+  const retentionDays = opts.retentionDays ?? DM_AUDIO_RETENTION_DAYS;
+  const dry = opts.dry ?? false;
+  const cutoff = (opts.now ?? Date.now()) - retentionDays * 24 * 60 * 60 * 1000;
+  const result: DmAudioCleanupResult = { candidates: 0, bytes: 0, deleted: 0, dry };
+  if (!fs.existsSync(dir)) return result;
+
+  const walk = (current: string, isRoot: boolean) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) { walk(full, false); continue; }
+      if (!entry.isFile()) continue;
+      const stat = fs.statSync(full);
+      if (stat.mtimeMs >= cutoff) continue;
+      result.candidates++;
+      result.bytes += stat.size;
+      if (dry) continue;
+      try {
+        fs.unlinkSync(full);
+        result.deleted++;
+      } catch (err) {
+        console.warn(`[cleanup-dm-audio] could not delete ${full}:`, (err as Error)?.message);
       }
     }
-    return res.json({ deleted });
+    // Prune the folder only after its files went — and only if nothing is left.
+    if (!isRoot && !dry) {
+      try {
+        if (fs.readdirSync(current).length === 0) fs.rmdirSync(current);
+      } catch { /* a concurrent upload may have just landed here — leave it */ }
+    }
+  };
+  walk(dir, true);
+  return result;
+}
+
+/** Runs the retention sweep on the real upload folder and logs one summary line. */
+export function cleanupDmAudio(dry: boolean): DmAudioCleanupResult {
+  const r = cleanupDmAudioDir(DM_AUDIO_DIR, { dry });
+  console.log(`[cleanup-dm-audio] deleted=${r.deleted} bytes=${r.bytes} dry=${r.dry}` +
+    (dry ? ` candidates=${r.candidates}` : ''));
+  return r;
+}
+
+// cleanup-dm-audio — ?dry=1 (or body { dry: true }) reports what WOULD go
+// without touching anything. The scheduled run lives in the heartbeat (index.ts).
+router.post('/cleanup-dm-audio', async (req: Request, res: Response) => {
+  try {
+    // A REAL sweep deletes files: over HTTP it needs the internal secret
+    // (the heartbeat calls cleanupDmAudio directly). Without it → dry only.
+    const secret = process.env.INTERNAL_SHARED_SECRET || '';
+    const authed = !!secret && req.headers['x-internal-secret'] === secret;
+    const dry = !authed || req.query.dry === '1' || req.body?.dry === true;
+    const r = cleanupDmAudio(dry);
+    return res.json(dry
+      ? { dry: true, candidates: r.candidates, bytes: r.bytes }
+      : { deleted: r.deleted, candidates: r.candidates, bytes: r.bytes });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
