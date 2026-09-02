@@ -68,17 +68,25 @@ console.log('— nothing at all —');
   check('stamp with trailing blank lines', processDescription('Process initiated: X\n\n   \n') === '');
 }
 
-console.log('— the case holds what the initiator wrote, the record holds a stamp —');
+console.log('— the editable record outranks the original —');
 {
-  // The live shape: KIND 87044 carries 879 characters of reasoning while the
-  // KIND 37044 record carries only "Process initiated: <title>".
+  // The live shape today: KIND 87044 carries the initiator's reasoning while
+  // the KIND 37044 record carries only "Process initiated: <title>".
   const caseText = 'Proces se odpira zaradi naslednjih ravnanj, ki odpirajo vprašanje iskrenih namenov.';
-  const recordText = 'Process initiated: Zloraba sistema in zaupanja';
-  check('the case wins', pickProcessDescription(caseText, recordText) === caseText);
-  check('the record is the fallback', pickProcessDescription('', 'Neki opis brez žiga') === 'Neki opis brez žiga');
-  check('a stamped record is not a fallback', pickProcessDescription('', recordText) === '');
+  const stamped = 'Process initiated: Zloraba sistema in zaupanja';
+  check('a stamped record yields to the case', pickProcessDescription(caseText, stamped) === caseText);
+
+  // Once a facilitator edits it on selfresponsible.life, the record must win —
+  // a refined wording cannot be overruled by the original.
+  const edited = 'Dopolnjen opis, ki ga je uredil fasilitator.';
+  check('an edited record wins', pickProcessDescription(caseText, edited) === edited);
+  check('even over a longer case text',
+    pickProcessDescription(caseText + ' '.repeat(50) + 'še več', edited) === edited);
+
+  check('no case → the record alone', pickProcessDescription('', edited) === edited);
+  check('no record → the case alone', pickProcessDescription(caseText, '') === caseText);
+  check('stamped record and no case → nothing', pickProcessDescription('', stamped) === '');
   check('neither → nothing', pickProcessDescription(null, null) === '');
-  check('an unreadable case falls back to the record', pickProcessDescription('', 'Opis') === 'Opis');
 }
 
 console.log('— ciphertext is never shown —');

@@ -11,6 +11,7 @@ import { ownSupabase } from "@/lib/ownSupabaseClient";
 import { formatResumeDate } from "@/hooks/useOwnAssessments";
 import { useLang } from "@/i18n/I18nContext";
 import { processDescription, descriptionNeedsFolding } from "@/lib/processDescription";
+import RichText from "@/components/own/RichText";
 import { toast } from "sonner";
 
 const MESSAGES_PER_PAGE = 20;
@@ -503,67 +504,30 @@ export default function ChatView({
             another a thousand characters of transaction tables, and the phase
             banner was already removed once to give messages back their room. */}
         {(conversationRoster || description) && (
-          <div className="ml-10 md:ml-11 mt-1.5 text-xs md:text-sm text-muted-foreground">
-            <div className={infoOpen ? 'max-h-56 overflow-y-auto pr-1' : ''}>
-            {conversationRoster && (
-              infoOpen ? (
-                <div className="space-y-0.5">
-                  <p className="break-words">
-                    <span className="font-medium">{en ? 'Opened' : 'Odprto'}:</span>{' '}
-                    {conversationRoster.opened}
-                  </p>
-                  <p className="break-words">
-                    <span className="font-medium">{en ? 'Initiator' : 'Pobudnik'}:</span>{' '}
-                    {conversationRoster.initiator}
-                  </p>
-                  {conversationRoster.facilitators.length > 0 && (
-                    <p className="break-words">
-                      <span className="font-medium">
-                        {conversationRoster.facilitators.length > 1
-                          ? (en ? 'Facilitators' : 'Fasilitatorji')
-                          : (en ? 'Facilitator' : 'Fasilitator')}:
-                      </span>{' '}
-                      {conversationRoster.facilitators.join(', ')}
-                    </p>
-                  )}
-                  {conversationRoster.participants.length > 0 && (
-                    <p className="break-words">
-                      <span className="font-medium">{en ? 'Participants' : 'Udeleženci'}:</span>{' '}
-                      {conversationRoster.participants.join(', ')}
-                    </p>
-                  )}
-                  {conversationRoster.guests.length > 0 && (
-                    <p className="break-words">
-                      <span className="font-medium">{en ? 'Guests' : 'Gostje'}:</span>{' '}
-                      {conversationRoster.guests.join(', ')}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="truncate">
-                  {conversationRoster.opened}
-                  {' · '}
-                  <span className="font-medium">{en ? 'Initiator' : 'Pobudnik'}:</span>{' '}
-                  {conversationRoster.initiator}
-                </p>
-              )
+          <div className="ml-10 md:ml-11 mt-1.5 text-sm md:text-base text-muted-foreground">
+            {conversationRoster && !infoOpen && (
+              <p className="truncate">
+                {conversationRoster.opened}
+                {' · '}
+                <span className="font-medium">{en ? 'Initiator' : 'Pobudnik'}:</span>{' '}
+                {conversationRoster.initiator}
+              </p>
             )}
 
-            {description && (
+            {description && !infoOpen && (
               <p
                 className={`whitespace-pre-wrap break-words ${conversationRoster ? 'mt-1.5' : ''} ${
-                  !infoOpen && descriptionFolds ? 'line-clamp-2' : ''
+                  descriptionFolds ? 'line-clamp-2' : ''
                 }`}
               >
                 {description}
               </p>
             )}
-            </div>
 
             <button
               type="button"
               onClick={() => setInfoOpen((open) => !open)}
-              className="mt-0.5 text-xs font-medium text-primary hover:underline"
+              className="mt-2 inline-flex items-center rounded-md border border-primary/40 px-3 py-1.5 text-sm md:text-base font-semibold text-primary hover:bg-primary/10"
             >
               {infoOpen
                 ? (en ? 'Show less' : 'Pokaži manj')
@@ -602,6 +566,48 @@ export default function ChatView({
       {/* Messages */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 px-2 md:px-4">
         <div className="space-y-2 pb-4">
+          {/* Opened detail lives here, not in the sticky header: it scrolls with
+              the conversation, so the whole reason is reachable and the messages
+              keep their room. */}
+          {infoOpen && (conversationRoster || description) && (
+            <div className="rounded-lg border bg-muted/30 p-3 md:p-4 mt-2 text-sm md:text-base text-muted-foreground">
+              {conversationRoster && (
+                <div className="space-y-0.5">
+                  <p className="break-words">
+                    <span className="font-medium">{en ? 'Opened' : 'Odprto'}:</span>{' '}
+                    {conversationRoster.opened}
+                  </p>
+                  <p className="break-words">
+                    <span className="font-medium">{en ? 'Initiator' : 'Pobudnik'}:</span>{' '}
+                    {conversationRoster.initiator}
+                  </p>
+                  {conversationRoster.facilitators.length > 0 && (
+                    <p className="break-words">
+                      <span className="font-medium">
+                        {conversationRoster.facilitators.length > 1
+                          ? (en ? 'Facilitators' : 'Fasilitatorji')
+                          : (en ? 'Facilitator' : 'Fasilitator')}:
+                      </span>{' '}
+                      {conversationRoster.facilitators.join(', ')}
+                    </p>
+                  )}
+                  {conversationRoster.participants.length > 0 && (
+                    <p className="break-words">
+                      <span className="font-medium">{en ? 'Participants' : 'Udeleženci'}:</span>{' '}
+                      {conversationRoster.participants.join(', ')}
+                    </p>
+                  )}
+                  {conversationRoster.guests.length > 0 && (
+                    <p className="break-words">
+                      <span className="font-medium">{en ? 'Guests' : 'Gostje'}:</span>{' '}
+                      {conversationRoster.guests.join(', ')}
+                    </p>
+                  )}
+                </div>
+              )}
+              {description && <RichText text={description} className={conversationRoster ? 'mt-3' : ''} />}
+            </div>
+          )}
           {isLoading ? (
             <div className="text-center py-8 text-sm text-muted-foreground">
               Loading messages...

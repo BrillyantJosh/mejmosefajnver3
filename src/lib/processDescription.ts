@@ -56,14 +56,19 @@ export function descriptionNeedsFolding(description: string): boolean {
 /**
  * The description to show, given both events.
  *
- * The CASE (KIND 87044) holds what the initiator actually wrote — the reason
- * the process was opened. The process record (KIND 37044) usually holds only
- * the stamped title. So the case wins whenever it says anything, and the
- * process record is the fallback for the few cases the relays cannot produce.
+ * The RECORD (KIND 37044) wins, because it is the one a facilitator can edit —
+ * selfresponsible.life/environment/edit-process-record republishes exactly this
+ * field, so a refined wording must never be overruled by the original.
+ *
+ * It only wins when it says something of its own: a record still carrying the
+ * opening stamp "Process initiated: <title>" reduces to nothing here, and the
+ * CASE (KIND 87044) — where the initiator's original reason was filed — steps
+ * in. That is what carries the thirteen processes opened before the reason was
+ * written into the record at all.
  */
 export function pickProcessDescription(
   caseContent: string | null | undefined,
   processContent: string | null | undefined
 ): string {
-  return processDescription(caseContent) || processDescription(processContent);
+  return processDescription(processContent) || processDescription(caseContent);
 }

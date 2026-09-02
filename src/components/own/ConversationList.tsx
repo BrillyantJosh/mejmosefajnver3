@@ -4,6 +4,7 @@ import { Lock } from "lucide-react";
 import { useState } from "react";
 import { useLang } from "@/i18n/I18nContext";
 import { descriptionNeedsFolding } from "@/lib/processDescription";
+import RichText from "@/components/own/RichText";
 
 interface Conversation {
   id: string;
@@ -92,25 +93,24 @@ export default function ConversationList({ conversations, selectedId, onSelect }
 
             {/* What the initiator wrote when opening the case. */}
             {conv.description && (
-              <div className="mt-2 text-xs md:text-sm text-muted-foreground">
-                <p
-                  className={`whitespace-pre-wrap break-words ${
-                    openDescriptions.has(conv.id)
-                      ? 'max-h-56 overflow-y-auto pr-1'
-                      : descriptionNeedsFolding(conv.description)
-                        ? 'line-clamp-3'
-                        : ''
-                  }`}
-                >
-                  {conv.description}
-                </p>
+              <div className="mt-3 text-sm md:text-base text-muted-foreground">
+                {/* Open means open: the whole reason, laid out as written. An
+                    inner scrollbar inside a clickable card was worse than
+                    useless — the page scrolls perfectly well. */}
+                {openDescriptions.has(conv.id) ? (
+                  <RichText text={conv.description} />
+                ) : (
+                  <p className={`whitespace-pre-wrap break-words ${descriptionNeedsFolding(conv.description) ? 'line-clamp-3' : ''}`}>
+                    {conv.description}
+                  </p>
+                )}
                 {descriptionNeedsFolding(conv.description) && (
                   <button
                     type="button"
                     // The card itself opens the process — reading the reason
                     // in place must not do that too.
                     onClick={(e) => { e.stopPropagation(); toggleDescription(conv.id); }}
-                    className="mt-0.5 text-xs font-medium text-primary hover:underline"
+                    className="mt-2 inline-flex items-center rounded-md border border-primary/40 px-3 py-1.5 text-sm md:text-base font-semibold text-primary hover:bg-primary/10"
                   >
                     {openDescriptions.has(conv.id)
                       ? (en ? 'Show less' : 'Pokaži manj')
