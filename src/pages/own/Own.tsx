@@ -828,6 +828,7 @@ export default function Own() {
   const chatViewEl = selectedProcess ? (
     <ChatView
       conversationTitle={selectedProcess?.title}
+      conversationDescription={selectedProcess?.description}
       conversationStatus={selectedProcess?.status}
       processEventId={selectedProcess?.processEventId}
       senderPubkey={session?.nostrHexId}

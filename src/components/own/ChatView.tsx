@@ -10,6 +10,7 @@ import PauseProcessDialog from "./PauseProcessDialog";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
 import { formatResumeDate } from "@/hooks/useOwnAssessments";
 import { useLang } from "@/i18n/I18nContext";
+import { processDescription, descriptionNeedsFolding } from "@/lib/processDescription";
 import { toast } from "sonner";
 
 const MESSAGES_PER_PAGE = 20;
@@ -137,6 +138,8 @@ interface Message {
 
 interface ChatViewProps {
   conversationTitle?: string;
+  /** Raw `content` of the KIND 37044 process event — what it was opened about. */
+  conversationDescription?: string;
   conversationStatus?: string;
   processEventId?: string;
   senderPubkey?: string;
@@ -183,6 +186,7 @@ interface ChatViewProps {
 
 export default function ChatView({ 
   conversationTitle, 
+  conversationDescription,
   conversationStatus,
   processEventId,
   senderPubkey,
@@ -216,6 +220,17 @@ export default function ChatView({
   lashCounts = new Map()
 }: ChatViewProps) {
   const en = useLang() === 'en';
+
+  // What the process was opened about. Until now an opened process showed only
+  // its title, so whoever had not read the opening message never learned the
+  // subject. Folded by default — one of the live descriptions runs to a
+  // thousand characters of tables — but never hidden.
+  const description = useMemo(
+    () => processDescription(conversationDescription),
+    [conversationDescription]
+  );
+  const descriptionFolds = descriptionNeedsFolding(description);
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isReEntering, setIsReEntering] = useState(false);
@@ -462,6 +477,33 @@ export default function ChatView({
             </div>
           </div>
         </div>
+
+        {description && (
+          <div className="ml-10 md:ml-11 mt-1.5">
+            <p
+              className={`text-xs md:text-sm text-muted-foreground whitespace-pre-wrap break-words ${
+                descriptionOpen
+                  ? 'max-h-64 overflow-y-auto pr-1'
+                  : descriptionFolds
+                    ? 'line-clamp-2'
+                    : ''
+              }`}
+            >
+              {description}
+            </p>
+            {descriptionFolds && (
+              <button
+                type="button"
+                onClick={() => setDescriptionOpen((open) => !open)}
+                className="mt-0.5 text-xs font-medium text-primary hover:underline"
+              >
+                {descriptionOpen
+                  ? (en ? 'Show less' : 'Pokaži manj')
+                  : (en ? 'Show more' : 'Pokaži več')}
+              </button>
+            )}
+          </div>
+        )}
       </Card>
 
       {isExited ? (

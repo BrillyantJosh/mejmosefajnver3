@@ -23,6 +23,12 @@ export interface OpenProcess {
   guests: string[];
   language: string;
   topic?: string;
+  /**
+   * What the process was opened ABOUT, from the event's `content`. Nothing
+   * read this before, so an opened process showed only its title. Kept raw
+   * here; processDescription() decides what of it is worth reading.
+   */
+  description?: string;
   userRole?: string;
   /** Set when a facilitator has offered to hand this process over (cross-app: selfresponsible.life). */
   handoverTo?: string;
@@ -93,6 +99,7 @@ function toOpenProcesses(events: Event[], userPubkey: string): OpenProcess[] {
         guests,
         language,
         topic,
+        description: event.content || '',
         userRole,
         handoverTo: event.tags.find(t => t[0] === 'handover_to')?.[1],
         createdAt: event.created_at
