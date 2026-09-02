@@ -8,6 +8,7 @@
  */
 import {
   processDescription,
+  pickProcessDescription,
   descriptionNeedsFolding,
   DESCRIPTION_FOLD_CHARS,
 } from '../src/lib/processDescription.js';
@@ -65,6 +66,28 @@ console.log('— nothing at all —');
   check('undefined', processDescription(undefined) === '');
   check('whitespace only', processDescription('   \n  ') === '');
   check('stamp with trailing blank lines', processDescription('Process initiated: X\n\n   \n') === '');
+}
+
+console.log('— the case holds what the initiator wrote, the record holds a stamp —');
+{
+  // The live shape: KIND 87044 carries 879 characters of reasoning while the
+  // KIND 37044 record carries only "Process initiated: <title>".
+  const caseText = 'Proces se odpira zaradi naslednjih ravnanj, ki odpirajo vprašanje iskrenih namenov.';
+  const recordText = 'Process initiated: Zloraba sistema in zaupanja';
+  check('the case wins', pickProcessDescription(caseText, recordText) === caseText);
+  check('the record is the fallback', pickProcessDescription('', 'Neki opis brez žiga') === 'Neki opis brez žiga');
+  check('a stamped record is not a fallback', pickProcessDescription('', recordText) === '');
+  check('neither → nothing', pickProcessDescription(null, null) === '');
+  check('an unreadable case falls back to the record', pickProcessDescription('', 'Opis') === 'Opis');
+}
+
+console.log('— ciphertext is never shown —');
+{
+  const nip04 = 'Zm9vYmFyYmF6cXV4' + '?iv=YWJjZGVmZ2hpamtsbW5vcA==';
+  check('encrypted case → nothing', processDescription(nip04) === '', processDescription(nip04));
+  check('and no fallback to it', pickProcessDescription(nip04, '') === '');
+  check('a plain sentence with a question mark still shows',
+    processDescription('Zakaj je to storil? Ne vem.') === 'Zakaj je to storil? Ne vem.');
 }
 
 console.log(failures ? `\n❌ ${failures} FAILED` : '\n✅ all passed');

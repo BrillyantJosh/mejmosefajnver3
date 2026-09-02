@@ -21,9 +21,13 @@
 /** Written by selfresponsible.life (CreateProcessDialog, TakeOverCaseDialog). */
 const OPENING_STAMP = /^process initiated:/i;
 
+/** A NIP-04 payload ends in ?iv=… — ciphertext must never reach a reader. */
+const ENCRYPTED = /\?iv=[A-Za-z0-9+/=]+$/;
+
 export function processDescription(content: string | null | undefined): string {
   const text = (content || '').trim();
   if (!text) return '';
+  if (ENCRYPTED.test(text)) return '';
   if (!OPENING_STAMP.test(text)) return text;
 
   // Drop the stamp line only. No newline means the stamp was the whole content,
@@ -47,4 +51,19 @@ export const DESCRIPTION_FOLD_CHARS = 160;
 
 export function descriptionNeedsFolding(description: string): boolean {
   return description.length > DESCRIPTION_FOLD_CHARS || description.includes('\n');
+}
+
+/**
+ * The description to show, given both events.
+ *
+ * The CASE (KIND 87044) holds what the initiator actually wrote — the reason
+ * the process was opened. The process record (KIND 37044) usually holds only
+ * the stamped title. So the case wins whenever it says anything, and the
+ * process record is the fallback for the few cases the relays cannot produce.
+ */
+export function pickProcessDescription(
+  caseContent: string | null | undefined,
+  processContent: string | null | undefined
+): string {
+  return processDescription(caseContent) || processDescription(processContent);
 }

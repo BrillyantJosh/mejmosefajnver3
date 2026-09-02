@@ -1,7 +1,9 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Lock } from "lucide-react";
+import { useState } from "react";
 import { useLang } from "@/i18n/I18nContext";
+import { descriptionNeedsFolding } from "@/lib/processDescription";
 
 interface Conversation {
   id: string;
@@ -10,6 +12,8 @@ interface Conversation {
   facilitators: string[];
   participants: string[];
   guests: string[];
+  /** Why the initiator opened it, from the KIND 87044 case event. */
+  description?: string;
   status: string;
   phase?: string;
   lastActivity: string;
@@ -36,6 +40,16 @@ const PHASE_STYLES: Record<string, { label: string; emoji: string; color: string
 
 export default function ConversationList({ conversations, selectedId, onSelect }: ConversationListProps) {
   const en = useLang() === 'en';
+  // Which cards have had their description opened. Folded by default so the
+  // list stays scannable — one live case runs to 1645 characters.
+  const [openDescriptions, setOpenDescriptions] = useState<Set<string>>(new Set());
+  const toggleDescription = (id: string) =>
+    setOpenDescriptions((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   return (
     <div className="space-y-3">
       <div className="mb-4">
@@ -75,6 +89,36 @@ export default function ConversationList({ conversations, selectedId, onSelect }
                 <p className="break-words"><span className="font-medium">Guests:</span> {conv.guests.join(', ')}</p>
               )}
             </div>
+
+            {/* What the initiator wrote when opening the case. */}
+            {conv.description && (
+              <div className="mt-2 text-xs md:text-sm text-muted-foreground">
+                <p
+                  className={`whitespace-pre-wrap break-words ${
+                    openDescriptions.has(conv.id)
+                      ? 'max-h-56 overflow-y-auto pr-1'
+                      : descriptionNeedsFolding(conv.description)
+                        ? 'line-clamp-3'
+                        : ''
+                  }`}
+                >
+                  {conv.description}
+                </p>
+                {descriptionNeedsFolding(conv.description) && (
+                  <button
+                    type="button"
+                    // The card itself opens the process — reading the reason
+                    // in place must not do that too.
+                    onClick={(e) => { e.stopPropagation(); toggleDescription(conv.id); }}
+                    className="mt-0.5 text-xs font-medium text-primary hover:underline"
+                  >
+                    {openDescriptions.has(conv.id)
+                      ? (en ? 'Show less' : 'Pokaži manj')
+                      : (en ? 'Show more' : 'Pokaži več')}
+                  </button>
+                )}
+              </div>
+            )}
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge className={`text-xs border ${phaseInfo.bg} ${phaseInfo.color}`}>

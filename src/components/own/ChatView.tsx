@@ -138,7 +138,7 @@ interface Message {
 
 interface ChatViewProps {
   conversationTitle?: string;
-  /** Raw `content` of the KIND 37044 process event — what it was opened about. */
+  /** Why the initiator opened the case (KIND 87044 content, already resolved). */
   conversationDescription?: string;
   /**
    * Who the process is between, and since when — the block the list shows and

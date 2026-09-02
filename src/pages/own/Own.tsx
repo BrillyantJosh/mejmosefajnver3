@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import ConversationList from "@/components/own/ConversationList";
+import { useOwnCaseDescriptions, normaliseCaseId } from "@/hooks/useOwnCaseDescriptions";
+import { pickProcessDescription } from "@/lib/processDescription";
 import ChatView from "@/components/own/ChatView";
 import OwnSelfMatrix from "@/components/own/OwnSelfMatrix";
 import { CaseTodo, TODO_TXT } from "@/pages/own/Todo";
@@ -348,6 +350,11 @@ export default function Own() {
   );
   const { byCase: freezesByCase } = useProcessFreezesBulk(listRoots);
 
+  // What the initiator actually wrote when opening each case. It lives in the
+  // KIND 87044 case event, not in the 37044 record this page reads, so it has
+  // to be fetched alongside — see useOwnCaseDescriptions.
+  const caseDescriptions = useOwnCaseDescriptions(processes.map(p => p.processEventId));
+
   // Format conversations for display
   const conversations = processes.map(process => ({
     id: process.id,
@@ -363,6 +370,10 @@ export default function Own() {
     ),
     guests: process.guests.map(g =>
       profiles.get(g)?.full_name || g.slice(0, 8)
+    ),
+    description: pickProcessDescription(
+      caseDescriptions.get(normaliseCaseId(process.processEventId)),
+      process.description
     ),
     status: process.phase,
     phase: process.phase,
@@ -830,7 +841,7 @@ export default function Own() {
   const chatViewEl = selectedProcess ? (
     <ChatView
       conversationTitle={selectedProcess?.title}
-      conversationDescription={selectedProcess?.description}
+      conversationDescription={selectedRow?.description}
       conversationRoster={
         selectedRow && {
           opened: selectedRow.lastActivity,
