@@ -825,10 +825,21 @@ export default function Own() {
     : [];
   const nameOfPk = (pk: string) => profiles.get(pk)?.full_name || profiles.get(pk)?.display_name || pk.slice(0, 8);
 
+  const selectedRow = conversations.find((c) => c.id === selectedProcessId);
+
   const chatViewEl = selectedProcess ? (
     <ChatView
       conversationTitle={selectedProcess?.title}
       conversationDescription={selectedProcess?.description}
+      conversationRoster={
+        selectedRow && {
+          opened: selectedRow.lastActivity,
+          initiator: selectedRow.initiator,
+          facilitators: selectedRow.facilitators,
+          participants: selectedRow.participants,
+          guests: selectedRow.guests,
+        }
+      }
       conversationStatus={selectedProcess?.status}
       processEventId={selectedProcess?.processEventId}
       senderPubkey={session?.nostrHexId}

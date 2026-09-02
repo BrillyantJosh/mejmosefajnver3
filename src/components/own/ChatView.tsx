@@ -140,6 +140,17 @@ interface ChatViewProps {
   conversationTitle?: string;
   /** Raw `content` of the KIND 37044 process event — what it was opened about. */
   conversationDescription?: string;
+  /**
+   * Who the process is between, and since when — the block the list shows and
+   * the opened process used to throw away. Names already resolved.
+   */
+  conversationRoster?: {
+    opened: string;
+    initiator: string;
+    facilitators: string[];
+    participants: string[];
+    guests: string[];
+  };
   conversationStatus?: string;
   processEventId?: string;
   senderPubkey?: string;
@@ -187,6 +198,7 @@ interface ChatViewProps {
 export default function ChatView({ 
   conversationTitle, 
   conversationDescription,
+  conversationRoster,
   conversationStatus,
   processEventId,
   senderPubkey,
@@ -230,7 +242,7 @@ export default function ChatView({
     [conversationDescription]
   );
   const descriptionFolds = descriptionNeedsFolding(description);
-  const [descriptionOpen, setDescriptionOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isReEntering, setIsReEntering] = useState(false);
@@ -450,7 +462,13 @@ export default function ChatView({
           </Button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 md:gap-3 flex-wrap">
-              <h2 className="text-base md:text-lg font-semibold truncate min-w-0">{conversationTitle}</h2>
+              <h2
+                className={`text-base md:text-lg font-semibold min-w-0 ${
+                  infoOpen ? 'break-words' : 'truncate'
+                }`}
+              >
+                {conversationTitle}
+              </h2>
               <Badge
                 title={currentPhase.description}
                 className={`text-xs shrink-0 ${currentPhase.bg} ${currentPhase.color} border`}
@@ -478,30 +496,79 @@ export default function ChatView({
           </div>
         </div>
 
-        {description && (
-          <div className="ml-10 md:ml-11 mt-1.5">
-            <p
-              className={`text-xs md:text-sm text-muted-foreground whitespace-pre-wrap break-words ${
-                descriptionOpen
-                  ? 'max-h-64 overflow-y-auto pr-1'
-                  : descriptionFolds
-                    ? 'line-clamp-2'
-                    : ''
-              }`}
-            >
-              {description}
-            </p>
-            {descriptionFolds && (
-              <button
-                type="button"
-                onClick={() => setDescriptionOpen((open) => !open)}
-                className="mt-0.5 text-xs font-medium text-primary hover:underline"
-              >
-                {descriptionOpen
-                  ? (en ? 'Show less' : 'Pokaži manj')
-                  : (en ? 'Show more' : 'Pokaži več')}
-              </button>
+        {/* What this process IS: who it is between, since when, and what it was
+            opened about. The list shows all of it and the opened process used
+            to drop every word — you saw a title and nothing else. Folded to a
+            single line, because one live case carries eleven guests and
+            another a thousand characters of transaction tables, and the phase
+            banner was already removed once to give messages back their room. */}
+        {(conversationRoster || description) && (
+          <div className="ml-10 md:ml-11 mt-1.5 text-xs md:text-sm text-muted-foreground">
+            <div className={infoOpen ? 'max-h-56 overflow-y-auto pr-1' : ''}>
+            {conversationRoster && (
+              infoOpen ? (
+                <div className="space-y-0.5">
+                  <p className="break-words">
+                    <span className="font-medium">{en ? 'Opened' : 'Odprto'}:</span>{' '}
+                    {conversationRoster.opened}
+                  </p>
+                  <p className="break-words">
+                    <span className="font-medium">{en ? 'Initiator' : 'Pobudnik'}:</span>{' '}
+                    {conversationRoster.initiator}
+                  </p>
+                  {conversationRoster.facilitators.length > 0 && (
+                    <p className="break-words">
+                      <span className="font-medium">
+                        {conversationRoster.facilitators.length > 1
+                          ? (en ? 'Facilitators' : 'Fasilitatorji')
+                          : (en ? 'Facilitator' : 'Fasilitator')}:
+                      </span>{' '}
+                      {conversationRoster.facilitators.join(', ')}
+                    </p>
+                  )}
+                  {conversationRoster.participants.length > 0 && (
+                    <p className="break-words">
+                      <span className="font-medium">{en ? 'Participants' : 'Udeleženci'}:</span>{' '}
+                      {conversationRoster.participants.join(', ')}
+                    </p>
+                  )}
+                  {conversationRoster.guests.length > 0 && (
+                    <p className="break-words">
+                      <span className="font-medium">{en ? 'Guests' : 'Gostje'}:</span>{' '}
+                      {conversationRoster.guests.join(', ')}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="truncate">
+                  {conversationRoster.opened}
+                  {' · '}
+                  <span className="font-medium">{en ? 'Initiator' : 'Pobudnik'}:</span>{' '}
+                  {conversationRoster.initiator}
+                </p>
+              )
             )}
+
+            {description && (
+              <p
+                className={`whitespace-pre-wrap break-words ${conversationRoster ? 'mt-1.5' : ''} ${
+                  !infoOpen && descriptionFolds ? 'line-clamp-2' : ''
+                }`}
+              >
+                {description}
+              </p>
+            )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setInfoOpen((open) => !open)}
+              className="mt-0.5 text-xs font-medium text-primary hover:underline"
+            >
+              {infoOpen
+                ? (en ? 'Show less' : 'Pokaži manj')
+                : (en ? 'Show more' : 'Pokaži več')}
+            </button>
           </div>
         )}
       </Card>
