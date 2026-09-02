@@ -279,8 +279,8 @@ export interface PersonFreezeState {
  *
  * · Notices from anyone not on the allow-list are discarded outright.
  * · Group by (person, author); the highest created_at in each group wins.
- * · ANY-OF across co-facilitators: frozen if ANY current facilitator's latest
- *   notice says frozen and its SPLIT bound has not been reached.
+ * · The NEWEST DECISION WINS, whoever made it: a release lifts every freeze
+ *   older than itself; a freeze published after a release stands.
  */
 export const computeFreezeStates = (
   notices: FreezeNotice[],
@@ -309,7 +309,13 @@ export const computeFreezeStates = (
     const sorted = [...list].sort(
       (a, b) => b.created_at - a.created_at || (a.author < b.author ? -1 : a.author > b.author ? 1 : 0),
     );
-    const active = sorted.filter((n) => n.status === 'frozen' && !isSplitLapsed(n.untilSplit, currentSplit));
+    // The newest release on the record. A freeze published BEFORE it has been
+    // lifted, whoever wrote either — the owner's rule of 2.9.2026, so a
+    // facilitator leading a process can end a sanction taken in it. On an
+    // equal second the freeze stands (fail closed), and a freeze taken AFTER
+    // a release is not overruled by it.
+    const freedAt = sorted.reduce((t, n) => (n.status === 'live' ? Math.max(t, n.created_at) : t), 0);
+    const active = sorted.filter((n) => n.status === 'frozen' && n.created_at >= freedAt && !isSplitLapsed(n.untilSplit, currentSplit));
     if (active.length > 0) {
       states.set(person, { person, frozen: true, decidedBy: active[0], lapsedBySplit: false });
       continue;
