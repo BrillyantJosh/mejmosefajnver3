@@ -237,7 +237,7 @@ export default function ChatView({
 
   // The being invites voice only in its guide steps — Reflection and Change —
   // never as a condition; a typed answer counts exactly the same.
-  const voicePhase = phase === 'reflection' || phase === 'change';
+  const voicePhase = phase === 'reflection' || phase === 'alignment' || phase === 'change';
 
   // Media (audio/image) send that injects the active reply + clears it on success
   const handleSendMedia = async (path: string, meta?: OwnAudioSendMeta): Promise<boolean> => {
