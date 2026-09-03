@@ -40,18 +40,28 @@ export interface UnconditionalPaymentsContext {
 export function useAiAdvisorUnconditionalPayments() {
   const { session } = useAuth();
   
-  // Fetch proposals for the current user (with polling for fresh data)
+  // MainLayout wraps every authenticated page, so these two polls run for as
+  // long as anyone has the app open — and both are relay-backed: on production
+  // fetch-donation-proposals averages 2444ms and fetch-donation-payments
+  // 1116ms. At 15 seconds and a thousand users that is 133 relay-backed
+  // requests a second, each holding a handler on the only thread for seconds.
+  //
+  // What it feeds is one icon in the header (MainLayout.tsx:340, shown when
+  // pendingCount > 0). The pages that actually list the payments —
+  // unconditional-payment/Pending and /Completed — fetch on mount, so opening
+  // one is still immediate. Five minutes for a badge, not fifteen seconds.
+  const BADGE_POLL_MS = 300000;
+
   const { proposals, isLoading: proposalsLoading, paidStateUnknown } = useNostrDonationProposals(
     session?.nostrHexId,
-    { poll: true, pollIntervalMs: 15000, enabled: !!session?.nostrHexId }
+    { poll: true, pollIntervalMs: BADGE_POLL_MS, enabled: !!session?.nostrHexId }
   );
-  
-  // Fetch payments to check which are already paid (with polling)
+
   const { payments, isLoading: paymentsLoading } = useNostrDonationPayments(
     session?.nostrHexId,
     {
       poll: true,
-      pollIntervalMs: 15000,
+      pollIntervalMs: BADGE_POLL_MS,
       enabled: !!session?.nostrHexId
     }
   );
