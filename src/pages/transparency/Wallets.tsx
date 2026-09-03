@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useLang } from "@/i18n/I18nContext";
+import { makeRequestGate } from "@/lib/balanceLoad";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { UserAvatar } from '@/components/ui/UserAvatar';
@@ -35,10 +37,13 @@ interface WalletWithBalance {
   freezeStatus?: string;
   balance?: number;
   balanceLoading?: boolean;
+  /** The lookup failed. NOT the same as a wallet holding nothing. */
+  balanceError?: boolean;
 }
 
 export default function Wallets() {
   const [searchTerm, setSearchTerm] = useState("");
+  const en = useLang() === 'en';
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const { profiles, isLoading: profilesLoading } = useNostrKind0Profiles();
   const { wallets, isLoading: walletsLoading } = useNostrUserWallets(selectedProfile?.pubkey || null);
@@ -46,6 +51,10 @@ export default function Wallets() {
   const { profile: currentUserProfile } = useNostrProfile();
   const { score: paymentScore } = useNostrPaymentScore(selectedProfile?.pubkey);
   const [walletsWithBalances, setWalletsWithBalances] = useState<WalletWithBalance[]>([]);
+  // Looking one person up, then another, leaves two requests in the air with
+  // nothing tying either back to the search that asked for it. Whichever
+  // finished last used to win the screen.
+  const balanceGate = useRef(makeRequestGate());
 
   const filteredProfiles = profiles.filter(
     (profile) =>
@@ -64,6 +73,7 @@ export default function Wallets() {
 
   const fetchBalances = async () => {
     if (!parameters?.electrumServers || wallets.length === 0) return;
+    const token = balanceGate.current.newer();
 
     setWalletsWithBalances(wallets.map(w => ({
       walletId: w.walletId,
@@ -85,13 +95,16 @@ export default function Wallets() {
 
       if (error) {
         console.error('Error fetching balances:', error);
+        if (!balanceGate.current.isCurrent(token)) return;
+        // NOT zero. A failed lookup shown as 0 reads as "this person holds
+        // nothing", which is a different statement and might not be true.
         setWalletsWithBalances(wallets.map(w => ({
           walletId: w.walletId,
           walletType: w.walletType,
           note: w.note,
           freezeStatus: w.freezeStatus,
-          balance: 0,
-          balanceLoading: false
+          balanceLoading: false,
+          balanceError: true
         })));
         return;
       }
@@ -108,16 +121,18 @@ export default function Wallets() {
         };
       });
 
+      if (!balanceGate.current.isCurrent(token)) return;
       setWalletsWithBalances(updatedWallets);
     } catch (error) {
       console.error('Error fetching balances:', error);
+      if (!balanceGate.current.isCurrent(token)) return;
       setWalletsWithBalances(wallets.map(w => ({
         walletId: w.walletId,
         walletType: w.walletType,
         note: w.note,
         freezeStatus: w.freezeStatus,
-        balance: 0,
-        balanceLoading: false
+        balanceLoading: false,
+        balanceError: true
       })));
     }
   };
@@ -465,6 +480,13 @@ export default function Wallets() {
                           </div>
                           {wallet.balanceLoading ? (
                             <Skeleton className="h-8 w-32" />
+                          ) : wallet.balanceError ? (
+                            /* Not "0 LANA". A lookup that failed and a wallet
+                               that is empty are different things, and only one
+                               of them is a statement about this person. */
+                            <span className="text-sm text-amber-600">
+                              {en ? 'Balance unavailable' : 'Stanja ni bilo mogoče naložiti'}
+                            </span>
                           ) : (
                             <div className="flex flex-col items-end">
                               {wallet.balance && wallet.balance > 0 && (

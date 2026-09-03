@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { makeRequestGate } from "@/lib/balanceLoad";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -55,6 +56,8 @@ interface WalletWithBalance {
   freezeStatus?: string;
   balance?: number;
   balanceLoading?: boolean;
+  /** The lookup failed. NOT the same as a wallet holding nothing. */
+  balanceError?: boolean;
 }
 
 export default function SearchByWallet() {
@@ -89,6 +92,10 @@ export default function SearchByWallet() {
   const [walletsWithBalances, setWalletsWithBalances] = useState<
     WalletWithBalance[]
   >([]);
+  // Looking one person up, then another, leaves two requests in the air with
+  // nothing tying either back to the search that asked for it. Whichever
+  // finished last used to win the screen.
+  const balanceGate = useRef(makeRequestGate());
 
   // API call to check wallet registration
   const checkWalletRegistration = useCallback(async (walletAddress: string) => {
@@ -157,6 +164,7 @@ export default function SearchByWallet() {
 
   const fetchBalances = async () => {
     if (!parameters?.electrumServers || wallets.length === 0) return;
+    const token = balanceGate.current.newer();
 
     setWalletsWithBalances(
       wallets.map((w) => ({
@@ -183,14 +191,17 @@ export default function SearchByWallet() {
 
       if (error) {
         console.error("Error fetching balances:", error);
+        if (!balanceGate.current.isCurrent(token)) return;
+        // NOT zero. A failed lookup shown as 0 reads as "this person holds
+        // nothing", which is a different statement and might not be true.
         setWalletsWithBalances(
           wallets.map((w) => ({
             walletId: w.walletId,
             walletType: w.walletType,
             note: w.note,
             freezeStatus: w.freezeStatus,
-            balance: 0,
             balanceLoading: false,
+            balanceError: true,
           }))
         );
         return;
@@ -210,17 +221,19 @@ export default function SearchByWallet() {
         };
       });
 
+      if (!balanceGate.current.isCurrent(token)) return;
       setWalletsWithBalances(updatedWallets);
     } catch (error) {
       console.error("Error fetching balances:", error);
+      if (!balanceGate.current.isCurrent(token)) return;
       setWalletsWithBalances(
         wallets.map((w) => ({
           walletId: w.walletId,
           walletType: w.walletType,
           note: w.note,
           freezeStatus: w.freezeStatus,
-          balance: 0,
           balanceLoading: false,
+          balanceError: true,
         }))
       );
     }
@@ -678,6 +691,13 @@ export default function SearchByWallet() {
                           </div>
                           {wallet.balanceLoading ? (
                             <Skeleton className="h-8 w-32" />
+                          ) : wallet.balanceError ? (
+                            /* Not "0 LANA". A lookup that failed and a wallet
+                               that is empty are different things, and only one
+                               of them is a statement about this person. */
+                            <span className="text-sm text-amber-600">
+                              Balance unavailable
+                            </span>
                           ) : (
                             <div className="flex flex-col items-end">
                               {wallet.balance && wallet.balance > 0 && (

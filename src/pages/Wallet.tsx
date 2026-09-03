@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { makeRequestGate } from "@/lib/balanceLoad";
 import { Wallet as WalletIcon, CreditCard, FileText, ExternalLink, TrendingUp, Copy, QrCode, Snowflake, ShieldAlert, Layers } from "lucide-react";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import QRCode from "react-qr-code";
@@ -46,6 +47,8 @@ interface WalletWithBalance {
   balance?: number;
   unconfirmedBalance?: number;
   balanceLoading?: boolean;
+  /** The lookup failed. NOT the same as the wallet holding nothing. */
+  balanceError?: boolean;
 }
 
 export default function Wallet() {
@@ -55,6 +58,9 @@ export default function Wallet() {
   const { records: unregRecords, count: unregCount } = useUnregisteredLana();
   const splitWarning = useWarningBeforeSplit();
   const [walletsWithBalances, setWalletsWithBalances] = useState<WalletWithBalance[]>([]);
+  // Refreshing while a previous lookup is still in the air left the older
+  // answer free to land last and overwrite the newer one.
+  const balanceGate = useRef(makeRequestGate());
   const [utxoCounts, setUtxoCounts] = useState<Record<string, number>>({});
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [selectedWalletForQr, setSelectedWalletForQr] = useState<string>("");
@@ -107,6 +113,7 @@ export default function Wallet() {
   }, [wallets, parameters?.electrumServers]);
 
   const fetchBalances = async () => {
+    const token = balanceGate.current.newer();
     if (!parameters?.electrumServers || wallets.length === 0) return;
 
     // Set loading state
@@ -124,7 +131,10 @@ export default function Wallet() {
 
       if (error) {
         console.error('Error fetching balances:', error);
-        setWalletsWithBalances(wallets.map(w => ({ ...w, balance: 0, balanceLoading: false })));
+        if (!balanceGate.current.isCurrent(token)) return;
+        // NOT zero. Telling someone their own wallet holds nothing because we
+        // could not reach Electrum is the worst version of this mistake.
+        setWalletsWithBalances(wallets.map(w => ({ ...w, balanceLoading: false, balanceError: true })));
         return;
       }
 
@@ -139,10 +149,12 @@ export default function Wallet() {
         };
       });
 
+      if (!balanceGate.current.isCurrent(token)) return;
       setWalletsWithBalances(updatedWallets);
     } catch (error) {
       console.error('Error fetching balances:', error);
-      setWalletsWithBalances(wallets.map(w => ({ ...w, balance: 0, balanceLoading: false })));
+      if (!balanceGate.current.isCurrent(token)) return;
+      setWalletsWithBalances(wallets.map(w => ({ ...w, balanceLoading: false, balanceError: true })));
     }
   };
 
@@ -472,6 +484,11 @@ export default function Wallet() {
                     </div>
                     {wallet.balanceLoading ? (
                       <Skeleton className="h-8 w-32" />
+                    ) : wallet.balanceError ? (
+                      /* Not "0 LANA". Telling someone their own wallet is empty
+                         because we could not reach Electrum is a different
+                         statement, and the wrong one. */
+                      <span className="text-sm text-amber-600">Balance unavailable — try again</span>
                     ) : (
                       <div className="flex flex-col items-end">
                         {wallet.balance && wallet.balance > 0 && (
