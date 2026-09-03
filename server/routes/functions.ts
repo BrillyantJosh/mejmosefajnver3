@@ -227,6 +227,35 @@ router.post('/proxy-image', async (req: Request, res: Response) => {
   }
 });
 
+
+/**
+ * Where an Electrum call is allowed to go.
+ *
+ * Three handlers took the server's host and port straight from the request
+ * body (`electrumServers` / `electrum_servers`), unauthenticated, and dialled
+ * whatever they were given — an open primitive for making this box open TCP
+ * connections to any address, and for parking them there.
+ *
+ * The body was never the source of truth anyway: the client sends back the
+ * very list it read from KIND 38888, which this server already holds. So the
+ * destination is read from the registry and the body is ignored.
+ */
+function resolveElectrumServers(): Array<{ host: string; port: number }> {
+  const fallback = [{ host: 'electrum1.lanacoin.com', port: 5097 }];
+  try {
+    const db = getDb();
+    const row = db.prepare('SELECT electrum_servers FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+    if (!row?.electrum_servers) return fallback;
+    const parsed = JSON.parse(row.electrum_servers);
+    const servers = (Array.isArray(parsed) ? parsed : [])
+      .map((x: any) => ({ host: String(x?.host || '').trim(), port: Number(x?.port) }))
+      .filter((x: any) => x.host && Number.isInteger(x.port) && x.port > 0 && x.port < 65536);
+    return servers.length ? servers : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // get-block-height
 router.post('/get-block-height', async (req: Request, res: Response) => {
   try {
@@ -1502,6 +1531,16 @@ router.post('/send-room-push-notification', async (req: Request, res: Response) 
       return res.status(400).json({ error: 'memberPubkeys required' });
     }
 
+    // Unauthenticated, and the loop below awaits a web-push delivery per entry
+    // with no cap: one request carrying a long list occupied this handler — and
+    // with it the only thread's turn — for as long as the caller cared to make
+    // it. A real encrypted room is far under this; the number is a ceiling, not
+    // a target.
+    const MAX_RECIPIENTS = 200;
+    if (memberPubkeys.length > MAX_RECIPIENTS) {
+      return res.status(400).json({ error: `too many recipients (max ${MAX_RECIPIENTS})` });
+    }
+
     const db = getDb();
     let totalSent = 0;
 
@@ -1643,11 +1682,25 @@ router.post('/refresh-nostr-profiles', async (req: Request, res: Response) => {
 // query-nostr-events - Generic endpoint for querying Nostr events from relays
 router.post('/query-nostr-events', async (req: Request, res: Response) => {
   try {
-    const { filter, timeout } = req.body;
+    const { filter: rawFilter, timeout: rawTimeout } = req.body;
 
-    if (!filter || !filter.kinds || !Array.isArray(filter.kinds)) {
+    if (!rawFilter || !rawFilter.kinds || !Array.isArray(rawFilter.kinds)) {
       return res.status(400).json({ error: 'filter with kinds array is required' });
     }
+
+    // Unauthenticated, and both the filter and the hold time came straight from
+    // the caller: `limit` decided how much this process would collect and
+    // serialise, and `timeout` decided how long it would occupy a handler and a
+    // relay subscription. Neither was bounded.
+    //
+    // The relays are strfry and declare max_limit 500 over NIP-11, so asking
+    // for more than that was never answered anyway.
+    const filter = {
+      ...rawFilter,
+      kinds: rawFilter.kinds.slice(0, 20),
+      limit: Math.min(Number(rawFilter.limit) > 0 ? Number(rawFilter.limit) : 500, 500),
+    };
+    const timeout = Math.min(Math.max(Number(rawTimeout) || 15000, 1000), 20000);
 
     // Get relays from KIND 38888 in database
     const db = getDb();
@@ -2062,41 +2115,13 @@ router.post('/get-wallet-balances', async (req: Request, res: Response) => {
   try {
     // Support both field naming conventions from frontend
     const walletAddresses: string[] = req.body.addresses || req.body.wallet_addresses || [];
-    const clientServers = req.body.electrumServers || req.body.electrum_servers;
+    // The destination is never taken from the request — see resolveElectrumServers.
 
     if (!Array.isArray(walletAddresses) || walletAddresses.length === 0) {
       return res.status(400).json({ error: 'wallet_addresses array is required' });
     }
 
-    // Get electrum servers: from request, from KIND 38888 DB, or defaults
-    let servers: Array<{ host: string; port: number }> = [];
-
-    if (clientServers && Array.isArray(clientServers) && clientServers.length > 0) {
-      servers = clientServers.map((s: any) => ({
-        host: s.host,
-        port: typeof s.port === 'string' ? parseInt(s.port, 10) : s.port
-      }));
-    } else {
-      const db = getDb();
-      const params = db.prepare('SELECT electrum_servers FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
-      if (params?.electrum_servers) {
-        try {
-          const parsed = JSON.parse(params.electrum_servers);
-          servers = parsed.map((s: any) => ({
-            host: s.host,
-            port: typeof s.port === 'string' ? parseInt(s.port, 10) : s.port
-          }));
-        } catch {}
-      }
-    }
-
-    if (servers.length === 0) {
-      servers = [
-        { host: 'electrum1.lanacoin.com', port: 5097 },
-        { host: 'electrum2.lanacoin.com', port: 5097 },
-        { host: 'electrum3.lanacoin.com', port: 5097 }
-      ];
-    }
+    const servers = resolveElectrumServers();
 
     console.log(`💰 Batch balance fetch: ${walletAddresses.length} wallets via ${servers.map(s => `${s.host}:${s.port}`).join(', ')}`);
 
@@ -2130,17 +2155,12 @@ router.post('/get-wallet-balances', async (req: Request, res: Response) => {
 // =============================================
 router.post('/get-utxo-info', async (req: Request, res: Response) => {
   try {
-    const { address, electrumServers } = req.body;
+    const { address } = req.body;   // the destination is never taken from the body
     if (!address) {
       return res.status(400).json({ success: false, error: 'address required' });
     }
 
-    const servers = electrumServers && electrumServers.length > 0
-      ? electrumServers
-      : [
-          { host: 'electrum1.lanacoin.com', port: 5097 },
-          { host: 'electrum2.lanacoin.com', port: 5097 }
-        ];
+    const servers = resolveElectrumServers();
 
     const utxos = await electrumCall('blockchain.address.listunspent', [address], servers);
     const utxoCount = utxos ? utxos.length : 0;
@@ -2175,17 +2195,11 @@ router.post('/analyze-wallet-utxos', async (req: Request, res: Response) => {
   try {
     // Accept both camelCase (app) and snake_case (registrar) param names
     const address = req.body.address || req.body.wallet_address;
-    const electrumServers = req.body.electrumServers || req.body.electrum_servers;
     if (!address) {
       return res.status(400).json({ success: false, error: 'address required' });
     }
 
-    const servers = electrumServers && electrumServers.length > 0
-      ? electrumServers
-      : [
-          { host: 'electrum1.lanacoin.com', port: 5097 },
-          { host: 'electrum2.lanacoin.com', port: 5097 }
-        ];
+    const servers = resolveElectrumServers();
 
     const utxos = await electrumCall('blockchain.address.listunspent', [address], servers);
 
@@ -2256,7 +2270,6 @@ router.post('/consolidate-wallet', async (req: Request, res: Response) => {
     const selectedUtxos = req.body.selectedUtxos || req.body.selected_utxos;
     const privateKey = req.body.privateKey || req.body.private_key;
     const userPubkey = req.body.userPubkey;
-    const electrumServers = req.body.electrumServers || req.body.electrum_servers;
 
     if (!senderAddress || !selectedUtxos || !privateKey || selectedUtxos.length === 0) {
       return res.status(400).json({ success: false, error: 'Missing required parameters' });
@@ -2301,12 +2314,7 @@ router.post('/consolidate-wallet', async (req: Request, res: Response) => {
       return res.json({ success: false, error: `Invalid private key: ${keyErr.message}` });
     }
 
-    const servers = electrumServers && electrumServers.length > 0
-      ? electrumServers
-      : [
-          { host: 'electrum1.lanacoin.com', port: 5097 },
-          { host: 'electrum2.lanacoin.com', port: 5097 }
-        ];
+    const servers = resolveElectrumServers();
 
     // Single output back to the same address (no change) → outputCount = 1.
     // Fee formula shared with the page (src/lib/consolidationPlan.ts) so the two
@@ -2976,7 +2984,7 @@ router.post('/send-lana-transaction', async (req: Request, res: Response) => {
     mentorPercent: req.body.mentorPercent,
     amount: req.body.amount,
     hasKey: !!req.body.privateKey,
-    servers: req.body.electrumServers?.length || 0
+    servers: resolveElectrumServers().length
   });
   try {
     // Freeze check, resolved from the sender ADDRESS so it runs for every
