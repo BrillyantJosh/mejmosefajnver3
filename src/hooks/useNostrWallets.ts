@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { singleFlight } from '@/lib/singleFlight';
 
 export interface NostrWallet {
   walletId: string;
@@ -32,9 +33,14 @@ export const useNostrWallets = () => {
     try {
       console.log('🔄 Fetching wallets via edge function for:', session.nostrHexId);
       
-      const { data, error } = await supabase.functions.invoke('fetch-user-wallets', {
-        body: { userPubkey: session.nostrHexId }
-      });
+      // MainLayout mounts this hook three times (directly, and through
+      // useUnregisteredLana and useWarningBeforeSplit), and each mount used to
+      // fire its own POST — a route that runs three relay filters against
+      // every relay. Concurrent callers now share one round trip.
+      const { data, error } = await singleFlight(
+        `user-wallets:${session.nostrHexId}`,
+        () => supabase.functions.invoke('fetch-user-wallets', { body: { userPubkey: session.nostrHexId } })
+      );
 
       if (error) {
         console.error('❌ Edge function error:', error);

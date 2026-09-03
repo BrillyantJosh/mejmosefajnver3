@@ -134,12 +134,31 @@ function buildWhereClause(query: Record<string, any>, table: string): { where: s
     orderBy = ` ORDER BY ${orderParts.join(', ')}`;
   }
 
-  // Handle limit and offset
-  if (query.limit) {
-    limit = ` LIMIT ${parseInt(query.limit, 10)}`;
-    if (query.offset) {
-      limit += ` OFFSET ${parseInt(query.offset, 10)}`;
-    }
+  // Handle limit and offset.
+  //
+  // There was no ceiling and no default: omitting `limit` produced
+  // `SELECT * FROM "<table>"` with no bound, so one unauthenticated request
+  // could make this process serialise an entire table synchronously —
+  // dm_read_status alone is past 23,000 rows and has no retention.
+  //
+  // The default is high on purpose. The app's own reads are per-user and
+  // unbounded by design (loadReadStatuses in src/hooks/useNostrDMs.ts pulls
+  // every read-status a person has ever accumulated), and a low default would
+  // truncate that silently — quietly marking old messages unread is a worse
+  // failure than a slow query. So the cap bounds the damage without cutting
+  // into real use, and says so in the log when it bites, which is how we will
+  // learn whether anything genuine is approaching it.
+  const MAX_ROWS = 10000;
+  const DEFAULT_ROWS = 5000;
+  const asked = query.limit !== undefined ? parseInt(String(query.limit), 10) : NaN;
+  const rows = Number.isFinite(asked) && asked > 0 ? Math.min(asked, MAX_ROWS) : DEFAULT_ROWS;
+  if (Number.isFinite(asked) && asked > MAX_ROWS) {
+    console.warn(`⚠️ /api/db/${table}: limit ${asked} clamped to ${MAX_ROWS}`);
+  }
+  limit = ` LIMIT ${rows}`;
+  const offset = query.offset !== undefined ? parseInt(String(query.offset), 10) : NaN;
+  if (Number.isFinite(offset) && offset > 0) {
+    limit += ` OFFSET ${offset}`;
   }
 
   // Handle select

@@ -460,6 +460,11 @@ export function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_dm_lashes_created ON dm_lashes(created_at);
     CREATE INDEX IF NOT EXISTS idx_dm_lashes_message ON dm_lashes(message_event_id);
     CREATE INDEX IF NOT EXISTS idx_dm_lashes_sender ON dm_lashes(sender_pubkey);
+    -- recipient_pubkey is the column fetch-unpaid-lashes filters on and the
+    -- only one of the four that had no index: the query fell back to scanning
+    -- the whole table through idx_dm_lashes_created. expires_at rides along so
+    -- the freshness test is answered from the index too.
+    CREATE INDEX IF NOT EXISTS idx_dm_lashes_recipient ON dm_lashes(recipient_pubkey, expires_at);
     CREATE INDEX IF NOT EXISTS idx_dm_read_status_user ON dm_read_status(user_nostr_id);
     CREATE INDEX IF NOT EXISTS idx_dm_read_status_sender ON dm_read_status(sender_pubkey);
     CREATE INDEX IF NOT EXISTS idx_dm_read_status_conversation_unread ON dm_read_status(user_nostr_id, conversation_pubkey, is_read);

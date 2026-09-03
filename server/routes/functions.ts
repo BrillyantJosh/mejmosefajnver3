@@ -1833,14 +1833,25 @@ router.post('/sync-room-posts', async (req: Request, res: Response) => {
 // fetch-unpaid-lashes
 router.post('/fetch-unpaid-lashes', async (req: Request, res: Response) => {
   try {
-    const { nostrHexId } = req.body;
+    // Broken on both ends since it was written: the caller posts `userPubkey`
+    // (src/hooks/useNostrUnpaidLashes.ts:26) while this read `nostrHexId`, so
+    // the bind was undefined -> NULL and matched nothing; and it answered
+    // `{ lashes }` while the caller tests `data.success` and reads
+    // `data.unpaidCount`, so every response was discarded. It returned 200 in
+    // 2ms and looked healthy while every signed-in tab asked for it every 15
+    // seconds and threw the answer away.
+    const pubkey = req.body?.userPubkey || req.body?.nostrHexId;
+    if (!pubkey) {
+      return res.status(400).json({ success: false, error: 'userPubkey is required' });
+    }
     const db = getDb();
-    const unpaid = db.prepare(`
-      SELECT * FROM dm_lashes
+    // The caller wants a badge number, not the rows. Counting keeps this off
+    // the serialiser on a path that runs once per tab per 15 seconds.
+    const row = db.prepare(`
+      SELECT COUNT(*) AS n FROM dm_lashes
       WHERE recipient_pubkey = ? AND expires_at > datetime('now')
-      ORDER BY created_at DESC
-    `).all(nostrHexId);
-    return res.json({ lashes: unpaid });
+    `).get(pubkey) as { n: number };
+    return res.json({ success: true, unpaidCount: row?.n || 0 });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
