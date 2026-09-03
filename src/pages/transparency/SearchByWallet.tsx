@@ -27,8 +27,8 @@ import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
 import { supabase } from "@/integrations/supabase/client";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
-import lana8wonderBg from "@/assets/lana8wonder-bg.png";
-import knightsBg from "@/assets/knights-bg.png";
+import lana8wonderBg from "@/assets/lana8wonder-bg.webp";
+import knightsBg from "@/assets/knights-bg.webp";
 
 /** Get human-readable freeze reason */
 function getFreezeReasonLabel(freezeStatus: string): string {

@@ -8,7 +8,7 @@ import {
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { PlayCircle, ExternalLink, HelpCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import lana8wonderIcon from "@/assets/lana8wonder-icon.png";
+import lana8wonderIcon from "@/assets/lana8wonder-icon.webp";
 
 interface FaqItem {
   id: string;

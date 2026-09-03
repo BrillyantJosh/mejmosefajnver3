@@ -12,8 +12,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrProfile } from "@/hooks/useNostrProfile";
 import { useNostrPaymentScore } from "@/hooks/useNostrPaymentScore";
-import lana8wonderBg from "@/assets/lana8wonder-bg.png";
-import knightsBg from "@/assets/knights-bg.png";
+import lana8wonderBg from "@/assets/lana8wonder-bg.webp";
+import knightsBg from "@/assets/knights-bg.webp";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 /** Get human-readable freeze reason */

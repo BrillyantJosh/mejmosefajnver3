@@ -11,10 +11,15 @@ import { KeyRound, Wallet, QrCode } from 'lucide-react';
 import { NostrStatus } from '@/components/NostrStatus';
 import { QRScanner } from '@/components/QRScanner';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
-import loginHero from '@/assets/login-hero.png';
+import loginHero from '@/assets/login-hero.webp';
 import loginHeroLoop from '@/assets/login-hero-loop.mp4';
 
 const Login = () => {
+  // Read synchronously, before the first render. useIsMobile resolves in an
+  // effect, which is one paint too late — the video would already be on the wire.
+  const [isSmallScreen] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+  );
   const [wif, setWif] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
@@ -88,21 +93,31 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      {/* Hero animation — the still remains the poster/fallback while the loop loads. */}
+      {/* Hero. On a phone the still is the whole thing.
+          `autoPlay` makes a browser fetch the entire file regardless of
+          preload, and measured on a 375px viewport this login screen was
+          5.7 MB — 3.0 MB of poster and 2.75 MB of loop against 51 KB for all
+          of the application code. That is most of a minute on a slow
+          connection before anyone can type a key, for decoration.
+          The still is now 168 KB, and the loop is desktop-only. */}
       <div className="w-full">
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-          poster={loginHero}
-          aria-label="Magical Lana hero animation"
-          className="w-full h-auto"
-        >
-          <source src={loginHeroLoop} type="video/mp4" />
+        {isSmallScreen ? (
           <img src={loginHero} alt="Login Hero" className="w-full h-auto" />
-        </video>
+        ) : (
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+            poster={loginHero}
+            aria-label="Magical Lana hero animation"
+            className="w-full h-auto"
+          >
+            <source src={loginHeroLoop} type="video/mp4" />
+            <img src={loginHero} alt="Login Hero" className="w-full h-auto" />
+          </video>
+        )}
       </div>
       
       {/* Login Card */}
