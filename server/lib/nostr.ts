@@ -4,6 +4,7 @@
  */
 
 import WebSocket from 'ws';
+import { poolQuery } from './relayPool.js';
 import { getUfSettings } from './ufSettings.js';
 
 // Official Lana Relays - ONLY these should be used for KIND 38888
@@ -249,70 +250,16 @@ export async function queryEventsWithRelayStatus(
   const answered: string[] = [];
   const failed: { url: string; reason: string }[] = [];
 
-  const fetchEventsFromRelay = (relayUrl: string): Promise<NostrEvent[]> => {
-    return new Promise((resolve) => {
-      const events: NostrEvent[] = [];
-      let resolved = false;
-      const safeResolve = (result: NostrEvent[], ok: boolean, reason = '') => {
-        if (!resolved) {
-          resolved = true;
-          if (ok) answered.push(relayUrl);
-          else failed.push({ url: relayUrl, reason });
-          resolve(result);
-        }
-      };
-
-      const timeoutId = setTimeout(() => {
-        try { ws.close(); } catch {}
-        safeResolve(events, false, 'timeout');
-      }, timeout);
-
-      let ws: WebSocket;
-      try {
-        ws = new WebSocket(relayUrl);
-      } catch (error: any) {
-        clearTimeout(timeoutId);
-        safeResolve([], false, error?.message || 'socket construction failed');
-        return;
-      }
-
-      const subscriptionId = `query_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-      ws.on('open', () => {
-        const req = JSON.stringify(['REQ', subscriptionId, filter]);
-        ws.send(req);
-      });
-
-      ws.on('message', (data: Buffer) => {
-        try {
-          const message = JSON.parse(data.toString());
-
-          if (message[0] === 'EVENT' && message[1] === subscriptionId) {
-            events.push(message[2] as NostrEvent);
-          } else if (message[0] === 'EOSE') {
-            // All stored events received, close connection
-            clearTimeout(timeoutId);
-            try { ws.close(); } catch {}
-            safeResolve(events, true);
-          }
-        } catch (error) {
-          // Ignore parse errors
-        }
-      });
-
-      ws.on('error', (error: any) => {
-        clearTimeout(timeoutId);
-        safeResolve(events, false, error?.message || 'socket error');
-      });
-
-      ws.on('close', () => {
-        clearTimeout(timeoutId);
-        // CRITICAL: resolve on close too — if relay drops connection without
-        // error event, the promise would hang forever without this.
-        // Closing BEFORE an EOSE is a failure: the relay told us nothing.
-        safeResolve(events, false, 'closed before EOSE');
-      });
-    });
+  // One shared socket per relay, and identical concurrent filters answered
+  // once — see server/lib/relayPool.ts for the measurements that led to it.
+  // The contract here is unchanged: a relay that reaches EOSE is 'answered',
+  // anything else is 'failed' and reports what it managed to collect, so
+  // callers can still tell a silent relay from a genuinely empty result.
+  const fetchEventsFromRelay = async (relayUrl: string): Promise<NostrEvent[]> => {
+    const r = await poolQuery(relayUrl, filter, timeout);
+    if (r.ok) answered.push(relayUrl);
+    else failed.push({ url: relayUrl, reason: r.reason });
+    return r.events as NostrEvent[];
   };
 
   const results = await Promise.all(

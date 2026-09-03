@@ -207,3 +207,10 @@ export function isUserConnectedToAiTasks(nostrHexId: string): boolean {
 }
 
 export default router;
+
+/** How many SSE responses are currently held open — surfaced by /health. */
+export function sseClientCount(): { users: number; responses: number; systemParams: number } {
+  let responses = 0;
+  for (const set of sseClients.values()) responses += set.size;
+  return { users: sseClients.size, responses, systemParams: systemParamsClients.size };
+}

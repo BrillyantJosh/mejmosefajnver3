@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import compression from 'compression';
 import cors from 'cors';
 import path from 'path';
@@ -12,7 +12,8 @@ import dbRoutes from './routes/db';
 import storageRoutes from './routes/storage';
 import lanacrowdRoutes from './routes/lanacrowd';
 import unconditionalFinancingRoutes from './routes/unconditionalFinancing';
-import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks } from './routes/sse';
+import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks, sseClientCount } from './routes/sse';
+import { relayPoolStats } from './lib/relayPool.js';
 import functionsRoutes, { retryPendingNostrEvents, cleanupDmAudio } from './routes/functions';
 import voiceRoutes from './routes/voice';
 import beingsRoutes from './routes/beings';
@@ -348,11 +349,72 @@ app.use('/api/unconditional-financing', unconditionalFinancingRoutes);
 app.use('/api/beings', beingsRoutes);
 
 // =============================================
+// Health
+// =============================================
+
+// There was no /health route. Every probe against it fell through to the SPA
+// fallback below, which answers 200 with index.html — so the check passed
+// while Express could still serve a static file, and could not fail if the
+// database were wedged or the event loop blocked. A health check that cannot
+// fail is worse than none: it reports success through an outage.
+//
+// Deliberately cheap, because it is polled: one indexed COUNT, no relay
+// traffic, no writes.
+app.get('/health', (_req: Request, res: Response) => {
+  const started = Date.now();
+  try {
+    const db = getDb();
+    db.prepare('SELECT 1').get();
+    const dbMs = Date.now() - started;
+    return res.status(200).json({
+      ok: true,
+      db_ms: dbMs,
+      uptime_s: Math.round(process.uptime()),
+      rss_mb: Math.round(process.memoryUsage().rss / 1048576),
+      relays: relayPoolStats(),
+      sse_clients: sseClientCount(),
+    });
+  } catch (err: any) {
+    // 503 so the proxy and any restart policy can actually see it.
+    return res.status(503).json({ ok: false, error: err?.message || 'database unavailable' });
+  }
+});
+
+// =============================================
 // Static Frontend (production)
 // =============================================
 
 const distPath = path.resolve(__dirname, '../dist');
-app.use(express.static(distPath));
+
+// Everything under /assets/ is content-hashed AND build-stamped by Vite
+// (index-Dps-pkLJ-1788328862231.js), so a given URL can never change meaning —
+// a new build writes new names. They were nevertheless served with
+// `max-age=0`, which makes every browser revalidate every chunk on every load:
+// a thousand users landing at once turned roughly twenty immutable files each
+// into twenty thousand round trips this process had to answer, and re-gzip on
+// every miss.
+//
+// index.html is the opposite case and must stay uncached, or a deploy would
+// never reach anyone.
+app.use(
+  '/assets',
+  express.static(path.join(distPath, 'assets'), {
+    immutable: true,
+    maxAge: '1y',
+    fallthrough: true,   // a missing chunk falls through to the 404 below
+  })
+);
+
+app.use(
+  express.static(distPath, {
+    etag: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  })
+);
 
 // SPA fallback - serve index.html for all non-API routes
 // Express 5 requires named wildcard parameter
