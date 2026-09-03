@@ -22,6 +22,56 @@ interface WalletBalance {
 /**
  * Connect to the first available Electrum server
  */
+
+/**
+ * How many TCP connections this process may have open to Electrum at once.
+ *
+ * Every call here opens a fresh socket and destroys it — there is no pooling —
+ * so a burst of concurrent requests is a burst of connections. That is not
+ * theoretical: eighty-two seconds after a deploy, five balance requests
+ * arriving within five milliseconds of each other all came back "All Electrum
+ * servers failed" while the servers themselves were fine. Clients returning at
+ * once after a restart is exactly the shape that produces it.
+ *
+ * The limit does not make anything slower when there is no contention; it only
+ * makes the sixteenth simultaneous caller wait for the fifteenth instead of
+ * adding another connection the far end will refuse.
+ */
+const MAX_CONCURRENT_ELECTRUM = Number(process.env.ELECTRUM_MAX_CONCURRENT || 8);
+let activeConnections = 0;
+const waiting: Array<() => void> = [];
+
+function acquireSlot(): Promise<void> {
+  if (activeConnections < MAX_CONCURRENT_ELECTRUM) {
+    activeConnections++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    waiting.push(() => { activeConnections++; resolve(); });
+  });
+}
+
+function releaseSlot(): void {
+  activeConnections = Math.max(0, activeConnections - 1);
+  waiting.shift()?.();
+}
+
+/**
+ * Reads that are identical for everyone, answered once.
+ *
+ * Only the chain tip qualifies: every signed-in tab polls it, the question
+ * carries no user parameter, and the answer is the same for all of them.
+ * Anything address-specific differs per caller, and a broadcast is a WRITE —
+ * neither may ever be shared, so this is an allowlist rather than a rule.
+ */
+const COALESCABLE = new Set(['blockchain.headers.subscribe']);
+const inFlightCalls = new Map<string, Promise<any>>();
+
+/** For diagnostics and tests. */
+export function electrumStats() {
+  return { active: activeConnections, queued: waiting.length, coalescing: inFlightCalls.size };
+}
+
 export async function connectElectrum(servers: ElectrumServer[], maxRetries = 2): Promise<net.Socket> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     for (const server of servers) {
@@ -56,6 +106,31 @@ export async function electrumCall(
   servers: ElectrumServer[],
   timeout = 30000
 ): Promise<any> {
+  // A broadcast is the one write here and must never queue behind reads: it is
+  // rare, it is what actually moves money, and a person is waiting on it.
+  const isWrite = method === 'blockchain.transaction.broadcast';
+
+  if (!isWrite && COALESCABLE.has(method)) {
+    const key = `${method}:${JSON.stringify(params)}`;
+    const running = inFlightCalls.get(key);
+    if (running) return running;
+    const p = electrumCallDirect(method, params, servers, timeout)
+      .finally(() => { inFlightCalls.delete(key); });
+    inFlightCalls.set(key, p);
+    return p;
+  }
+
+  return electrumCallDirect(method, params, servers, timeout, isWrite);
+}
+
+async function electrumCallDirect(
+  method: string,
+  params: any[],
+  servers: ElectrumServer[],
+  timeout = 30000,
+  skipLimiter = false
+): Promise<any> {
+  if (!skipLimiter) await acquireSlot();
   let socket: net.Socket | null = null;
   try {
     socket = await connectElectrum(servers);
@@ -98,6 +173,7 @@ export async function electrumCall(
     if (socket) {
       try { socket.destroy(); } catch {}
     }
+    if (!skipLimiter) releaseSlot();
   }
 }
 
@@ -110,6 +186,23 @@ export async function electrumCall(
  * - Rounds to 2 decimal places
  */
 export async function fetchBatchBalances(
+  servers: ElectrumServer[],
+  addresses: string[],
+  connectionTimeout = 15000
+): Promise<WalletBalance[]> {
+  // This is the path that failed: five of these arriving within five
+  // milliseconds of each other after a deploy all reported "All Electrum
+  // servers failed" while the servers were healthy. It opens its own socket
+  // rather than going through electrumCall, so it needs the same limit.
+  await acquireSlot();
+  try {
+    return await fetchBatchBalancesInner(servers, addresses, connectionTimeout);
+  } finally {
+    releaseSlot();
+  }
+}
+
+async function fetchBatchBalancesInner(
   servers: ElectrumServer[],
   addresses: string[],
   connectionTimeout = 15000

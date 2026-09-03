@@ -4,12 +4,27 @@ services:
     container_name: mejmosefajn-web
     restart: unless-stopped
     env_file: .env
+    # This box has four cores and 7.5 GB, and runs 44 containers including the
+    # nginx-proxy that fronts every other Lana app. With no limit declared, a
+    # leak or a runaway request path here does not degrade this app — it starves
+    # the neighbours and hands the OOM killer its choice of victim.
+    #
+    # Steady state is 66-131 MB and, since the relay pool landed, a few percent
+    # of one core. These are ceilings with a lot of headroom, not a budget.
+    mem_limit: 1g
+    mem_reservation: 256m
+    cpus: 2.0
+    # Node's own heap cap sits UNDER the container limit on purpose. Reaching
+    # the container limit is a SIGKILL with nothing logged; reaching the heap
+    # cap is a JavaScript error we can see and a process that exits cleanly for
+    # `restart: unless-stopped` to bring back.
     expose:
       - "3001"
     volumes:
       - ./data:/app/data
       - ./server/uploads:/app/server/uploads
     environment:
+      - NODE_OPTIONS=--max-old-space-size=768
       - VIRTUAL_HOST=new.mejmosefajn.org,app.mejmosefajn.org,new.lanalovesexeter.com,app.lanalovesexeter.com,app.lanaloves.us
       - VIRTUAL_PORT=3001
       - LETSENCRYPT_HOST=new.mejmosefajn.org,app.mejmosefajn.org,new.lanalovesexeter.com,app.lanalovesexeter.com,app.lanaloves.us
