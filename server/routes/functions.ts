@@ -438,11 +438,39 @@ router.post('/list-profiles', async (req: Request, res: Response) => {
 });
 
 // discover-profiles — full paginated sweep of ALL KIND 0 profiles from relays
+// The heaviest job in the app, and it was an open POST with no lock. The
+// heartbeat itself only dares run it every THIRTY minutes (server/index.ts):
+// it walks every page of profiles across all four relays. Anyone could start
+// another one, and another, each fanning out again while the last was still
+// going.
+//
+// One at a time, and not more than once every five minutes. A caller arriving
+// while a sweep is running gets the running one's outcome rather than starting
+// a second — the answer is the same, and it costs nothing.
+let discoverInFlight: Promise<void> | null = null;
+let discoverLastRunAt = 0;
+const DISCOVER_COOLDOWN_MS = 5 * 60 * 1000;
+
 router.post('/discover-profiles', async (req: Request, res: Response) => {
   try {
     const db = getDb();
-    console.log(`🔍 Manual discover-profiles triggered (full paginated sweep)`);
-    await discoverNewProfiles(db);
+
+    if (discoverInFlight) {
+      console.log('🔍 discover-profiles: joining the sweep already running');
+      await discoverInFlight;
+    } else if (Date.now() - discoverLastRunAt < DISCOVER_COOLDOWN_MS) {
+      const waitS = Math.ceil((DISCOVER_COOLDOWN_MS - (Date.now() - discoverLastRunAt)) / 1000);
+      return res.status(429).json({
+        success: false,
+        error: `A sweep ran recently — try again in ${waitS}s`,
+        retry_after_s: waitS,
+      });
+    } else {
+      console.log(`🔍 Manual discover-profiles triggered (full paginated sweep)`);
+      discoverInFlight = discoverNewProfiles(db)
+        .finally(() => { discoverInFlight = null; discoverLastRunAt = Date.now(); });
+      await discoverInFlight;
+    }
 
     // Return current DB stats
     const total = (db.prepare('SELECT COUNT(*) as cnt FROM nostr_profiles').get() as any).cnt;

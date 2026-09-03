@@ -1,4 +1,4 @@
-import express, { type Request, type Response } from 'express';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import compression from 'compression';
 import cors from 'cors';
 import path from 'path';
@@ -54,8 +54,30 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// 50mb applied to EVERY route, and body-parser's JSON.parse is synchronous on
+// the only thread — roughly twenty concurrent bodies of that size is the whole
+// heap, from anyone, with no authentication anywhere in front of it.
+//
+// Nothing legitimate comes close: file uploads go through multer as multipart
+// and never touch this, and no client sends base64 in JSON — the audio the
+// speech endpoints encode is read from disk on the server. The biggest real
+// bodies are encrypted DM content and Nostr events, all far under a megabyte.
+//
+// Settable without a code change, so if something genuine ever does hit it the
+// answer is a config value rather than a deploy.
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '2mb';
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: JSON_BODY_LIMIT }));
+
+// Without this a rejected body comes back as an HTML stack trace, which tells
+// the caller nothing and tells us nothing either. Say the limit out loud.
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err?.type === 'entity.too.large') {
+    console.warn(`⚠️ Body over ${JSON_BODY_LIMIT} rejected on ${req.method} ${req.url}`);
+    return res.status(413).json({ error: `Request body too large (limit ${JSON_BODY_LIMIT})` });
+  }
+  return next(err);
+});
 
 // Request logging
 app.use((req, res, next) => {

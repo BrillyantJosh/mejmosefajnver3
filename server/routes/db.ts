@@ -223,8 +223,20 @@ function processRows(rows: any[], table: string): any[] {
 }
 
 // GET /api/db/_schema/tables - List all tables with row counts and column info
+//
+// This counts EVERY row of ALL 25 tables and reads each one's schema, all
+// synchronously on the only thread, and it was unauthenticated — an
+// admin-panel convenience anyone could ask for as fast as they liked. It backs
+// one page (src/pages/admin/DatabaseBrowser.tsx), which is refreshed by hand.
+// A short cache costs an admin nothing and takes the repetition away.
+let schemaCache: { at: number; payload: any } | null = null;
+const SCHEMA_CACHE_MS = 30_000;
+
 router.get('/_schema/tables', (_req: Request, res: Response) => {
   try {
+    if (schemaCache && Date.now() - schemaCache.at < SCHEMA_CACHE_MS) {
+      return res.json(schemaCache.payload);
+    }
     const db = getDb();
     const tables = Array.from(ALLOWED_TABLES).sort().map(table => {
       const countRow = db.prepare(`SELECT COUNT(*) as count FROM "${table}"`).get() as any;
@@ -241,6 +253,7 @@ router.get('/_schema/tables', (_req: Request, res: Response) => {
         })),
       };
     });
+    schemaCache = { at: Date.now(), payload: tables };
     return res.json(tables);
   } catch (error: any) {
     console.error('Schema tables error:', error);
