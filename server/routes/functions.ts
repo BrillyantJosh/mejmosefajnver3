@@ -206,26 +206,13 @@ router.post('/fetch-url-metadata', async (req: Request, res: Response) => {
   }
 });
 
-// proxy-image
-router.post('/proxy-image', async (req: Request, res: Response) => {
-  try {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: 'URL required' });
-
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(15000)
-    });
-
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    const buffer = await response.arrayBuffer();
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.send(Buffer.from(buffer));
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
-  }
-});
+// proxy-image was removed. It fetched ANY url a caller supplied and returned
+// the body — an unauthenticated read of anything this container can reach,
+// which on a box running 44 containers behind a shared docker network is every
+// other Lana app's internal port, plus loopback and cloud metadata. It also
+// buffered the whole response into memory with no size cap. Nothing in the
+// app, the built bundle, or the server called it; the legacy copy under
+// supabase/functions/ already logs itself as deprecated.
 
 
 /**
@@ -3350,7 +3337,31 @@ router.post('/check-wallet-registration', async (req: Request, res: Response) =>
 // =============================================
 // DEBUG: WIF Key Derivation (test page only)
 // =============================================
+
+/**
+ * A guard for endpoints that must never be reachable from the internet.
+ *
+ * Keyed on the peer address rather than NODE_ENV: an environment variable that
+ * is wrong, unset, or overridden silently opens the door, whereas a request
+ * genuinely arriving from outside cannot forge its source address through the
+ * proxy. Local development keeps working unchanged.
+ */
+function isLocalRequest(req: Request): boolean {
+  const ip = (req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
+  return ip === '127.0.0.1' || ip === '::1';
+}
+
 router.post('/debug-derive-wif', async (req: Request, res: Response) => {
+  // This takes a WIF — a PRIVATE KEY — over the network and returns the raw
+  // private key in its response. It is a debugging aid, it was reachable from
+  // the internet, and /test-transaction is a live route in production, so
+  // there was a public page inviting people to paste a key and send it here.
+  // Nothing in the app calls it outside that page. It also spends about 14ms
+  // of elliptic-curve work per request on the only thread, unauthenticated.
+  if (!isLocalRequest(req)) {
+    return res.status(404).json({ success: false, error: 'Not found' });
+  }
+
   try {
     const { wif } = req.body;
     if (!wif) {

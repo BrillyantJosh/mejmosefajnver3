@@ -326,7 +326,13 @@ router.post('/tts', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'text is required' });
     }
 
-    console.log(`🔊 Voice TTS: ${text.length} chars, voice=${voice}, speed=${speed}`);
+    // Unauthenticated, and it spends OPENAI_API_KEY per character. /translate
+    // has capped its input since it was written; this had no cap at all, so a
+    // single request could bill for as much text as it cared to send. 4000 is
+    // OpenAI's own ceiling for tts-1.
+    const capped = String(text).slice(0, 4000);
+
+    console.log(`🔊 Voice TTS: ${capped.length} chars, voice=${voice}, speed=${speed}`);
 
     const response = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
@@ -336,7 +342,7 @@ router.post('/tts', async (req: Request, res: Response) => {
       },
       body: JSON.stringify({
         model: 'tts-1',
-        input: text,
+        input: capped,
         voice,
         speed,
         response_format: 'mp3',

@@ -14,6 +14,7 @@ import lanacrowdRoutes from './routes/lanacrowd';
 import unconditionalFinancingRoutes from './routes/unconditionalFinancing';
 import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks, sseClientCount } from './routes/sse';
 import { relayPoolStats } from './lib/relayPool.js';
+import { createRateLimit } from './lib/rateLimit.js';
 import functionsRoutes, { retryPendingNostrEvents, cleanupDmAudio } from './routes/functions';
 import voiceRoutes from './routes/voice';
 import beingsRoutes from './routes/beings';
@@ -341,7 +342,16 @@ app.use('/api/sse', sseRoutes);
 app.use('/api/functions', functionsRoutes);
 
 // Voice proxy routes (STT, TTS, Sožitje)
-app.use('/api/voice', voiceRoutes);
+// Paid, unauthenticated, and slow: speech-to-text, translation and speech all
+// spend a third-party key per call. Mounted on this router ONLY — a limiter
+// placed any further forward has taken apps in this fleet down twice, once by
+// serving blank pages and once by 429-ing the JavaScript bundle itself.
+// 60/minute is far above a person talking and far below a script.
+app.use('/api/voice', createRateLimit({
+  max: 60,
+  windowMs: 60_000,
+  message: 'Too many voice requests — please wait a moment.',
+}), voiceRoutes);
 
 // LanaCrowd (100millionideas) — server-authoritative REST API
 app.use('/api/lanacrowd', lanacrowdRoutes);
