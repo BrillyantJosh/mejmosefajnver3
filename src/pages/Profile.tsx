@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { User, Save, Loader2, Navigation, Map, Plus, Upload, X, Eye, EyeOff, Copy, Globe, Link, Building2, Mail, Phone } from "lucide-react";
+import { User, Save, Loader2, Navigation, Map, Plus, Upload, X, Eye, EyeOff, Copy, Globe, Link, Building2, Mail, Phone, PenLine } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -82,6 +82,8 @@ export default function Profile() {
   const [editingPayment, setEditingPayment] = useState<PaymentMethod | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  // A statement already given stays protected from stray edits until you deliberately replace it.
+  const [rewritingStatement, setRewritingStatement] = useState(false);
 
   // Helper function to ensure avatar URL is in correct format
   const formatAvatarUrl = (url: string | undefined, nostrHexId: string): string => {
@@ -147,6 +149,7 @@ export default function Profile() {
     if (profile && session?.nostrHexId) {
       console.log('📋 Profile form reset:', { lang: profile.lang, interests: profile.interests, intimateInterests: profile.intimateInterests });
       const formattedPictureUrl = formatAvatarUrl(profile.picture, session.nostrHexId);
+      setRewritingStatement(false);
 
       form.reset({
         name: profile.name || '',
@@ -217,6 +220,7 @@ export default function Profile() {
         description: "Your profile has been published to Nostr relays",
       });
       setIsEditing(false);
+      setRewritingStatement(false);
     } else {
       toast({
         title: "Error",
@@ -1184,25 +1188,63 @@ export default function Profile() {
                   <FormField
                     control={form.control}
                     name="statement_of_responsibility"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Statement of Self-Responsibility *</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Write in your own words that you accept unconditional self-responsibility inside the Lana World..."
-                            {...field}
-                            readOnly={!!profile?.statement_of_responsibility}
-                            className={`min-h-[100px] ${profile?.statement_of_responsibility ? 'bg-muted/50 cursor-not-allowed opacity-90' : ''}`}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          {profile?.statement_of_responsibility
-                            ? 'Your statement of self-responsibility is locked and can no longer be changed.'
-                            : 'You must explicitly accept unconditional self-responsibility before saving your profile. Minimum 10 characters.'}
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      const given = profile?.statement_of_responsibility;
+                      const locked = !!given && !rewritingStatement;
+                      return (
+                        <FormItem>
+                          <FormLabel>Statement of Self-Responsibility *</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Write in your own words that you accept unconditional self-responsibility inside the Lana World..."
+                              {...field}
+                              readOnly={locked}
+                              className={`min-h-[100px] ${locked ? 'bg-muted/50 cursor-not-allowed opacity-90' : ''}`}
+                            />
+                          </FormControl>
+                          {given && (
+                            <div className="pt-1">
+                              {locked ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setRewritingStatement(true);
+                                    form.setValue('statement_of_responsibility', '', { shouldDirty: true });
+                                    form.setFocus('statement_of_responsibility');
+                                  }}
+                                >
+                                  <PenLine className="mr-2 h-4 w-4" />
+                                  Write a new statement
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setRewritingStatement(false);
+                                    form.setValue('statement_of_responsibility', given, { shouldValidate: true });
+                                  }}
+                                >
+                                  <X className="mr-2 h-4 w-4" />
+                                  Keep the statement I gave
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                          <FormDescription>
+                            {locked
+                              ? 'This is the statement you have given. You can replace it with a new one — it stays as it is until you save the new one.'
+                              : given
+                                ? 'Write your new statement of unconditional self-responsibility. Minimum 10 characters. The one you gave before stays until you save this.'
+                                : 'You must explicitly accept unconditional self-responsibility before saving your profile. Minimum 10 characters.'}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
 
                   <FormField
@@ -1367,7 +1409,13 @@ export default function Profile() {
                     <Button 
                       type="button" 
                       variant="outline" 
-                      onClick={() => setIsEditing(false)}
+                      onClick={() => {
+                        setIsEditing(false);
+                        if (rewritingStatement) {
+                          setRewritingStatement(false);
+                          form.setValue('statement_of_responsibility', profile?.statement_of_responsibility || '');
+                        }
+                      }}
                     >
                       Cancel
                     </Button>
