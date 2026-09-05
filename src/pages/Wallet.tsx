@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { freezeResolution } from "@/lib/freezeResolution";
 import { makeRequestGate } from "@/lib/balanceLoad";
 import { Wallet as WalletIcon, CreditCard, FileText, ExternalLink, TrendingUp, Copy, QrCode, Snowflake, ShieldAlert, Layers } from "lucide-react";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
@@ -227,8 +228,27 @@ export default function Wallet() {
                 <strong className="block mt-1">Reason: {getFreezeReasonLabel(reason)}</strong>
                 <span className="block mt-1">
                   You can still receive funds, but all outgoing transactions are disabled.
-                  Contact your registrar to resolve this issue.
                 </span>
+                {/* "Contact your registrar" was the whole instruction, with
+                    nothing to click. Where to go depends on the reason. */}
+                {(() => {
+                  const res = freezeResolution(reason, frozenWallets[0]?.walletId || '');
+                  return (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 border-blue-500/50 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10"
+                      onClick={() => {
+                        if (res.external) window.open(res.href, '_blank', 'noopener,noreferrer');
+                        else window.location.href = res.href;
+                      }}
+                    >
+                      <Snowflake className="h-4 w-4 mr-2" />
+                      {res.label}
+                      {res.external && <ExternalLink className="h-3 w-3 ml-2 opacity-70" />}
+                    </Button>
+                  );
+                })()}
               </AlertDescription>
             </Alert>
           );
@@ -563,17 +583,33 @@ export default function Wallet() {
                   </Button>
                 )}
 
-                {wallet.freezeStatus && wallet.walletType !== "Lana8Wonder" && wallet.walletType !== "Knights" && wallet.walletType !== "Retail" && (
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    variant="outline"
-                    disabled
-                  >
-                    <Snowflake className="h-4 w-4 mr-2" />
-                    Sending Disabled — Wallet Frozen
-                  </Button>
-                )}
+                {/* A frozen wallet used to end at a disabled button and an
+                    alert saying "contact your registrar", with nothing to
+                    click. Where the freeze can be resolved depends on WHY it
+                    was frozen — see src/lib/freezeResolution. Deliberately not
+                    limited by wallet type: a Lana8Wonder freeze has its own
+                    resolve path and was the one showing no button at all. */}
+                {wallet.freezeStatus && (() => {
+                  const res = freezeResolution(wallet.freezeStatus, wallet.walletId);
+                  return (
+                    <div className="space-y-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-blue-500/50 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10"
+                        onClick={() => {
+                          if (res.external) window.open(res.href, '_blank', 'noopener,noreferrer');
+                          else window.location.href = res.href;
+                        }}
+                      >
+                        <Snowflake className="h-4 w-4 mr-2" />
+                        {res.label}
+                        {res.external && <ExternalLink className="h-3 w-3 ml-2 opacity-70" />}
+                      </Button>
+                      <p className="text-xs text-muted-foreground text-center">{res.hint}</p>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           ))}
