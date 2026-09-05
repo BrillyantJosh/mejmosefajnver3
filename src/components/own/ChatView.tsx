@@ -10,7 +10,7 @@ import PauseProcessDialog from "./PauseProcessDialog";
 import { ownSupabase } from "@/lib/ownSupabaseClient";
 import { formatResumeDate } from "@/hooks/useOwnAssessments";
 import { useLang } from "@/i18n/I18nContext";
-import { processDescription, descriptionNeedsFolding } from "@/lib/processDescription";
+import { processDescription } from "@/lib/processDescription";
 import RichText from "@/components/own/RichText";
 import { toast } from "sonner";
 
@@ -242,7 +242,13 @@ export default function ChatView({
     () => processDescription(conversationDescription),
     [conversationDescription]
   );
-  const descriptionFolds = descriptionNeedsFolding(description);
+  // The header is sticky: every row it takes is a row of conversation the
+  // reader loses. So the summary line carries the description with its line
+  // breaks flattened — the text as written opens below, inside the scroll.
+  const descriptionPreview = useMemo(
+    () => description.replace(/\s+/g, ' ').trim(),
+    [description]
+  );
   const [infoOpen, setInfoOpen] = useState(false);
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -462,11 +468,10 @@ export default function ChatView({
             <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
           </Button>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0">
               <h2
-                className={`text-base md:text-lg font-semibold min-w-0 ${
-                  infoOpen ? 'break-words' : 'truncate'
-                }`}
+                className="text-base md:text-lg font-semibold min-w-0 flex-1 truncate"
+                title={conversationTitle}
               >
                 {conversationTitle}
               </h2>
@@ -476,21 +481,37 @@ export default function ChatView({
               >
                 {currentPhase.emoji} {currentPhase.label}
               </Badge>
+              {/* On a phone the words come off the status chips and only the
+                  sign stays: with both of them spelled out, a 375px row left
+                  the title one letter wide. The state itself is never dropped —
+                  it is written out in full inside the conversation below. */}
               {isLocked && (
-                <Badge className="text-xs shrink-0 gap-1 bg-amber-100 text-amber-700 border border-amber-300 dark:bg-amber-950 dark:text-amber-300">
+                <Badge
+                  title={en ? 'Paused' : 'V premoru'}
+                  className="text-xs shrink-0 gap-1 bg-amber-100 text-amber-700 border border-amber-300 dark:bg-amber-950 dark:text-amber-300"
+                >
                   <Lock className="w-3 h-3" />
-                  {en ? 'Paused' : 'V premoru'}
+                  <span className="hidden sm:inline">{en ? 'Paused' : 'V premoru'}</span>
                 </Badge>
               )}
               {/* Beside Paused, never instead of it: a process can be paused
                   AND hold a frozen person, and hiding one behind the other
                   would make the reader think the other had been lifted. */}
               {isFrozenForMe && (
-                <Badge className="text-xs shrink-0 gap-1 bg-blue-100 text-blue-700 border border-blue-300 dark:bg-blue-950 dark:text-blue-300">
+                <Badge
+                  title={
+                    freezeUntilSplit != null
+                      ? (en ? `Frozen · up to SPLIT ${freezeUntilSplit}` : `Zamrznjen · do SPLITA ${freezeUntilSplit}`)
+                      : (en ? 'Frozen' : 'Zamrznjen')
+                  }
+                  className="text-xs shrink-0 gap-1 bg-blue-100 text-blue-700 border border-blue-300 dark:bg-blue-950 dark:text-blue-300"
+                >
                   <span aria-hidden="true">❄️</span>
-                  {freezeUntilSplit != null
-                    ? (en ? `Frozen · up to SPLIT ${freezeUntilSplit}` : `Zamrznjen · do SPLITA ${freezeUntilSplit}`)
-                    : (en ? 'Frozen' : 'Zamrznjen')}
+                  <span className="hidden sm:inline">
+                    {freezeUntilSplit != null
+                      ? (en ? `Frozen · up to SPLIT ${freezeUntilSplit}` : `Zamrznjen · do SPLITA ${freezeUntilSplit}`)
+                      : (en ? 'Frozen' : 'Zamrznjen')}
+                  </span>
                 </Badge>
               )}
             </div>
@@ -498,36 +519,36 @@ export default function ChatView({
         </div>
 
         {/* What this process IS: who it is between, since when, and what it was
-            opened about. The list shows all of it and the opened process used
-            to drop every word — you saw a title and nothing else. Folded to a
-            single line, because one live case carries eleven guests and
-            another a thousand characters of transaction tables, and the phase
-            banner was already removed once to give messages back their room. */}
-        {(conversationRoster || description) && (
-          <div className="ml-10 md:ml-11 mt-1.5 text-sm md:text-base text-muted-foreground">
-            {conversationRoster && !infoOpen && (
-              <p className="truncate">
-                {conversationRoster.opened}
-                {' · '}
-                <span className="font-medium">{en ? 'Initiator' : 'Pobudnik'}:</span>{' '}
-                {conversationRoster.initiator}
-              </p>
-            )}
-
-            {description && !infoOpen && (
-              <p
-                className={`whitespace-pre-wrap break-words ${conversationRoster ? 'mt-1.5' : ''} ${
-                  descriptionFolds ? 'line-clamp-2' : ''
-                }`}
-              >
-                {description}
+            opened about — all of it on ONE line, cut where the line ends, with
+            the toggle beside it rather than under it. The header is sticky and
+            was covering the conversation: title, date, two clamped lines of
+            description and a block button came to five rows before a single
+            message. The whole text opens below, inside the scroll area. */}
+        {(conversationRoster || descriptionPreview) && (
+          <div className="ml-10 md:ml-11 mt-0.5 flex items-baseline gap-2 text-xs md:text-sm text-muted-foreground">
+            {!infoOpen && (
+              <p className="flex-1 min-w-0 truncate">
+                {conversationRoster && (
+                  <>
+                    {conversationRoster.opened}
+                    {' · '}
+                    <span className="font-medium">{en ? 'Initiator' : 'Pobudnik'}:</span>{' '}
+                    {conversationRoster.initiator}
+                  </>
+                )}
+                {descriptionPreview && (
+                  <>
+                    {conversationRoster ? ' · ' : ''}
+                    {descriptionPreview}
+                  </>
+                )}
               </p>
             )}
 
             <button
               type="button"
               onClick={() => setInfoOpen((open) => !open)}
-              className="mt-2 inline-flex items-center rounded-md border border-primary/40 px-3 py-1.5 text-sm md:text-base font-semibold text-primary hover:bg-primary/10"
+              className="shrink-0 font-semibold text-primary hover:underline"
             >
               {infoOpen
                 ? (en ? 'Show less' : 'Pokaži manj')
@@ -571,6 +592,9 @@ export default function ChatView({
               keep their room. */}
           {infoOpen && (conversationRoster || description) && (
             <div className="rounded-lg border bg-muted/30 p-3 md:p-4 mt-2 text-sm md:text-base text-muted-foreground">
+              {/* The header truncates the title to hold its two rows; on a phone
+                  there is no hover to reveal the rest, so it belongs here. */}
+              <p className="font-semibold text-foreground break-words mb-2">{conversationTitle}</p>
               {conversationRoster && (
                 <div className="space-y-0.5">
                   <p className="break-words">
