@@ -49,11 +49,20 @@ import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { useNostrWallets } from '@/hooks/useNostrWallets';
 import { evaluateFreezeGate, canVoteWith, freezeGateExplanation } from '@/lib/voteEligibility';
 import { resolveProposalVideo } from '@/lib/youtube';
+import AlignmentResults from './AlignmentResults';
+import AlignmentCover from './AlignmentCover';
+import type { AlignmentTally } from '@/lib/alignmentTally';
 import { toast } from "sonner";
 
 interface ProposalDetailProps {
   proposal: AwarenessProposal;
   onBack: () => void;
+  /** Every vote cast on this alignment, already counted one per person. */
+  tally?: AlignmentTally;
+  /** False when no relay answered; the result is then unknown, not zero. */
+  talliesResolved?: boolean;
+  talliesLoading?: boolean;
+  onRefreshTally?: () => void;
 }
 
 function formatDate(timestamp: number): string {
@@ -82,7 +91,14 @@ function getTimeRemaining(endTimestamp: number): { text: string; isEnded: boolea
   return { text: `${minutes}m remaining`, isEnded: false };
 }
 
-export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps) {
+export default function ProposalDetail({
+  proposal,
+  onBack,
+  tally,
+  talliesResolved = false,
+  talliesLoading = false,
+  onRefreshTally,
+}: ProposalDetailProps) {
   const { status: lana8WonderStatus, isLoading: isLoadingLana8Wonder } = useNostrLana8Wonder();
   const { wallets, isLoading: isLoadingWallets, resolved: walletsResolved } = useNostrWallets();
   const { acknowledgement, isLoading: isLoadingAck, submitVote, refetch } = useNostrUserAcknowledgement(proposal.dTag, proposal.id);
@@ -180,16 +196,13 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
         </Button>
       </div>
 
-      {/* Header with image */}
-      {proposal.img && (
-        <div className="w-full h-40 sm:h-48 md:h-64 overflow-hidden rounded-lg mb-4 sm:mb-6">
-          <img 
-            src={proposal.img} 
-            alt={proposal.title}
-            className="w-full h-full object-cover"
-          />
-        </div>
-      )}
+      {/* Header with image — drawn when the published one cannot be loaded */}
+      <AlignmentCover
+        src={proposal.img}
+        title={proposal.title}
+        seed={proposal.dTag}
+        className="w-full h-40 sm:h-48 md:h-64 rounded-lg mb-4 sm:mb-6"
+      />
 
       {/* Title and badges */}
       <div className="flex flex-col gap-2 sm:gap-3 mb-4 sm:mb-6">
@@ -213,6 +226,17 @@ export default function ProposalDetail({ proposal, onBack }: ProposalDetailProps
       <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-4 sm:mb-6">
         {proposal.shortPerspective}
       </p>
+
+      {/* What everyone decided. Above the perspective on purpose: on a closed
+          alignment this is the answer the reader came for, and the full text
+          runs to thousands of words before the old placement was reached. */}
+      <AlignmentResults
+        tally={tally}
+        resolved={talliesResolved}
+        isLoading={talliesLoading}
+        ended={timeRemaining.isEnded}
+        onRefresh={onRefreshTally}
+      />
 
       {/* Long perspective */}
       <Card className="mb-4 sm:mb-6">

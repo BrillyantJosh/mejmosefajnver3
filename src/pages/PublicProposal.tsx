@@ -13,6 +13,9 @@ import { useNostrPublicProposal } from "@/hooks/useNostrPublicProposal";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "@/hooks/use-toast";
 import { resolveProposalVideo } from "@/lib/youtube";
+import AlignmentCover from "@/components/lanaalignsworld/AlignmentCover";
+import AlignmentResults from "@/components/lanaalignsworld/AlignmentResults";
+import { useAlignmentTallies, tallyFor } from "@/hooks/useAlignmentTallies";
 
 // Helper to format text with line breaks and bold
 function FormattedText({ text }: { text: string }) {
@@ -84,6 +87,12 @@ export default function PublicProposal() {
     : undefined;
 
   const { proposal, loading, error } = useNostrPublicProposal(decodedDTag, relays);
+  const {
+    tallies,
+    resolved: talliesResolved,
+    isLoading: talliesLoading,
+    refetch: refetchTallies,
+  } = useAlignmentTallies();
 
   // A YouTube URL may sit in the plain "link" (or doc) field — embed it as a
   // player and omit that field from Resources so it isn't shown twice.
@@ -163,16 +172,14 @@ export default function PublicProposal() {
           </Button>
         </div>
 
-        {/* Cover Image */}
-        {proposal.img && (
-          <div className="relative w-full overflow-hidden rounded-lg">
-            <img 
-              src={proposal.img} 
-              alt={proposal.title}
-              className="w-full h-auto max-h-[50vh] object-contain mx-auto"
-            />
-          </div>
-        )}
+        {/* Cover — the published image where it still loads, a drawn one where
+            the storage behind it is gone */}
+        <AlignmentCover
+          src={proposal.img}
+          title={proposal.title}
+          seed={proposal.dTag}
+          className="w-full h-48 sm:h-64 rounded-lg"
+        />
 
         <Card>
           <CardHeader>
@@ -199,6 +206,16 @@ export default function PublicProposal() {
             <p className="text-base text-muted-foreground">
               {proposal.shortPerspective}
             </p>
+
+            {/* A shared link is how most people meet an alignment, so the
+                result belongs here too — not only behind a login. */}
+            <AlignmentResults
+              tally={tallyFor(tallies, proposal.dTag)}
+              resolved={talliesResolved}
+              isLoading={talliesLoading}
+              ended={timeRemaining.isEnded}
+              onRefresh={refetchTallies}
+            />
 
             {/* Full perspective */}
             <div className="bg-muted/30 border rounded-lg p-4">
