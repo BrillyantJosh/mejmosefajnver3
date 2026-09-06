@@ -4,7 +4,7 @@ import { useNostrUserAcknowledgement } from "@/hooks/useNostrUserAcknowledgement
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { resolveProposalVideo } from "@/lib/youtube";
+import { resolveProposalVideo, youTubeThumbnails } from "@/lib/youtube";
 import TallyStrip from "./TallyStrip";
 import AlignmentCover from "./AlignmentCover";
 import type { AlignmentTally } from "@/lib/alignmentTally";
@@ -72,7 +72,7 @@ export default function ProposalCard({
           lines — and where the original is gone, AlignmentCover draws one. */}
       <div className="relative w-full h-36 sm:h-44 rounded-t-lg overflow-hidden">
         <AlignmentCover
-          src={proposal.img}
+          sources={[proposal.img, ...youTubeThumbnails(video?.videoId)]}
           title={proposal.title}
           seed={proposal.dTag}
           className="w-full h-full"

@@ -48,7 +48,7 @@ import VoteDialog from "./VoteDialog";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { useNostrWallets } from '@/hooks/useNostrWallets';
 import { evaluateFreezeGate, canVoteWith, freezeGateExplanation } from '@/lib/voteEligibility';
-import { resolveProposalVideo } from '@/lib/youtube';
+import { resolveProposalVideo, youTubeThumbnails } from '@/lib/youtube';
 import AlignmentResults from './AlignmentResults';
 import AlignmentCover from './AlignmentCover';
 import type { AlignmentTally } from '@/lib/alignmentTally';
@@ -198,7 +198,7 @@ export default function ProposalDetail({
 
       {/* Header with image — drawn when the published one cannot be loaded */}
       <AlignmentCover
-        src={proposal.img}
+        sources={[proposal.img, ...youTubeThumbnails(video?.videoId)]}
         title={proposal.title}
         seed={proposal.dTag}
         className="w-full h-40 sm:h-48 md:h-64 rounded-lg mb-4 sm:mb-6"

@@ -90,22 +90,39 @@ export function getYouTubeEmbedUrl(url?: string | null): string | null {
 }
 
 /**
+ * The video's own still images, best first.
+ *
+ * maxresdefault does not exist for every video and answers 404, so hqdefault
+ * follows it — that one is generated for every video YouTube holds.
+ */
+export function youTubeThumbnails(videoId?: string | null): string[] {
+  if (!videoId) return [];
+  return [
+    `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+    `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+  ];
+}
+
+/**
  * Pick the video to embed for a proposal: the dedicated youtube field first,
  * then a YouTube URL pasted into link or doc.
  *
  * Returns the embed URL plus which source field it came from, so the caller can
  * omit that field from the "Resources" list and avoid showing the same video
- * again as a bare link.
+ * again as a bare link. The video id comes back too: it is the one picture of
+ * an alignment that still exists, now that the storage holding the uploaded
+ * covers has been deleted.
  */
 export function resolveProposalVideo(proposal: {
   youtube?: string | null;
   link?: string | null;
   doc?: string | null;
-}): { embedUrl: string; source: 'youtube' | 'link' | 'doc' } | null {
+}): { embedUrl: string; source: 'youtube' | 'link' | 'doc'; videoId: string } | null {
   const candidates: Array<'youtube' | 'link' | 'doc'> = ['youtube', 'link', 'doc'];
   for (const source of candidates) {
     const embedUrl = getYouTubeEmbedUrl(proposal[source]);
-    if (embedUrl) return { embedUrl, source };
+    const videoId = getYouTubeVideoId(proposal[source]);
+    if (embedUrl && videoId) return { embedUrl, source, videoId };
   }
   return null;
 }

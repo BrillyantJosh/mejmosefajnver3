@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useNostrPublicProposal } from "@/hooks/useNostrPublicProposal";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { toast } from "@/hooks/use-toast";
-import { resolveProposalVideo } from "@/lib/youtube";
+import { resolveProposalVideo, youTubeThumbnails } from "@/lib/youtube";
 import AlignmentCover from "@/components/lanaalignsworld/AlignmentCover";
 import AlignmentResults from "@/components/lanaalignsworld/AlignmentResults";
 import { useAlignmentTallies, tallyFor } from "@/hooks/useAlignmentTallies";
@@ -175,7 +175,7 @@ export default function PublicProposal() {
         {/* Cover — the published image where it still loads, a drawn one where
             the storage behind it is gone */}
         <AlignmentCover
-          src={proposal.img}
+          sources={[proposal.img, ...youTubeThumbnails(video?.videoId)]}
           title={proposal.title}
           seed={proposal.dTag}
           className="w-full h-48 sm:h-64 rounded-lg"
