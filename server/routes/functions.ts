@@ -3012,8 +3012,27 @@ router.post('/send-lana-transaction', async (req: Request, res: Response) => {
     // the guard absolute and silently killed that feature. The cap is worked out
     // inside the guard from the wallet's own balance, not from anything the
     // caller sends. Batch sends and consolidation stay blocked outright.
+    //
+    // Two things the cap alone did not cover, both of which let ~1,376 LANA out
+    // of a wallet whose card read FROZEN the whole time:
+    //
+    //   emptyWallet — the allowance was measured against `amount`, but in this
+    //     mode sendLanaTransaction ignores `amount` and sends the entire
+    //     balance. A small declared amount therefore passed a guard that was
+    //     reading a number nothing downstream would honour.
+    //
+    //   requireKnownState — an unreadable freeze state used to mean "proceed".
+    //     For a drain, and for the Lana8Wonder cash-out, it now means refuse:
+    //     those are the two shapes where a wrong "allow" moves everything.
+    //     `purpose` is the client saying which screen it is, and is deliberately
+    //     only ever used to make the guard STRICTER — omitting it lands in the
+    //     ordinary capped path, and the unforgeable half of the Lana8Wonder gate
+    //     is the wallet type the guard reads from the registrar's own list.
+    const emptyingWallet = !!req.body.emptyWallet;
     const frozenError = await blockIfFrozen(req.body.senderAddress, 'send-lana-transaction', {
       cappedSpendLana: Number(req.body.amount),
+      emptyingWallet,
+      requireKnownState: emptyingWallet || req.body.purpose === 'lana8wonder-cashout',
     });
     if (frozenError) return res.json({ success: false, error: frozenError });
 

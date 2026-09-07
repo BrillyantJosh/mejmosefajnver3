@@ -17,11 +17,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, Send, Key, QrCode } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, Send, Key, QrCode, Snowflake, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { QRScanner } from '@/components/QRScanner';
 import { useTranslation } from '@/i18n/I18nContext';
 import lana8wonderTranslations from '@/i18n/modules/lana8wonder';
+import {
+  lana8wonderTransferGate,
+  mayTransfer,
+  transferGateExplanation,
+  transferGateResolution,
+} from '@/lib/lana8wonderTransferGate';
 
 interface LocationState {
   sourceWalletId: string;
@@ -38,10 +44,17 @@ export default function Lana8WonderTransfer() {
   const location = useLocation();
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
-  const { wallets, isLoading: walletsLoading } = useNostrWallets();
+  const { wallets, isLoading: walletsLoading, resolved: walletsResolved } = useNostrWallets();
   const { t } = useTranslation(lana8wonderTranslations);
 
   const state = location.state as LocationState | undefined;
+
+  // This page had no freeze check of any kind. Hiding the button on the plan
+  // page is not a gate — this route stays reachable from a tab opened before
+  // the freeze, from the back button, and from anything that can POST. The
+  // source wallet is re-judged here, and again on the server.
+  const gate = lana8wonderTransferGate(wallets, walletsResolved, state?.sourceWalletId || '');
+  const transferAllowed = mayTransfer(gate);
 
   const [privateKey, setPrivateKey] = useState('');
   const [isValidatingKey, setIsValidatingKey] = useState(false);
@@ -98,6 +111,13 @@ export default function Lana8WonderTransfer() {
       return;
     }
 
+    // Re-checked at the moment of sending, not only at render: the list can
+    // resolve, or a freeze can land, while this page is open.
+    if (!transferAllowed) {
+      toast.error(transferGateExplanation(gate));
+      return;
+    }
+
     if (state.sourceWalletId === selectedDestination) {
       toast.error(t('transfer.sameWalletError'));
       return;
@@ -139,6 +159,10 @@ export default function Lana8WonderTransfer() {
           privateKey: privateKey,
           emptyWallet: useEmptyWallet,
           electrumServers: parameters?.electrumServers || [],
+          // Tells the server this is the annuity cash-out, which makes its
+          // freeze guard refuse rather than proceed when the registrar's list
+          // cannot be read. Only ever makes the guard stricter.
+          purpose: 'lana8wonder-cashout',
         },
       });
 
@@ -181,6 +205,48 @@ export default function Lana8WonderTransfer() {
           <ArrowLeft className="h-4 w-4 mr-2" />
           {t('transfer.back')}
         </Button>
+      </div>
+    );
+  }
+
+  // A frozen — or unverifiable — source wallet never gets the form. Showing the
+  // private-key field and failing at the end would teach someone to keep
+  // trying, and would have them paste a key for a transfer that cannot happen.
+  if (!walletsLoading && !transferAllowed) {
+    const res = transferGateResolution(gate, state.sourceWalletId);
+    return (
+      <div className="container mx-auto p-3 md:p-4 pb-24 space-y-4">
+        <Button variant="ghost" onClick={() => navigate('/lana8wonder')} className="mb-2">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          {t('transfer.back')}
+        </Button>
+
+        <Alert variant="destructive" className="border-blue-500/50 bg-blue-500/10">
+          <Snowflake className="h-4 w-4 text-blue-500" />
+          <AlertTitle className="text-blue-700 dark:text-blue-400">
+            {t('plan.frozen.title')}
+          </AlertTitle>
+          <AlertDescription className="text-blue-700/80 dark:text-blue-300/80">
+            <span className="block mb-1">{transferGateExplanation(gate)}</span>
+            <span className="block mb-3 font-mono text-xs break-all opacity-80">
+              {state.sourceWalletId}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-blue-500/50 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10"
+              onClick={() => {
+                if (res.external) window.open(res.href, '_blank', 'noopener,noreferrer');
+                else navigate(res.href);
+              }}
+            >
+              <Snowflake className="h-4 w-4 mr-2" />
+              {res.label}
+              {res.external && <ExternalLink className="h-3 w-3 ml-2 opacity-70" />}
+            </Button>
+            <span className="block mt-2 text-xs opacity-80">{res.hint}</span>
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }

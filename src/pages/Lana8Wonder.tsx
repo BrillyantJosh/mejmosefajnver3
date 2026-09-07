@@ -16,6 +16,12 @@ import { useTranslation } from '@/i18n/I18nContext';
 import EntrySplitCard from '@/components/lana8wonder/EntrySplitCard';
 import { readFromRelays } from '@/lib/relayRead';
 import { choosePlanEvent } from '@/lib/planRead';
+import {
+  lana8wonderTransferGate,
+  mayTransfer,
+  transferGateExplanation,
+  transferGateResolution,
+} from '@/lib/lana8wonderTransferGate';
 
 // Error boundary to catch render crashes and show error instead of white screen
 class Lana8WonderErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
@@ -91,7 +97,9 @@ const Lana8Wonder = () => {
   const location = useLocation();
   const { session } = useAuth();
   const { parameters } = useSystemParameters();
-  const { wallets, isLoading: walletsLoading } = useNostrWallets();
+  // `resolved` says whether the registrar's list was actually read. Without it
+  // an outage — which hands back an empty list — reads as "nothing is frozen".
+  const { wallets, isLoading: walletsLoading, resolved: walletsResolved } = useNostrWallets();
   const { t } = useTranslation(lana8wonderTranslations);
   const [isLoading, setIsLoading] = useState(true);
   const [annuityPlan, setAnnuityPlan] = useState<AnnuityPlan | null>(null);
@@ -279,29 +287,42 @@ const Lana8Wonder = () => {
     setEligibleWallets(eligible);
   }, [wallets, exchangeRates, annuityPlan, accountBalances]);
 
-  // Frozen-wallet detection (registrar freeze, same source as the Wallet module).
-  // A frozen wallet blocks payouts; the user must unfreeze it on LanaWatch.us.
-  const frozenAddresses = new Set((wallets || []).filter(w => w.freezeStatus).map(w => w.walletId));
-  const frozenAlert = frozenAddresses.size > 0 ? (
-    <Alert variant="destructive" className="border-blue-500/50 bg-blue-500/10">
-      <Snowflake className="h-4 w-4 text-blue-500" />
-      <AlertTitle className="text-blue-700 dark:text-blue-400">{t('plan.frozen.title')}</AlertTitle>
-      <AlertDescription className="text-blue-700/80 dark:text-blue-300/80">
-        <span className="block mb-2">{t('plan.frozen.description')}</span>
-        <Button
-          variant="outline"
-          size="sm"
-          asChild
-          className="border-blue-500/50 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10"
-        >
-          <a href="https://www.lanawatch.us" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
-            {t('plan.frozen.action')}
-            <ExternalLink className="h-4 w-4" />
-          </a>
-        </Button>
-      </AlertDescription>
-    </Alert>
-  ) : null;
+  // May this account move its money? Asked per wallet and answered in three
+  // values, because two were not enough: `frozenAddresses` used to be a Set
+  // built from whatever the wallet list happened to contain, and a relay
+  // outage hands back an empty list that is indistinguishable from "nothing is
+  // frozen". That put the green Transfer button on a wallet the registrar had
+  // frozen. See src/lib/lana8wonderTransferGate — `clear` now has to be earned.
+  const gateFor = (address: string) => lana8wonderTransferGate(wallets, walletsResolved, address);
+
+  const frozenWallets = (wallets || []).filter(w => w.freezeStatus || w.status === 'frozen');
+  const frozenAlert = frozenWallets.length > 0 ? (() => {
+    // Reason-aware, like the /wallet page: the registrar's max-cap page asks
+    // for the entire balance, so a freeze it cannot lift must not be sent there.
+    const first = frozenWallets[0];
+    const res = transferGateResolution(gateFor(first.walletId), first.walletId);
+    return (
+      <Alert variant="destructive" className="border-blue-500/50 bg-blue-500/10">
+        <Snowflake className="h-4 w-4 text-blue-500" />
+        <AlertTitle className="text-blue-700 dark:text-blue-400">{t('plan.frozen.title')}</AlertTitle>
+        <AlertDescription className="text-blue-700/80 dark:text-blue-300/80">
+          <span className="block mb-2">{t('plan.frozen.description')}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-blue-500/50 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10"
+            onClick={() => {
+              if (res.external) window.open(res.href, '_blank', 'noopener,noreferrer');
+              else navigate(res.href);
+            }}
+          >
+            {res.label}
+            {res.external && <ExternalLink className="h-4 w-4 ml-2" />}
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  })() : null;
 
   if (isLoading || walletsLoading) {
     return (
@@ -458,38 +479,56 @@ const Lana8Wonder = () => {
                                 </AlertDescription>
                               </div>
                             </div>
-                            {frozenAddresses.has(account.wallet) ? (
-                              // Wallet frozen → no payout. Direct the user to LanaWatch.us to unfreeze.
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                asChild
-                                className="whitespace-nowrap border-blue-500/50 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10 self-end md:self-auto"
-                              >
-                                <a href="https://www.lanawatch.us" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
-                                  <Snowflake className="h-4 w-4" />
-                                  {t('plan.frozen.action')}
-                                </a>
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="default"
-                                size="sm"
-                                className="whitespace-nowrap bg-green-600 hover:bg-green-700 text-white self-end md:self-auto"
-                                onClick={() => navigate('/lana8wonder/transfer', {
-                                  state: {
-                                    sourceWalletId: account.wallet,
-                                    cashOutAmount: cashOutAmount,
-                                    cashOutFiat: cashOutFiat,
-                                    currency: annuityPlan.currency,
-                                    accountId: account.account_id,
-                                  }
-                                })}
-                              >
-                                <ArrowRightLeft className="h-4 w-4 mr-2" />
-                                {t('plan.transfer')}
-                              </Button>
-                            )}
+                            {(() => {
+                              // Only a positively clear reading offers a
+                              // transfer. Frozen and unreadable both land on a
+                              // link to wherever THIS freeze can be lifted,
+                              // rather than a dead button or, as before, a live
+                              // one.
+                              const gate = gateFor(account.wallet);
+                              if (mayTransfer(gate)) {
+                                return (
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    className="whitespace-nowrap bg-green-600 hover:bg-green-700 text-white self-end md:self-auto"
+                                    onClick={() => navigate('/lana8wonder/transfer', {
+                                      state: {
+                                        sourceWalletId: account.wallet,
+                                        cashOutAmount: cashOutAmount,
+                                        cashOutFiat: cashOutFiat,
+                                        currency: annuityPlan.currency,
+                                        accountId: account.account_id,
+                                      }
+                                    })}
+                                  >
+                                    <ArrowRightLeft className="h-4 w-4 mr-2" />
+                                    {t('plan.transfer')}
+                                  </Button>
+                                );
+                              }
+                              const res = transferGateResolution(gate, account.wallet);
+                              return (
+                                <div className="flex flex-col gap-1.5 self-end md:self-auto md:items-end">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="whitespace-nowrap border-blue-500/50 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10"
+                                    onClick={() => {
+                                      if (res.external) window.open(res.href, '_blank', 'noopener,noreferrer');
+                                      else navigate(res.href);
+                                    }}
+                                  >
+                                    <Snowflake className="h-4 w-4 mr-2" />
+                                    {res.label}
+                                    {res.external && <ExternalLink className="h-3 w-3 ml-2 opacity-70" />}
+                                  </Button>
+                                  <p className="text-xs opacity-80 max-w-xs md:text-right">
+                                    {transferGateExplanation(gate)}
+                                  </p>
+                                </div>
+                              );
+                            })()}
                           </Alert>
                         )}
                         {account.levels.map(level => {
