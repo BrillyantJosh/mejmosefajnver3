@@ -48,7 +48,7 @@ const frozen = {
   'frozen.submitting': 'Sending…',
   'frozen.sent': 'Your request has been sent.',
   'frozen.sentNote':
-    'Facilitators can now read it. It does not lift the decision by itself — that takes three facilitator signatures — but it is the part that is yours to do.',
+    'Facilitators can now read it. It does not lift the decision by itself, but it is the part that is yours to do.',
   'frozen.alreadySent': 'You sent a request on {date}. You may send another.',
   'frozen.sendFailed': 'The request could not be sent',
   'frozen.cancel': 'Not now',
@@ -99,7 +99,7 @@ export const frozenDict: TranslationDict<keyof typeof frozen> = {
     'frozen.submitting': 'Pošiljam…',
     'frozen.sent': 'Tvoja prošnja je poslana.',
     'frozen.sentNote':
-      'Fasilitatorji jo lahko zdaj preberejo. Sama po sebi odločitve ne dvigne — za to so potrebni trije podpisi fasilitatorjev — je pa tisti del, ki je tvoj.',
+      'Fasilitatorji jo lahko zdaj preberejo. Sama po sebi odločitve ne dvigne, je pa tisti del, ki je tvoj.',
     'frozen.alreadySent': 'Prošnjo si poslal {date}. Lahko pošlješ novo.',
     'frozen.sendFailed': 'Prošnje ni bilo mogoče poslati',
     'frozen.cancel': 'Ne zdaj',
