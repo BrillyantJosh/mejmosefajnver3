@@ -15,8 +15,7 @@ const frozen = {
   'frozen.noReason':
     'The reason could not be loaded right now. It is published with the decision and can be read again later.',
   'frozen.sinceLabel': 'In effect since',
-  'frozen.indefinite':
-    'This decision has no end date. It is lifted only when three facilitators sign to withdraw it.',
+  'frozen.indefinite': 'This decision has no end date.',
 
   'frozen.returnTitle': 'How can you come back?',
   'frozen.returnIntro':
@@ -67,8 +66,7 @@ export const frozenDict: TranslationDict<keyof typeof frozen> = {
     'frozen.noReason':
       'Razloga trenutno ni bilo mogoče naložiti. Objavljen je skupaj z odločitvijo in ga je mogoče prebrati pozneje.',
     'frozen.sinceLabel': 'Velja od',
-    'frozen.indefinite':
-      'Ta odločitev nima roka. Dvigne se samo, če jo za umik podpišejo trije fasilitatorji.',
+    'frozen.indefinite': 'Ta odločitev nima roka.',
 
     'frozen.returnTitle': 'Kako lahko ponovno vstopiš?',
     'frozen.returnIntro':
