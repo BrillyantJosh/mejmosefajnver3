@@ -279,9 +279,7 @@ export default function Wallet() {
             <strong>{splitWarning.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LANA</strong>,
             which exceeds the maximum allowed balance of{' '}
             <strong>{splitWarning.limit.toLocaleString()} LANA</strong>.
-            {splitWarning.splitApproaching
-              ? ' A SPLIT is approaching — reduce your balance now to avoid your account being frozen.'
-              : ' You must reduce your balance before the next SPLIT to avoid your account being frozen.'}
+ A SPLIT is approaching — reduce your balance now to avoid your account being frozen.
             {' '}Transfer or spend your LANA to bring your balance below the limit.
           </AlertDescription>
         </Alert>
@@ -300,9 +298,7 @@ export default function Wallet() {
             in total, above the {splitWarning.retail.limit.toLocaleString()} LANA allowed on Retail
             wallets. This limit is counted across <strong>all</strong> your Retail wallets together,
             separately from your Wallet and Main Wallet.
-            {splitWarning.splitApproaching
-              ? ' A SPLIT is approaching — bring the Retail total down now.'
-              : ' Bring the Retail total below the limit before the next SPLIT.'}
+ A SPLIT is approaching — bring the Retail total down now.
           </AlertDescription>
         </Alert>
       )}
@@ -424,8 +420,9 @@ export default function Wallet() {
               )}
 
               {/* CLEAR overlay badge — this wallet counts toward a limit that is
-                  currently exceeded. Retail wallets answer to the Retail limit,
-                  everything else to the Split cap. */}
+                  currently exceeded AND a Split is approaching; without the
+                  authority's flag nothing is marked. Retail wallets answer to
+                  the Retail limit, everything else to the Split cap. */}
               {!wallet.freezeStatus && (wallet.balance || 0) > 0 && (
                 wallet.walletType === 'Retail'
                   ? splitWarning.retail.exceeded

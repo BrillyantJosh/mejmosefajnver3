@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useNostrWallets } from '@/hooks/useNostrWallets';
 import { useWalletBalances } from '@/hooks/useWalletBalances';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { evaluateSplitLimit } from '@/lib/splitWarning';
 
 /** Everyday wallets, measured against the Split cap. */
 const WATCHED_TYPES = new Set(['Wallet', 'Main Wallet']);
@@ -13,6 +14,7 @@ export interface SplitLimitCheck {
   limit: number;
   /** Combined balance of the wallets this limit applies to. */
   totalBalance: number;
+  /** Show the warning: over the limit AND a Split is approaching. */
   exceeded: boolean;
 }
 
@@ -32,6 +34,10 @@ export interface SplitLimitCheck {
  * balance at which an account is frozen outright, a different message.
  *
  * Lana.Discount wallets are excluded from both — they are managed separately.
+ *
+ * Both warnings are held shut unless KIND 38888 says `split_approaching` is
+ * true. See src/lib/splitWarning.ts for that rule and why it is the flag, not
+ * the balance, that decides whether anything is shown.
  */
 export function useWarningBeforeSplit() {
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
@@ -39,7 +45,7 @@ export function useWarningBeforeSplit() {
 
   const limit = parameters?.maxCapLanasOnSplit || 0;
   const retailLimit = parameters?.freezeRetailAccountAbove || 0;
-  /** The authority's flag that a Split is coming — makes the warnings urgent. */
+  /** The authority's flag that a Split is coming — nothing is warned without it. */
   const splitApproaching = !!parameters?.splitApproaching;
 
   const watchedAddresses = useMemo(() => {
@@ -55,27 +61,29 @@ export function useWarningBeforeSplit() {
   const { totalBalance, isLoading: balancesLoading } = useWalletBalances(watchedAddresses);
   const { totalBalance: retailBalance, isLoading: retailLoading } = useWalletBalances(retailAddresses);
 
-  // Deliberately NOT gated on splitApproaching: being over a limit is the risk
-  // itself, and hiding the warning until a flag flips would leave someone
-  // exposed at exactly the wrong moment. The flag only sharpens the wording.
-  const exceeded = limit > 0 && totalBalance > limit;
-  const retailExceeded = retailLimit > 0 && retailBalance > retailLimit;
+  // Gated on splitApproaching (Brilly, 9 September 2026): when the authority
+  // has not flagged a Split as approaching, the warning must not be shown at
+  // all. Between 6 August and that date it was shown whenever the balance was
+  // over the cap; the rule now follows the flag. Nothing in the app states the
+  // bare fact instead — no Split approaching means no sign at all.
+  const everyday = evaluateSplitLimit(limit, totalBalance, splitApproaching);
+  const retailVerdict = evaluateSplitLimit(retailLimit, retailBalance, splitApproaching);
 
   const retail: SplitLimitCheck = {
-    limit: retailLimit,
+    limit: retailVerdict.limit,
     totalBalance: retailBalance,
-    exceeded: retailExceeded,
+    exceeded: retailVerdict.warn,
   };
 
   return {
     // everyday wallets (unchanged shape — existing callers keep working)
-    exceeded,
+    exceeded: everyday.warn,
     totalBalance,
     limit,
     // retail wallets, measured on their own limit
     retail,
-    /** True when either limit is breached — for a single header signal. */
-    anyExceeded: exceeded || retailExceeded,
+    /** True when either warning is live — for a single header signal. */
+    anyExceeded: everyday.warn || retailVerdict.warn,
     hasRetailWallets: retailAddresses.length > 0,
     splitApproaching,
     loading: walletsLoading || balancesLoading || retailLoading || paramsLoading,

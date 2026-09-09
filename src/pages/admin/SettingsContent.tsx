@@ -169,7 +169,7 @@ export default function SettingsContent() {
           <CardDescription>
             Two limits, both published in the authority's KIND 38888 event and both updating on
             their own — nothing to set here. Anyone above either one is warned to reduce before the
-            SPLIT.
+            SPLIT — but only while <code>split_approaching</code> is true.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -194,7 +194,9 @@ export default function SettingsContent() {
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">
-              No SPLIT flagged as approaching right now. Anyone over the threshold is still warned.
+              No SPLIT flagged as approaching, so <strong>no one is warned</strong> — the CLEAR badge
+              and the wallet alerts stay hidden even for balances over the threshold. They appear by
+              themselves when the authority sets <code>split_approaching</code> to true.
             </p>
           )}
 
