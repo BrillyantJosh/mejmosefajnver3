@@ -49,7 +49,12 @@ const frozen = {
   'frozen.sent': 'Your request has been sent.',
   'frozen.sentNote':
     'Facilitators can now read it. It does not lift the decision by itself, but it is the part that is yours to do.',
-  'frozen.alreadySent': 'You sent a request on {date}. You may send another.',
+  'frozen.alreadySent': 'You sent your request on {date}.',
+  'frozen.alreadySentNote':
+    'This is what you wrote. One request is enough — there is nothing more to send, and nothing is gained by sending it again. What happens next is not yours to push.',
+  'frozen.yourAnswers': 'Your answers',
+  'frozen.emptyAnswer': '— left empty —',
+  'frozen.loadingOwn': 'Looking for your request…',
   'frozen.sendFailed': 'The request could not be sent',
   'frozen.cancel': 'Not now',
 
@@ -100,7 +105,12 @@ export const frozenDict: TranslationDict<keyof typeof frozen> = {
     'frozen.sent': 'Tvoja prošnja je poslana.',
     'frozen.sentNote':
       'Fasilitatorji jo lahko zdaj preberejo. Sama po sebi odločitve ne dvigne, je pa tisti del, ki je tvoj.',
-    'frozen.alreadySent': 'Prošnjo si poslal {date}. Lahko pošlješ novo.',
+    'frozen.alreadySent': 'Prošnjo si poslal {date}.',
+    'frozen.alreadySentNote':
+      'To si napisal. Ena prošnja je dovolj — poslati ni več česa in s ponavljanjem se ne pridobi nič. Kar sledi, ni na tebi, da priganjaš.',
+    'frozen.yourAnswers': 'Tvoji odgovori',
+    'frozen.emptyAnswer': '— pustil prazno —',
+    'frozen.loadingOwn': 'Iščem tvojo prošnjo…',
     'frozen.sendFailed': 'Prošnje ni bilo mogoče poslati',
     'frozen.cancel': 'Ne zdaj',
 

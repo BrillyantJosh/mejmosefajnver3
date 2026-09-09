@@ -98,28 +98,57 @@ export async function publishReentryRequest(params: {
   }
 }
 
-/** Has this person already applied? Used to show them what they sent. */
-export async function findOwnReentryRequests(
-  pubkey: string,
-  relays: string[],
-): Promise<{ id: string; submittedAt: number }[]> {
-  if (!relays?.length) return [];
+/**
+ * The request this person has already sent, if any — with their own answers
+ * readable again.
+ *
+ * They can open it themselves: NIP-44 derives one conversation key from
+ * (their private key, platform public key), which is the same key the platform
+ * derives from the other side. Nothing extra had to be stored for them to see
+ * their own words again.
+ */
+export async function findOwnReentryRequest(params: {
+  pubkey: string;
+  privateKeyHex: string;
+  relays: string[];
+}): Promise<{ id: string; submittedAt: number; answers?: ReentryAnswers; note?: string } | null> {
+  const { pubkey, privateKeyHex, relays } = params;
+  if (!relays?.length) return null;
+
   const pool = new SimplePool();
   try {
     const evs = (await withTimeout(
       pool.querySync(relays, { kinds: [REENTRY_KIND], '#p': [pubkey.toLowerCase()] }),
       8000,
     )) as Event[];
-    return evs
+
+    const mine = evs
       // Nobody applies on another's behalf — the signature must be the applicant's.
       .filter((e) => e.pubkey.toLowerCase() === pubkey.toLowerCase())
-      .map((e) => ({
-        id: e.id,
-        submittedAt: Number(e.tags.find((t) => t[0] === 'submitted_at')?.[1]) || e.created_at,
-      }))
-      .sort((a, b) => b.submittedAt - a.submittedAt);
+      // The EARLIEST is the request. Taking the newest would let someone bury an
+      // inconvenient answer under a fresher one.
+      .sort((a, b) => a.created_at - b.created_at);
+
+    const ev = mine[0];
+    if (!ev) return null;
+
+    const submittedAt = Number(ev.tags.find((t) => t[0] === 'submitted_at')?.[1]) || ev.created_at;
+    const base = { id: ev.id, submittedAt };
+
+    const platform = await platformPubkey(pool, relays);
+    if (!platform) return base;   // it exists; the words just could not be opened now
+
+    try {
+      const key = nip44.v2.utils.getConversationKey(hexToBytes(privateKeyHex), platform);
+      const parsed = JSON.parse(nip44.v2.decrypt(ev.content, key)) as {
+        answers?: ReentryAnswers; note?: string;
+      };
+      return { ...base, answers: parsed.answers, note: parsed.note };
+    } catch {
+      return base;
+    }
   } catch {
-    return [];
+    return null;
   } finally {
     try { pool.close(relays); } catch { /* already closed */ }
   }
