@@ -1,3 +1,5 @@
+import { FrozenOutError, type FreezeVerdict } from '@/lib/ownFreezeGate';
+import { FrozenOutScreen } from '@/components/FrozenOutScreen';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,6 +24,7 @@ const Login = () => {
   );
   const [wif, setWif] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [frozenVerdict, setFrozenVerdict] = useState<FreezeVerdict | null>(null);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [rememberMe, setRememberMe] = useState(true); // Default to true for better UX
   const { login } = useAuth();
@@ -73,6 +76,13 @@ const Login = () => {
       });
       navigate('/');
     } catch (error) {
+      // A standing commission decision is not a failed sign-in. The person is
+      // shown what was decided and how to come back, instead of an error that
+      // reads like their key was wrong.
+      if (error instanceof FrozenOutError) {
+        setFrozenVerdict(error.verdict);
+        return;
+      }
       toast({
         title: "Login error",
         description: error instanceof Error ? error.message : "Invalid WIF key",
@@ -90,6 +100,17 @@ const Login = () => {
       description: "Private key loaded from QR code"
     });
   };
+
+  // Nothing of the app renders while a decision stands — not the form,
+
+  // not a partial view. The account is simply not reachable.
+
+  if (frozenVerdict) {
+
+    return <FrozenOutScreen verdict={frozenVerdict} onBack={() => setFrozenVerdict(null)} />;
+
+  }
+
 
   return (
     <div className="min-h-screen flex flex-col bg-background">

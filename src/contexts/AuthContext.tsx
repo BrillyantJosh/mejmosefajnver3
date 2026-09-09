@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { checkGrossViolationFreeze, FrozenOutError, type FreezeVerdict } from '@/lib/ownFreezeGate';
 import { convertWifToIds } from '@/lib/crypto';
 import { SimplePool } from 'nostr-tools';
 
@@ -34,6 +35,9 @@ interface AuthContextType {
   login: (wif: string, relays?: string[], rememberMe?: boolean) => Promise<void>;
   logout: () => void;
   refreshSession: () => void;
+  /** Set when a commission decision stands; the app renders nothing else. */
+  frozenOut: FreezeVerdict | null;
+  setFrozenOut: (v: FreezeVerdict | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,6 +46,7 @@ const SESSION_KEY = 'lana_user_session';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<UserSession | null>(null);
+  const [frozenOut, setFrozenOut] = useState<FreezeVerdict | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const isSessionValid = (session: UserSession): boolean => {
@@ -94,6 +99,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setIsLoading(false);
   }, [loadSessionFromStorage]);
+
+
 
   // Handle Chrome Memory Saver - detect if tab was discarded and restore session
   useEffect(() => {
@@ -154,6 +161,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (wif: string, relays?: string[], rememberMe: boolean = false) => {
     try {
       const derivedIds = await convertWifToIds(wif);
+
+      // A commission gross-violation decision closes the door BEFORE a session
+      // exists. Checking after login would leave the account reachable for as
+      // long as it took a screen to render — and the point of the sanction is
+      // that the contents are not reachable at all.
+      const gate = await checkGrossViolationFreeze(derivedIds.nostrHexId, relays ?? []);
+      if (gate.frozen) {
+        console.warn('Sign-in refused: commission gross-violation decision stands');
+        throw new FrozenOutError(gate);
+      }
       let lanaWalletID: string | undefined = undefined;
       let lanoshi2lash: string | undefined = undefined;
       let profileName: string | undefined = undefined;
@@ -299,7 +316,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ session, isLoading, login, logout, refreshSession }}>
+    <AuthContext.Provider value={{ session, isLoading, login, logout, refreshSession, frozenOut, setFrozenOut }}>
       {children}
     </AuthContext.Provider>
   );

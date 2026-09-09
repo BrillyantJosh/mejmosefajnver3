@@ -10,6 +10,7 @@ import { ModulesProvider } from "./contexts/ModulesContext";
 import { AdminProvider } from "./contexts/AdminContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { I18nProvider } from "./i18n/I18nContext";
+import { FrozenOutGate } from "./components/FrozenOutGate";
 import { SystemParametersProvider } from "./contexts/SystemParametersContext";
 import { AdminProtectedRoute, ProtectedRoute } from "./components/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
@@ -220,6 +221,7 @@ const App = () => (
               <Sonner />
               <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
+              <FrozenOutGate>
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/public" element={<PublicHome />} />
@@ -455,6 +457,7 @@ const App = () => (
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </FrozenOutGate>
               </Suspense>
               </ErrorBoundary>
             </TooltipProvider>
