@@ -1,3 +1,4 @@
+import { convertWifToIds } from '@/lib/crypto';
 import { FrozenOutError, type FreezeVerdict } from '@/lib/ownFreezeGate';
 import { FrozenOutScreen } from '@/components/FrozenOutScreen';
 import { useState, useEffect } from 'react';
@@ -25,6 +26,7 @@ const Login = () => {
   const [wif, setWif] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [frozenVerdict, setFrozenVerdict] = useState<FreezeVerdict | null>(null);
+  const [signKey, setSignKey] = useState<string | null>(null);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [rememberMe, setRememberMe] = useState(true); // Default to true for better UX
   const { login } = useAuth();
@@ -81,6 +83,12 @@ const Login = () => {
       // reads like their key was wrong.
       if (error instanceof FrozenOutError) {
         setFrozenVerdict(error.verdict);
+        // Their key, kept in memory only, so they can sign a re-entry request
+        // without a session ever being created. Never stored.
+        try {
+          const ids = await convertWifToIds(wif);
+          setSignKey(ids.nostrPrivateKey);
+        } catch { /* the page still shows; only the form needs the key */ }
         return;
       }
       toast({
@@ -107,7 +115,14 @@ const Login = () => {
 
   if (frozenVerdict) {
 
-    return <FrozenOutScreen verdict={frozenVerdict} onBack={() => setFrozenVerdict(null)} />;
+    return (
+      <FrozenOutScreen
+        verdict={frozenVerdict}
+        onBack={() => { setSignKey(null); setFrozenVerdict(null); }}
+        signWith={signKey ?? undefined}
+        relays={parameters?.relays}
+      />
+    );
 
   }
 

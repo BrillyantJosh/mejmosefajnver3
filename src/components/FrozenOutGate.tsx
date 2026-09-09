@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { FrozenOutScreen } from '@/components/FrozenOutScreen';
@@ -20,6 +20,9 @@ import { checkGrossViolationFreeze } from '@/lib/ownFreezeGate';
  */
 export const FrozenOutGate = ({ children }: { children: React.ReactNode }) => {
   const { session, frozenOut, setFrozenOut, logout } = useAuth();
+  // Held in memory only, so the person can still sign a re-entry request after
+  // their session ends. Never persisted.
+  const [signKey, setSignKey] = useState<string | null>(null);
   const { parameters } = useSystemParameters();
   const relays = parameters?.relays;
   const busy = useRef(false);
@@ -39,6 +42,7 @@ export const FrozenOutGate = ({ children }: { children: React.ReactNode }) => {
           // Take the language BEFORE the session ends. Losing it here would
           // switch the page to English at exactly the moment someone most
           // needs to read it in their own.
+          setSignKey(session?.nostrPrivateKey ?? null);
           setFrozenOut({ ...verdict, lang: session?.profileLang });
           logout();
         }
@@ -55,6 +59,15 @@ export const FrozenOutGate = ({ children }: { children: React.ReactNode }) => {
     return () => { cancelled = true; clearInterval(timer); };
   }, [session?.nostrHexId, relays, frozenOut, setFrozenOut, logout]);
 
-  if (frozenOut) return <FrozenOutScreen verdict={frozenOut} onBack={() => setFrozenOut(null)} />;
+  if (frozenOut) {
+    return (
+      <FrozenOutScreen
+        verdict={frozenOut}
+        onBack={() => { setSignKey(null); setFrozenOut(null); }}
+        signWith={signKey ?? undefined}
+        relays={relays}
+      />
+    );
+  }
   return <>{children}</>;
 };

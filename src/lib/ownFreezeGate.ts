@@ -26,6 +26,8 @@ export interface FreezeVerdict {
   since?: number;
   /** True when nothing could be determined — the caller decides what to do. */
   unknown?: boolean;
+  /** The KIND 87058 this freeze comes from, so a request can name it. */
+  violationEventId?: string;
   /**
    * The person's own language, captured before their session ends.
    * Without it the page falls back to English at exactly the moment someone
@@ -47,7 +49,7 @@ const readCache = (pubkey: string): FreezeVerdict | null => {
 
 const writeCache = (pubkey: string, v: FreezeVerdict) => {
   try {
-    localStorage.setItem(cacheKey(pubkey), JSON.stringify({ frozen: v.frozen, reason: v.reason, since: v.since, lang: v.lang }));
+    localStorage.setItem(cacheKey(pubkey), JSON.stringify({ frozen: v.frozen, reason: v.reason, since: v.since, lang: v.lang, violationEventId: v.violationEventId }));
   } catch { /* private mode — the live check still runs every time */ }
 };
 
@@ -135,6 +137,7 @@ export async function checkGrossViolationFreeze(
     // Frozen. Now find the words to show — display only, never the decision.
     let reason: string | undefined;
     let since: number | undefined;
+    let violationEventId: string | undefined;
     try {
       const reports = (await withTimeout(
         pool.querySync(relays, { kinds: [VIOLATION_KIND], '#p': [hex] }),
@@ -153,6 +156,7 @@ export async function checkGrossViolationFreeze(
           if (typeof content.subject === 'string' && content.subject.trim()) reason = content.subject.trim();
         } catch { /* unreadable content — the freeze still stands */ }
         since = Number(report.tags.find((t) => t[0] === 'effective_at')?.[1]) || report.created_at;
+        violationEventId = report.id;
       }
     } catch { /* the reason is a courtesy; its absence never unfreezes anyone */ }
 
@@ -170,7 +174,7 @@ export async function checkGrossViolationFreeze(
       if (raw) lang = raw;
     } catch { /* the page still renders, in the reader's default */ }
 
-    const verdict: FreezeVerdict = { frozen: true, reason, since, lang };
+    const verdict: FreezeVerdict = { frozen: true, reason, since, lang, violationEventId };
     writeCache(hex, verdict);
     return verdict;
   } catch {

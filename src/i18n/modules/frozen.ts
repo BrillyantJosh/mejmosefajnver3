@@ -40,6 +40,20 @@ const frozen = {
   'frozen.principlesE':
     'If, after honest introspection, you feel that you want to be part of such a community and are ready to bring your conduct into line with these principles, you may ask to re-enter. A process of reintegration can then begin, and the next steps for restoring your participation in the community will be agreed.',
 
+  'frozen.apply': 'Ask to re-enter',
+  'frozen.applyIntro':
+    'When you have answered the four questions for yourself, you can write your answers here. They are signed with your own key and encrypted so that only facilitators can read them — never the public.',
+  'frozen.applyPrivacy': 'Only facilitators can read this. It is not published in the clear.',
+  'frozen.applyShort': 'Write as much or as little as is true. Nothing here has a required length.',
+  'frozen.submit': 'Sign and send',
+  'frozen.submitting': 'Sending…',
+  'frozen.sent': 'Your request has been sent.',
+  'frozen.sentNote':
+    'Facilitators can now read it. It does not lift the decision by itself — that takes three facilitator signatures — but it is the part that is yours to do.',
+  'frozen.alreadySent': 'You sent a request on {date}. You may send another.',
+  'frozen.sendFailed': 'The request could not be sent',
+  'frozen.cancel': 'Not now',
+
   'frozen.back': 'Back to sign in',
 };
 
@@ -77,6 +91,20 @@ export const frozenDict: TranslationDict<keyof typeof frozen> = {
       'Notranja sprememba je vedno prostovoljna. Sodelovanje v skupnosti pa je pogojeno s spoštovanjem njenih načel.',
     'frozen.principlesE':
       'Če po iskreni introspekciji začutiš, da želiš biti del takšne skupnosti in si pripravljen svoje ravnanje uskladiti s temi načeli, lahko zaprosiš za ponovni vstop. Takrat se lahko začne proces ponovne vključitve in določijo nadaljnji koraki za ponovno vzpostavitev sodelovanja v skupnosti.',
+
+    'frozen.apply': 'Zaprosi za ponovni vstop',
+    'frozen.applyIntro':
+      'Ko si si na štiri vprašanja odgovoril zase, lahko odgovore zapišeš tukaj. Podpišeš jih s svojim ključem, šifrirani pa so tako, da jih lahko preberejo samo fasilitatorji — javnost nikoli.',
+    'frozen.applyPrivacy': 'To lahko preberejo samo fasilitatorji. Ni objavljeno odprto.',
+    'frozen.applyShort': 'Napiši toliko ali tako malo, kolikor je res. Nič tukaj nima predpisane dolžine.',
+    'frozen.submit': 'Podpiši in pošlji',
+    'frozen.submitting': 'Pošiljam…',
+    'frozen.sent': 'Tvoja prošnja je poslana.',
+    'frozen.sentNote':
+      'Fasilitatorji jo lahko zdaj preberejo. Sama po sebi odločitve ne dvigne — za to so potrebni trije podpisi fasilitatorjev — je pa tisti del, ki je tvoj.',
+    'frozen.alreadySent': 'Prošnjo si poslal {date}. Lahko pošlješ novo.',
+    'frozen.sendFailed': 'Prošnje ni bilo mogoče poslati',
+    'frozen.cancel': 'Ne zdaj',
 
     'frozen.back': 'Nazaj na prijavo',
   },

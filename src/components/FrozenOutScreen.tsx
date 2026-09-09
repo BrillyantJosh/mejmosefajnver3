@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useTranslation, useLangControl } from '@/i18n/I18nContext';
 import { frozenDict } from '@/i18n/modules/frozen';
 import { specificGround, type FreezeVerdict } from '@/lib/ownFreezeGate';
+import { ReentryRequestForm } from '@/components/ReentryRequestForm';
 
 /**
  * Shown INSTEAD of the app when a commission decision stands.
@@ -15,9 +16,18 @@ import { specificGround, type FreezeVerdict } from '@/lib/ownFreezeGate';
 export const FrozenOutScreen = ({
   verdict,
   onBack,
+  signWith,
+  relays,
 }: {
   verdict: FreezeVerdict;
   onBack: () => void;
+  /**
+   * The person's own key, held in memory only so they can sign a re-entry
+   * request. Never written to storage: they are signed out, and a sanction is
+   * no reason to start keeping their key around.
+   */
+  signWith?: string;
+  relays?: string[];
 }) => {
   const { setLang } = useLangControl();
 
@@ -95,6 +105,16 @@ export const FrozenOutScreen = ({
             <p>{t('frozen.principlesE')}</p>
           </div>
         </div>
+
+        {/* The one act left to them. Without it a sanction has no route back. */}
+        {signWith && relays && relays.length > 0 && (
+          <ReentryRequestForm
+            privateKeyHex={signWith}
+            relays={relays}
+            violationEventId={verdict.violationEventId}
+            onSent={() => { /* the form shows its own confirmation */ }}
+          />
+        )}
 
         <Button variant="outline" onClick={onBack} className="w-full sm:w-auto">
           {t('frozen.back')}
