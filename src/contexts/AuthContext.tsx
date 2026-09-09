@@ -306,6 +306,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(SESSION_KEY, JSON.stringify(userSession));
       console.log(`Session created, expires in ${expirationDays} days:`, new Date(expiresAt));
     } catch (error) {
+      // A commission decision must reach the caller INTACT. Re-wrapping every
+      // failure in a plain Error kept only the message, so the typed error and
+      // the decision it carries were lost — the caller saw a generic "login
+      // error" toast where it should have shown the person what was decided.
+      if (error instanceof FrozenOutError) throw error;
       throw new Error(error instanceof Error ? error.message : 'Login failed');
     }
   };

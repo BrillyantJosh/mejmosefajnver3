@@ -47,7 +47,7 @@ const readCache = (pubkey: string): FreezeVerdict | null => {
 
 const writeCache = (pubkey: string, v: FreezeVerdict) => {
   try {
-    localStorage.setItem(cacheKey(pubkey), JSON.stringify({ frozen: v.frozen, reason: v.reason, since: v.since }));
+    localStorage.setItem(cacheKey(pubkey), JSON.stringify({ frozen: v.frozen, reason: v.reason, since: v.since, lang: v.lang }));
   } catch { /* private mode — the live check still runs every time */ }
 };
 
@@ -156,7 +156,21 @@ export async function checkGrossViolationFreeze(
       }
     } catch { /* the reason is a courtesy; its absence never unfreezes anyone */ }
 
-    const verdict: FreezeVerdict = { frozen: true, reason, since };
+    // Their own language, read from their profile. On the sign-in path there
+    // is no session to take it from, and this page is the one place it matters
+    // most: it is all they will see.
+    let lang: string | undefined;
+    try {
+      const profile = (await withTimeout(
+        pool.querySync(relays, { kinds: [0], authors: [hex], limit: 1 }),
+        6000,
+      )) as Event[];
+      const content = JSON.parse(profile[0]?.content || '{}');
+      const raw = String(content?.lang || content?.language || '').toLowerCase().split(/[-_]/)[0];
+      if (raw) lang = raw;
+    } catch { /* the page still renders, in the reader's default */ }
+
+    const verdict: FreezeVerdict = { frozen: true, reason, since, lang };
     writeCache(hex, verdict);
     return verdict;
   } catch {
