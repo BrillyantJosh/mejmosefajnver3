@@ -10,6 +10,7 @@ import OwnFullMatrix from "@/components/own/OwnFullMatrix";
 import OwnParticipantDetail from "@/components/own/OwnParticipantDetail";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNostrOpenProcesses } from "@/hooks/useNostrOpenProcesses";
+import { canPauseProcess } from "@/lib/ownProcessRecords";
 import { useNostrGroupKey } from "@/hooks/useNostrGroupKey";
 import { useNostrGroupMessages } from "@/hooks/useNostrGroupMessages";
 import { useNostrProcessExitState, PROCESS_EXIT_KIND } from "@/hooks/useNostrProcessExitState";
@@ -161,8 +162,10 @@ export default function Own() {
     selectedProcess?.processEventId || null,
     selectedProcess?.facilitators?.length ? selectedProcess.facilitators : (selectedProcess?.facilitator || null)
   );
-  // Only the facilitator may pause / reopen the process
-  const canPause = selectedProcess?.userRole === 'facilitator';
+  // The facilitator LEADING the process may pause / reopen it — read from the
+  // roster, not from userRole (which reports 'initiator' for a facilitator who
+  // opened the case himself, and so left him with Exit but no Pause).
+  const canPause = canPauseProcess(selectedProcess, session?.nostrHexId);
   const en = useLang() === 'en';
 
   // The beings' silence (KIND 37045) toward the LOGGED-IN person in THIS case.

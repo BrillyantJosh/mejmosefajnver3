@@ -2,39 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SimplePool, Filter, Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { readFromRelays } from '@/lib/relayRead';
+import { toOpenProcesses } from '@/lib/ownProcessRecords';
+import type { OpenProcess } from '@/lib/ownProcessRecords';
 
-export interface OpenProcess {
-  id: string;
-  processEventId: string;
-  title: string;
-  status: string;
-  phase: string;
-  openedAt: number;
-  initiator: string;
-  /** The OPENING facilitator — the one who authored the record. */
-  facilitator: string;
-  /**
-   * Every facilitator, in tag order, opening one first. A process can be
-   * co-led (e.g. a human together with a being), and each co-facilitator
-   * carries the same ['p',hex,'facilitator'] tag and the same standing.
-   */
-  facilitators: string[];
-  participants: string[];
-  guests: string[];
-  language: string;
-  topic?: string;
-  /**
-   * What the process was opened ABOUT, from the event's `content`. Nothing
-   * read this before, so an opened process showed only its title. Kept raw
-   * here; processDescription() decides what of it is worth reading.
-   */
-  description?: string;
-  userRole?: string;
-  /** Set when a facilitator has offered to hand this process over (cross-app: selfresponsible.life). */
-  handoverTo?: string;
-  createdAt?: number;
-}
-
+export type { OpenProcess };
 
 /** Whether the app has actually heard from a relay yet. */
 export type OpenProcessStatus = 'loading' | 'ready' | 'unreachable';
@@ -44,87 +15,6 @@ const ATTEMPT_BUDGETS_MS = [6_000, 10_000, 15_000];
 const BACKOFF_MS = [2_000, 4_000];
 /** Even if system parameters never arrive, resolve rather than spin forever. */
 const PARAMS_DEADLINE_MS = 12_000;
-
-/** Pure: relay events → the user's open processes. Unchanged from before. */
-function toOpenProcesses(events: Event[], userPubkey: string): OpenProcess[] {
-  return events
-    .map((event: Event) => {
-      const dTag = event.tags.find(t => t[0] === 'd')?.[1] || event.id;
-      const status = event.tags.find(t => t[0] === 'status')?.[1] || '';
-      const title = event.tags.find(t => t[0] === 'title')?.[1] || 'Untitled';
-      const phase = event.tags.find(t => t[0] === 'phase')?.[1] || 'opening';
-      const openedAt = parseInt(event.tags.find(t => t[0] === 'opened_at')?.[1] || '0');
-      const language = event.tags.find(t => t[0] === 'lang')?.[1] || 'en';
-      const topic = event.tags.find(t => t[0] === 'topic')?.[1];
-      
-      // Find process event reference (root event)
-      // Priority: 1) e-tag with 'process'/'root' marker, 2) d-tag (should equal KIND 87044 ID), 3) event.id
-      const eTagProcessId = event.tags.find(t => t[0] === 'e' && (t[3] === 'root' || t[2] === 'process'))?.[1];
-      const processEventId = eTagProcessId || dTag;
-      
-
-      // Extract roles - check both index 2 and 3 for compatibility
-      const getRole = (tag: string[]) => tag[3] || tag[2];
-      // Lowercase all pubkeys from tags — downstream assessment lookups
-      // key on lowercased hex, and role checks must be case-insensitive.
-      const initiator = (event.tags.find(t => t[0] === 'p' && (t[2] === 'initiator' || t[3] === 'initiator'))?.[1] || '').toLowerCase();
-      // ALL facilitators — a co-led process has more than one, and
-      // reading only the first would leave the co-facilitator with no
-      // role at all, so the .filter below would hide the process from
-      // the very person who leads it.
-      const facilitators = event.tags.filter(t => t[0] === 'p' && (t[2] === 'facilitator' || t[3] === 'facilitator')).map(t => (t[1] || '').toLowerCase()).filter(Boolean);
-      const facilitator = facilitators[0] || '';
-      const participants = event.tags.filter(t => t[0] === 'p' && (t[2] === 'participant' || t[3] === 'participant')).map(t => (t[1] || '').toLowerCase());
-      const guests = event.tags.filter(t => t[0] === 'p' && (t[2] === 'guest' || t[3] === 'guest')).map(t => (t[1] || '').toLowerCase());
-
-      // Check if user is in any role
-      const userPk = (userPubkey || '').toLowerCase();
-      let userRole: string | undefined;
-      if (initiator === userPk) userRole = 'initiator';
-      else if (facilitators.includes(userPk)) userRole = 'facilitator';
-      else if (participants.includes(userPk)) userRole = 'participant';
-      else if (guests.includes(userPk)) userRole = 'guest';
-
-      return {
-        id: dTag,
-        processEventId,
-        title,
-        status,
-        phase,
-        openedAt,
-        initiator,
-        facilitator,
-        facilitators,
-        participants,
-        guests,
-        language,
-        topic,
-        description: event.content || '',
-        userRole,
-        handoverTo: event.tags.find(t => t[0] === 'handover_to')?.[1],
-        createdAt: event.created_at
-      };
-    })
-    .filter(process =>
-      // A PAUSED process is still the person's process. Filtering to 'open'
-      // only made a facilitator's pause look like deletion: on 30.8.2026 the
-      // Mojca case went to status 'paused' at 05:47 and the whole community
-      // saw it vanish from /own. Only 'closed' leaves the list — a pause is
-      // shown (amber badge), never hidden.
-      (process.status === 'open' || process.status === 'paused') &&
-      process.userRole !== undefined
-    )
-    // A facilitator handover (selfresponsible.life) leaves TWO same-d records:
-    // the outgoing facilitator's (carries handover_to) and the new one's
-    // (authoritative). Order them so the authoritative + newest wins the
-    // dedup below — otherwise which facilitator shows is relay-arrival luck.
-    .sort((a, b) => (a.handoverTo ? 1 : 0) - (b.handoverTo ? 1 : 0) || (b.createdAt || 0) - (a.createdAt || 0))
-    // Deduplicate by id - keep the preferred (first after the sort above) occurrence
-    .filter((process, index, self) =>
-      self.findIndex(p => p.id === process.id) === index
-    )
-    .sort((a, b) => b.openedAt - a.openedAt);
-}
 
 /**
  * The user's OPEN processes (KIND 37044), read from the relays.

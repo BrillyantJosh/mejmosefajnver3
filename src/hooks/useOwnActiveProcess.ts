@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { SimplePool } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { newestPerProcess } from '@/lib/ownProcessRecords';
 
 /**
  * Lightweight hook that checks if the current user has any active (open)
@@ -35,7 +36,11 @@ export function useOwnActiveProcess() {
 
         if (cancelled) return;
 
-        const found = events.some((event) => {
+        // Newest record per process ONLY. The relays keep one record per
+        // author, so a process that changed hands or was ended still has older
+        // records saying 'open' — asking every record kept this badge lit for
+        // processes that are over.
+        const found = newestPerProcess(events).some((event) => {
           const status = event.tags.find(t => t[0] === 'status')?.[1];
           if (status !== 'open') return false;
 

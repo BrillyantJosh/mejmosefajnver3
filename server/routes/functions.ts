@@ -19,6 +19,7 @@ import { blockIfFrozen } from '../lib/walletFreeze';
 import { readFromRelaysServer } from '../lib/relayReadServer.js';
 import { findDuplicateConfirmations } from '../../src/lib/unconditionalPaymentGuard.js';
 import { consolidationFee, MIN_INPUTS, MIN_NET } from '../../src/lib/consolidationPlan.js';
+import { newestPerProcess } from '../../src/lib/ownProcessRecords.js';
 import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -3682,9 +3683,13 @@ router.post('/check-own-active', async (req: Request, res: Response) => {
     // Fetch ALL KIND 37044 events (no #p filter — relays don't support it for this kind range)
     const events = await queryEventsFromRelays(relays, { kinds: [37044], limit: 100 }, 12000);
 
-    // Filter: status=open AND user has a role in p-tags
+    // Filter: status=open AND user has a role in p-tags.
+    // Only the NEWEST record per process may be asked: the relays keep one per
+    // author, so a process that changed hands or was ended still carries older
+    // records saying 'open', and reading every record kept the header warning
+    // lit for processes that are over.
     const roles = ['initiator', 'facilitator', 'participant', 'guest'];
-    const activeProcesses = events.filter(event => {
+    const activeProcesses = newestPerProcess(events).filter(event => {
       const status = event.tags?.find((t: string[]) => t[0] === 'status')?.[1];
       if (status !== 'open') return false;
 
@@ -3731,8 +3736,10 @@ router.post('/check-header-warnings', async (req: Request, res: Response) => {
     ]);
 
     // --- OWN: check for active processes (KIND 37044) ---
+    // Newest record per process only — an older 'open' record of an ended
+    // process must not keep this warning lit (see /check-own-active above).
     const roles = ['initiator', 'facilitator', 'participant', 'guest'];
-    const ownActive = ownEvents.some((event: any) => {
+    const ownActive = newestPerProcess(ownEvents).some((event: any) => {
       const status = event.tags?.find((t: string[]) => t[0] === 'status')?.[1];
       if (status !== 'open') return false;
       return event.tags?.some((t: string[]) =>
