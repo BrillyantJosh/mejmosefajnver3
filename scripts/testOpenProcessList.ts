@@ -184,9 +184,9 @@ console.log('— a handover still names the CURRENT facilitator —');
 
 console.log('— the header warning reads the same pile, and must not stay lit —');
 {
-  // /check-own-active + /check-header-warnings + useOwnActiveProcess test
-  // `status === 'open'` on EVERY record. Without the dedup, the ended cases
-  // above keep the badge on through their older records.
+  // /check-own-active + /check-header-warnings test `status === 'open'` on
+  // EVERY record. Without the dedup, the ended cases above keep the badge on
+  // through their older records.
   const newest = newestPerProcess(all);
   check('one record per process survives', newest.length === 3, newest.length);
   const statusOf = (d: string) =>
