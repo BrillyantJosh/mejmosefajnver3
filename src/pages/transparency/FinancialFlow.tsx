@@ -286,7 +286,9 @@ function BalancesSection({ pubkey, fiat }: { pubkey: string; fiat: FiatView }) {
             <span className="truncate font-mono text-muted-foreground">
               {w.walletId}
               {w.note ? ` · ${w.note}` : ""}
-              {w.freezeStatus ? " ❄" : ""}
+              {/* An exclusion is a heavier decision than a freeze and must not
+                  wear the same mark. */}
+              {w.freezeStatus === "frozen_own_person" ? " ⛔" : w.freezeStatus ? " ❄" : ""}
             </span>
             <span className="shrink-0 text-right">
               {fmtLana(w.balance)}

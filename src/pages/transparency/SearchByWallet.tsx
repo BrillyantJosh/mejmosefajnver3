@@ -7,21 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Search,
-  Wallet as WalletIcon,
-  TrendingUp,
-  Copy,
-  ExternalLink,
-  CreditCard,
-  FileText,
-  Snowflake,
-  ShieldAlert,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  User,
-} from "lucide-react";
+import { Ban, CheckCircle, Copy, CreditCard, ExternalLink, FileText, Loader2, Search, ShieldAlert, Snowflake, TrendingUp, User, Wallet as WalletIcon, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
@@ -31,9 +17,17 @@ import { useNostrProfile } from "@/hooks/useNostrProfile";
 import lana8wonderBg from "@/assets/lana8wonder-bg.webp";
 import knightsBg from "@/assets/knights-bg.webp";
 
+/** True when the wallets are held by a commission exclusion, not an ordinary freeze. */
+const isExclusion = (freezeStatus?: string | null) => freezeStatus === "frozen_own_person";
+
 /** Get human-readable freeze reason */
 function getFreezeReasonLabel(freezeStatus: string): string {
   switch (freezeStatus) {
+    // A commission of three deciding someone is out of the community is not
+    // the same event as a registrar freezing a wallet, and calling both
+    // "frozen" made the heavier decision read like the lighter one.
+    case "frozen_own_person":
+      return "Excluded from the community by a commission decision";
     case "frozen_l8w":
       return "Late wallet registration";
     case "frozen_max_cap":
@@ -472,12 +466,18 @@ export default function SearchByWallet() {
                 variant="destructive"
                 className="mb-6 border-blue-500/50 bg-blue-500/10"
               >
-                <Snowflake className="h-4 w-4 text-blue-500" />
+                {isExclusion(reason) ? (
+                  <Ban className="h-4 w-4 text-red-500" />
+                ) : (
+                  <Snowflake className="h-4 w-4 text-blue-500" />
+                )}
                 <AlertTitle className="text-blue-700 dark:text-blue-400">
-                  All Accounts Frozen
+                  {isExclusion(reason) ? "Excluded" : "All Accounts Frozen"}
                 </AlertTitle>
                 <AlertDescription className="text-blue-700/80 dark:text-blue-300/80">
-                  All wallets for this user have been frozen.
+                  {isExclusion(reason)
+                    ? "A commission of facilitators has excluded this person from the community."
+                    : "All wallets for this user have been frozen."}
                   <strong className="block mt-1">
                     Reason: {getFreezeReasonLabel(reason)}
                   </strong>
@@ -668,10 +668,24 @@ export default function SearchByWallet() {
                     <CardContent className="space-y-3 relative z-10">
                       {/* Freeze reason banner on card */}
                       {wallet.freezeStatus && (
-                        <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 text-sm">
-                          <ShieldAlert className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                        <div
+                          className={`flex items-start gap-2 p-3 rounded-lg border text-sm ${
+                            isExclusion(wallet.freezeStatus)
+                              ? "bg-red-500/10 border-red-500/30"
+                              : "bg-blue-500/10 border-blue-500/30"
+                          }`}
+                        >
+                          {isExclusion(wallet.freezeStatus) ? (
+                            <Ban className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                          ) : (
+                            <ShieldAlert className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                          )}
                           <div>
-                            <p className="font-medium text-blue-700 dark:text-blue-400">
+                            <p className={`font-medium ${
+                              isExclusion(wallet.freezeStatus)
+                                ? "text-red-700 dark:text-red-400"
+                                : "text-blue-700 dark:text-blue-400"
+                            }`}>
                               {getFreezeReasonLabel(wallet.freezeStatus)}
                             </p>
                             <p className="text-blue-600/70 dark:text-blue-300/70 text-xs mt-0.5">
