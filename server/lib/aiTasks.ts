@@ -152,8 +152,10 @@ export async function fetchMissingData(
             if (addresses.length > 0) {
               const servers = getElectrumServersFromDb(db);
               const balances = await fetchBatchBalances(servers, addresses);
-              // Merge balances into wallets
-              const balanceMap = new Map(balances.map(b => [b.address, b]));
+              // Merge balances into wallets. fetchBatchBalances returns the
+              // address in `wallet_id` — keying this by `b.address` read
+              // undefined for every row, so every wallet merged as 0.
+              const balanceMap = new Map(balances.map(b => [b.wallet_id, b]));
               result.wallets = wallets.map((w: any) => {
                 const bal = balanceMap.get(w.address);
                 return {
