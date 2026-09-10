@@ -11,7 +11,7 @@
  */
 
 import * as crypto from 'crypto';
-import { electrumCall } from './electrum';
+import { electrumCall } from './electrum.js';
 
 // ==============================================
 // Base58 Encoding/Decoding

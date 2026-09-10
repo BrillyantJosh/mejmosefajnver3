@@ -8,14 +8,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import webpush from 'web-push';
-import { getDb } from '../db/connection';
-import { electrumCall, fetchBatchBalances } from '../lib/electrum';
-import { detectMissingFields, createPendingTask } from '../lib/aiTasks';
-import { sendLanaTransaction, sendBatchLanaTransaction, base58CheckDecode, uint8ArrayToHex, privateKeyToPublicKey, privateKeyToUncompressedPublicKey, publicKeyToAddress, normalizeWif, buildSignedTx } from '../lib/crypto';
-import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays, discoverNewProfiles } from '../lib/nostr';
-import { sendPushToUser } from '../lib/pushNotification';
+import { getDb } from '../db/connection.js';
+import { electrumCall, fetchBatchBalances } from '../lib/electrum.js';
+import { detectMissingFields, createPendingTask } from '../lib/aiTasks.js';
+import { sendLanaTransaction, sendBatchLanaTransaction, base58CheckDecode, uint8ArrayToHex, privateKeyToPublicKey, privateKeyToUncompressedPublicKey, publicKeyToAddress, normalizeWif, buildSignedTx } from '../lib/crypto.js';
+import { fetchKind38888, fetchUserWallets, queryEventsFromRelays, publishEventToRelays, discoverNewProfiles } from '../lib/nostr.js';
+import { sendPushToUser } from '../lib/pushNotification.js';
 import { verifyEvent } from 'nostr-tools';
-import { blockIfFrozen } from '../lib/walletFreeze';
+import { blockIfFrozen } from '../lib/walletFreeze.js';
 import { readFromRelaysServer } from '../lib/relayReadServer.js';
 import { findDuplicateConfirmations } from '../../src/lib/unconditionalPaymentGuard.js';
 import { consolidationFee, MIN_INPUTS, MIN_NET } from '../../src/lib/consolidationPlan.js';
@@ -151,7 +151,7 @@ router.post('/coingecko-lana-price', async (req: Request, res: Response) => {
       throw new Error(`CoinGecko API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const eurRate = data?.lanacoin?.eur;
 
     if (typeof eurRate !== 'number') {
@@ -1185,14 +1185,18 @@ const PROGRESS_MESSAGES: Record<string, { builder: string; skeptic: string; medi
   hr: { builder: "🔨 Pripremam odgovor...", skeptic: "🔍 Provjeravam točnost...", mediator: "⚖️ Sintetiziram konačni odgovor..." },
 };
 
-function parseTriadJSON<T>(text: string, fallback: T): T {
+// The models are asked for a `payment_intent` on top of the shape we fall back
+// to, so what comes back is wider than the fallback that types it.
+type TriadResponse<T> = T & { payment_intent?: any };
+
+function parseTriadJSON<T>(text: string, fallback: T): TriadResponse<T> {
   try {
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
     if (jsonMatch) return JSON.parse(jsonMatch[1].trim());
     return JSON.parse(text);
   } catch {
     console.error("Failed to parse triad JSON:", text.substring(0, 200));
-    return fallback;
+    return fallback as TriadResponse<T>;
   }
 }
 
@@ -3333,7 +3337,7 @@ router.post('/register-virgin-wallet', async (req: Request, res: Response) => {
       }),
     });
 
-    const result = await response.json();
+    const result = await response.json() as any;
 
     if (result.success) {
       console.log(`✅ Wallet registration successful: ${result.message || 'OK'}`);

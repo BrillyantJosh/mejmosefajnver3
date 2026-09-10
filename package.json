@@ -10,6 +10,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "typecheck:server": "tsc --noEmit -p server/tsconfig.json",
     "start": "node --import tsx server/index.ts",
     "start:prod": "NODE_ENV=production node --import tsx server/index.ts",
     "lint": "eslint .",

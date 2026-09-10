@@ -3,23 +3,23 @@ import compression from 'compression';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, closeDb } from './db/connection';
-import { fetchKind38888, refreshStaleProfiles, discoverNewProfiles, cleanupOrphanedProfiles, syncProjectFundedStatus, indexLanacrowdFromRelays, indexUnconditionalFinancingFromRelays } from './lib/nostr';
+import { getDb, closeDb } from './db/connection.js';
+import { fetchKind38888, refreshStaleProfiles, discoverNewProfiles, cleanupOrphanedProfiles, syncProjectFundedStatus, indexLanacrowdFromRelays, indexUnconditionalFinancingFromRelays } from './lib/nostr.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-import dbRoutes from './routes/db';
-import storageRoutes from './routes/storage';
-import lanacrowdRoutes from './routes/lanacrowd';
-import unconditionalFinancingRoutes from './routes/unconditionalFinancing';
-import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks, sseClientCount } from './routes/sse';
+import dbRoutes from './routes/db.js';
+import storageRoutes from './routes/storage.js';
+import lanacrowdRoutes from './routes/lanacrowd.js';
+import unconditionalFinancingRoutes from './routes/unconditionalFinancing.js';
+import sseRoutes, { emitSystemParametersUpdate, emitAiTaskUpdate, isUserConnectedToAiTasks, sseClientCount } from './routes/sse.js';
 import { relayPoolStats } from './lib/relayPool.js';
 import { createRateLimit } from './lib/rateLimit.js';
-import functionsRoutes, { retryPendingNostrEvents, cleanupDmAudio } from './routes/functions';
-import voiceRoutes from './routes/voice';
-import beingsRoutes from './routes/beings';
-import { processPendingTasks, setSSEHandlers } from './lib/aiTasks';
-import { syncUnregisteredLana } from './lib/unregisteredLana';
+import functionsRoutes, { retryPendingNostrEvents, cleanupDmAudio } from './routes/functions.js';
+import voiceRoutes from './routes/voice.js';
+import beingsRoutes from './routes/beings.js';
+import { processPendingTasks, setSSEHandlers } from './lib/aiTasks.js';
+import { syncUnregisteredLana } from './lib/unregisteredLana.js';
 
 const app = express();
 

@@ -5,7 +5,7 @@
  */
 
 import type Database from 'better-sqlite3';
-import { queryEventsFromRelays } from './nostr';
+import { queryEventsFromRelays } from './nostr.js';
 
 // =============================================
 // Helper functions (same pattern as aiTasks.ts)

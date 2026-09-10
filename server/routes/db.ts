@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { getDb } from '../db/connection';
+import { getDb } from '../db/connection.js';
 
 const router = Router();
 
@@ -262,7 +262,7 @@ router.get('/_schema/tables', (_req: Request, res: Response) => {
 });
 
 // GET /api/db/:table - SELECT
-router.get('/:table', (req: Request, res: Response) => {
+router.get('/:table', (req: Request<{ table: string }>, res: Response) => {
   const { table } = req.params;
 
   if (!validateTable(table)) {
@@ -305,7 +305,7 @@ router.get('/:table', (req: Request, res: Response) => {
 });
 
 // POST /api/db/:table - INSERT or UPSERT
-router.post('/:table', (req: Request, res: Response) => {
+router.post('/:table', (req: Request<{ table: string }>, res: Response) => {
   const { table } = req.params;
 
   if (!validateTable(table)) {
@@ -409,7 +409,7 @@ router.post('/:table', (req: Request, res: Response) => {
 });
 
 // PATCH /api/db/:table - UPDATE
-router.patch('/:table', (req: Request, res: Response) => {
+router.patch('/:table', (req: Request<{ table: string }>, res: Response) => {
   const { table } = req.params;
 
   if (!validateTable(table)) {
@@ -468,7 +468,7 @@ router.patch('/:table', (req: Request, res: Response) => {
 });
 
 // DELETE /api/db/:table - DELETE
-router.delete('/:table', (req: Request, res: Response) => {
+router.delete('/:table', (req: Request<{ table: string }>, res: Response) => {
   const { table } = req.params;
 
   if (!validateTable(table)) {

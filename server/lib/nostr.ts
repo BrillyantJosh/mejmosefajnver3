@@ -742,7 +742,7 @@ async function fetchAllFromRelay(
   let until: number | undefined = undefined;
 
   for (let page = 0; page < maxPages; page++) {
-    const filter = { ...baseFilter, limit: pageSize };
+    const filter: Record<string, any> = { ...baseFilter, limit: pageSize };
     if (until !== undefined) filter.until = until;
 
     const events = await queryEventsFromRelays([relayUrl], filter, pageTimeout);

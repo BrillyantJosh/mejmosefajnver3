@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
-import { fetchUserWallets, queryEventsFromRelays } from './nostr';
-import { fetchBatchBalances, ElectrumServer } from './electrum';
-import { sendPushToUser } from './pushNotification';
+import { fetchUserWallets, queryEventsFromRelays } from './nostr.js';
+import { fetchBatchBalances, ElectrumServer } from './electrum.js';
+import { sendPushToUser } from './pushNotification.js';
 
 // =============================================
 // Types

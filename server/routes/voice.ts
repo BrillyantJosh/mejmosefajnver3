@@ -3,7 +3,7 @@ import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb } from '../db/connection';
+import { getDb } from '../db/connection.js';
 
 const router = Router();
 
@@ -71,7 +71,7 @@ async function transcribeWithGroq(data: Buffer, filename: string, cleanMime: str
     throw new Error(`Groq STT error ${response.status}: ${errText.slice(0, 200)}`);
   }
 
-  const json = await response.json();
+  const json = await response.json() as any;
   const text = (json.text || '').trim();
   console.log(`🎙 Voice STT [${language}]: "${text.slice(0, 80)}..." (${Date.now() - startTime}ms)`);
 
@@ -428,7 +428,7 @@ router.post('/sozitje', async (req: Request, res: Response) => {
     const response = await fetch(url, fetchOptions);
 
     // Always parse JSON — Sožitje may include mood/response even in error responses
-    const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({})) as any;
 
     if (!response.ok) {
       console.error(`🤖 Sožitje error ${response.status}: ${JSON.stringify(data).slice(0, 200)}`);

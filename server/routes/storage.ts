@@ -24,7 +24,7 @@ for (const bucket of ALLOWED_BUCKETS) {
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const bucket = req.params.bucket;
+    const bucket = req.params.bucket as string;
     if (!ALLOWED_BUCKETS.includes(bucket)) {
       return cb(new Error(`Invalid bucket: ${bucket}`), '');
     }
@@ -38,7 +38,7 @@ const storage = multer.diskStorage({
       const safePath = String(providedPath).replace(/\.\./g, '').replace(/^\//, '');
       // Ensure subdirectory exists if path contains /
       if (safePath.includes('/')) {
-        const bucket = req.params.bucket;
+        const bucket = req.params.bucket as string;
         const fullDir = path.join(UPLOADS_DIR, bucket, path.dirname(safePath));
         if (!fs.existsSync(fullDir)) {
           fs.mkdirSync(fullDir, { recursive: true });
@@ -60,7 +60,7 @@ const upload = multer({
 });
 
 // POST /api/storage/:bucket/upload - Upload file
-router.post('/:bucket/upload', (req: Request, res: Response, next) => {
+router.post('/:bucket/upload', (req: Request<{ bucket: string }>, res: Response, next) => {
   const startTime = Date.now();
   console.log(`📤 Upload request received: bucket=${req.params.bucket}, content-length=${req.headers['content-length'] || 'unknown'}`);
 
@@ -104,7 +104,7 @@ router.post('/:bucket/upload', (req: Request, res: Response, next) => {
 });
 
 // GET /api/storage/:bucket/public/:filename - Get public URL (compatibility)
-router.get('/:bucket/public/:filename', (req: Request, res: Response) => {
+router.get('/:bucket/public/:filename', (req: Request<{ bucket: string; filename: string }>, res: Response) => {
   const { bucket, filename } = req.params;
 
   if (!ALLOWED_BUCKETS.includes(bucket)) {
@@ -159,7 +159,7 @@ function serveFile(bucket: string, relativePath: string, req: Request, res: Resp
 }
 
 // GET /api/storage/:bucket/* - Serve file (supports any subdirectory depth)
-router.get('/:bucket/{*filePath}', (req: Request, res: Response) => {
+router.get('/:bucket/{*filePath}', (req: Request<{ bucket: string; filePath: string | string[] }>, res: Response) => {
   const { bucket, filePath } = req.params;
   // Express 5 wildcard returns array of path segments — join them
   const resolvedPath = Array.isArray(filePath) ? filePath.join('/') : String(filePath);
@@ -167,7 +167,7 @@ router.get('/:bucket/{*filePath}', (req: Request, res: Response) => {
 });
 
 // DELETE /api/storage/:bucket/:filename - Delete file
-router.delete('/:bucket/:filename', (req: Request, res: Response) => {
+router.delete('/:bucket/:filename', (req: Request<{ bucket: string; filename: string }>, res: Response) => {
   const { bucket, filename } = req.params;
 
   if (!ALLOWED_BUCKETS.includes(bucket)) {
