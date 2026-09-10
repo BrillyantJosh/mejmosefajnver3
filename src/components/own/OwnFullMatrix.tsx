@@ -1,3 +1,4 @@
+import { useExclusions } from '@/hooks/useExclusions';
 import { useMemo } from "react";
 import { FreezeBadge } from "@/components/own/FreezeBadge";
 import type { PersonFreezeState } from "@/lib/ownFreeze";
@@ -48,6 +49,7 @@ interface Props {
 // per participant, aggregated across beings — no per-being rows. "More"
 // opens the full per-being detail (verdicts, grievances, emotions, smer).
 export default function OwnFullMatrix({ caseRoot, participants, phase, selectedParticipant, onSelect, freezes }: Props) {
+  const { exclusionOf } = useExclusions();
   const en = useLang() === "en";
   const L = en ? TXT.en : TXT.sl;
   const lang: "en" | "sl" = en ? "en" : "sl";
@@ -95,7 +97,7 @@ export default function OwnFullMatrix({ caseRoot, participants, phase, selectedP
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium truncate inline-flex items-center gap-1.5 min-w-0">
                       <span className="truncate">{nameOf(p)}</span>
-                      <FreezeBadge state={freezes?.get(p)} en={en} />
+                      <FreezeBadge state={freezes?.get(p)} en={en} exclusion={exclusionOf[p]} />
                     </span>
                     <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] text-orange-600 dark:text-orange-400 hover:text-orange-700 shrink-0" onClick={() => onSelect(p)}>
                       {L.more} <ChevronRight className="h-3 w-3" />

@@ -69,6 +69,7 @@ const Plan15Payouts = lazy(() => import("./pages/plan15/Plan15Payouts"));
 const OwnLayout = lazy(() => import("./pages/own/OwnLayout"));
 const Own = lazy(() => import("./pages/own/Own"));
 const OwnSearch = lazy(() => import("./pages/own/Search"));
+const OwnExcluded = lazy(() => import("./pages/own/Excluded"));
 const OwnMyCases = lazy(() => import("./pages/own/MyCases"));
 const OwnTranscript = lazy(() => import("./pages/own/Transcript"));
 const StartOwnProcess = lazy(() => import("./pages/own/StartOwnProcess"));
@@ -302,6 +303,7 @@ const App = () => (
                     <Route path="my-cases" element={<OwnMyCases />} />
                     <Route path="todo" element={<OwnTodo />} />
                     <Route path="matrix" element={<OwnMatrix />} />
+                    <Route path="excluded" element={<OwnExcluded />} />
                     <Route path="transcript/:caseId" element={<OwnTranscript />} />
                     <Route path="start/:postId" element={<StartOwnProcess />} />
                     <Route path="exit/:processId" element={<OwnExitProcess />} />

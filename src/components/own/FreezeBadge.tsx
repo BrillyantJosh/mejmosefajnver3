@@ -11,6 +11,7 @@
  */
 import { Badge } from '@/components/ui/badge';
 import type { PersonFreezeState } from '@/lib/ownFreeze';
+import type { Exclusion } from '@/lib/ownExclusion';
 
 const fmtDate = (unix: number | null | undefined, en: boolean): string => {
   if (!unix || !Number.isFinite(unix)) return '';
@@ -27,8 +28,38 @@ export const freezeLabel = (state: PersonFreezeState, en: boolean): string => {
   return en ? `${word} · up to SPLIT ${n}` : `${word} · do SPLITA ${n}`;
 };
 
-/** The chip that goes next to a person's name. */
-export const FreezeBadge = ({ state, en }: { state: PersonFreezeState | undefined | null; en: boolean }) => {
+/**
+ * The chip that goes next to a person's name.
+ *
+ * EXCLUSION IS NOT A FREEZE, and the two must not wear the same word. A KIND
+ * 87057 freeze is one facilitator pausing one person inside one process; an
+ * exclusion is a commission of three deciding someone is out of the community.
+ * Calling both "frozen" made the heavier decision read like the lighter one,
+ * so an exclusion says so and carries its own colour.
+ */
+export const FreezeBadge = ({
+  state,
+  en,
+  exclusion,
+}: {
+  state: PersonFreezeState | undefined | null;
+  en: boolean;
+  exclusion?: Exclusion | null;
+}) => {
+  if (exclusion) {
+    const on = fmtDate(exclusion.since, en);
+    return (
+      <Badge
+        variant="outline"
+        title={[on && (en ? `Excluded on ${on}` : `Izključen dne ${on}`), exclusion.reason]
+          .filter(Boolean).join(' — ')}
+        className="bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30 text-[10px] py-0 shrink-0"
+      >
+        ⛔ {en ? 'Excluded' : 'Izključen'}
+      </Badge>
+    );
+  }
+
   if (!state?.frozen) return null;
   const reason = state.decidedBy?.reason || '';
   const on = fmtDate(state.decidedBy?.effectiveAt, en);

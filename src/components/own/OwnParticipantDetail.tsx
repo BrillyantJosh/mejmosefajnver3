@@ -1,3 +1,4 @@
+import { useExclusions } from '@/hooks/useExclusions';
 import { useMemo, useState } from "react";
 import { FreezeBadge } from "@/components/own/FreezeBadge";
 import type { PersonFreezeState } from "@/lib/ownFreeze";
@@ -143,6 +144,7 @@ interface Props {
 // The right-side detail (overseer view): one participant's timeline (all 87047
 // opinions over time) + the latest verdict from each being about them.
 export default function OwnParticipantDetail({ caseRoot, participantPubkey, participantName, phase, onBack, freezes }: Props) {
+  const { exclusionOf } = useExclusions();
   const en = useLang() === "en";
   const L = en ? TXT.en : TXT.sl;
   const lang: "en" | "sl" = en ? "en" : "sl";
@@ -353,7 +355,7 @@ export default function OwnParticipantDetail({ caseRoot, participantPubkey, part
       </div>
 
       <h3 className="text-base font-semibold">{participantName}</h3>
-        <FreezeBadge state={freezes?.get((participantPubkey || '').toLowerCase())} en={en} />
+        <FreezeBadge state={freezes?.get((participantPubkey || '').toLowerCase())} en={en} exclusion={exclusionOf[(participantPubkey || '').toLowerCase()]} />
 
       {/* Bitja čakajo — čez cel pas, pred zavihki. Brez »spodnje ocene«: pod
           njim so zavihki, ne ocena; stale stoji pri vsaki oceni posebej. */}

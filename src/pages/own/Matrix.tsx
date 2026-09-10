@@ -1,3 +1,4 @@
+import { useExclusions } from '@/hooks/useExclusions';
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useProcessFreezes } from "@/hooks/useProcessFreezes";
 import { FreezeBadge } from "@/components/own/FreezeBadge";
@@ -317,6 +318,7 @@ function GrievanceLine({
 }
 
 export default function Matrix() {
+  const { exclusionOf } = useExclusions();
   const en = useLang() === "en";
   const L = en ? TXT.en : TXT.sl;
   const lang: "en" | "sl" = en ? "en" : "sl";
@@ -918,7 +920,7 @@ export default function Matrix() {
                       )}
                       <tr className="border-b border-border/50 align-top">
                         <td className="p-3 font-medium whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1.5">{nameOf(p)}<FreezeBadge state={freezeStates.get(p)} en={en} /></span>
+                          <span className="inline-flex items-center gap-1.5">{nameOf(p)}<FreezeBadge state={freezeStates.get(p)} en={en} exclusion={exclusionOf[p]} /></span>
                         </td>
                         {beings.map((b) => {
                           const st = stateFor(b, p);
@@ -940,7 +942,7 @@ export default function Matrix() {
                 {participants.map((p) => (
                   <Card key={p}>
                     <CardContent className="p-3 space-y-2.5">
-                      <div className="font-semibold text-sm inline-flex items-center gap-1.5 flex-wrap">{nameOf(p)}<FreezeBadge state={freezeStates.get(p)} en={en} /></div>
+                      <div className="font-semibold text-sm inline-flex items-center gap-1.5 flex-wrap">{nameOf(p)}<FreezeBadge state={freezeStates.get(p)} en={en} exclusion={exclusionOf[p]} /></div>
                       <SilenceBand participant={p} />
                       {beings.map((b) => {
                         const st = stateFor(b, p);

@@ -1,12 +1,13 @@
 import { Outlet } from "react-router-dom";
 import SubNavigation from "@/components/layout/SubNavigation";
-import { Shield, Search, Briefcase, Grid3x3 } from "lucide-react";
+import { Shield, Search, Briefcase, Grid3x3, Ban } from "lucide-react";
 
 const ownNavItems = [
   { title: "OWN", path: "/own", icon: Shield },
   { title: "Cases", path: "/own/search", icon: Search },
   { title: "MY cases", path: "/own/my-cases", icon: Briefcase },
   { title: "Matrix", path: "/own/matrix", icon: Grid3x3 },
+  { title: "Excluded", path: "/own/excluded", icon: Ban },
 ];
 
 export default function OwnLayout() {

@@ -1,3 +1,4 @@
+import { useExclusions } from '@/hooks/useExclusions';
 import { useEffect, useMemo, useState } from "react";
 import { useProcessFreezes } from "@/hooks/useProcessFreezes";
 import { FreezeBadge } from "@/components/own/FreezeBadge";
@@ -235,6 +236,7 @@ export function CaseTodo({ caseRoot, title, me, phase, onOpen, onOpenSelf, L, la
   // been frozen must see it here too rather than discover it at the composer.
   const { states: freezeStates } = useProcessFreezes(caseRoot);
   const myFreeze = freezeStates.get((myPubkey || me || '').toLowerCase());
+  const { exclusionOf } = useExclusions();
   const items = useMemo(() => mergeTodo(ledgers, me), [ledgers, me]);
 
   // CHANGE — the commitment leg of "what waits for me". Three honest states:
@@ -403,7 +405,7 @@ export function CaseTodo({ caseRoot, title, me, phase, onOpen, onOpenSelf, L, la
         <CardTitle className="text-base flex items-center justify-between gap-2 flex-wrap">
           <span className="leading-snug">{title}</span>
           <span className="inline-flex items-center gap-2">
-            <FreezeBadge state={myFreeze} en={lang === 'en'} />
+            <FreezeBadge state={myFreeze} en={lang === 'en'} exclusion={exclusionOf[(myPubkey || me || '').toLowerCase()]} />
             {translating && <span className="text-[11px] font-normal text-muted-foreground">{L.translating}</span>}
             {items.length > 0 && (
               <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/40">
