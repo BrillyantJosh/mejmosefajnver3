@@ -52,7 +52,11 @@ const parse = (ev: Event): OwnProcessRecord => {
   };
 };
 
-const isActive = (r: OwnProcessRecord) => r.status !== 'closed' && r.phase !== 'resolution';
+// A process is running only while it is OPEN. Treating everything that is
+// not 'closed' as active kept terminated processes in every active list —
+// exactly the processes that were stopped because they should not be held.
+const isActive = (r: OwnProcessRecord) =>
+  r.status !== 'closed' && r.status !== 'terminated' && r.phase !== 'resolution';
 
 export const useAllOwnProcesses = () => {
   const { parameters } = useSystemParameters();
