@@ -21,6 +21,18 @@ export default function SendLanaResult() {
   const amount = searchParams.get("amount") || "";
   const fee = searchParams.get("fee") || "";
   const privateKey = searchParams.get("privateKey") || "";
+  /**
+   * Was this an emptying transfer? It has to be, if it was one before.
+   *
+   * The amount carried here for an "Empty Wallet" send is the balance LESS the
+   * fee of a one-output transaction, so rebuilding it as an ordinary transfer
+   * asks for that amount plus a two-output fee — 0.000051 LANA more than the
+   * wallet holds, which is exactly the change output an emptying transfer does
+   * not build. Retry hardcoded `false` and could therefore never succeed at
+   * all, on a page whose own text calls a rejected first broadcast the most
+   * common outcome.
+   */
+  const emptyWallet = searchParams.get("emptyWallet") === "true";
 
   const [currentBlockHeight, setCurrentBlockHeight] = useState<number | null>(null);
   const [isCheckingBlock, setIsCheckingBlock] = useState(false);
@@ -111,7 +123,7 @@ export default function SendLanaResult() {
           recipientAddress,
           amount: parseFloat(amount),
           privateKey,
-          emptyWallet: false,
+          emptyWallet,
           electrumServers: parameters?.electrumServers || []
         }
       });

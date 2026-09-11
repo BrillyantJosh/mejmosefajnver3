@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { canPay, estimateOrdinaryFeeLana } from "@/lib/paymentFunds";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -131,7 +132,28 @@ export function PaymentForm({
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const hasEnoughBalance = senderWalletBalance >= amount;
+  /**
+   * THE FEE WAS NEVER IN THIS SUM. `balance >= amount` painted the balance
+   * green and opened the form, and the server then refused a wallet holding
+   * exactly the amount: an ordinary payment takes its fee out of the change,
+   * and there is no change. The amount here is fixed, so the payer could do
+   * nothing about it and was never told what was missing.
+   *
+   * The fee depends on how many pieces the wallet is in, so it is asked for.
+   * Until the answer arrives — or if it never does — the old sum stands, so a
+   * momentary outage cannot stop a payment that would have gone through.
+   */
+  const [networkFeeLana, setNetworkFeeLana] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!senderWalletId) { setNetworkFeeLana(null); return; }
+    estimateOrdinaryFeeLana(senderWalletId, (name, opts) => supabase.functions.invoke(name, opts) as any)
+      .then(fee => { if (!cancelled) setNetworkFeeLana(fee); });
+    return () => { cancelled = true; };
+  }, [senderWalletId]);
+
+  const funds = canPay(senderWalletBalance, amount, networkFeeLana);
+  const hasEnoughBalance = funds.enough;
 
   return (
     <Card className="w-full max-w-md mx-auto">
@@ -181,7 +203,9 @@ export function PaymentForm({
         {!hasEnoughBalance && (
           <Alert variant="destructive">
             <AlertDescription>
-              {t('insufficientBalance', language, { needed: formatNumber(amount), available: formatNumber(senderWalletBalance) })}
+              {funds.shortForFeeLana != null
+                ? `The amount is there, but not the network fee — ${formatNumber(funds.shortForFeeLana)} LANA short.`
+                : t('insufficientBalance', language, { needed: formatNumber(amount), available: formatNumber(senderWalletBalance) })}
             </AlertDescription>
           </Alert>
         )}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { canPay, estimateOrdinaryFeeLana } from "@/lib/paymentFunds";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -207,6 +208,8 @@ export default function ShopPay() {
 
   // Balance check
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  /** The network fee an ordinary payment out of this wallet costs, in LANA. */
+  const [networkFeeLana, setNetworkFeeLana] = useState<number | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
 
@@ -245,6 +248,7 @@ export default function ShopPay() {
   useEffect(() => {
     if (!selectedWalletId || !selectedInvoice || step !== "pay") {
       setWalletBalance(null);
+      setNetworkFeeLana(null);
       setBalanceError(null);
       return;
     }
@@ -279,6 +283,13 @@ export default function ShopPay() {
         const walletData = data?.wallets?.[0];
         if (walletData && !walletData.error) {
           setWalletBalance(walletData.balance);
+          // Asked for, not guessed: the fee depends on how many pieces the
+          // wallet is in. A null answer leaves the old check in place rather
+          // than inventing a refusal — see canPay.
+          setNetworkFeeLana(
+            await estimateOrdinaryFeeLana(selectedWalletId, (name, opts) =>
+              supabase.functions.invoke(name, opts) as any),
+          );
         } else {
           setBalanceError("Could not check balance");
         }
@@ -293,10 +304,16 @@ export default function ShopPay() {
   }, [selectedWalletId, selectedInvoice, step, parameters?.electrumServers]);
 
   // Derived: is balance sufficient?
-  const hasSufficientBalance =
-    walletBalance !== null &&
-    selectedInvoice !== null &&
-    walletBalance >= selectedInvoice.amountLana;
+  //
+  // IT NEVER INCLUDED THE NETWORK FEE. A wallet holding exactly the invoice
+  // amount was painted green and the Pay button enabled, and the server then
+  // refused it — the fee comes out of the change, and there is no change. The
+  // invoice is fixed, so the payer could do nothing but put more LANA in, and
+  // nothing on the screen ever said so or named a figure.
+  const funds = walletBalance !== null && selectedInvoice !== null
+    ? canPay(walletBalance, selectedInvoice.amountLana, networkFeeLana)
+    : null;
+  const hasSufficientBalance = funds?.enough === true;
 
   // ==========================================
   // Fetch invoices
@@ -752,7 +769,11 @@ export default function ShopPay() {
                           <span className="text-xs text-green-600">Sufficient funds</span>
                         )}
                         {!hasSufficientBalance && walletBalance !== null && (
-                          <span className="text-xs text-red-500">Insufficient funds</span>
+                          <span className="text-xs text-red-500">
+                            {funds?.shortForFeeLana != null
+                              ? `The amount is there, but not the network fee — ${formatLana(funds.shortForFeeLana)} LANA short`
+                              : "Insufficient funds"}
+                          </span>
                         )}
                       </div>
                     </>

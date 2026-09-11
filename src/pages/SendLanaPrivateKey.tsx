@@ -136,13 +136,22 @@ export default function SendLanaPrivateKey() {
       const errorMessage = err instanceof Error ? err.message : "Failed to process transaction";
       
       // Navigate to result page with error parameters
+      // THE SHAPE HAS TO SURVIVE THE FAILURE, or the retry cannot work.
+      //
+      // `amount` here was computed as the balance minus the fee of a
+      // ONE-output transaction — that is what "Empty Wallet" means. Leaving
+      // emptyWallet out of these parameters meant the result page's Retry
+      // button rebuilt it as an ordinary two-output transfer, which needs
+      // 0.000051 LANA more than the wallet has: the cost of the change output
+      // an emptying transaction does not build. Every press, for ever.
       const params = new URLSearchParams({
         success: "false",
         error: errorMessage,
         senderAddress: walletId,
         recipientAddress: recipientWalletId,
         amount: amount,
-        privateKey: privateKey.trim()
+        privateKey: privateKey.trim(),
+        ...(emptyWallet ? { emptyWallet: "true" } : {})
       });
       navigate(`/send-lana/result?${params.toString()}`);
     } finally {
