@@ -1,4 +1,4 @@
-import { useEffect, useState, Component, ReactNode } from 'react';
+import { useEffect, useState, Component, ReactNode, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrWallets } from '@/hooks/useNostrWallets';
@@ -8,13 +8,15 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, ExternalLink, Sparkles, CheckCircle2, AlertCircle, ArrowRightLeft, Copy, X, Snowflake } from 'lucide-react';
+import { Loader2, ExternalLink, Sparkles, CheckCircle2, AlertCircle, ArrowRightLeft, Copy, X, Snowflake, Clock, RefreshCw } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { useTranslation } from '@/i18n/I18nContext';
 import EntrySplitCard from '@/components/lana8wonder/EntrySplitCard';
 import { readFromRelays } from '@/lib/relayRead';
+import { evaluateCashOut } from '@/lib/cashOutDue';
+import { useRecentSends } from '@/hooks/useRecentSends';
 import { choosePlanEvent } from '@/lib/planRead';
 import {
   lana8wonderTransferGate,
@@ -105,7 +107,13 @@ const Lana8Wonder = () => {
   const [annuityPlan, setAnnuityPlan] = useState<AnnuityPlan | null>(null);
   const [eligibleWallets, setEligibleWallets] = useState<string[]>([]);
   const [accountBalances, setAccountBalances] = useState<Record<string, number>>({});
+  // The mempool half of each balance. Negative means money is leaving this
+  // wallet right now — the chain's own answer to "has the cash-out been sent".
+  const [accountUnconfirmed, setAccountUnconfirmed] = useState<Record<string, number>>({});
   const [loadingBalances, setLoadingBalances] = useState(false);
+  // Bumped to ask the chain again — on returning to the tab, and while a
+  // transfer is still on its way.
+  const [balanceRefresh, setBalanceRefresh] = useState(0);
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
   const [successData, setSuccessData] = useState<{ txHash: string; amount: number } | null>(null);
 
@@ -126,6 +134,15 @@ const Lana8Wonder = () => {
       toast.success(t('plan.txCopied'));
     }
   };
+
+  // What these wallets have already sent, as the server recorded it when it
+  // broadcast each transaction. Server-side on purpose: a transfer made on a
+  // phone has to be known to a laptop opened straight afterwards.
+  const planWalletIds = useMemo(
+    () => (annuityPlan?.accounts || []).map(a => a.wallet),
+    [annuityPlan]
+  );
+  const { sends: recentSends, refresh: refreshRecentSends } = useRecentSends(planWalletIds);
 
   const relays = parameters?.relays || [];
   const exchangeRates = parameters?.exchangeRates;
@@ -238,10 +255,13 @@ const Lana8Wonder = () => {
 
         if (data?.wallets) {
           const balances: Record<string, number> = {};
+          const unconfirmed: Record<string, number> = {};
           data.wallets.forEach((w: any) => {
             balances[w.wallet_id] = w.balance;
+            unconfirmed[w.wallet_id] = Number(w.unconfirmed_balance) || 0;
           });
           setAccountBalances(balances);
+          setAccountUnconfirmed(unconfirmed);
         }
       } catch (error) {
         console.error('Error fetching wallet balances:', error);
@@ -251,7 +271,24 @@ const Lana8Wonder = () => {
     };
 
     fetchBalances();
-  }, [annuityPlan, wallets, parameters?.electrumServers]);
+  }, [annuityPlan, wallets, parameters?.electrumServers, balanceRefresh]);
+
+  // The balance used to be read once and then left on screen for as long as
+  // the page stayed open. Coming back from a transfer, that single read often
+  // happened before the Electrum server had the transaction — the alert
+  // re-armed, and people pressed it again. Asking once more when the tab is
+  // looked at costs one request and closes most of that window.
+  useEffect(() => {
+    const askAgain = () => {
+      if (document.visibilityState === 'visible') setBalanceRefresh(n => n + 1);
+    };
+    window.addEventListener('focus', askAgain);
+    document.addEventListener('visibilitychange', askAgain);
+    return () => {
+      window.removeEventListener('focus', askAgain);
+      document.removeEventListener('visibilitychange', askAgain);
+    };
+  }, []);
 
   // Check wallet eligibility (≥100 EUR/GBP/USD equivalent)
   useEffect(() => {
@@ -430,9 +467,20 @@ const Lana8Wonder = () => {
                 const lastTriggeredLevel = triggeredLevels[0];
                 const expectedRemaining = lastTriggeredLevel?.remaining_lanas || 0;
 
-                // Check if user needs to cash out (balance > remaining * 1.02)
-                const needsCashOut = balance !== undefined && lastTriggeredLevel && balance > expectedRemaining * 1.02;
-                const cashOutAmount = needsCashOut ? balance - expectedRemaining : 0;
+                // What is owed AFTER subtracting whatever is already on its
+                // way — the chain's own unconfirmed figure, or, until the
+                // mempool has it, what the server wrote down when it
+                // broadcast. See src/lib/cashOutDue.ts.
+                const verdict = evaluateCashOut({
+                  balance,
+                  unconfirmedBalance: accountUnconfirmed[account.wallet],
+                  expectedRemaining,
+                  inFlight: recentSends[account.wallet] || null,
+                  now: Date.now(),
+                });
+                const needsCashOut = !!lastTriggeredLevel && verdict.state === 'due';
+                const cashOutOnItsWay = !!lastTriggeredLevel && verdict.state === 'in_flight';
+                const cashOutAmount = needsCashOut ? verdict.amountDue : 0;
                 const cashOutFiat = cashOutAmount * currentPrice;
 
                 return (
@@ -460,10 +508,60 @@ const Lana8Wonder = () => {
                             {cashOutAmount.toFixed(2)} LANA
                           </Badge>
                         )}
+                        {cashOutOnItsWay && !loadingBalances && (
+                          <Badge
+                            variant="outline"
+                            className="flex items-center gap-1 text-xs border-amber-500/50 text-amber-700 dark:text-amber-300"
+                          >
+                            <Clock className="h-3 w-3" />
+                            {t('plan.cashOutSentBadge')}
+                          </Badge>
+                        )}
                       </div>
                     </AccordionTrigger>
                     <AccordionContent>
                       <div className="space-y-3 md:space-y-4 mt-2">
+                        {/* Sent, and the chain has not finished with it yet.
+                            Shown INSTEAD of the red alert — the alert staying
+                            up is what got people to press a second time — and
+                            saying so plainly, rather than going quiet, so
+                            nobody wonders whether their transfer happened. */}
+                        {cashOutOnItsWay && (
+                          <Alert className="border-amber-500/40 bg-amber-500/10 flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                            <div className="flex items-start gap-2">
+                              <Clock className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                              <div>
+                                <AlertTitle className="text-sm md:text-base">{t('plan.cashOutSentTitle')}</AlertTitle>
+                                <AlertDescription className="text-xs md:text-sm">
+                                  {t('plan.cashOutSentDescription')}{' '}
+                                  {verdict.inFlight?.txid && (
+                                    <a
+                                      href={`https://explorer.lanacoin.com/tx/${verdict.inFlight.txid}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="ml-1 underline break-all"
+                                    >
+                                      {verdict.inFlight.txid.slice(0, 12)}…
+                                    </a>
+                                  )}
+                                </AlertDescription>
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="whitespace-nowrap self-end md:self-auto"
+                              onClick={() => {
+                                setBalanceRefresh(n => n + 1);
+                                refreshRecentSends();
+                              }}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              {t('plan.cashOutSentCheck')}
+                            </Button>
+                          </Alert>
+                        )}
+
                         {needsCashOut && (
                           <Alert variant="destructive" className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                             <div className="flex items-start gap-2">

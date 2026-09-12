@@ -12,6 +12,7 @@
 
 import * as crypto from 'crypto';
 import { electrumCall } from './electrum.js';
+import { recordOutgoingSend, recentSendsByWallet } from './outgoingSends.js';
 
 // ==============================================
 // Base58 Encoding/Decoding
@@ -829,6 +830,8 @@ export async function buildSignedTx(
 
 export interface SendLanaParams {
   senderAddress: string;
+  /** Free-text marker from the caller, e.g. 'lana8wonder-cashout'. */
+  purpose?: string;
   recipientAddress: string;
   mentorAddress?: string;
   mentorPercent?: number;
@@ -846,6 +849,47 @@ export interface SendLanaResult {
   mentorAmount?: number;
   fee?: number;
   error?: string;
+}
+
+/** A cash-out sent within this window is treated as still in flight. */
+const CASHOUT_GUARD_MS = 30 * 60 * 1000;
+
+/**
+ * Is a cash-out from this wallet already moving? Returns the sentence to show
+ * the person, or null when the way is clear.
+ *
+ * Asks the chain first, because it is the truth and it is the same answer on
+ * every device; falls back to what this server wrote down at the last
+ * broadcast, which covers the minutes before the mempool has propagated.
+ * A read that fails is not treated as "clear" for the chain half — but it is
+ * not treated as frozen either: the record still decides.
+ */
+async function cashOutAlreadyOnItsWay(
+  senderAddress: string,
+  servers: Array<{ host: string; port: number }>
+): Promise<string | null> {
+  try {
+    const recent = recentSendsByWallet([senderAddress], CASHOUT_GUARD_MS);
+    const record = recent[senderAddress];
+    if (record) {
+      const minutes = Math.max(1, Math.round((Date.now() - record.createdAt) / 60000));
+      return `A cash-out from this wallet was sent ${minutes} minute${minutes === 1 ? '' : 's'} ago (${record.txid}). Wait for it to confirm before sending another.`;
+    }
+  } catch (err) {
+    console.error('⚠️ Could not read recent sends for the cash-out guard:', err);
+  }
+
+  try {
+    const balance = await electrumCall('blockchain.address.get_balance', [senderAddress], servers);
+    const unconfirmed = Number(balance?.unconfirmed);
+    if (Number.isFinite(unconfirmed) && unconfirmed < 0) {
+      return 'This wallet already has an unconfirmed outgoing transaction. Wait for it to confirm before sending another cash-out.';
+    }
+  } catch (err) {
+    console.error('⚠️ Could not read the mempool for the cash-out guard:', err);
+  }
+
+  return null;
 }
 
 export async function sendLanaTransaction(params: SendLanaParams): Promise<SendLanaResult> {
@@ -879,6 +923,37 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
       throw new Error('Amount is required when not emptying wallet');
     }
 
+    // Use provided Electrum servers or fallback
+    const servers = electrumServers && electrumServers.length > 0
+      ? electrumServers
+      : [
+          { host: 'electrum1.lanacoin.com', port: 5097 },
+          { host: 'electrum2.lanacoin.com', port: 5097 },
+          { host: 'electrum3.lanacoin.com', port: 5097 }
+        ];
+
+    console.log(`⚙️ Using Electrum servers:`, servers);
+
+    // A cash-out that is already on its way is not sent a second time.
+    //
+    // People pressed the Lana8Wonder cash-out twice while the first transfer
+    // sat in the mempool, and this is where that becomes real money: the UTXO
+    // selection below reads `listunspent`, which on these servers still offers
+    // an input that an unconfirmed transaction has already spent. With one
+    // UTXO the second attempt is rejected as a double spend; with several it
+    // builds a DIFFERENT, valid transaction and the surplus leaves twice.
+    //
+    // Only the annuity cash-out is held back — every other kind of send may
+    // legitimately follow another within minutes. Two independent signals, so
+    // neither the record nor the chain alone has to be right.
+    if (params.purpose === 'lana8wonder-cashout') {
+      const alreadyMoving = await cashOutAlreadyOnItsWay(senderAddress, servers);
+      if (alreadyMoving) {
+        console.warn(`🛑 Refusing second cash-out from ${senderAddress}: ${alreadyMoving}`);
+        return { success: false, error: alreadyMoving };
+      }
+    }
+
     // Validate private key matches sender address
     const normalizedKey = normalizeWif(privateKey);
     const privateKeyBytes = base58CheckDecode(normalizedKey);
@@ -908,16 +983,6 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
 
     console.log('✅ Private key validation passed');
 
-    // Use provided Electrum servers or fallback
-    const servers = electrumServers && electrumServers.length > 0
-      ? electrumServers
-      : [
-          { host: 'electrum1.lanacoin.com', port: 5097 },
-          { host: 'electrum2.lanacoin.com', port: 5097 },
-          { host: 'electrum3.lanacoin.com', port: 5097 }
-        ];
-
-    console.log(`⚙️ Using Electrum servers:`, servers);
 
     // Get UTXOs
     const utxos = await electrumCall('blockchain.address.listunspent', [senderAddress], servers);
@@ -1070,6 +1135,17 @@ export async function sendLanaTransaction(params: SendLanaParams): Promise<SendL
     }
 
     console.log('✅ Transaction broadcast successful:', txHash);
+
+    // The money has left. Write it down here, at the only point where the
+    // sender, the amount and the txid are all known for certain — the page
+    // that asked for it can then stop asking before the chain catches up.
+    // Never allowed to affect the outcome: the transaction is already gone.
+    recordOutgoingSend({
+      txid: txHash,
+      walletId: senderAddress,
+      amountLana: amountSatoshis / 100_000_000,
+      purpose: params.purpose,
+    });
 
     // Calculate actual split amounts for response
     const hasMentorSplit = mentorAddress && mentorPercent && mentorPercent > 0;
@@ -1268,6 +1344,15 @@ export async function sendBatchLanaTransaction(params: SendBatchLanaParams): Pro
     }
 
     console.log('✅ Batch transaction broadcast successful:', txHash);
+
+    // Same reason as the single send above: what has left the wallet must be
+    // knowable before the chain shows it.
+    recordOutgoingSend({
+      txid: txHash,
+      walletId: senderAddress,
+      amountLana: totalAmountSatoshis / 100_000_000,
+      purpose: 'batch',
+    });
 
     return {
       success: true,

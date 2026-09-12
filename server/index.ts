@@ -18,6 +18,7 @@ import { createRateLimit } from './lib/rateLimit.js';
 import functionsRoutes, { retryPendingNostrEvents, cleanupDmAudio } from './routes/functions.js';
 import voiceRoutes from './routes/voice.js';
 import beingsRoutes from './routes/beings.js';
+import cashoutsRoutes from './routes/cashouts.js';
 import { processPendingTasks, setSSEHandlers } from './lib/aiTasks.js';
 import { syncUnregisteredLana } from './lib/unregisteredLana.js';
 
@@ -379,6 +380,8 @@ app.use('/api/voice', createRateLimit({
 app.use('/api/lanacrowd', lanacrowdRoutes);
 app.use('/api/unconditional-financing', unconditionalFinancingRoutes);
 app.use('/api/beings', beingsRoutes);
+// What a wallet has already sent, so a cash-out is never asked for twice
+app.use('/api/cashouts', cashoutsRoutes);
 
 // =============================================
 // Health

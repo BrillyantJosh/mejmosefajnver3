@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { SimplePool } from 'nostr-tools';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { evaluateCashOut, type InFlightCashOut } from '@/lib/cashOutDue';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
@@ -100,10 +101,36 @@ export function useLana8WonderCashOut() {
 
         const balanceData = await balanceRes.json();
         const balances: Record<string, number> = {};
+        const unconfirmed: Record<string, number> = {};
         if (balanceData?.wallets) {
           balanceData.wallets.forEach((w: any) => {
             balances[w.wallet_id] = w.balance;
+            unconfirmed[w.wallet_id] = Number(w.unconfirmed_balance) || 0;
           });
+        }
+
+        // What has already been sent from these wallets. The badge counted
+        // people who had cashed out minutes earlier, which is half of why they
+        // pressed again. A failed read leaves this empty — the chain figures
+        // above still stand on their own.
+        const sent: Record<string, InFlightCashOut> = {};
+        try {
+          const sendsRes = await fetch(
+            `${API_URL}/api/cashouts/recent?wallets=${encodeURIComponent(walletAddresses.join(','))}`
+          );
+          if (sendsRes.ok) {
+            const sendsData = await sendsRes.json();
+            for (const [walletId, row] of Object.entries<any>(sendsData?.sends || {})) {
+              sent[walletId] = {
+                walletId,
+                amount: Number(row?.amountLana) || 0,
+                txid: String(row?.txid || ''),
+                sentAt: Number(row?.createdAt) || 0,
+              };
+            }
+          }
+        } catch (err) {
+          console.warn('Could not read recent sends for the cash-out badge:', err);
         }
 
         // 3. Calculate pending cash-outs
@@ -122,8 +149,16 @@ export function useLana8WonderCashOut() {
 
           const expectedRemaining = lastTriggeredLevel.remaining_lanas || 0;
 
-          // Same formula as Lana8Wonder.tsx line 304
-          if (balance > expectedRemaining * 1.02) {
+          // The same rule the page uses, from the same file: what is already
+          // on its way is subtracted before anything is counted as owed.
+          const verdict = evaluateCashOut({
+            balance,
+            unconfirmedBalance: unconfirmed[account.wallet],
+            expectedRemaining,
+            inFlight: sent[account.wallet] || null,
+            now: Date.now(),
+          });
+          if (verdict.state === 'due') {
             count++;
           }
         }

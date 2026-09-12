@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
@@ -62,6 +62,8 @@ export default function Lana8WonderTransfer() {
   const [keyError, setKeyError] = useState('');
   const [selectedDestination, setSelectedDestination] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  /** Closes the double-tap window that React state alone leaves open. */
+  const submitLock = useRef(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
 
   // Filter wallets to only show allowed types and exclude source wallet
@@ -123,6 +125,15 @@ export default function Lana8WonderTransfer() {
       return;
     }
 
+    // The button is disabled through `isSubmitting`, but that is React state
+    // and it does not take effect until the next render — two quick taps on a
+    // slow phone can both get through. This ref shuts the door in the same
+    // tick, before any money moves.
+    if (submitLock.current) {
+      console.warn('Transfer already in progress — ignoring the second press');
+      return;
+    }
+    submitLock.current = true;
     setIsSubmitting(true);
 
     try {
@@ -187,6 +198,7 @@ export default function Lana8WonderTransfer() {
       const msg = error instanceof Error ? error.message : (error?.message || error?.error || 'Transfer failed');
       toast.error(msg);
     } finally {
+      submitLock.current = false;
       setIsSubmitting(false);
     }
   };

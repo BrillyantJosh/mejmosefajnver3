@@ -441,9 +441,27 @@ export function initializeSchema(db: Database.Database): void {
       recorded_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- Every LANA transaction this server broadcasts, so the app can tell that
+    -- money is already on its way before the chain shows it. People pressed a
+    -- Lana8Wonder cash-out twice because the balance still read high while
+    -- their first transfer sat in the mempool. Written at the moment of
+    -- broadcast, in server/lib/crypto.ts, where the sender and the txid are
+    -- known for certain — a client cannot fake a row here, and cannot skip one.
+    CREATE TABLE IF NOT EXISTS outgoing_sends (
+      txid TEXT NOT NULL,
+      wallet_id TEXT NOT NULL,
+      amount_lana REAL NOT NULL,
+      purpose TEXT,
+      created_at INTEGER NOT NULL,          -- unix MILLIseconds
+      PRIMARY KEY (txid, wallet_id)
+    );
+
     -- =============================================
     -- INDEXES
     -- =============================================
+
+    -- Read path is always "what has this wallet sent recently"
+    CREATE INDEX IF NOT EXISTS idx_outgoing_sends_wallet ON outgoing_sends(wallet_id, created_at);
 
     CREATE INDEX IF NOT EXISTS idx_ai_pending_tasks_status ON ai_pending_tasks(status);
     CREATE INDEX IF NOT EXISTS idx_ai_pending_tasks_nostr ON ai_pending_tasks(nostr_hex_id);
