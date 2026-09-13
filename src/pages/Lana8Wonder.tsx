@@ -16,6 +16,8 @@ import { useTranslation } from '@/i18n/I18nContext';
 import EntrySplitCard from '@/components/lana8wonder/EntrySplitCard';
 import { readFromRelays } from '@/lib/relayRead';
 import { evaluateCashOut } from '@/lib/cashOutDue';
+import { lana8wonderFreezeNotice } from '@/lib/lana8wonderFreezeNotice';
+import FreezeFirstNotice from '@/components/lana8wonder/FreezeFirstNotice';
 import { useRecentSends } from '@/hooks/useRecentSends';
 import { choosePlanEvent } from '@/lib/planRead';
 import {
@@ -332,6 +334,17 @@ const Lana8Wonder = () => {
   // frozen. See src/lib/lana8wonderTransferGate — `clear` now has to be earned.
   const gateFor = (address: string) => lana8wonderTransferGate(wallets, walletsResolved, address);
 
+  // What to do FIRST when the plan cannot pay out: judged from the plan's own
+  // wallets, so a frozen wallet elsewhere is not reported as a blocked cash-out.
+  const freezeNotice = useMemo(
+    () => lana8wonderFreezeNotice(wallets, walletsResolved, planWalletIds),
+    [wallets, walletsResolved, planWalletIds]
+  );
+  const accountByWallet = useMemo(
+    () => new Map((annuityPlan?.accounts || []).map(a => [a.wallet, a.account_id] as [string, number])),
+    [annuityPlan]
+  );
+
   const frozenWallets = (wallets || []).filter(w => w.freezeStatus || w.status === 'frozen');
   const frozenAlert = frozenWallets.length > 0 ? (() => {
     // Reason-aware, like the /wallet page: the registrar's max-cap page asks
@@ -353,7 +366,11 @@ const Lana8Wonder = () => {
               else navigate(res.href);
             }}
           >
-            {res.label}
+            {t(res.kind === 'self'
+              ? 'plan.freezeFirst.action.self'
+              : res.kind === 'own-process'
+                ? 'plan.freezeFirst.action.own'
+                : 'plan.freezeFirst.action.registrar')}
             {res.external && <ExternalLink className="h-4 w-4 ml-2" />}
           </Button>
         </AlertDescription>
@@ -373,7 +390,7 @@ const Lana8Wonder = () => {
   if (annuityPlan) {
     return (
       <div className="container mx-auto p-3 md:p-4 pb-24 space-y-4 md:space-y-6">
-        {frozenAlert}
+        <FreezeFirstNotice notice={freezeNotice} accountByWallet={accountByWallet} />
         {showSuccessBanner && successData && (
           <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
             <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -618,11 +635,21 @@ const Lana8Wonder = () => {
                                     }}
                                   >
                                     <Snowflake className="h-4 w-4 mr-2" />
-                                    {res.label}
+                                    {t(res.kind === 'self'
+                                      ? 'plan.freezeFirst.action.self'
+                                      : res.kind === 'own-process'
+                                        ? 'plan.freezeFirst.action.own'
+                                        : 'plan.freezeFirst.action.registrar')}
                                     {res.external && <ExternalLink className="h-3 w-3 ml-2 opacity-70" />}
                                   </Button>
                                   <p className="text-xs opacity-80 max-w-xs md:text-right">
-                                    {transferGateExplanation(gate)}
+                                    {gate.state === 'unknown'
+                                      ? t('plan.freezeFirst.walletUnknown')
+                                      : t('plan.freezeFirst.walletBlocked', {
+                                          reason: t((['frozen_max_cap', 'frozen_l8w', 'frozen_too_wild', 'frozen_unreg_Lanas', 'frozen_own_person', 'frozen'].includes(gate.reason || '')
+                                            ? `plan.freezeFirst.reason.${gate.reason}`
+                                            : 'plan.freezeFirst.reason.other') as Parameters<typeof t>[0]).toLowerCase(),
+                                        })}
                                   </p>
                                 </div>
                               );
