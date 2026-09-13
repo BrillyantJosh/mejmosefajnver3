@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, RefreshCw, Send, ShoppingBasket, Store } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, MinusCircle, RefreshCw, Send, ShoppingBasket, Store } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -818,8 +818,22 @@ export default function FoodCornerOrder() {
                   ) : (
                     <div className="space-y-2">
                       {selectedItems.map(({ listing, qty }) => (
-                        <div key={listing.ref} className="flex justify-between gap-3 text-sm">
-                          <span className="truncate">{qty} {listing.unit} · {listing.title}</span>
+                        <div key={listing.ref} className="flex items-center justify-between gap-2 text-sm">
+                          {/* Taking something back out used to mean scrolling to its
+                              card and typing 0 into the quantity. The cart is the
+                              quantity: emptying it here empties it there too. */}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 -ml-2 text-muted-foreground hover:text-destructive"
+                            onClick={() => updateQuantity(listing.ref, "")}
+                            aria-label={t("order.cart.remove", { title: listing.title })}
+                            title={t("order.cart.remove", { title: listing.title })}
+                          >
+                            <MinusCircle className="h-4 w-4" />
+                          </Button>
+                          <span className="truncate flex-1">{qty} {listing.unit} · {listing.title}</span>
                           <span className="font-medium shrink-0">{formatFoodMoney(qty * listing.price, listing.priceCurrency)}</span>
                         </div>
                       ))}
