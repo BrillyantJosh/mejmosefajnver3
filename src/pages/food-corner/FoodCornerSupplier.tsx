@@ -16,7 +16,14 @@ import {
   FoodCornerOrderWithFulfillment,
   type FoodCornerNode,
 } from "@/types/foodCorner";
-import { foodCornerItemKey, foodCornerOrderingWindow, foodCornerWeekRange, formatFoodMoney } from "@/lib/foodCorner";
+import {
+  foodCornerItemKey,
+  foodCornerMinWeekOffset,
+  foodCornerOrderInWeek,
+  foodCornerOrderingWindow,
+  foodCornerWeekRange,
+  formatFoodMoney,
+} from "@/lib/foodCorner";
 
 // Countable units that must be whole numbers (mirrors the buyer order form).
 const WHOLE_UNITS = new Set(["piece", "pieces", "pcs", "kos", "kom", "komad", "kpl", "unit", "units"]);
@@ -62,8 +69,9 @@ export default function FoodCornerSupplier() {
   const locale = lang === "sl" ? "sl-SI" : undefined;
 
   // Per-product delivered TOTAL the supplier brings to a point (aggregate, not per
-  // buyer): nodeRef → productKey → qty string. The supplier delivers the whole
-  // amount to the Točka Obilja, reduced if short.
+  // buyer): `${nodeRef}__${cycleStart}` → productKey → qty string. The supplier
+  // delivers the whole amount to the Točka Obilja, reduced if short. Keyed by cycle
+  // too, so an edit typed on one week never lands in another week's 36604.
   const [deliveredTotals, setDeliveredTotals] = useState<Record<string, Record<string, string>>>({});
 
   // Which points have the per-buyer breakdown expanded (read-only, so the supplier can
@@ -105,6 +113,8 @@ export default function FoodCornerSupplier() {
     return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "thursday";
   }, [supplierOrders, nodeByRef]);
   const week = useMemo(() => foodCornerWeekRange(weekOffset, anchorDay), [weekOffset, anchorDay]);
+  // The pager may step forward to the latest cycle a lead time put an order in.
+  const minWeekOffset = useMemo(() => foodCornerMinWeekOffset(supplierOrders, anchorDay), [supplierOrders, anchorDay]);
   const weekLabel = `${week.start.toLocaleDateString(locale, { day: "numeric", month: "short" })} – ${new Date(
     week.end.getTime() - 1,
   ).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" })}`;
@@ -113,12 +123,10 @@ export default function FoodCornerSupplier() {
   const nodeCycleStart = (node?: FoodCornerNode) =>
     Math.floor(foodCornerWeekRange(weekOffset, node?.pickups?.[0]?.day || anchorDay).start.getTime() / 1000);
 
+  // An order belongs to the cycle it was placed in, moved later by its lead time —
+  // so a cycle's totals include lead orders placed weeks earlier.
   const ordersInWeek = useMemo(
-    () =>
-      supplierOrders.filter((order) => {
-        const ms = order.createdAt * 1000;
-        return ms >= week.start.getTime() && ms < week.end.getTime();
-      }),
+    () => supplierOrders.filter((order) => foodCornerOrderInWeek(order, week)),
     [supplierOrders, week],
   );
 
@@ -213,15 +221,19 @@ export default function FoodCornerSupplier() {
 
   // Delivered value shown for a product: local edit → last published (this cycle) →
   // default = ordered total.
+  const deliveredEditKey = (nodeRef: string) => `${nodeRef}__${nodeCycleStart(nodeByRef.get(nodeRef))}`;
+
   const deliveredValue = (nodeRef: string, product: ProductAgg, publishedMap: Map<string, number>): string => {
-    const local = deliveredTotals[nodeRef]?.[product.key];
+    const local = deliveredTotals[deliveredEditKey(nodeRef)]?.[product.key];
     if (local !== undefined) return local;
     const published = publishedMap.get(product.key);
     return String(published ?? product.qty);
   };
 
-  const setDelivered = (nodeRef: string, key: string, qty: string) =>
-    setDeliveredTotals((cur) => ({ ...cur, [nodeRef]: { ...(cur[nodeRef] || {}), [key]: qty } }));
+  const setDelivered = (nodeRef: string, key: string, qty: string) => {
+    const editKey = deliveredEditKey(nodeRef);
+    setDeliveredTotals((cur) => ({ ...cur, [editKey]: { ...(cur[editKey] || {}), [key]: qty } }));
+  };
 
   // Publish the supplier's aggregate delivery for a point (KIND 36604) — one event
   // per (supplier, node, cycle), re-emitting ALL products (replaceable, latest-wins).
@@ -378,8 +390,8 @@ export default function FoodCornerSupplier() {
           size="sm"
           variant="outline"
           className="gap-1"
-          disabled={weekOffset === 0}
-          onClick={() => setWeekOffset((o) => Math.max(0, o - 1))}
+          disabled={weekOffset <= minWeekOffset}
+          onClick={() => setWeekOffset((o) => Math.max(minWeekOffset, o - 1))}
         >
           {t("ecoPoint.orders.nextWeek")}
           <ChevronRight className="h-4 w-4" />

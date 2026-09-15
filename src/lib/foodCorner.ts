@@ -179,6 +179,7 @@ export function parseFoodCornerListing(event: FoodCornerRawEvent): FoodCornerLis
     maxOrder: getTag(event, "max_order"),
     availableFrom: getTag(event, "available_from"),
     availableUntil: getTag(event, "available_until"),
+    leadTimeWeeks: parseLeadTimeWeeks(getTag(event, "lead_time_weeks")),
     eco: getTags(event, "eco"),
     cert: getTags(event, "cert"),
     tags: getTags(event, "t"),
@@ -239,6 +240,7 @@ export function parseFoodCornerOrder(event: FoodCornerRawEvent, listingMap: Map<
     pickupPoint: getTag(event, "pickup_point"),
     requestedDate: getTag(event, "requested_date"),
     requestedWindow: getTag(event, "requested_window"),
+    leadTimeWeeks: parseLeadTimeWeeks(getTag(event, "lead_time_weeks")),
     payment: getTags(event, "payment"),
     paid: getTag(event, "paid"),
     recurring: getTag(event, "recurring"),
@@ -583,6 +585,131 @@ export function foodCornerWeekRange(
   const end = new Date(start);
   end.setDate(start.getDate() + 7);
   return { start, end };
+}
+
+/** Longest "Rok dobave" a supplier can choose, in weeks. */
+export const FOOD_CORNER_MAX_LEAD_WEEKS = 12;
+
+/**
+ * "Rok dobave" in whole weeks, from a listing's or an order's `lead_time_weeks`
+ * tag. Anything that is not a plain whole number (absent, empty, "-1", "1.5",
+ * "two") reads as 0 — the usual pickup, exactly as before lead times existed.
+ * Capped at FOOD_CORNER_MAX_LEAD_WEEKS.
+ *
+ * Twin: being3 public/foodcorner-common.js. Both run the same vectors
+ * (scripts/foodCornerLeadTime.vectors.json here, test/ there).
+ */
+export function parseLeadTimeWeeks(raw: unknown): number {
+  const text = String(raw ?? "").trim();
+  if (!/^\d+$/.test(text)) return 0;
+  return Math.min(FOOD_CORNER_MAX_LEAD_WEEKS, Number.parseInt(text, 10));
+}
+
+/** `date` moved by whole weeks on the local calendar — keeps the wall-clock time across a DST change. */
+export function addFoodCornerWeeks(date: Date, weeks: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + 7 * weeks);
+  return result;
+}
+
+/**
+ * The moment that decides which weekly cycle an order belongs to: when it was
+ * placed, moved `leadTimeWeeks` weeks later. A product with a two-week lead
+ * time ordered in week 1 is therefore listed, delivered and shared out in
+ * week 3. With lead 0 this is created_at — the rule every list used before, so
+ * orders without the tag stay exactly where they were.
+ */
+export function foodCornerOrderCycleTime(order: { createdAt: number; leadTimeWeeks?: number }): number {
+  const placed = new Date(order.createdAt * 1000);
+  return order.leadTimeWeeks ? addFoodCornerWeeks(placed, order.leadTimeWeeks).getTime() : placed.getTime();
+}
+
+/** Whether an order belongs to a foodCornerWeekRange cycle (see foodCornerOrderCycleTime). */
+export function foodCornerOrderInWeek(
+  order: { createdAt: number; leadTimeWeeks?: number },
+  range: { start: Date; end: Date },
+): boolean {
+  const time = foodCornerOrderCycleTime(order);
+  return time >= range.start.getTime() && time < range.end.getTime();
+}
+
+/**
+ * The foodCornerWeekRange offset whose cycle holds `timeMs`: 0 = current,
+ * 1 = previous, -1 = next, …
+ */
+export function foodCornerWeekOffsetOf(timeMs: number, anchorDay = "thursday", from: Date = new Date()): number {
+  const current = foodCornerWeekRange(0, anchorDay, from).start;
+  const moment = new Date(timeMs);
+  const day = new Date(moment.getFullYear(), moment.getMonth(), moment.getDate());
+  // Local midnights are 23 or 25 hours apart across DST — round to whole days.
+  const days = Math.round((day.getTime() - current.getTime()) / 86_400_000);
+  return 0 - Math.floor(days / 7);
+}
+
+/**
+ * The furthest cycle an order pager may step forward to: 0 (this cycle), or the
+ * (negative) offset of the latest cycle a lead time has put one of `orders` in.
+ */
+export function foodCornerMinWeekOffset(
+  orders: { createdAt: number; leadTimeWeeks?: number }[],
+  anchorDay = "thursday",
+  from: Date = new Date(),
+): number {
+  let min = 0;
+  for (const order of orders) {
+    min = Math.min(min, foodCornerWeekOffsetOf(foodCornerOrderCycleTime(order), anchorDay, from));
+  }
+  return min;
+}
+
+/**
+ * Orders of cycle `fromOffset` and of every later cycle, one entry per cycle,
+ * soonest first — the Točka's "Po dobavi" view. Earlier cycles are left out.
+ */
+export function groupFoodCornerOrdersByCycle<T extends { createdAt: number; leadTimeWeeks?: number }>(
+  orders: T[],
+  fromOffset: number,
+  anchorDay = "thursday",
+  from: Date = new Date(),
+): { offset: number; range: { start: Date; end: Date }; orders: T[] }[] {
+  const byOffset = new Map<number, T[]>();
+  for (const order of orders) {
+    const offset = foodCornerWeekOffsetOf(foodCornerOrderCycleTime(order), anchorDay, from);
+    if (offset > fromOffset) continue;
+    byOffset.set(offset, [...(byOffset.get(offset) || []), order]);
+  }
+  return Array.from(byOffset.entries())
+    .sort((a, b) => b[0] - a[0])
+    .map(([offset, cycleOrders]) => ({ offset, range: foodCornerWeekRange(offset, anchorDay, from), orders: cycleOrders }));
+}
+
+/**
+ * Checkout split: one KIND 36601 per (seller unit, lead time), in the order the
+ * items come. Products of one seller with different lead times are picked up in
+ * different weeks, so they cannot share an order. With no lead times this is
+ * exactly the old one-order-per-seller split.
+ */
+export function groupFoodCornerCheckout<T extends { listing: { unitRef: string; leadTimeWeeks?: number } }>(
+  items: T[],
+): { sellerRef: string; leadTimeWeeks: number; items: T[] }[] {
+  const groups = new Map<string, { sellerRef: string; leadTimeWeeks: number; items: T[] }>();
+  for (const item of items) {
+    const leadTimeWeeks = item.listing.leadTimeWeeks || 0;
+    const key = JSON.stringify([item.listing.unitRef, leadTimeWeeks]);
+    const group = groups.get(key) || { sellerRef: item.listing.unitRef, leadTimeWeeks, items: [] };
+    group.items.push(item);
+    groups.set(key, group);
+  }
+  return Array.from(groups.values());
+}
+
+/** Slovenian plural form of a count: 1 teden (one), 2 tedna (two), 3–4 tedne (few), 5+ tednov (other). */
+export function slovenianPluralForm(count: number): "one" | "two" | "few" | "other" {
+  const rest = Math.abs(Math.trunc(count)) % 100;
+  if (rest === 1) return "one";
+  if (rest === 2) return "two";
+  if (rest === 3 || rest === 4) return "few";
+  return "other";
 }
 
 export function describeFoodCornerPause(node: FoodCornerNode): string {

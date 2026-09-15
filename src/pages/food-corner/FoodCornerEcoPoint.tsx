@@ -22,10 +22,14 @@ import { FOOD_CORNER_ALLOCATION_KIND, FOOD_CORNER_NODE_KIND, FoodCornerNodeStatu
 import {
   deliveredTotalsForNode,
   describeFoodCornerPause,
+  effectiveBuyerQty,
   foodCornerItemKey,
+  foodCornerMinWeekOffset,
+  foodCornerOrderInWeek,
   foodCornerWeekRange,
   formatFoodMoney,
   generateFoodCornerId,
+  groupFoodCornerOrdersByCycle,
   listingCategory,
   groupOrdersByNode,
   reconcileOrderItems,
@@ -281,7 +285,8 @@ export default function FoodCornerEcoPoint() {
   // Orders view: group by buyer or supplier, paginated by the Točka Obilja cycle
   // (pickup day → pickup day, e.g. Thursday→Thursday — when orders are fulfilled),
   // latest cycle first. Anchor to the pickup day (NOT the earlier cutoff day).
-  const [ordersGroupBy, setOrdersGroupBy] = useState<"buyer" | "seller">("buyer");
+  // "delivery" lists the selected cycle and every later one (lead times), view only.
+  const [ordersGroupBy, setOrdersGroupBy] = useState<"buyer" | "seller" | "delivery">("buyer");
   const [ordersWeekOffset, setOrdersWeekOffset] = useState(0);
   const ordersAnchorDay = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -295,6 +300,8 @@ export default function FoodCornerEcoPoint() {
     () => foodCornerWeekRange(ordersWeekOffset, ordersAnchorDay),
     [ordersWeekOffset, ordersAnchorDay],
   );
+  // The pager may step forward to the latest cycle a lead time put an order in.
+  const ordersMinWeekOffset = foodCornerMinWeekOffset(myNodeOrders, ordersAnchorDay);
 
   // Resolve KIND 0 names for every buyer that ordered through my Eco points.
   const buyerPubkeys = useMemo(
@@ -305,12 +312,9 @@ export default function FoodCornerEcoPoint() {
   const buyerName = (pk: string) =>
     buyerProfiles.get(pk)?.display_name || buyerProfiles.get(pk)?.full_name || `${pk.slice(0, 12)}…`;
 
+  // An order belongs to the cycle it was placed in, moved later by its lead time.
   const weekOrders = useMemo(
-    () =>
-      myNodeOrders.filter((order) => {
-        const ms = order.createdAt * 1000;
-        return ms >= ordersWeek.start.getTime() && ms < ordersWeek.end.getTime();
-      }),
+    () => myNodeOrders.filter((order) => foodCornerOrderInWeek(order, ordersWeek)),
     [myNodeOrders, ordersWeek],
   );
 
@@ -469,16 +473,66 @@ export default function FoodCornerEcoPoint() {
     orders: FoodCornerOrderWithFulfillment[];
     total: number;
   }
+  interface SupplierTotals {
+    key: string;
+    name: string;
+    products: { key: string; title: string; unit: string; qty: number }[];
+  }
   interface OrderGroup {
     key: string;
     label: string;
     orders: FoodCornerOrderWithFulfillment[];
     total: number;
     currency: string;
-    buyers: BuyerSub[] | null; // buyer breakdown (only in "by supplier" mode)
+    buyers: BuyerSub[] | null; // buyer breakdown ("by supplier" and "by delivery" modes)
+    suppliers?: SupplierTotals[]; // product totals per supplier (only in "by delivery" mode)
   }
 
   const orderGroups = useMemo<OrderGroup[]>(() => {
+    if (ordersGroupBy === "delivery") {
+      // One card per pickup: the selected cycle and every later one, soonest first.
+      // The pickup is the anchor weekday that closes the cycle (range end).
+      const locale = lang === "sl" ? "sl-SI" : undefined;
+      return groupFoodCornerOrdersByCycle(myNodeOrders, ordersWeekOffset, ordersAnchorDay).map((cycle) => {
+        const subs = new Map<string, BuyerSub>();
+        const suppliers = new Map<string, SupplierTotals>();
+        for (const order of cycle.orders) {
+          const sub =
+            subs.get(order.buyerPubkey) || { pubkey: order.buyerPubkey, name: buyerName(order.buyerPubkey), orders: [], total: 0 };
+          sub.orders.push(order);
+          sub.total += orderEffectiveTotal(order);
+          subs.set(order.buyerPubkey, sub);
+
+          const supplier = suppliers.get(order.sellerRef) || {
+            key: order.sellerRef,
+            name: producers.find((p) => p.unitRef === order.sellerRef)?.name || `${order.sellerPubkey.slice(0, 12)}…`,
+            products: [],
+          };
+          // Same quantity the buyer rows and the card total use: allocated when the
+          // Točka published a 36603 for this order, else ordered.
+          for (const r of reconcileOrderItems(order)) {
+            const productKey = foodCornerItemKey(r.listingRef, r.unit);
+            let product = supplier.products.find((p) => p.key === productKey);
+            if (!product) {
+              const title = r.title || `${t("supplier.unknownProduct")} (${r.listingRef.slice(-6)})`;
+              product = { key: productKey, title, unit: r.unit, qty: 0 };
+              supplier.products.push(product);
+            }
+            product.qty += effectiveBuyerQty(r);
+          }
+          suppliers.set(order.sellerRef, supplier);
+        }
+        return {
+          key: `cycle:${cycle.offset}`,
+          label: cycle.range.end.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "numeric" }),
+          orders: cycle.orders,
+          total: cycle.orders.reduce((sum, o) => sum + orderEffectiveTotal(o), 0),
+          currency: cycle.orders[0]?.currency || "EUR",
+          buyers: Array.from(subs.values()).sort((a, b) => b.total - a.total),
+          suppliers: Array.from(suppliers.values()).sort((a, b) => a.name.localeCompare(b.name)),
+        };
+      });
+    }
     const map = new Map<string, OrderGroup>();
     const buyerSubs = new Map<string, Map<string, BuyerSub>>(); // groupKey -> buyerPk -> sub
     for (const order of weekOrders) {
@@ -510,7 +564,7 @@ export default function FoodCornerEcoPoint() {
     }
     return groups.sort((a, b) => b.total - a.total);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekOrders, ordersGroupBy, producers, buyerProfiles]);
+  }, [weekOrders, ordersGroupBy, producers, buyerProfiles, myNodeOrders, ordersWeekOffset, ordersAnchorDay, lang, t]);
   const ordersLocale = lang === "sl" ? "sl-SI" : undefined;
   const weekLabel = `${ordersWeek.start.toLocaleDateString(ordersLocale, { day: "numeric", month: "short" })} – ${new Date(
     ordersWeek.end.getTime() - 1,
@@ -1200,6 +1254,14 @@ export default function FoodCornerEcoPoint() {
                 >
                   {t("ecoPoint.orders.groupSeller")}
                 </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={ordersGroupBy === "delivery" ? "default" : "ghost"}
+                  onClick={() => setOrdersGroupBy("delivery")}
+                >
+                  {t("ecoPoint.orders.groupDelivery")}
+                </Button>
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -1220,8 +1282,8 @@ export default function FoodCornerEcoPoint() {
                   size="sm"
                   variant="outline"
                   className="gap-1"
-                  disabled={ordersWeekOffset === 0}
-                  onClick={() => setOrdersWeekOffset((o) => Math.max(0, o - 1))}
+                  disabled={ordersWeekOffset <= ordersMinWeekOffset}
+                  onClick={() => setOrdersWeekOffset((o) => Math.max(ordersMinWeekOffset, o - 1))}
                 >
                   {t("ecoPoint.orders.nextWeek")}
                   <ChevronRight className="h-4 w-4" />
@@ -1231,7 +1293,9 @@ export default function FoodCornerEcoPoint() {
 
             {orderGroups.length === 0 ? (
               <Card>
-                <CardContent className="p-5 text-sm text-muted-foreground">{t("ecoPoint.orders.weekEmpty")}</CardContent>
+                <CardContent className="p-5 text-sm text-muted-foreground">
+                  {ordersGroupBy === "delivery" ? t("ecoPoint.orders.deliveryEmpty") : t("ecoPoint.orders.weekEmpty")}
+                </CardContent>
               </Card>
             ) : (
               <div className="space-y-4">
@@ -1241,7 +1305,11 @@ export default function FoodCornerEcoPoint() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                            {ordersGroupBy === "buyer" ? t("ecoPoint.orders.buyer") : t("ecoPoint.orders.supplier")}
+                            {ordersGroupBy === "buyer"
+                              ? t("ecoPoint.orders.buyer")
+                              : ordersGroupBy === "delivery"
+                                ? t("ecoPoint.orders.pickup")
+                                : t("ecoPoint.orders.supplier")}
                           </p>
                           <p className="font-semibold truncate">{group.label}</p>
                           <p className="text-xs text-muted-foreground">
@@ -1268,7 +1336,21 @@ export default function FoodCornerEcoPoint() {
                           )}
                         </div>
                       </div>
-                      <div className="border-t pt-2">
+                      <div className="border-t pt-2 space-y-3">
+                        {group.suppliers && group.suppliers.length > 0 && (
+                          <div className="space-y-1">
+                            {group.suppliers.map((supplier) => (
+                              <p key={supplier.key} className="text-xs break-words">
+                                <span className="font-medium text-primary">{supplier.name}: </span>
+                                <span className="text-muted-foreground">
+                                  {supplier.products
+                                    .map((p) => `${Number(p.qty.toFixed(2))} ${p.unit} ${p.title}`)
+                                    .join(" · ")}
+                                </span>
+                              </p>
+                            ))}
+                          </div>
+                        )}
                         {group.buyers ? (
                           <div className="space-y-3">
                             {group.buyers.map((sub) => (
@@ -1284,20 +1366,23 @@ export default function FoodCornerEcoPoint() {
                                   </p>
                                   <div className="flex items-center gap-1.5 shrink-0">
                                     <span className="text-sm font-semibold">{formatFoodMoney(sub.total, group.currency)}</span>
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="ghost"
-                                      className="h-7 w-7"
-                                      title={t("ecoPoint.print.one")}
-                                      onClick={() =>
-                                        printBuyers([
-                                          { name: sub.name, orders: sub.orders, total: sub.total, currency: group.currency },
-                                        ])
-                                      }
-                                    >
-                                      <Printer className="h-3.5 w-3.5" />
-                                    </Button>
+                                    {/* Print is labelled with the selected week, so it has no place on later pickups. */}
+                                    {ordersGroupBy !== "delivery" && (
+                                      <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-7 w-7"
+                                        title={t("ecoPoint.print.one")}
+                                        onClick={() =>
+                                          printBuyers([
+                                            { name: sub.name, orders: sub.orders, total: sub.total, currency: group.currency },
+                                          ])
+                                        }
+                                      >
+                                        <Printer className="h-3.5 w-3.5" />
+                                      </Button>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="space-y-1 pl-3 border-l">{sub.orders.map(renderOrderRow)}</div>

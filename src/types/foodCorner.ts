@@ -112,6 +112,9 @@ export interface FoodCornerListing {
   maxOrder: string;
   availableFrom: string;
   availableUntil: string;
+  // "Rok dobave": how many pickups later than usual this product comes (tag
+  // `lead_time_weeks`). 0 = the usual pickup.
+  leadTimeWeeks: number;
   eco: string[];
   cert: string[];
   tags: string[];
@@ -169,6 +172,10 @@ export interface FoodCornerOrder {
   pickupPoint: string;
   requestedDate: string;
   requestedWindow: string;
+  // Lead time frozen onto the order at checkout (tag `lead_time_weeks`). Every
+  // list puts the order into the cycle this many weeks after the one it was
+  // placed in. 0 = orders without the tag, i.e. all orders before lead times.
+  leadTimeWeeks: number;
   payment: string[];
   paid: string;
   recurring: string;

@@ -18,15 +18,18 @@ import {
   FoodCornerListing,
 } from "@/types/foodCorner";
 import {
+  addFoodCornerWeeks,
   describeFoodCornerPause,
   effectiveBuyerQty,
   foodCornerOrderingWindow,
   foodCornerWeekRange,
   formatFoodMoney,
   generateFoodCornerId,
+  groupFoodCornerCheckout,
   isFoodCornerNodePaused,
   listingCategory,
   reconcileOrderItems,
+  slovenianPluralForm,
   type FoodCornerListingCategory,
 } from "@/lib/foodCorner";
 import type { FoodCornerNode } from "@/types/foodCorner";
@@ -98,6 +101,12 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+// A requested_date tag ("YYYY-MM-DD") as a local date, or null when it isn't one.
+function parseISODate(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || "");
+  return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null;
+}
+
 // "2d 4h 13m 5s" — drops leading zero units.
 function formatCountdown(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -137,6 +146,8 @@ export default function FoodCornerOrder() {
   const [selectedNodeRef, setSelectedNodeRef] = useState(() => localStorage.getItem(storageKey) || "");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
+  // True for the whole checkout — isPublishing drops between the orders it sends.
+  const [placingOrder, setPlacingOrder] = useState(false);
   // Ticking clock so the order-deadline countdown updates live (every second).
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -244,6 +255,23 @@ export default function FoodCornerOrder() {
         year: "numeric",
       })
     : "";
+  // Same format for the later pickups that a "Rok dobave" (lead time) moves an order to.
+  const formatPickupDate = (date: Date) =>
+    date.toLocaleDateString(lang === "sl" ? "sl-SI" : undefined, {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  const leadPickupDisplay = (weeks: number) =>
+    orderWindow?.pickup ? formatPickupDate(addFoodCornerWeeks(orderWindow.pickup, weeks)) : "";
+  // "Rok dobave: 2 tedna · prevzem …" — Slovenian has four plural forms of "teden".
+  const leadLine = (weeks: number, date: string) =>
+    t("order.lead.line", {
+      n: weeks,
+      weeks: t(`order.lead.week.${lang === "sl" ? slovenianPluralForm(weeks) : weeks === 1 ? "one" : "other"}` as FoodCornerKey),
+      date: date || "—",
+    });
 
   useEffect(() => {
     if (!selectedNodeRef) return;
@@ -269,6 +297,18 @@ export default function FoodCornerOrder() {
     () => selectedItems.filter(({ listing, qty }) => orderQtyViolation(listing, qty) !== null),
     [selectedItems],
   );
+
+  // Cart items with a lead time, per distinct lead (shortest first) — each is
+  // picked up that many weeks after the usual estimated pickup date.
+  const cartLeadGroups = useMemo(() => {
+    const byLead = new Map<number, string[]>();
+    for (const { listing } of selectedItems) {
+      if (listing.leadTimeWeeks > 0) byLead.set(listing.leadTimeWeeks, [...(byLead.get(listing.leadTimeWeeks) || []), listing.title]);
+    }
+    return Array.from(byLead.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([weeks, titles]) => ({ weeks, titles }));
+  }, [selectedItems]);
 
   const total = selectedItems.reduce((sum, item) => sum + item.qty * item.listing.price, 0);
   const currency = selectedItems[0]?.listing.priceCurrency || "EUR";
@@ -302,12 +342,17 @@ export default function FoodCornerOrder() {
   // Group My orders by Točka Obilja (one entry per point per cycle). A single
   // checkout is split into one KIND 36601 per seller, but the buyer picks up
   // everything at ONE point — so consolidate per point, aggregating items + total
-  // (the buyer doesn't care about the per-seller split).
+  // (the buyer doesn't care about the per-seller split). Orders with a lead time
+  // ("Rok dobave") are picked up on a later date, so they get their own entry
+  // per lead time and pickup date.
   const myOrdersByPoint = useMemo(() => {
     const map = new Map<
       string,
       {
+        key: string;
         nodeRef: string;
+        leadTimeWeeks: number;
+        requestedDate: string;
         total: number;
         currency: string;
         createdAt: number;
@@ -318,10 +363,17 @@ export default function FoodCornerOrder() {
       }
     >();
     for (const order of myOrdersInWeek) {
-      let g = map.get(order.distributionPoint);
+      const key =
+        order.leadTimeWeeks > 0
+          ? JSON.stringify([order.distributionPoint, order.leadTimeWeeks, order.requestedDate])
+          : order.distributionPoint;
+      let g = map.get(key);
       if (!g) {
         g = {
+          key,
           nodeRef: order.distributionPoint,
+          leadTimeWeeks: order.leadTimeWeeks,
+          requestedDate: order.requestedDate,
           total: 0,
           currency: order.currency || "EUR",
           createdAt: 0,
@@ -330,7 +382,7 @@ export default function FoodCornerOrder() {
           statuses: new Set(),
           items: new Map(),
         };
-        map.set(order.distributionPoint, g);
+        map.set(key, g);
       }
       // Prefer the Točka Obilja allocation (KIND 36603) when present — that's the
       // quantity/total the buyer actually receives; else fall back to ordered.
@@ -412,17 +464,24 @@ export default function FoodCornerOrder() {
       return;
     }
 
-    const groups = new Map<string, typeof selectedItems>();
-    for (const item of selectedItems) {
-      const existing = groups.get(item.listing.unitRef) || [];
-      existing.push(item);
-      groups.set(item.listing.unitRef, existing);
-    }
+    // One KIND 36601 per (seller, lead time): products with a "Rok dobave" are
+    // picked up weeks later, so they travel in their own order.
+    const groups = groupFoodCornerCheckout(selectedItems);
+    const usedOrderIds = new Set<string>();
+    let sent = 0;
 
+    setPlacingOrder(true);
     try {
-      for (const [sellerRef, items] of groups.entries()) {
-        const orderId = generateFoodCornerId("o");
+      for (const { sellerRef, leadTimeWeeks, items } of groups) {
+        let orderId = generateFoodCornerId("o");
+        while (usedOrderIds.has(orderId)) orderId = generateFoodCornerId("o");
+        usedOrderIds.add(orderId);
         const orderTotal = items.reduce((sum, item) => sum + item.qty * item.listing.price, 0);
+        // The usual pickup, moved as many weeks later as the lead time.
+        const orderRequestedDate =
+          leadTimeWeeks > 0 && orderWindow?.pickup
+            ? toISODate(addFoodCornerWeeks(orderWindow.pickup, leadTimeWeeks))
+            : requestedDate;
         const pickup = selectedNode.pickups[0];
         const itemTags = items.map(({ listing, qty }) => [
           "item",
@@ -449,14 +508,20 @@ export default function FoodCornerOrder() {
             ["fulfillment", "distribution_point"],
             ["distribution_point", selectedNode.ref],
             ...(pickup?.id ? [["pickup_point", pickup.id]] : []),
-            ...(requestedDate ? [["requested_date", requestedDate]] : []),
+            ...(orderRequestedDate ? [["requested_date", orderRequestedDate]] : []),
             ...(pickup?.window ? [["requested_window", pickup.window]] : []),
+            ...(leadTimeWeeks > 0 ? [["lead_time_weeks", String(leadTimeWeeks)]] : []),
             ["payment", "lana_pay"],
             ["paid", "false"],
             ...categoryTags.map((tag) => ["t", tag]),
           ],
           note.trim(),
         );
+        // This order is out — take its items off the cart, so pressing again
+        // after a later failure sends only what is still left.
+        sent += 1;
+        const sentRefs = new Set(items.map(({ listing }) => listing.ref));
+        setQuantities((current) => Object.fromEntries(Object.entries(current).filter(([ref]) => !sentRefs.has(ref))));
       }
 
       toast.success(t("order.toast.published"));
@@ -464,7 +529,17 @@ export default function FoodCornerOrder() {
       setNote("");
       await refetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("order.toast.failed"));
+      if (sent > 0 && sent < groups.length) {
+        // Part of the checkout went out: say how much, keep the note for the rest.
+        toast.error(t("order.toast.partial", { sent, total: groups.length }), {
+          description: err instanceof Error ? err.message : undefined,
+        });
+        await refetch();
+      } else {
+        toast.error(err instanceof Error ? err.message : t("order.toast.failed"));
+      }
+    } finally {
+      setPlacingOrder(false);
     }
   };
 
@@ -768,6 +843,9 @@ export default function FoodCornerOrder() {
                             step={isWholeUnit(listing.unit) ? "1" : "0.1"}
                             inputMode={isWholeUnit(listing.unit) ? "numeric" : "decimal"}
                             value={quantities[listing.ref] || ""}
+                            // Checkout sends one order per (seller, lead time) and takes
+                            // each off the cart as it goes: no edits while that runs.
+                            disabled={placingOrder}
                             aria-invalid={qtyViolation !== null}
                             onChange={(event) => {
                               let value = event.target.value;
@@ -789,6 +867,12 @@ export default function FoodCornerOrder() {
                             {maxOrder !== null && t("order.maxLabel", { qty: listing.maxOrder, unit: listing.unit })}
                             {qtyViolation === "below" && ` — ${t("order.belowMinWarn")}`}
                             {qtyViolation === "above" && ` — ${t("order.aboveMaxWarn")}`}
+                          </p>
+                        )}
+                        {listing.leadTimeWeeks > 0 && (
+                          <p className="text-xs font-medium text-amber-700 dark:text-amber-300 flex items-start gap-1">
+                            <Clock className="h-3 w-3 shrink-0 mt-0.5" />
+                            <span>{leadLine(listing.leadTimeWeeks, leadPickupDisplay(listing.leadTimeWeeks))}</span>
                           </p>
                         )}
                         <div className="flex flex-wrap gap-1">
@@ -828,6 +912,7 @@ export default function FoodCornerOrder() {
                             size="icon"
                             className="h-8 w-8 shrink-0 -ml-2 text-muted-foreground hover:text-destructive"
                             onClick={() => updateQuantity(listing.ref, "")}
+                            disabled={placingOrder}
                             aria-label={t("order.cart.remove", { title: listing.title })}
                             title={t("order.cart.remove", { title: listing.title })}
                           >
@@ -849,6 +934,15 @@ export default function FoodCornerOrder() {
                     <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
                       {requestedDateDisplay || "—"}
                     </div>
+                    {/* Products with a lead time come on a later pickup — one line per lead time. */}
+                    {cartLeadGroups.map(({ weeks, titles }) => (
+                      <p
+                        key={weeks}
+                        className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 break-words"
+                      >
+                        {t("order.lead.cartPickup", { date: leadPickupDisplay(weeks) || "—", titles: titles.join(", ") })}
+                      </p>
+                    ))}
                     <p className="text-xs text-muted-foreground">{t("order.cart.estimatedHint")}</p>
                   </div>
 
@@ -863,8 +957,8 @@ export default function FoodCornerOrder() {
                     />
                   </div>
 
-                  <Button className="w-full gap-2" onClick={placeOrder} disabled={isPublishing || selectedItems.length === 0 || invalidItems.length > 0}>
-                    {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  <Button className="w-full gap-2" onClick={placeOrder} disabled={placingOrder || isPublishing || selectedItems.length === 0 || invalidItems.length > 0}>
+                    {placingOrder || isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     {t("order.cart.submit")}
                   </Button>
                 </CardContent>
@@ -924,7 +1018,7 @@ export default function FoodCornerOrder() {
                 {myOrdersByPoint.map((group) => {
                   const node = getNodeByRef(group.nodeRef);
                   return (
-                    <Card key={group.nodeRef}>
+                    <Card key={group.key}>
                       <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -938,6 +1032,20 @@ export default function FoodCornerOrder() {
                             <p className="text-xs font-medium text-primary mt-1 flex items-center gap-1">
                               <Store className="h-3 w-3 shrink-0" />
                               {t("order.myOrders.via", { point: node.name })}
+                            </p>
+                          )}
+                          {group.leadTimeWeeks > 0 && (
+                            <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mt-1 flex items-start gap-1">
+                              <Clock className="h-3 w-3 shrink-0 mt-0.5" />
+                              <span>
+                                {leadLine(
+                                  group.leadTimeWeeks,
+                                  (() => {
+                                    const date = parseISODate(group.requestedDate);
+                                    return date ? formatPickupDate(date) : "";
+                                  })(),
+                                )}
+                              </span>
                             </p>
                           )}
                           <ul className="mt-2 space-y-1">
