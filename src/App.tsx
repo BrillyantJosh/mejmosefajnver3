@@ -133,6 +133,11 @@ const ShopPay = lazy(() => import("./pages/shop/ShopPay"));
 const LanaDiscountLayout = lazy(() => import("./pages/discount/LanaDiscountLayout"));
 const DiscountTransactions = lazy(() => import("./pages/discount/DiscountTransactions"));
 const DiscountSell = lazy(() => import("./pages/discount/DiscountSell"));
+const BefLayout = lazy(() => import("./pages/bef/BefLayout"));
+const BefExplorer = lazy(() => import("./pages/bef/BefExplorer"));
+const BefInterest = lazy(() => import("./pages/bef/BefInterest"));
+const BefCircle = lazy(() => import("./pages/bef/BefCircle"));
+const BefSell = lazy(() => import("./pages/bef/BefSell"));
 const MeetLayout = lazy(() => import("./pages/meet/MeetLayout"));
 const MeetJoin = lazy(() => import("./pages/meet/MeetJoin"));
 const MeetSchedule = lazy(() => import("./pages/meet/MeetSchedule"));
@@ -424,6 +429,12 @@ const App = () => (
                     <Route index element={<Navigate to="/discount/transactions" replace />} />
                     <Route path="transactions" element={<DiscountTransactions />} />
                     <Route path="sell" element={<DiscountSell />} />
+                  </Route>
+                  <Route path="/bef" element={<BefLayout />}>
+                    <Route index element={<BefExplorer />} />
+                    <Route path="interest" element={<BefInterest />} />
+                    <Route path="circle" element={<BefCircle />} />
+                    <Route path="sell" element={<BefSell />} />
                   </Route>
                   <Route path="/meet" element={<MeetLayout />}>
                     <Route index element={<MeetJoin />} />

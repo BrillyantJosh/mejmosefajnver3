@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video, Sprout, Utensils, HandCoins } from 'lucide-react';
+import { Users, MessageSquare, Wallet as WalletIcon, Coins, ShoppingCart, FileText, FileKey, Radio, Sparkles, CreditCard, Shield, Heart, Music, Search, HandHeart, CheckCircle, Lightbulb, CalendarDays, Globe, Bot, Landmark, Lock, ArrowLeftRight, Eye, AlertTriangle, TrendingUp, Tag, Send, Video, Sprout, Utensils, HandCoins, Scale } from 'lucide-react';
 import { ModuleConfig, ModuleType } from '@/types/modules';
 
 // Language-aware module display helpers (Slovenian variants when lang === 'sl').
@@ -32,6 +32,7 @@ import lanaeventsImage from '@/assets/lanaevents-module.webp';
 import lanaalignsImage from '@/assets/lana-aligns-world-module.webp';
 import unconditionalFinancingEnImage from '@/assets/unconditional-financing-module-en.webp';
 import unconditionalFinancingSlImage from '@/assets/unconditional-financing-module-sl.webp';
+import befModuleImage from '@/assets/bef-module.webp';
 
 const DEFAULT_MODULES: ModuleConfig[] = [
   {
@@ -429,6 +430,20 @@ const DEFAULT_MODULES: ModuleConfig[] = [
     order: 29
   },
   {
+    id: 'bef',
+    title: 'BEF',
+    titleSl: 'BEF',
+    description: 'Balanced Exchange Framework: explore scenarios, express a non-binding interest, sell on Lana.discount, keep your circle of cards',
+    descriptionSl: 'Balanced Exchange Framework: preizkusi scenarije, izrazi nezavezujoč interes, prodaj na Lana.discount, vodi svoj krog kartic',
+    icon: Scale,
+    path: '/bef',
+    gradient: 'from-teal-600 to-sky-700',
+    image: befModuleImage,
+    imagePosition: 'object-[50%_32%]',
+    enabled: true,
+    order: 29.5
+  },
+  {
     id: 'meet',
     title: 'Lana Meet',
     description: 'Video meetings with real-time translation',
@@ -516,7 +531,8 @@ const mapToNostrId = (id: ModuleType): string => {
     'meet': 'Lana Meet',
     'theLanaLife': 'TheLana.Life',
     'direct-fund': 'Direct Fund',
-    'unconditionalfinancing': 'Unconditional Financing'
+    'unconditionalfinancing': 'Unconditional Financing',
+    'bef': 'BEF'
   };
   return mapping[id] || id;
 };
@@ -560,7 +576,8 @@ const mapFromNostrId = (id: string): ModuleType | null => {
     'Lana Discount': 'lanadiscount',
     'Lana Meet': 'meet',
     'TheLana.Life': 'theLanaLife',
-    'Unconditional Financing': 'unconditionalfinancing'
+    'Unconditional Financing': 'unconditionalfinancing',
+    'BEF': 'bef'
   };
   return mapping[id] || null;
 };

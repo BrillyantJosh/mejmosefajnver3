@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { checkGrossViolationFreeze, FrozenOutError, type FreezeVerdict } from '@/lib/ownFreezeGate';
 import { convertWifToIds } from '@/lib/crypto';
+import { befClient } from '@/lib/bef/config';
+import { forgetBefPerson } from '@/lib/bef/personToken';
 import { SimplePool } from 'nostr-tools';
 
 // TypeScript declaration for document.wasDiscarded (Chrome Memory Saver feature)
@@ -81,6 +83,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           console.log('Session expired, removing...');
           localStorage.removeItem(SESSION_KEY);
+          // No MejmoSefajn session, no BEF Explorer session opened with its key.
+          forgetBefPerson(befClient);
         }
       }
     } catch (error) {
@@ -318,6 +322,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setSession(null);
     localStorage.removeItem(SESSION_KEY);
+    // After the session key, so other tabs leave the app before they see the
+    // BEF token go — never signing in to BEF again on the way out.
+    forgetBefPerson(befClient);
   };
 
   return (
