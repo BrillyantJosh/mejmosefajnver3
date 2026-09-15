@@ -118,8 +118,30 @@ router.get('/:bucket/public/:filename', (req: Request<{ bucket: string; filename
   });
 });
 
+// Kinds a stored file may be shown as in the browser. Nothing here can carry a
+// script. Everything else — .svg, .html, .htm, .xml, .pdf, anything unknown — is
+// handed over as a download of plain bytes (see serveFile).
+//
+// .aac is here because DMAudioRecorder records it as a fallback and Chat /
+// BeingChat play it as a voice message.
+const INLINE_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif',
+  '.mp3', '.m4a', '.aac', '.ogg', '.opus', '.wav',
+  '.webm', '.mp4', '.mov',
+]);
+
 // Helper to serve a file from a bucket given a relative file path
 function serveFile(bucket: string, relativePath: string, req: Request, res: Response) {
+  // Anyone can upload any file here, and it comes back from the app's OWN origin —
+  // the origin whose localStorage holds the signed-in person's keys. A stored file
+  // must never be able to run as the app, so on every response:
+  //  - nosniff: the browser takes the Content-Type we send and never guesses a page
+  //    out of the bytes;
+  //  - CSP sandbox: a file opened on its own gets no origin and runs no script.
+  //    No default-src, which would stop an image from showing when opened directly.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', 'sandbox');
+
   if (!ALLOWED_BUCKETS.includes(bucket)) {
     return res.status(400).json({ error: `Invalid bucket: ${bucket}` });
   }
@@ -131,11 +153,25 @@ function serveFile(bucket: string, relativePath: string, req: Request, res: Resp
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ error: 'File not found' });
   }
+  // Only a stored file, never a folder. An upload's `path` can make a folder named
+  // like a picture (x.png/index.html); `x.png/` would pass the extension check below
+  // and send() would serve the index.html inside it as text/html.
+  const stat = fs.statSync(filePath);
+  if (!stat.isFile()) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+  // Pictures, sound and video display inline. Anything else is a download, and its
+  // type is plain bytes — an .svg or .html must not render even when a page fetches
+  // it into a blob: URL (the sandbox header does not travel with the blob, the type
+  // does). send() keeps a Content-Type that is already set.
+  if (!INLINE_EXTENSIONS.has(path.extname(safePath).toLowerCase())) {
+    res.setHeader('Content-Disposition', 'attachment');
+    res.setHeader('Content-Type', 'application/octet-stream');
+  }
   // For audio buckets, force audio/* Content-Type so <audio> elements don't reject
   // the file on devices that refuse video/webm in audio context.
   // Also disable caching to prevent stale Content-Type from being served via 304.
   if (bucket === 'dm-audio' && safePath.endsWith('.webm')) {
-    const stat = fs.statSync(filePath);
     res.setHeader('Content-Type', 'audio/webm');
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -155,7 +191,8 @@ function serveFile(bucket: string, relativePath: string, req: Request, res: Resp
     res.setHeader('Content-Length', stat.size);
     return fs.createReadStream(filePath).pipe(res);
   }
-  return res.sendFile(filePath);
+  // index: false — send() never looks for an index file in a folder, whatever reaches it.
+  return res.sendFile(filePath, { index: false });
 }
 
 // GET /api/storage/:bucket/* - Serve file (supports any subdirectory depth)
