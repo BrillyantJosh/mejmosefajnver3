@@ -107,3 +107,65 @@ export async function readFromRelays(
   await Promise.all(relays.map(readOne));
   return snapshot();
 }
+
+/**
+ * The same honest read, retried — for the one caller that cannot be allowed to
+ * refuse over a blip: the pre-payment duplicate guard.
+ *
+ * A phone is not a server. iOS suspends the page while the camera sheet is up
+ * (scanning a WIF is the usual reason on the confirm screen), and the sockets
+ * around that moment can be gone without the page being told. One attempt then
+ * reports "no relay answered" for a network that is perfectly fine a second
+ * later, and a fail-closed guard turns that into a refused payment.
+ *
+ * Each attempt gets its OWN pool, and that is the whole point. nostr-tools does
+ * not re-dial a relay it already has: `ensureRelay` hands back the cached
+ * AbstractRelay and `connect()` returns immediately while `_connected` is still
+ * true — so on a half-open socket the REQ goes into a black hole and every
+ * retry on that pool burns its budget the same way. A fresh pool, with the old
+ * one closed first, is the only way to actually get a new connection.
+ *
+ * Stops at the FIRST attempt that gets a real answer: one relay answering is
+ * enough, exactly as for a single read. Exhausting the attempts returns the
+ * last result with `answered: []` — it never throws, so the caller's
+ * fail-closed check stays the only thing that decides.
+ */
+export interface RelayReadRetryOptions extends RelayReadOptions {
+  /** Total attempts, INCLUDING the first. */
+  attempts: number;
+  /** Pause between attempts — room for a resumed network stack to settle. */
+  pauseMs: number;
+  /** Fired before each attempt with its 1-based number, for a progress line. */
+  onAttempt?: (attempt: number, attempts: number) => void;
+}
+
+export async function readFromRelaysWithRetry(
+  newPool: () => SimplePool,
+  relays: string[],
+  filter: Filter,
+  opts: RelayReadRetryOptions,
+): Promise<RelayReadResult> {
+  const attempts = Math.max(1, opts.attempts);
+  let last: RelayReadResult = { events: [], answered: [], failed: [] };
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (opts.cancelled?.value) return last;
+    opts.onAttempt?.(attempt, attempts);
+
+    const pool = newPool();
+    try {
+      last = await readFromRelays(pool, relays, filter, opts);
+    } finally {
+      // Torn down before the next attempt: a retry that reuses the sockets it
+      // just failed on is not a retry.
+      try { pool.close(relays); } catch { /* sockets already gone */ }
+    }
+
+    if (last.answered.length > 0) return last;
+    if (attempt < attempts && !opts.cancelled?.value) {
+      await new Promise<void>((r) => setTimeout(r, opts.pauseMs));
+    }
+  }
+
+  return last;
+}

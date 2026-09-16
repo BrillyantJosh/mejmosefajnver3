@@ -148,3 +148,56 @@ export function findDuplicateConfirmations(
 
   return matches;
 }
+
+/* ─── How the browser reads the confirmations this matcher needs ───────────
+ *
+ * The guard is fail-closed: no answer from any relay means we do not pay. That
+ * is right, and it stays. What was wrong is how little it took to get no
+ * answer. On 2026-09-15 a payer on an iPhone scanned her key with the camera
+ * and was refused on a 66.41 LANA batch while all four relays were healthy —
+ * measured the same day at 356–912 ms to EOSE for exactly her filter. A single
+ * attempt on a phone whose sockets had just been suspended was the whole story.
+ *
+ * Hence: several attempts, each on a fresh pool (see readFromRelaysWithRetry),
+ * and a per-attempt budget with real headroom over the healthy case.
+ */
+
+/**
+ * Per-attempt wall clock, covering connect AND EOSE for every relay in
+ * parallel. Healthy is under 1 s; 12 s is ~13× that and still ~3× a pessimistic
+ * mobile round, so a slow relay is waited for instead of being called dead.
+ */
+export const GUARD_READ_BUDGET_MS = 12_000;
+
+/**
+ * Attempts including the first. Attempt 2 is the one that recovers a socket
+ * killed by the camera sheet; attempt 3 covers a network still re-associating.
+ */
+export const GUARD_READ_ATTEMPTS = 3;
+
+/** Pause between attempts — retrying into a still-suspended stack wastes one. */
+export const GUARD_READ_PAUSE_MS = 1_200;
+
+/**
+ * Worst case before the guard refuses: 3 × 12 s + 2 × 1.2 s ≈ 38 s. Bounded on
+ * purpose — the user is shown which attempt is running while it runs.
+ */
+export const GUARD_READ_WORST_CASE_MS =
+  GUARD_READ_ATTEMPTS * GUARD_READ_BUDGET_MS + (GUARD_READ_ATTEMPTS - 1) * GUARD_READ_PAUSE_MS;
+
+/**
+ * What we say when the check could not be made. Someone who has just typed a
+ * private key and pressed a payment button must not have to wonder whether the
+ * money went: the first sentence answers that, before the reason.
+ */
+export const GUARD_UNVERIFIABLE_MESSAGE =
+  'Nothing was sent — no LANA has left your wallet. ' +
+  'We could not reach any relay to check whether these payments were already made, ' +
+  'and we never pay without that check. ' +
+  'Check your internet connection and press Confirm & Send Payment again.';
+
+/** Same promise first, for the case where the relay list itself never loaded. */
+export const GUARD_NO_RELAY_LIST_MESSAGE =
+  'Nothing was sent — no LANA has left your wallet. ' +
+  'The list of relays is not loaded, so we cannot check whether these payments were already made. ' +
+  'Reload the page and try again.';

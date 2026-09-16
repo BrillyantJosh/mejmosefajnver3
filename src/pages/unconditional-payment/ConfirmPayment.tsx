@@ -12,8 +12,15 @@ import { convertWifToIds } from "@/lib/crypto";
 import { formatLana } from "@/lib/currencyConversion";
 import { supabase } from "@/integrations/supabase/client";
 import { SimplePool, finalizeEvent } from 'nostr-tools';
-import { readFromRelays } from "@/lib/relayRead";
-import { findDuplicateConfirmations } from "@/lib/unconditionalPaymentGuard";
+import { readFromRelaysWithRetry } from "@/lib/relayRead";
+import {
+  findDuplicateConfirmations,
+  GUARD_READ_ATTEMPTS,
+  GUARD_READ_BUDGET_MS,
+  GUARD_READ_PAUSE_MS,
+  GUARD_NO_RELAY_LIST_MESSAGE,
+  GUARD_UNVERIFIABLE_MESSAGE,
+} from "@/lib/unconditionalPaymentGuard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
@@ -56,6 +63,10 @@ export default function ConfirmPayment() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  /** Set only when the duplicate check could not be made — nothing was sent. */
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  /** Which verification attempt is running, so a long wait stays legible. */
+  const [verifyProgress, setVerifyProgress] = useState<string | null>(null);
 
   const relays = parameters?.relays || [];
 
@@ -138,6 +149,17 @@ export default function ConfirmPayment() {
   const recipientPubkeys = recipientSummary.map(r => r.pubkey);
   const { profiles: recipientProfiles } = useNostrProfilesCacheBulk(recipientPubkeys);
 
+  /**
+   * The check could not be made, so nothing was attempted. Said on the page as
+   * well as in a toast: a toast that has faded leaves exactly the doubt this
+   * message exists to remove.
+   */
+  const refuseUnverified = (message: string) => {
+    console.warn('⛔ Payment not attempted — previous payments could not be verified');
+    setVerifyError(message);
+    toast.error(message, { duration: 15000 });
+  };
+
   const handleConfirmPayment = async () => {
     if (!privateKey || !isPrivateKeyValid || !paymentData) {
       toast.error("Please enter a valid private key");
@@ -150,6 +172,7 @@ export default function ConfirmPayment() {
     }
 
     setIsProcessing(true);
+    setVerifyError(null);
 
     try {
       console.log('🚀 Processing unconditional payment...');
@@ -161,24 +184,41 @@ export default function ConfirmPayment() {
       // minted (the generator re-mints settled obligations under new d-tags).
       // Fails CLOSED: if no relay answers, we cannot verify — so we do not pay.
       if (relays.length === 0) {
-        throw new Error('Could not verify previous payments — relay list unavailable. Please try again.');
+        refuseUnverified(GUARD_NO_RELAY_LIST_MESSAGE);
+        return;
       }
 
-      const guardPool = new SimplePool();
+      // Retried, each attempt on its OWN pool, because what fails here is the
+      // phone rather than the relays: the camera sheet that scans the key
+      // suspends the page, and sockets opened around that moment can be dead
+      // without the page being told. readFromRelaysWithRetry explains why a
+      // fresh pool is the only thing that actually re-dials.
       let priorConfirmations;
       try {
-        priorConfirmations = await readFromRelays(
-          guardPool,
+        priorConfirmations = await readFromRelaysWithRetry(
+          () => new SimplePool(),
           relays,
           { kinds: [90901], authors: [session.nostrHexId], limit: 500 },
-          { budgetMs: 8000 },
+          {
+            budgetMs: GUARD_READ_BUDGET_MS,
+            attempts: GUARD_READ_ATTEMPTS,
+            pauseMs: GUARD_READ_PAUSE_MS,
+            onAttempt: (attempt, total) =>
+              setVerifyProgress(
+                attempt === 1
+                  ? 'Checking your previous payments…'
+                  : `No relay answered — trying again (${attempt} of ${total})…`,
+              ),
+          },
         );
       } finally {
-        try { guardPool.close(relays); } catch { /* sockets already gone */ }
+        setVerifyProgress(null);
       }
 
       if (priorConfirmations.answered.length === 0) {
-        throw new Error('Could not verify previous payments — no relay answered. Please try again.');
+        // Still fail-CLOSED after every attempt: unverifiable is never "unpaid".
+        refuseUnverified(GUARD_UNVERIFIABLE_MESSAGE);
+        return;
       }
 
       const alreadyPaid = findDuplicateConfirmations(
@@ -595,6 +635,13 @@ export default function ConfirmPayment() {
             </AlertDescription>
           </Alert>
 
+          {verifyError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{verifyError}</AlertDescription>
+            </Alert>
+          )}
+
           <Button
             onClick={handleConfirmPayment}
             disabled={!isPrivateKeyValid || isProcessing}
@@ -610,6 +657,10 @@ export default function ConfirmPayment() {
               </>
             )}
           </Button>
+
+          {verifyProgress && (
+            <p className="text-sm text-muted-foreground text-center">{verifyProgress}</p>
+          )}
         </CardContent>
       </Card>
 
