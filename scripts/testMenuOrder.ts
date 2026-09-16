@@ -43,6 +43,19 @@ console.log('— the declared order —');
   check('nothing left over here', g.rest.length === 0, ids(g.rest));
 }
 
+console.log('— where BEF sits —');
+{
+  // Asked for by name: BEF directly after PLAN15, so "the one under PLAN15"
+  // means the same thing to everyone. Registry order alone would have left it
+  // in the trailing group, far down the list.
+  check('BEF follows PLAN15 in group 2',
+    MENU_GROUP_CORE.indexOf('bef') === MENU_GROUP_CORE.indexOf('plan15') + 1, MENU_GROUP_CORE);
+  const g = groupMenuModules([{ id: 'bef' }, { id: 'plan15' }, { id: 'wallet' }]);
+  check('and it holds even when the input says otherwise',
+    ids(g.core).join() === 'wallet,plan15,bef', ids(g.core));
+  check('it is not left in the trailing group as well', !ids(g.rest).includes('bef'), ids(g.rest));
+}
+
 console.log('— settings cannot reorder it —');
 {
   // Same set, reversed: the registry's own order must not leak through.
@@ -103,7 +116,8 @@ console.log('— a module missing from the registry just closes the gap —');
 {
   const withoutWallet = MENU_GROUP_CORE.filter((id) => id !== 'wallet').map((id) => ({ id }));
   const g = groupMenuModules(withoutWallet);
-  check('no hole, no crash', ids(g.core).join() === 'unconditionalpayment,lana8wonder,plan15', ids(g.core));
+  check('no hole, no crash',
+    ids(g.core).join() === MENU_GROUP_CORE.filter((id) => id !== 'wallet').join(), ids(g.core));
 }
 
 console.log('— the pinned lead still obeys enabled —');

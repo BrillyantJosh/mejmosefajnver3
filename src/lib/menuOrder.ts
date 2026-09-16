@@ -21,6 +21,7 @@ export const MENU_GROUP_CORE: string[] = [
   'unconditionalpayment',
   'lana8wonder',
   'plan15',
+  'bef',
 ];
 
 /** Group 3 — the places that money moves through. */
