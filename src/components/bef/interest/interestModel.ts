@@ -25,7 +25,6 @@ import {
   type InterestDraft,
   type InterestLimitError,
   type InterestRound,
-  type InterestStatus,
   type InterestWindowLimits,
 } from '../../../lib/bef/vendor/server/lib/interestEvent.ts';
 import { currencyForCountry } from '../../../lib/bef/vendor/server/lib/personProfile.ts';
@@ -91,16 +90,6 @@ export function readInterestForm(win: InterestWindow, editor: InterestEditor, wa
   return { draft, notWhole, limitErrors: checkInterestLimits(draft, limitsFromWindow(win, editor.currency)) };
 }
 
-/** A withdrawal is the same event with no rounds, in the currency of what it withdraws. */
-export const withdrawalDraft = (existing: InterestView, wallet: string, paramsEventId: string): InterestDraft => ({
-  split: existing.split,
-  currency: existing.currency,
-  rounds: [],
-  status: 'withdrawn',
-  wallet,
-  paramsEventId,
-});
-
 /**
  * The calculator's choice as an editor: only into an open split, never over an
  * interest the person already has there, and the amount only into its round
@@ -122,14 +111,25 @@ export function prefillEditor(
 }
 
 /**
- * The splits that get a card: open ones, ones where the person holds an active
- * interest (it can still be withdrawn), and one closed while the person was
- * filling it in, for as long as its refusal is shown — otherwise the card would
- * vanish on reload without saying that nothing was sent.
+ * The live interest a person holds in a split — the one shown, changed and
+ * counted. A person who withdrew before 16 Sept 2026, when that was still
+ * possible, holds a withdrawn row: it is not an interest any more, and the form
+ * is open to them as to anybody. Its created_at still matters when they sign a
+ * new one (BEF takes only a newer event), so the whole list is kept.
+ */
+export const activeInterest = (mine: InterestView[], split: number): InterestView | undefined =>
+  mine.find((i) => i.split === split && i.status === 'active');
+
+/**
+ * The splits that get a card: open ones, ones where the person holds a live
+ * interest (which stays as signed, whether or not the split is still open), and
+ * one closed while the person was filling it in, for as long as its refusal is
+ * shown — otherwise the card would vanish on reload without saying that
+ * nothing was sent.
  */
 export function visibleWindows(windows: InterestWindows, mine: InterestView[], problemSplits: readonly number[]): InterestWindow[] {
   return [...windows.windows]
-    .filter((w) => w.open || problemSplits.includes(w.split) || mine.some((i) => i.split === w.split && i.status === 'active'))
+    .filter((w) => w.open || problemSplits.includes(w.split) || activeInterest(mine, w.split) != null)
     .sort((a, b) => a.split - b.split);
 }
 
@@ -197,14 +197,14 @@ export interface SendInterestOptions {
   /** The window the form was read from: the limits the person saw. */
   win: InterestWindowLimits;
   draft: InterestDraft;
-  /** The interest BEF holds for this split, whatever its status: the new event must be newer. */
+  /** The interest BEF holds for this split: the new event must be newer. */
   previous?: Pick<InterestView, 'createdAt'> | null;
   /** Every event signed, by id — so an answer that never came can be looked for afterwards. */
   onSigned?: (eventId: string) => void;
 }
 
 /**
- * Sign and send one interest (or its withdrawal).
+ * Sign and send one interest.
  *
  * 1. The amounts are checked against the published limits; what does not fit
  *    is refused here as `limits`, and nothing is signed.
@@ -216,14 +216,14 @@ export interface SendInterestOptions {
  *    read again; a second one is said.
  */
 export async function sendInterest({ client, withSession, win, draft, previous, onSigned }: SendInterestOptions): Promise<InterestSubmitResult> {
-  // The form never lets these through; were one to come, it is a fault here
-  // (BEF's own shape errors of the same names), and nothing is signed.
-  if (draft.status === 'active' && draft.rounds.length === 0) throw new BefApiError('active_without_rounds', 0);
-  if (draft.status === 'withdrawn' && draft.rounds.length > 0) throw new BefApiError('withdrawn_with_rounds', 0);
-  if (draft.status === 'active') {
-    const errors = checkInterestLimits(draft, limitsFromWindow(win, draft.currency));
-    if (errors.length > 0) throw new BefApiError('limits', 0, { error: 'limits', errors });
-  }
+  // An interest is changed, never taken back: BEF refuses anything but `active`
+  // with 409 no_withdrawal, and nothing here signs one.
+  if (draft.status !== 'active') throw new BefApiError('no_withdrawal', 0);
+  // The form never lets this through; were it to come, it is a fault here
+  // (BEF's own shape error of the same name), and nothing is signed.
+  if (draft.rounds.length === 0) throw new BefApiError('active_without_rounds', 0);
+  const errors = checkInterestLimits(draft, limitsFromWindow(win, draft.currency));
+  if (errors.length > 0) throw new BefApiError('limits', 0, { error: 'limits', errors });
   const previousSeconds = previous ? Math.floor(timestampMs(previous.createdAt) / 1000) : null;
 
   const attempt = async ({ token, key, person }: BefAuth): Promise<InterestSubmitResult> => {
@@ -249,7 +249,6 @@ export async function sendInterest({ client, withSession, win, draft, previous, 
 /** What a card says after a send BEF took. `relays` is null when the answer came
  * too late and the interest was found among the person's own afterwards. */
 export interface InterestOutcome {
-  status: InterestStatus;
   eventId: string;
   relays: { accepted: number; total: number } | null;
 }
@@ -285,11 +284,9 @@ export function interestSendProblem(err: unknown, currency: InterestCurrency): I
       return { code, text: 'interest.err.window_closed', reload: 'windows' };
     case 'split_not_available':
       return { code, text: 'interest.err.split_not_available', reload: 'windows' };
-    // BEF holds something newer (or nothing to withdraw): read it again.
+    // BEF holds something newer: read it again.
     case 'stale_event':
       return { code, text: 'interest.err.stale_event', reload: 'mine' };
-    case 'nothing_to_withdraw':
-      return { code, text: 'interest.err.nothing_to_withdraw', reload: 'mine' };
     case 'outcome_unknown':
       // It may have gone through: what BEF holds now is read before anything is said.
       return { code, text: 'interest.outcomeUnknown', reload: 'mine' };
@@ -307,5 +304,3 @@ export function interestSendProblem(err: unknown, currency: InterestCurrency): I
 export const arrivedInterest = (mine: InterestView[] | null, split: number, signedIds: readonly string[]): InterestView | null =>
   mine?.find((i) => i.split === split && signedIds.includes(i.eventId)) ?? null;
 
-/** The status the answer is about, for the words of a success. */
-export const sentText = (status: InterestStatus): BefInterestTextKey => (status === 'withdrawn' ? 'interest.withdrawnSent' : 'interest.sent');

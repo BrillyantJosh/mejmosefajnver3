@@ -28,6 +28,20 @@ const befExplorer = {
   "explorer.source": "Source: {source}",
   "explorer.lastChecked": "Last checked: {time} UTC",
 
+  // ── who has already expressed interest (GET /api/interests) ──
+  "expressed.title": "Interest already expressed",
+  "expressed.lead": "People who have said on BEF Explorer, with their own signature, how much they would co-create — round by round. Non-binding: not an order and not a reservation.",
+  "expressed.people": "People: {count}",
+  "expressed.empty": "No interest in this round yet.",
+  "expressed.noName": "No public name",
+  "expressed.signedAt": "signed {time}",
+  "expressed.beyond": "above the published limit",
+  "expressed.beyondNote": "“Above the published limit” means the amount is more than the limit published for that round now — for example because the limit was lowered after it was signed. It stays exactly as it was signed.",
+  "expressed.noneYet": "Nobody has expressed interest in this split yet. You could be the first.",
+  "expressed.loading": "Loading the expressed interests…",
+  "expressed.unavailable": "The expressed interests cannot be shown right now.",
+  "expressed.source": "Source: the signed public events (KIND 30970) people express on BEF Explorer, kept by BEF Explorer. The name is from each person’s own public profile; wallet, e-mail, telephone and country are never shown.",
+
   // ── BEF Explorer's site-wide disclaimer ──
   "explorer.disclaimerTitle": "Disclaimer",
   "explorer.disclaimer": "BEF Explorer is an independent informational and scenario-modelling platform. It does not buy, sell, broker, custody, or execute LANA or other crypto-asset transactions, does not receive or transmit orders, and does not provide personalised investment recommendations. Every listed company remains independently responsible for its own offers, contracts, pricing, and settlement. Users must decide independently whether to enter into any transaction and must contract directly with the relevant company.",
@@ -52,6 +66,20 @@ const translations: TranslationDict<BefExplorerKey> = {
     "explorer.source": "Vir: {source}",
     "explorer.lastChecked": "Nazadnje preverjeno: {time} UTC",
 
+    // ── who has already expressed interest (GET /api/interests) ──
+    "expressed.title": "Že izraženi interesi",
+    "expressed.lead": "Ljudje, ki so na BEF Explorerju s svojim podpisom povedali, koliko bi ko-kreirali — po rundah. Nezavezujoče: ni naročilo in ni rezervacija.",
+    "expressed.people": "Število oseb: {count}",
+    "expressed.empty": "V tej rundi še ni izraženih interesov.",
+    "expressed.noName": "Brez javnega imena",
+    "expressed.signedAt": "oddano {time}",
+    "expressed.beyond": "nad objavljeno mejo",
+    "expressed.beyondNote": "»Nad objavljeno mejo« pomeni, da znesek presega mejo, ki je za to rundo objavljena zdaj — na primer, ker je bila meja po oddaji znižana. Ostane točno tak, kot je bil podpisan.",
+    "expressed.noneYet": "V tem splitu še nihče ni izrazil interesa. Lahko si prvi.",
+    "expressed.loading": "Nalagam izražene interese…",
+    "expressed.unavailable": "Izraženih interesov trenutno ni mogoče prikazati.",
+    "expressed.source": "Vir: podpisani javni dogodki (KIND 30970), ki jih ljudje oddajo na BEF Explorerju in jih ta hrani. Ime je iz javnega profila osebe; denarnice, e-pošte, telefona in države seznam nikoli ne pokaže.",
+
     // ── BEF Explorer's site-wide disclaimer ──
     "explorer.disclaimerTitle": "Izjava o omejitvi odgovornosti",
     "explorer.disclaimer": "BEF Explorer je neodvisna informacijska in simulacijska platforma. Ne kupuje, ne prodaja, ne posreduje, ne hrani in ne izvršuje poslov z LANO ali drugimi kriptosredstvi, ne sprejema in ne posreduje naročil ter ne daje osebnih naložbenih priporočil. Vsako navedeno podjetje je samostojno odgovorno za svoje ponudbe, pogodbe, cene in poravnavo. Uporabnik se sam odloči, ali bo sklenil posel, in pogodbo sklene neposredno z zadevnim podjetjem.",
@@ -70,6 +98,20 @@ const translations: TranslationDict<BefExplorerKey> = {
     "explorer.expressInterestNote": "Unverbindlich: kein Auftrag und keine Reservierung. Öffnet die Seite Interesse, wo Sie angeben können, wie viel Sie in diesem Split ko-kreieren würden. Ihren Schlüssel geben Sie dort nicht ein: MejmoSefajn meldet Sie bei BEF Explorer an.",
     "explorer.source": "Quelle: {source}",
     "explorer.lastChecked": "Zuletzt geprüft: {time} UTC",
+
+    // ── who has already expressed interest (GET /api/interests) ──
+    "expressed.title": "Bereits bekundetes Interesse",
+    "expressed.lead": "Menschen, die auf BEF Explorer mit ihrer eigenen Signatur gesagt haben, wie viel sie ko-kreieren würden — Runde für Runde. Unverbindlich: kein Auftrag und keine Reservierung.",
+    "expressed.people": "Personen: {count}",
+    "expressed.empty": "In dieser Runde gibt es noch keine Interessenbekundung.",
+    "expressed.noName": "Kein öffentlicher Name",
+    "expressed.signedAt": "signiert {time}",
+    "expressed.beyond": "über der veröffentlichten Grenze",
+    "expressed.beyondNote": "„Über der veröffentlichten Grenze“ heißt: Der Betrag liegt über der Grenze, die für diese Runde jetzt veröffentlicht ist — zum Beispiel, weil sie nach der Signatur gesenkt wurde. Er bleibt genau so, wie er signiert wurde.",
+    "expressed.noneYet": "In diesem Split hat noch niemand Interesse bekundet. Sie könnten die erste Person sein.",
+    "expressed.loading": "Die Interessenbekundungen werden geladen…",
+    "expressed.unavailable": "Die Interessenbekundungen können gerade nicht angezeigt werden.",
+    "expressed.source": "Quelle: die signierten öffentlichen Events (KIND 30970), die Menschen auf BEF Explorer abgeben und die BEF Explorer aufbewahrt. Der Name stammt aus dem eigenen öffentlichen Profil; Wallet, E-Mail, Telefon und Land zeigt die Liste nie.",
 
     // ── BEF Explorer's site-wide disclaimer ──
     "explorer.disclaimerTitle": "Haftungsausschluss",
@@ -90,6 +132,20 @@ const translations: TranslationDict<BefExplorerKey> = {
     "explorer.source": "Forrás: {source}",
     "explorer.lastChecked": "Utoljára ellenőrizve: {time} UTC",
 
+    // ── who has already expressed interest (GET /api/interests) ──
+    "expressed.title": "Már jelzett érdeklődések",
+    "expressed.lead": "Emberek, akik a BEF Exploreren saját aláírásukkal megmondták, mennyivel vennének részt a ko-kreációban — körönként. Nem kötelező érvényű: nem megrendelés és nem foglalás.",
+    "expressed.people": "Személyek: {count}",
+    "expressed.empty": "Ebben a körben még nincs jelzett érdeklődés.",
+    "expressed.noName": "Nincs nyilvános név",
+    "expressed.signedAt": "aláírva {time}",
+    "expressed.beyond": "a közzétett korlát felett",
+    "expressed.beyondNote": "A „közzétett korlát felett” azt jelenti, hogy az összeg több, mint a körre most közzétett korlát — például mert a korlátot az aláírás után csökkentették. Pontosan úgy marad, ahogy aláírták.",
+    "expressed.noneYet": "Ebben a Splitben még senki sem jelzett érdeklődést. Te lehetsz az első.",
+    "expressed.loading": "A jelzett érdeklődések betöltése…",
+    "expressed.unavailable": "A jelzett érdeklődéseket most nem lehet megmutatni.",
+    "expressed.source": "Forrás: a nyilvános, aláírt események (KIND 30970), amelyeket az emberek a BEF Exploreren adnak le, és amelyeket a BEF Explorer megőriz. A név mindenki saját nyilvános profiljából való; pénztárcát, e-mailt, telefont és országot a lista soha nem mutat.",
+
     // ── BEF Explorer's site-wide disclaimer ──
     "explorer.disclaimerTitle": "Felelősségkizárás",
     "explorer.disclaimer": "A BEF Explorer független tájékoztató és forgatókönyv-modellező platform. Nem vásárol, nem ad el, nem közvetít, nem őriz és nem hajt végre LANA- vagy más kriptoeszköz-ügyleteket, nem fogad és nem továbbít megbízásokat, és nem ad személyre szabott befektetési ajánlást. Minden feltüntetett cég önállóan felel a saját ajánlataiért, szerződéseiért, árazásáért és elszámolásáért. A felhasználó maga dönti el, hogy belép-e bármilyen ügyletbe, és közvetlenül az érintett céggel köt szerződést.",
@@ -108,6 +164,20 @@ const translations: TranslationDict<BefExplorerKey> = {
     "explorer.expressInterestNote": "Non vincolante: non è un ordine né una prenotazione. Apre la pagina Interesse, dove puoi indicare quanto co-creeresti in questo split. Lì non devi inserire la chiave: MejmoSefajn ti fa accedere a BEF Explorer.",
     "explorer.source": "Fonte: {source}",
     "explorer.lastChecked": "Ultima verifica: {time} UTC",
+
+    // ── who has already expressed interest (GET /api/interests) ──
+    "expressed.title": "Interesse già manifestato",
+    "expressed.lead": "Persone che su BEF Explorer hanno dichiarato, con la propria firma, quanto co-creerebbero — round per round. Non vincolante: non è un ordine né una prenotazione.",
+    "expressed.people": "Persone: {count}",
+    "expressed.empty": "In questo round non c’è ancora nessuna manifestazione di interesse.",
+    "expressed.noName": "Nessun nome pubblico",
+    "expressed.signedAt": "firmato {time}",
+    "expressed.beyond": "oltre il limite pubblicato",
+    "expressed.beyondNote": "«Oltre il limite pubblicato» significa che l’importo supera il limite pubblicato ora per quel round — per esempio perché è stato abbassato dopo la firma. Resta esattamente come è stato firmato.",
+    "expressed.noneYet": "In questo split nessuno ha ancora manifestato interesse. Potresti essere il primo.",
+    "expressed.loading": "Caricamento delle manifestazioni di interesse…",
+    "expressed.unavailable": "Le manifestazioni di interesse non possono essere mostrate in questo momento.",
+    "expressed.source": "Fonte: gli eventi pubblici firmati (KIND 30970) che le persone inviano su BEF Explorer e che BEF Explorer conserva. Il nome proviene dal profilo pubblico di ciascuno; portafoglio, e-mail, telefono e paese non compaiono mai.",
 
     // ── BEF Explorer's site-wide disclaimer ──
     "explorer.disclaimerTitle": "Avvertenza",

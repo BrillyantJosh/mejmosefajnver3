@@ -90,7 +90,9 @@ export const INTEREST_PROBLEMS: Table = {
   window_closed: ['interest.err.window_closed', 'none'],
   params_changed: ['interest.err.params_changed', 'none'],
   limits: ['interest.err.limits', 'none'],
-  nothing_to_withdraw: ['interest.err.nothing_to_withdraw', 'none'],
+  // BEF refuses a withdrawal (an interest is changed, never taken back); the
+  // module signs none, so this can only be a fault here.
+  no_withdrawal: ['interest.err.rejected', 'none'],
   publish_failed: ['interest.err.publish_failed', 'none'],
   outcome_unknown: ['interest.outcomeUnknown', 'none'],
 };

@@ -2,16 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useTranslation } from "@/i18n/I18nContext";
@@ -19,13 +9,14 @@ import befInterestText from "@/i18n/modules/befInterest";
 import type { InterestView, InterestWindows } from "@/lib/bef/api";
 import type { InterestPrefill } from "@/lib/bef/prefill";
 import { problemCode } from "@/lib/bef/problems";
-import type { InterestDraft, InterestStatus } from "@/lib/bef/vendor/server/lib/interestEvent.ts";
+import type { InterestDraft } from "@/lib/bef/vendor/server/lib/interestEvent.ts";
 import { countryByCode } from "@/lib/bef/vendor/server/lib/countries.ts";
 import { flagEmoji } from "@/lib/bef/vendor/src/lib/format.ts";
 import { useBefPerson, type BefStage } from "@/pages/bef/BefPersonProvider";
 import { BefText } from "../BefText";
 import { InterestSplitCard } from "./InterestSplitCard";
 import {
+  activeInterest,
   arrivedInterest,
   blankEditor,
   defaultCurrency,
@@ -34,7 +25,6 @@ import {
   readInterestForm,
   sendInterest,
   visibleWindows,
-  withdrawalDraft,
   type InterestEditor,
   type InterestOutcome,
   type InterestProblem,
@@ -56,7 +46,9 @@ type SignedIn = Extract<BefStage, { kind: "signedIn" }>;
  * The KIND 30970 is built by the vendored interestEvent.ts and signed in this
  * browser with the key the person is logged in to MejmoSefajn with — never
  * typed, never sent. One live interest per person per split: a change replaces
- * it, a withdrawal is the same event with no rounds.
+ * it. An interest is never withdrawn — BEF Explorer refuses a withdrawal,
+ * whatever the event definition lets other publishers say (owner's decision,
+ * 16. 9. 2026).
  *
  * Ported from bef-explorer src/components/person/InterestForm.tsx. Left out:
  * the key field (there is no key to type) and Sign out (logging out of
@@ -74,7 +66,6 @@ export function InterestForm({ signedIn, prefill }: { signedIn: SignedIn; prefil
   const [busySplit, setBusySplit] = useState<number | null>(null);
   const [outcomes, setOutcomes] = useState<Record<number, InterestOutcome>>({});
   const [problems, setProblems] = useState<Record<number, InterestProblem>>({});
-  const [confirmWithdraw, setConfirmWithdraw] = useState<number | null>(null);
   const prefilled = useRef(false);
 
   const fallbackCurrency = defaultCurrency(person.country);
@@ -131,13 +122,12 @@ export function InterestForm({ signedIn, prefill }: { signedIn: SignedIn; prefil
     void loadAll();
   }, [loadAll]);
 
-  const editorFor = (split: number): InterestEditor =>
-    editors[split] ?? blankEditor(mine.find((i) => i.split === split), fallbackCurrency);
+  const editorFor = (split: number): InterestEditor => editors[split] ?? blankEditor(activeInterest(mine, split), fallbackCurrency);
 
   const patchEditor = (split: number, patch: Partial<InterestEditor>) =>
     setEditors((all) => ({
       ...all,
-      [split]: { ...(all[split] ?? blankEditor(mine.find((i) => i.split === split), fallbackCurrency)), ...patch },
+      [split]: { ...(all[split] ?? blankEditor(activeInterest(mine, split), fallbackCurrency)), ...patch },
     }));
 
   const setProblem = (split: number, problem: InterestProblem | null) =>
@@ -156,24 +146,19 @@ export function InterestForm({ signedIn, prefill }: { signedIn: SignedIn; prefil
       return next;
     });
 
-  const send = async (split: number, status: InterestStatus) => {
+  const send = async (split: number) => {
     if (!windows || busySplit != null) return;
     const win = windows.windows.find((w) => w.split === split);
     if (!win) return;
+    // Whatever BEF holds for this split, live or withdrawn: the new event must be newer.
     const existing = mine.find((i) => i.split === split);
 
-    let draft: InterestDraft;
-    if (status === "withdrawn") {
-      if (!existing || existing.status !== "active") return;
-      draft = withdrawalDraft(existing, person.wallet, windows.paramsEventId);
-    } else {
-      const form = readInterestForm(win, editorFor(split), person.wallet, windows.paramsEventId);
-      if (form.notWhole.length || form.limitErrors.length || form.draft.rounds.length === 0) {
-        patchEditor(split, { tried: true });
-        return;
-      }
-      draft = form.draft;
+    const form = readInterestForm(win, editorFor(split), person.wallet, windows.paramsEventId);
+    if (form.notWhole.length || form.limitErrors.length || form.draft.rounds.length === 0) {
+      patchEditor(split, { tried: true });
+      return;
     }
+    const draft: InterestDraft = form.draft;
 
     setBusySplit(split);
     setProblem(split, null);
@@ -182,7 +167,7 @@ export function InterestForm({ signedIn, prefill }: { signedIn: SignedIn; prefil
     try {
       const result = await sendInterest({ client, withSession, win, draft, previous: existing, onSigned: (eventId) => signed.push(eventId) });
       setMine((list) => [...list.filter((i) => i.split !== split), result.interest]);
-      setOutcome(split, { status, eventId: result.interest.eventId, relays: result.relays });
+      setOutcome(split, { eventId: result.interest.eventId, relays: result.relays });
       patchEditor(split, { editing: false, tried: false, amounts: {} });
     } catch (err) {
       const problem = interestSendProblem(err, draft.currency);
@@ -193,7 +178,7 @@ export function InterestForm({ signedIn, prefill }: { signedIn: SignedIn; prefil
           // The answer never came: what BEF holds now says whether it went through.
           const arrived = arrivedInterest(now, split, signed);
           if (arrived) {
-            setOutcome(split, { status, eventId: arrived.eventId, relays: null });
+            setOutcome(split, { eventId: arrived.eventId, relays: null });
             patchEditor(split, { editing: false, tried: false, amounts: {} });
             return;
           }
@@ -297,7 +282,7 @@ export function InterestForm({ signedIn, prefill }: { signedIn: SignedIn; prefil
           <InterestSplitCard
             key={w.split}
             win={w}
-            existing={mine.find((i) => i.split === w.split)}
+            existing={activeInterest(mine, w.split)}
             editor={editorFor(w.split)}
             wallet={person.wallet}
             paramsEventId={windows.paramsEventId}
@@ -306,36 +291,14 @@ export function InterestForm({ signedIn, prefill }: { signedIn: SignedIn; prefil
             outcome={outcomes[w.split]}
             problem={problems[w.split]}
             onPatch={(patch) => patchEditor(w.split, patch)}
-            onSend={() => void send(w.split, "active")}
+            onSend={() => void send(w.split)}
             onChange={() => {
-              const existing = mine.find((i) => i.split === w.split);
+              const existing = activeInterest(mine, w.split);
               if (existing) startChange(existing);
             }}
-            onWithdraw={() => setConfirmWithdraw(w.split)}
           />
         ))
       )}
-
-      <AlertDialog open={confirmWithdraw != null} onOpenChange={(open) => !open && setConfirmWithdraw(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("interest.withdraw")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("interest.withdrawConfirm", { number: confirmWithdraw ?? "" })}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("interest.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (confirmWithdraw != null) void send(confirmWithdraw, "withdrawn");
-                setConfirmWithdraw(null);
-              }}
-            >
-              {t("interest.withdraw")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

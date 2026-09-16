@@ -49,6 +49,8 @@ import {
   type CalcScope,
   type PublishedLimit,
 } from '../src/components/bef/explorer/scenarioModel.js';
+import { anyBeyondLimit, entryKey, roundsToShow, roundTotals, splitIsEmpty } from '../src/components/bef/explorer/publicInterests.js';
+import type { PublicInterestRound, PublicInterestSplit } from '../src/lib/bef/api.js';
 import { befDir, ROOT } from './syncBef.js';
 
 let failures = 0;
@@ -222,6 +224,20 @@ async function main() {
   }
 
   /* ─────────────────────────────────────────────────────────── companies ── */
+  console.log('— who has already expressed interest: what of BEF’s list is shown —');
+  {
+    const entry = (patch: Record<string, unknown> = {}) => ({ name: 'Ana Novak', key: 'abcd1234…9f2a', currency: 'EUR' as const, amount: 1000, signedAt: 1_757_000_000, beyondLimit: false, ...patch });
+    const round = (n: number, patch: Partial<PublicInterestRound> = {}): PublicInterestRound => ({ round: n, openForInterest: false, entries: [], totals: {}, people: 0, ...patch });
+    const busy = round(1, { openForInterest: true, entries: [entry(), entry({ name: null, currency: 'GBP', amount: 50 })], totals: { EUR: 1000, GBP: 50 }, people: 2 });
+    const split: PublicInterestSplit = { split: 9, scope: 'current', people: 2, rounds: [busy, round(2, { openForInterest: true }), round(3, { entries: [entry({ amount: 5, beyondLimit: true })], totals: { EUR: 5 }, people: 1 })] };
+    check('shown: a round somebody is in, and an open round; not a closed empty one', roundsToShow(split).map((r) => r.round).join() === '1,2,3' && roundsToShow({ ...split, rounds: [busy, round(2), round(3)] }).map((r) => r.round).join() === '1');
+    check('a split nobody is in says so instead of empty rounds', splitIsEmpty({ ...split, rounds: [round(1, { openForInterest: true }), round(2)] }) && !splitIsEmpty(split));
+    check('totals: per currency, biggest first, never added across currencies', JSON.stringify(roundTotals(busy)) === JSON.stringify([{ currency: 'EUR', amount: 1000 }, { currency: 'GBP', amount: 50 }]) && roundTotals(round(2)).length === 0);
+    check('a zero total is not shown as a currency', roundTotals(round(1, { totals: { EUR: 0, GBP: 20 } })).map((t) => t.currency).join() === 'GBP');
+    check('the note about the published limit is shown only when somebody is above one', anyBeyondLimit({ splits: [split], paramsEventId: 'x' }) && !anyBeyondLimit({ splits: [{ ...split, rounds: [busy] }], paramsEventId: 'x' }));
+    check('two people with no name in the same round are still two rows', entryKey(entry({ name: null }), 0) !== entryKey(entry({ name: null }), 1));
+  }
+
   console.log('— a route lists only companies trading LANA in the currency —');
   {
     const company = (over: Record<string, unknown>) => ({ id: 1, role: 'seller', name: 'X', asset: 'LANA', currency: 'EUR', currencies: ['EUR'], enabled: 1, ...over }) as unknown as Company;
@@ -487,6 +503,41 @@ async function main() {
       check('a chosen seller comes back with its published status', withSeller.kind === 'result' && withSeller.scenario.statuses.seller === 'CURRENT' && withSeller.scenario.input.sellerId === alpha.id && !scenarioIsStale(withSeller.scenario, { amountText: '1000', currency: 'EUR', round: 1, scope: 'current', sellerId: alpha.id, treasuryId: null }));
       const q = interestQuery({ splits, scope: 'next', currentSplit: 9, currency: 'EUR', round: 1, amount: parseCalcAmount('4.999') });
       check('Express interest on the next split names split 10', q === 'split=10&currency=EUR&round=1&amount=4999', q);
+
+      // ── who has already expressed interest, from BEF's own /api/interests ──
+      const hex = (c: string) => c.repeat(64);
+      const addPerson = db.prepare('INSERT INTO people (hex, name, display_name, country, email, phone, wallet, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+      addPerson.run(hex('a'), 'Ana Novak', 'Ana', 'SI', 'ana@example.test', '+38640111222', 'LAnaWalletAddress11111111111111111', '2026-09-16T10:00:00Z');
+      addPerson.run(hex('d'), 'Dan Kovač', 'Dan', 'SI', 'dan@example.test', '+38640333444', 'LDanWalletAddress11111111111111111', '2026-09-16T10:00:00Z');
+      const addInterest = db.prepare(
+        `INSERT INTO interests (hex, split_number, currency, rounds_json, total, status, wallet, params_event_id, event_id,
+           event_created_at, event_json, relays_accepted, relays_total, received_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 4, 4, '2026-09-16T10:00:00Z')`,
+      );
+      const rounds = (list: [number, number][]) => JSON.stringify(list.map(([round, amount]) => ({ round, amount })));
+      //                hex        split  ccy    rounds                          total  status       wallet                                params         event id    signed at
+      addInterest.run(hex('a'), 9, 'EUR', rounds([[1, 1000], [2, 5000]]), 6000, 'active', 'LAnaWalletAddress11111111111111111', 'p', hex('1'), 1_757_000_100, '{}');
+      addInterest.run(hex('b'), 9, 'GBP', rounds([[1, 50]]), 50, 'active', 'LNoProfileWallet1111111111111111111', 'p', hex('2'), 1_757_000_200, '{}');
+      addInterest.run(hex('c'), 9, 'EUR', rounds([]), 0, 'withdrawn', 'LGoneWalletAddress1111111111111111', 'p', hex('3'), 1_757_000_300, '{}');
+      addInterest.run(hex('d'), 10, 'EUR', rounds([[1, 900]]), 900, 'active', 'LDanWalletAddress11111111111111111', 'p', hex('4'), 1_757_000_400, '{}');
+
+      const list = await client.figures.interests();
+      const split9 = list.splits.find((x) => x.split === 9);
+      const split10 = list.splits.find((x) => x.split === 10);
+      check('the current split, and the next one once somebody is in it', list.splits.map((x) => `${x.split}:${x.scope}`).join() === '9:current,10:next', list.splits.map((x) => x.split));
+      const r1 = split9?.rounds.find((r) => r.round === 1);
+      check('round 1: both people, earliest signature first, each in its own currency', r1?.entries.map((e) => `${e.name ?? '—'}/${e.currency}/${e.amount}`).join() === 'Ana Novak/EUR/1000,—/GBP/50', r1?.entries);
+      check('…its totals are per currency, and it counts the people', JSON.stringify(r1?.totals) === JSON.stringify({ EUR: 1000, GBP: 50 }) && r1?.people === 2 && split9?.people === 2);
+      const r2 = split9?.rounds.find((r) => r.round === 2);
+      check('round 2: above the maximum per co-creator published now, shown as signed and marked', r2?.entries.length === 1 && r2.entries[0].amount === 5000 && r2.entries[0].beyondLimit === true, r2?.entries);
+      check('…and an amount within the limits is not marked', r1?.entries.every((e) => !e.beyondLimit) === true);
+      check('an interest withdrawn before 16 Sept 2026 is in no round', split9?.rounds.every((r) => r.entries.every((e) => e.amount !== 0)) && split9?.rounds.flatMap((r) => r.entries).length === 3, split9?.rounds.flatMap((r) => r.entries));
+      check('a round nobody is in is empty, not missing', split9?.rounds.map((r) => r.round).join() === '1,2,3' && split9?.rounds.find((r) => r.round === 3)?.entries.length === 0);
+      check('every key is shortened, never whole', split9?.rounds.flatMap((r) => r.entries).every((e) => e.key.includes('…') && e.key.length < 20) === true, split9?.rounds.flatMap((r) => r.entries).map((e) => e.key));
+      const payload = JSON.stringify(list);
+      const secrets = [hex('a'), hex('b'), hex('d'), 'LAnaWalletAddress11111111111111111', 'LDanWalletAddress11111111111111111', 'ana@example.test', '+38640111222', 'SI'];
+      check('nothing else about a person travels: no whole key, wallet, e-mail, telephone or country', secrets.every((secret) => !payload.includes(secret)), secrets.filter((secret) => payload.includes(secret)));
+      check('the rounds carry whether they are open for interest', split9?.rounds.every((r) => typeof r.openForInterest === 'boolean') === true);
     } finally {
       app.close();
       db.close();

@@ -26,6 +26,7 @@ import { signInterest, type BefKey } from '../src/lib/bef/signing.js';
 import { checkInterestLimits, limitsFromWindow, type InterestDraft } from '../src/lib/bef/vendor/server/lib/interestEvent.ts';
 import { setFormatLocale } from '../src/lib/bef/vendor/src/lib/format.ts';
 import {
+  activeInterest,
   anyRoundOpen,
   arrivedInterest,
   beyondLimits,
@@ -38,7 +39,6 @@ import {
   readInterestForm,
   sendInterest,
   visibleWindows,
-  withdrawalDraft,
   type InterestEditor,
 } from '../src/components/bef/interest/interestModel.js';
 import befInterestText from '../src/i18n/modules/befInterest.js';
@@ -172,8 +172,10 @@ async function main() {
   {
     check('anyRoundOpen', anyRoundOpen(WINDOWS) === true && anyRoundOpen({ ...WINDOWS, windows: [WIN10] }) === false);
     check('only the open split, sorted', JSON.stringify(visibleWindows(WINDOWS, [], []).map((w) => w.split)) === '[9]');
-    check('a closed split with an active interest keeps its card (it can be withdrawn)', JSON.stringify(visibleWindows(WINDOWS, [view(10, [{ round: 1, amount: 5 }])], []).map((w) => w.split)) === '[9,10]');
-    check('a closed split with a withdrawn interest does not', JSON.stringify(visibleWindows(WINDOWS, [view(10, [], 'withdrawn')], []).map((w) => w.split)) === '[9]');
+    check('a closed split with a live interest keeps its card (it stays as signed)', JSON.stringify(visibleWindows(WINDOWS, [view(10, [{ round: 1, amount: 5 }])], []).map((w) => w.split)) === '[9,10]');
+    check('a closed split with an interest withdrawn before 16 Sept 2026 does not', JSON.stringify(visibleWindows(WINDOWS, [view(10, [], 'withdrawn')], []).map((w) => w.split)) === '[9]');
+    const held = [view(9, [{ round: 1, amount: 5 }]), view(10, [], 'withdrawn')];
+    check('the live interest is the one shown; a withdrawn row is none', activeInterest(held, 9)?.total === 5 && activeInterest(held, 10) === undefined);
     check('a closed split keeps its card while its refusal is shown', JSON.stringify(visibleWindows(WINDOWS, [], [10]).map((w) => w.split)) === '[9,10]');
 
     check('default currency: GB → GBP, US → USD, else EUR', defaultCurrency('GB') === 'GBP' && defaultCurrency('US') === 'USD' && defaultCurrency('SI') === 'EUR' && defaultCurrency(null) === 'EUR');
@@ -199,9 +201,7 @@ async function main() {
     check('a held interest above a lower maximum is said, not refused', JSON.stringify(beyond) === JSON.stringify([{ code: 'round_above_person_max', round: 2, limit: 4000 }]), beyond);
     const closedRound = beyondLimits(view(9, [{ round: 1, amount: 100 }]), { ...WIN9, open: false, rounds: WIN9.rounds.map((r) => ({ ...r, open: false })) }, WALLET, P);
     check('a round closed for new interest does not make a held one too large', closedRound.length === 0, closedRound);
-    check('a withdrawn interest fits nothing to check', beyondLimits(view(9, [], 'withdrawn'), WIN9, WALLET, P).length === 0);
-    const withdrawal = withdrawalDraft(view(9, [{ round: 1, amount: 1 }], 'active', { currency: 'GBP' }), WALLET, P);
-    check('a withdrawal: no rounds, the held currency', withdrawal.status === 'withdrawn' && withdrawal.rounds.length === 0 && withdrawal.currency === 'GBP');
+    check('a withdrawn row fits nothing to check', beyondLimits(view(9, [], 'withdrawn'), WIN9, WALLET, P).length === 0);
   }
 
   /* ─────────────────────────────────────────────────────────────── send ── */
@@ -245,8 +245,8 @@ async function main() {
     check('above a limit: nothing asked, signed or sent', log.length === 0 && submitted.length === 0, log);
     const none = await throws(() => sendInterest({ client, withSession, win: WIN9, draft: draftOf({}) }));
     check('no amount: refused, nothing sent', codeOf(none) === 'active_without_rounds' && log.length === 0);
-    const withRounds = await throws(() => sendInterest({ client, withSession, win: WIN9, draft: { ...draftOf({ 1: '10' }), status: 'withdrawn' } }));
-    check('a withdrawal carrying rounds: refused, nothing sent', codeOf(withRounds) === 'withdrawn_with_rounds' && log.length === 0);
+    const withdrawal = await throws(() => sendInterest({ client, withSession, win: WIN9, draft: { ...draftOf({ 1: '10' }), status: 'withdrawn' } }));
+    check('a withdrawal: refused here, nothing asked, signed or sent', codeOf(withdrawal) === 'no_withdrawal' && log.length === 0 && submitted.length === 0);
 
     reset();
     const signed: string[] = [];
@@ -268,11 +268,6 @@ async function main() {
     reset();
     await sendInterest({ client, withSession, win: WIN9, draft: draftOf({ 1: '1000' }), previous: { createdAt: serverNow - 100 } });
     check('an older previous one leaves BEF’s now', submitted[0].created_at === serverNow);
-
-    reset();
-    const withdrawal = withdrawalDraft(view(9, [{ round: 1, amount: 99999 }]), key.address, P);
-    const withdrawn = await throws(() => sendInterest({ client, withSession, win: { ...WIN9, open: false, rounds: [] }, draft: withdrawal, previous: { createdAt: serverNow } }));
-    check('a withdrawal is never held to limits, even with every round closed', withdrawn === null && submitted.length === 1 && submitted[0].tags.find((t: string[]) => t[0] === 'status')[1] === 'withdrawn');
 
     reset();
     refuse = ['stale_clock'];
@@ -328,7 +323,7 @@ async function main() {
       ['window_closed', 'interest.err.window_closed', 'windows'],
       ['split_not_available', 'interest.err.split_not_available', 'windows'],
       ['stale_event', 'interest.err.stale_event', 'mine'],
-      ['nothing_to_withdraw', 'interest.err.nothing_to_withdraw', 'mine'],
+      ['no_withdrawal', 'interest.err.rejected', null],
       ['outcome_unknown', 'interest.outcomeUnknown', 'mine'],
       ['relay_writes_disabled', 'interest.relayWritesOff', null],
       ['stale_clock', 'interest.err.stale_clock', null],
@@ -524,10 +519,18 @@ async function main() {
       check('change right after: accepted, one second newer at least', change.interest.total === 2000 && change.interest.createdAt > sent.interest.createdAt, [sent.interest.createdAt, change.interest.createdAt]);
       const noPrevious = await throws(() => sendInterest({ client, withSession, win: win9, draft: typed({ 1: '3000' }).draft }));
       check('without the previous created_at BEF refuses stale_event — why it is passed', codeOf(noPrevious) === 'stale_event', codeOf(noPrevious));
-      const withdrawn = await sendInterest({ client, withSession, win: win9, draft: withdrawalDraft(change.interest, person.wallet, windows.paramsEventId), previous: change.interest });
-      check('withdraw right after: accepted, held as withdrawn', withdrawn.interest.status === 'withdrawn' && heldCreatedAt()?.status === 'withdrawn');
-      const again = await throws(() => sendInterest({ client, withSession, win: win9, draft: withdrawalDraft(change.interest, person.wallet, windows.paramsEventId), previous: withdrawn.interest }));
-      check('withdraw what is withdrawn: nothing_to_withdraw, reads mine again', codeOf(again) === 'nothing_to_withdraw' && interestSendProblem(again, 'EUR').reload === 'mine');
+      // An interest is changed, never taken back. The page signs no withdrawal;
+      // one signed by hand is refused by BEF itself, and what stands stays.
+      const withdrawalOf = (of: InterestView): InterestDraft => ({ split: of.split, currency: of.currency, rounds: [], status: 'withdrawn', wallet: person.wallet, paramsEventId: windows.paramsEventId });
+      const beforeWithdrawal = publisher.published.length;
+      const refusedWithdrawal = await throws(async () => {
+        await client.person.me(token);
+        return client.interest.submit(token, signInterest(key, withdrawalOf(change.interest), client.serverNowSeconds() + 5));
+      });
+      check('BEF refuses a withdrawal: 409 no_withdrawal', codeOf(refusedWithdrawal) === 'no_withdrawal' && (refusedWithdrawal as BefApiError).status === 409, refusedWithdrawal);
+      check('…nothing published, and the interest stands as signed', publisher.published.length === beforeWithdrawal && heldCreatedAt()?.status === 'active' && (await client.interest.mine(token)).interests[0].total === 2000);
+      check('…and the module says it in words, reading nothing again', interestSendProblem(refusedWithdrawal, 'EUR').text === 'interest.err.rejected' && interestSendProblem(refusedWithdrawal, 'EUR').reload === null);
+      const withdrawn = change;
 
       // stale_clock against BEF's own check: the first signature is an hour behind.
       let first = true;
@@ -571,7 +574,7 @@ async function main() {
       const writesOff = await throws(() => sendInterest({ client: offClient, withSession, win: freshWin, draft: typed({ 1: '1300' }, freshWin, fresh.paramsEventId).draft, previous: arrivedInterest(afterLate, 9, lateSigned) }));
       check('relay writes off on BEF: said as BEF Explorer’s, not "this server"', codeOf(writesOff) === 'relay_writes_disabled' && interestSendProblem(writesOff, 'EUR').text === 'interest.relayWritesOff');
 
-      // Every round closed by a newer KIND 38888: a change is refused, a withdrawal is not.
+      // Every round closed by a newer KIND 38888: a change is refused, and so is a withdrawal.
       params = helpers.insertKind38888(db, { split: '9', createdAt: 1757000200, splitRounds: { current: [{ round: 1, currency: 'EUR', size: 5000, buy_fee_percent: 20, sell_fee_percent: 20 }], next: [] }, interestOpen: { current: [], next: [] } });
       const closed = await client.interest.windows();
       const closedWin = closed.windows.find((w) => w.split === 9)!;
@@ -579,8 +582,12 @@ async function main() {
       check('closed: the card stays for the active interest', !closedWin.open && visibleWindows(closed, [held], []).some((w) => w.split === 9));
       const closedSend = await throws(() => sendInterest({ client, withSession, win: freshWin, draft: typed({ 1: '100' }, freshWin, fresh.paramsEventId).draft, previous: held }));
       check('a change sent on an old page after closing: window_closed', codeOf(closedSend) === 'window_closed', codeOf(closedSend));
-      const lastWithdraw = await sendInterest({ client, withSession, win: closedWin, draft: withdrawalDraft(held, person.wallet, closed.paramsEventId), previous: held });
-      check('withdrawal with every round closed: accepted', lastWithdraw.interest.status === 'withdrawn');
+      const beforeLast = publisher.published.length;
+      const lastWithdraw = await throws(async () => {
+        await client.person.me(token);
+        return client.interest.submit(token, signInterest(key, { split: held.split, currency: held.currency, rounds: [], status: 'withdrawn', wallet: person.wallet, paramsEventId: closed.paramsEventId }, client.serverNowSeconds() + 5));
+      });
+      check('a withdrawal with every round closed is refused too, and nothing is published', codeOf(lastWithdraw) === 'no_withdrawal' && publisher.published.length === beforeLast && (await client.interest.mine(token)).interests[0].status === 'active');
 
       const leaked = bodies.filter((b) => b.includes(key.privateKeyHex));
       check(`no request body carries the private key (${bodies.length} bodies)`, bodies.length > 5 && leaked.length === 0, leaked.length);

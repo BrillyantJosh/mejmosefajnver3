@@ -9,6 +9,7 @@ import { ExplorerInfo } from "@/components/bef/explorer/ExplorerInfo";
 import { ScenarioAssumptions } from "@/components/bef/explorer/ScenarioAssumptions";
 import { ScenarioInputs } from "@/components/bef/explorer/ScenarioInputs";
 import { ScenarioLegs } from "@/components/bef/explorer/ScenarioLegs";
+import { PublicInterestsList } from "@/components/bef/explorer/PublicInterestsList";
 import {
   bindingLimit,
   CALC_DEFAULTS,
@@ -46,6 +47,9 @@ const BEF_CALCULATOR_URL = `${BEF_PUBLIC_URL}/calculator`;
  * Explorer's calculator gives its own: split number, currency, round and a
  * whole amount. An interest is not an order, and nothing is sold here.
  *
+ * At the foot of the page, who has already expressed interest — BEF's own
+ * public list (GET /api/interests), as krogmenjave.com/povprasevanja shows it.
+ *
  * Ported from bef-explorer src/pages/CalculatorPage.tsx and
  * src/components/Calculator.tsx; the order is phone first — inputs, then the
  * result, then what it rests on.
@@ -80,6 +84,8 @@ export default function BefExplorer() {
       {state.kind === "ready" && <Calculator figures={state.figures} />}
 
       <ExplorerNotice />
+
+      <PublicInterestsList client={befClient} />
     </div>
   );
 }

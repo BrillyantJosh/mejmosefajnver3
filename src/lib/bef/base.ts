@@ -40,6 +40,7 @@ export const BEF_ROUTES = [
   // What the calculator reads — public figures, no token.
   ['GET', '/api/bootstrap'],
   ['GET', '/api/splits'],
+  ['GET', '/api/interests'],
   ['GET', '/api/companies'],
   ['GET', '/api/scenario'],
 ] as const;

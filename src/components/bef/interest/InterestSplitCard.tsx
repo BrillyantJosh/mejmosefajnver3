@@ -21,15 +21,14 @@ import {
   limitMessage,
   offeredIn,
   readInterestForm,
-  sentText,
   type InterestEditor,
   type InterestOutcome,
   type InterestProblem,
 } from "./interestModel";
 
 /**
- * One split on the Interest page: the interest the person holds there (with
- * Change and Withdraw), and — while the split is open — the form: a currency,
+ * One split on the Interest page: the interest the person holds there (which
+ * can be changed, never taken back), and — while the split is open — the form: a currency,
  * one whole amount per open round within its published limit, the split's
  * co-creation maximum, the total, and what does not fit, said before anything
  * is signed. Below it, BEF's answer: how many relays took the event, or why
@@ -51,10 +50,9 @@ export function InterestSplitCard({
   onPatch,
   onSend,
   onChange,
-  onWithdraw,
 }: {
   win: InterestWindow;
-  /** What BEF holds for the person in this split, whatever its status. */
+  /** The live interest the person holds in this split (activeInterest). */
   existing: InterestView | undefined;
   editor: InterestEditor;
   wallet: string;
@@ -68,19 +66,17 @@ export function InterestSplitCard({
   onPatch: (patch: Partial<InterestEditor>) => void;
   onSend: () => void;
   onChange: () => void;
-  onWithdraw: () => void;
 }) {
   const { t } = useTranslation(befInterestText);
   const id = useId();
 
-  const active = existing?.status === "active";
-  const showForm = win.open && (!existing || existing.status === "withdrawn" || editor.editing);
+  const showForm = win.open && (!existing || editor.editing);
   const openRounds = win.rounds.filter((r) => r.open).sort((a, b) => a.round - b.round);
   const form = readInterestForm(win, editor, wallet, paramsEventId);
   const capacity = win.capacity?.[editor.currency] ?? null;
   const total = form.draft.rounds.reduce((sum, r) => sum + r.amount, 0);
-  const dropped = editor.editing && active ? droppedRounds(existing, win, editor.currency) : [];
-  const beyond = active && !editor.editing ? beyondLimits(existing, win, wallet, paramsEventId) : [];
+  const dropped = editor.editing && existing ? droppedRounds(existing, win, editor.currency) : [];
+  const beyond = existing && !editor.editing ? beyondLimits(existing, win, wallet, paramsEventId) : [];
 
   // A late answer says "check below" / "shown below": true only when it is said
   // above the interest it points at, so those two go to the top of the card.
@@ -122,7 +118,7 @@ export function InterestSplitCard({
       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
       <div className="min-w-0">
         <p className="font-medium">
-          {outcome.relays ? t(sentText(outcome.status), outcome.relays) : t("interest.arrived")}
+          {outcome.relays ? t("interest.sent", outcome.relays) : t("interest.arrived")}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           {t("interest.eventId")}: <code className="break-all font-mono">{outcome.eventId}</code>
@@ -156,28 +152,21 @@ export function InterestSplitCard({
           <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-3 sm:p-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold">{t("interest.yours")}</span>
-              <Badge
-                variant="secondary"
-                className={cn(active && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400")}
-              >
-                {t(active ? "interest.statusActive" : "interest.statusWithdrawn")}
+              <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                {t("interest.statusActive")}
               </Badge>
             </div>
 
-            {active ? (
-              <dl className="space-y-1 text-sm">
-                {existing.rounds.map((r) => (
-                  <Row key={r.round} label={t("interest.round", { round: r.round })}>
-                    {fmtMoney(r.amount, existing.currency)}
-                  </Row>
-                ))}
-                <Row label={t("interest.total")} strong>
-                  {fmtMoney(existing.total, existing.currency)}
+            <dl className="space-y-1 text-sm">
+              {existing.rounds.map((r) => (
+                <Row key={r.round} label={t("interest.round", { round: r.round })}>
+                  {fmtMoney(r.amount, existing.currency)}
                 </Row>
-              </dl>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("interest.withdrawnNote")}</p>
-            )}
+              ))}
+              <Row label={t("interest.total")} strong>
+                {fmtMoney(existing.total, existing.currency)}
+              </Row>
+            </dl>
 
             <p className="text-xs text-muted-foreground">
               {t("interest.signedOn", { date: fmtDateTime(existing.createdAt) })} ·{" "}
@@ -190,7 +179,7 @@ export function InterestSplitCard({
               </code>
             </p>
 
-            {active && !win.open && <p className="text-sm text-muted-foreground">{t("interest.closedNote")}</p>}
+            {!win.open && <p className="text-sm text-muted-foreground">{t("interest.closedNote")}</p>}
 
             {beyond.length > 0 && (
               <Alert role="status">
@@ -202,16 +191,10 @@ export function InterestSplitCard({
               </Alert>
             )}
 
-            {active && (
+            {win.open && (
               <div className="flex flex-wrap gap-2">
-                {win.open && (
-                  <Button type="button" size="sm" variant="outline" onClick={onChange} disabled={locked}>
-                    {t("interest.change")}
-                  </Button>
-                )}
-                <Button type="button" size="sm" variant="destructive" onClick={onWithdraw} disabled={locked}>
-                  {busy && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                  {busy ? t("interest.submitting") : t("interest.withdraw")}
+                <Button type="button" size="sm" variant="outline" onClick={onChange} disabled={locked}>
+                  {t("interest.change")}
                 </Button>
               </div>
             )}

@@ -231,6 +231,45 @@ export interface SplitsResponse {
   sources: SourceNote[];
 }
 
+/* ------------------------------------------- expressed interests (public) -- */
+
+export interface PublicInterestEntry {
+  /** The name the person published in their own KIND 0 profile; null when they published none. */
+  name: string | null;
+  /** Their public key, shortened by BEF — never a whole key. */
+  key: string;
+  currency: InterestCurrency;
+  /** Whole units of `currency`. */
+  amount: number;
+  /** Unix seconds: when they signed this version of their interest. */
+  signedAt: number;
+  /** More than the limits published now allow for this round (a limit lowered since). */
+  beyondLimit: boolean;
+}
+
+export interface PublicInterestRound {
+  round: number;
+  openForInterest: boolean;
+  /** Earliest signature first. */
+  entries: PublicInterestEntry[];
+  /** Per currency, never added across currencies. */
+  totals: Partial<Record<InterestCurrency, number>>;
+  people: number;
+}
+
+export interface PublicInterestSplit {
+  split: number;
+  scope: 'current' | 'next';
+  rounds: PublicInterestRound[];
+  people: number;
+}
+
+export interface PublicInterests {
+  /** The current split, and the next one when anybody has expressed interest in it. */
+  splits: PublicInterestSplit[];
+  paramsEventId: string;
+}
+
 export interface Company {
   id: number;
   role: 'seller' | 'treasury';
@@ -526,6 +565,9 @@ export function createBefClient({
   const figures = {
     bootstrap: () => request<Bootstrap>('/api/bootstrap'),
     splits: () => request<SplitsResponse>('/api/splits'),
+    /** Who has expressed interest, as BEF publishes it: names from people's own
+     * public profiles and amounts, never a wallet, e-mail, telephone or country. */
+    interests: () => request<PublicInterests>('/api/interests'),
     companies: (role?: 'seller' | 'treasury') => request<{ companies: Company[] }>(`/api/companies${role ? `?role=${role}` : ''}`),
     scenario: (params: ScenarioParams) => {
       const q = new URLSearchParams({
