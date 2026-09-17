@@ -8,8 +8,8 @@
 import { readFileSync } from 'node:fs';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 import {
+  languagePickStillStands,
   newestOwnProfile,
-  profileLanguageChanged,
   REFRESHABLE_FIELDS,
   sessionProfileFromKind0,
   withProfile,
@@ -156,16 +156,30 @@ console.log('— the session follows a newer profile —');
   check('only how the app speaks to the person is refreshable', JSON.stringify([...REFRESHABLE_FIELDS].sort()) === JSON.stringify(['profileCountry', 'profileCurrency', 'profileDisplayName', 'profileLang', 'profileName']));
 }
 
-// ── When an earlier language pick in this browser gives way ────────────────
-console.log('— a new profile language replaces an older local pick —');
+// ── When the language was chosen, and what that outranks ──────────────────
+console.log('— the later choice of language wins —');
 {
-  check('signing in is not a choice of language', !profileLanguageChanged({}, { hexId: me, lang: 'sl' }));
-  check('signing out is not', !profileLanguageChanged({ hexId: me, lang: 'sl' }, {}));
-  check('switching to another person is not', !profileLanguageChanged({ hexId: me, lang: 'sl' }, { hexId: someoneElse, lang: 'en' }));
-  check('the same person, Slovenian → English, is', profileLanguageChanged({ hexId: me, lang: 'sl' }, { hexId: me, lang: 'en' }));
-  check('a profile that names a language for the first time is', profileLanguageChanged({ hexId: me }, { hexId: me, lang: 'en' }));
-  check('the same language in other letters is not', !profileLanguageChanged({ hexId: me, lang: 'en' }, { hexId: me, lang: ' EN ' }));
-  check('a profile that stops naming one is not', !profileLanguageChanged({ hexId: me, lang: 'en' }, { hexId: me }));
+  const base: SessionProfileState = { nostrHexId: me, profileLang: 'sl', profileEventAt: 1000 };
+  const changed = withProfile(base, wire(signed(2000, {}, [['lang', 'en']])));
+  check('a new language is marked with the profile that named it', changed.profileLangAt === 2000, changed);
+  const pictureOnly = withProfile(changed, wire(signed(3000, { picture: 'p' }, [['lang', 'en']])));
+  check('re-publishing a profile for another reason is not a new choice of language', pictureOnly.profileLangAt === 2000 && pictureOnly.profileEventAt === 3000, pictureOnly);
+  const backToSl = withProfile(pictureOnly, wire(signed(4000, {}, [['lang', 'sl']])));
+  check('changing it again moves the mark', backToSl.profileLangAt === 4000, backToSl);
+
+  // Brilly, 17. 9. 2026 20:00: session already English, the relays hold the
+  // very same profile — and a Slovenian pick from months ago still won.
+  const noMark: SessionProfileState = { nostrHexId: me, profileLang: 'en', profileEventAt: 5000 };
+  const marked = withProfile(noMark, wire(signed(5000, {}, [['lang', 'en']])));
+  check('the event the session already reflects still dates the choice', marked !== noMark && marked.profileLangAt === 5000, marked);
+  check('…and only once', withProfile(marked, wire(signed(5000, {}, [['lang', 'en']]))) === marked);
+  check('an older event still dates nothing', withProfile(marked, wire(signed(4999, {}, [['lang', 'sl']]))) === marked);
+
+  check('with no profile language known, a pick in this browser stands', languagePickStillStands(1, undefined));
+  check('a pick from before picks were dated gives way to the profile', !languagePickStillStands(0, 5000));
+  check('an older pick gives way', !languagePickStillStands(4999 * 1000, 5000));
+  check('a pick made after the profile stands', languagePickStillStands(5001 * 1000, 5000));
+  check('a pick in the same second as the profile gives way', !languagePickStillStands(5000 * 1000, 5000));
 }
 
 // ── The wiring, read from the files that ship ──────────────────────────────
@@ -181,11 +195,15 @@ console.log('— wired where it has to be —');
   check('a running session asks the relays again and verifies', /query-nostr-events/.test(auth) && /newestOwnProfile\(body\?\.events, hexId\)/.test(auth));
   check('…when the person comes back to the tab', /visibilitychange', onVisible/.test(auth));
   check('…and only through withProfile', /withProfile\(current, event\)/.test(auth));
+  check('a refreshed session is written back, both marks', /localStorage\.setItem\(SESSION_KEY, JSON\.stringify\(session\)\);[\s\S]{0,220}\}, \[session\]\);/.test(auth));
   check('publishing returns the signed event', /return \{ success: true, event: signedEvent \}/.test(hook));
   const upsertAt = profilePage.indexOf(".from('nostr_profiles').upsert");
   const applyAt = profilePage.indexOf('applyProfileEvent(result.event)');
   check('the Profile page hands it over after the cache write', upsertAt > 0 && applyAt > upsertAt, { upsertAt, applyAt });
-  check('the interface language lets an older pick go on a new profile language', /profileLanguageChanged\(before, after\)\) setLang\(null\)/.test(i18n));
+  check('sign-in dates the language choice', /profileLangAt = profileEvent\.created_at/.test(auth));
+  check('a pick in this browser is dated when it is made', /OVERRIDE_AT_KEY, String\(next\.at\)/.test(i18n));
+  check('…and only holds while it is the later choice', /languagePickStillStands\(pick\.at, session\?\.profileLangAt\)/.test(i18n));
+  check('the old key still carries the plain language (older tabs)', /localStorage\.setItem\(OVERRIDE_KEY, next\.lang\)/.test(i18n));
   check('the interface language still derives from the session profile', /resolveLang\(session\?\.profileLang\)/.test(i18n));
 }
 

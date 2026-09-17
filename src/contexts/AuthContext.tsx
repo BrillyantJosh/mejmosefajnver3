@@ -30,6 +30,7 @@ interface UserSession {
   profileCountry?: string; // Country code from KIND 0 profile
   profileCurrency?: string; // Currency from KIND 0 profile
   profileEventAt?: number; // created_at of the KIND 0 the profile fields were read from
+  profileLangAt?: number; // created_at of the profile that last named this language
   expiresAt: number; // Unix timestamp when session expires
 }
 
@@ -176,16 +177,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // A refreshed profile is written back, so the next visit — and every other
-  // tab — starts from the newer reading.
+  // tab — starts from the newer reading. Both marks count: reading the same
+  // profile again changes no field, but it does date the language choice.
   useEffect(() => {
-    if (!session || session.profileEventAt === undefined) return;
+    if (!session) return;
+    if (session.profileEventAt === undefined && session.profileLangAt === undefined) return;
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     } catch (e) {
       console.warn('Failed to save refreshed profile to localStorage:', e);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.profileEventAt]);
+  }, [session]);
 
   // The profile was read once, at sign-in, and kept for the whole session: a
   // language chosen later — here or in any other Lana app — never arrived. It
@@ -242,6 +244,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       let profileFields: SessionProfileFields = {};
       let profileEventAt: number | undefined = undefined;
+      let profileLangAt: number | undefined = undefined;
       
       // Check if user has a KIND 0 profile on relays
       if (relays && relays.length > 0) {
@@ -274,6 +277,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // The same reading every later refresh of the session uses.
             profileFields = sessionProfileFromKind0(profileEvent);
             profileEventAt = profileEvent.created_at;
+            // No history at sign-in: the language is taken to be chosen with
+            // this profile, and a language picked in this browser earlier than
+            // that gives way to it.
+            profileLangAt = profileEvent.created_at;
             console.log('Profile read:', {
               lanaWalletID: profileFields.lanaWalletID,
               lang: profileFields.profileLang,
@@ -322,6 +329,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         nostrPrivateKey: derivedIds.nostrPrivateKey,
         ...profileFields,
         profileEventAt,
+        profileLangAt,
         expiresAt
       };
       

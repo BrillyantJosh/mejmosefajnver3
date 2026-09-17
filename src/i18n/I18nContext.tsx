@@ -1,6 +1,6 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { profileLanguageChanged } from '@/lib/sessionProfile';
+import { languagePickStillStands } from '@/lib/sessionProfile';
 import { SupportedLang, SUPPORTED_LANGS, DEFAULT_LANG, TranslationDict } from './types';
 
 interface I18nContextValue {
@@ -13,16 +13,29 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue>({ lang: DEFAULT_LANG, setLang: () => {}, override: null });
 
-// A READER'S override, above every derived signal. The language used to be
-// derived only — profile, then country, then browser — which is right for a
-// first visit but leaves a visitor with no way to read the page in a language
-// they actually know. Stored locally, never published, and clearable back to
-// the derived value.
+// A READER'S pick, above a derived language. The language used to be derived
+// only — profile, then country, then browser — which is right for a first
+// visit but leaves a visitor with no way to read the page in a language they
+// actually know. Stored locally, never published, and clearable.
+//
+// It is stamped, because it used to outrank the profile FOR GOOD: someone who
+// once picked a language to read a matrix in kept the whole app in it, and
+// choosing another language in their profile changed nothing they could see
+// (Brilly, 17. 9. 2026). Now the later of the two choices wins. The plain
+// language stays under the old key, so a tab still running the previous
+// version of the app reads it as before.
 const OVERRIDE_KEY = 'lana_lang_override';
-const readOverride = (): SupportedLang | null => {
+const OVERRIDE_AT_KEY = 'lana_lang_override_at';
+
+interface LangPick { lang: SupportedLang; at: number }
+
+const readPick = (): LangPick | null => {
   try {
     const v = localStorage.getItem(OVERRIDE_KEY);
-    return v && SUPPORTED_LANGS.includes(v as SupportedLang) ? (v as SupportedLang) : null;
+    if (!v || !SUPPORTED_LANGS.includes(v as SupportedLang)) return null;
+    // A pick from before picks were stamped: older than any profile language.
+    const at = Number(localStorage.getItem(OVERRIDE_AT_KEY));
+    return { lang: v as SupportedLang, at: Number.isFinite(at) ? at : 0 };
   } catch (_) { return null; }
 };
 
@@ -100,13 +113,19 @@ function detectBrowserLang(): SupportedLang | null {
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { session } = useAuth();
-  const [override, setOverride] = useState<SupportedLang | null>(readOverride);
+  const [pick, setPick] = useState<LangPick | null>(readPick);
 
   const setLang = useCallback((l: SupportedLang | null) => {
-    setOverride(l);
+    const next = l ? { lang: l, at: Date.now() } : null;
+    setPick(next);
     try {
-      if (l) localStorage.setItem(OVERRIDE_KEY, l);
-      else localStorage.removeItem(OVERRIDE_KEY);
+      if (next) {
+        localStorage.setItem(OVERRIDE_KEY, next.lang);
+        localStorage.setItem(OVERRIDE_AT_KEY, String(next.at));
+      } else {
+        localStorage.removeItem(OVERRIDE_KEY);
+        localStorage.removeItem(OVERRIDE_AT_KEY);
+      }
     } catch (_) { /* private mode */ }
   }, []);
 
@@ -120,18 +139,8 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return resolved;
   }, [session?.profileLang, session?.profileCountry]);
 
-  // The person's own newer choice outranks a language picked earlier in this
-  // browser. When the profile language of the signed-in person changes — saved
-  // on the Profile page, or in another app and read back — an older pick is
-  // let go; otherwise the new language would be saved and never seen.
-  const lastProfile = useRef({ hexId: session?.nostrHexId, lang: session?.profileLang });
-  useEffect(() => {
-    const before = lastProfile.current;
-    const after = { hexId: session?.nostrHexId, lang: session?.profileLang };
-    lastProfile.current = after;
-    if (profileLanguageChanged(before, after)) setLang(null);
-  }, [session?.nostrHexId, session?.profileLang, setLang]);
-
+  // A pick only holds while it is the person's latest word on the matter.
+  const override = pick && languagePickStillStands(pick.at, session?.profileLangAt) ? pick.lang : null;
   const lang = override ?? derived;
 
   return (

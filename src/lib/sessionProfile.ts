@@ -23,6 +23,8 @@ export interface SessionProfileState extends SessionProfileFields {
   nostrHexId: string;
   /** created_at (seconds) of the KIND 0 the fields were read from; absent in sessions older than this. */
   profileEventAt?: number;
+  /** created_at (seconds) of the profile that last named THIS language — when the person chose it. */
+  profileLangAt?: number;
 }
 
 /**
@@ -116,7 +118,15 @@ export function withProfile<S extends SessionProfileState>(
   event: ProfileEvent,
 ): S {
   if (event.pubkey !== session.nostrHexId) return session;
-  if (session.profileEventAt !== undefined && event.created_at <= session.profileEventAt) return session;
+  const known = session.profileEventAt;
+  if (known !== undefined && event.created_at < known) return session;
+
+  // The event the session already reflects still says one thing it did not
+  // record before: the language was chosen no later than this. A pick made in
+  // this browser before that loses to it (see languagePickStillStands).
+  if (known !== undefined && event.created_at === known) {
+    return session.profileLangAt === undefined ? { ...session, profileLangAt: event.created_at } : session;
+  }
 
   // A newer event that changes no field still moves the mark forward, so an
   // event from in between — newer than the old mark, older than this one —
@@ -124,20 +134,25 @@ export function withProfile<S extends SessionProfileState>(
   const fields = sessionProfileFromKind0(event);
   const next: S = { ...session, profileEventAt: event.created_at };
   for (const key of REFRESHABLE_FIELDS) (next as SessionProfileState)[key] = fields[key];
+  // Only a different language is a new choice of language; re-publishing a
+  // profile for any other reason leaves the moment of that choice where it was.
+  next.profileLangAt = fields.profileLang !== session.profileLang || session.profileLangAt === undefined
+    ? event.created_at
+    : session.profileLangAt;
   return next;
 }
 
 /**
- * Whether the signed-in person has just chosen a different language in their
- * profile. Signing in, signing out or switching person is not a choice of
- * language; neither is a profile that stops naming one.
+ * Whether a language picked in this browser still outranks the profile: the
+ * later of the two choices wins.
+ *
+ * The pick (OWN matrix picker, frozen-out screen) used to be above the profile
+ * for good — someone who once read a matrix in another language kept reading
+ * the whole app in it, and changing the profile language did nothing they could
+ * see. A pick from before picks were timestamped counts as the older one.
+ * With no profile language known, the pick stands: it is the only choice there is.
  */
-export function profileLanguageChanged(
-  before: { hexId?: string; lang?: string },
-  after: { hexId?: string; lang?: string },
-): boolean {
-  if (!before.hexId || before.hexId !== after.hexId) return false;
-  const was = before.lang?.trim().toLowerCase();
-  const now = after.lang?.trim().toLowerCase();
-  return !!now && now !== was;
+export function languagePickStillStands(pickAt: number, profileLangAt?: number): boolean {
+  if (profileLangAt === undefined) return true;
+  return pickAt > profileLangAt * 1000;
 }
