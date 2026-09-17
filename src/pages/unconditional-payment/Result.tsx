@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, ExternalLink, Wallet, Send, Network } from "lucide-react";
+import { CheckCircle2, XCircle, ExternalLink, Wallet, Send, Network, Clock, AlertTriangle } from "lucide-react";
 import { formatLana } from "@/lib/currencyConversion";
 import { Badge } from "@/components/ui/badge";
+import { describeConfirmationDelivery, type DeliveryMode } from "@/lib/unconditionalPaymentFlow";
 
 interface RecipientSummary {
   wallet: string;
@@ -19,11 +20,26 @@ interface RelayResult {
   error?: string;
 }
 
+/** How the KIND 90901 confirmations travelled — see deliverConfirmations. */
+interface ConfirmationDelivery {
+  mode: DeliveryMode;
+  total: number;
+  deliveredByDevice: number;
+  deliveredByServer: number;
+  savedForServer: number;
+  undelivered: number;
+}
+
 interface ResultData {
   txid: string;
   totalAmount: number;
   recipients: RecipientSummary[];
   relayResults: RelayResult[];
+  /**
+   * Absent from results stored by older bundles — those always published from
+   * the device, which is exactly what the per-relay card below describes.
+   */
+  confirmations?: ConfirmationDelivery;
   timestamp: string;
 }
 
@@ -51,6 +67,13 @@ export default function Result() {
     return null;
   }
 
+  // Anything but "published from this device" gets its own honest card
+  // instead of a per-relay table that would show only failures.
+  const delivery = describeConfirmationDelivery(resultData.confirmations?.mode);
+  const DeliveryIcon = resultData.confirmations?.mode === 'server'
+    ? CheckCircle2
+    : resultData.confirmations?.mode === 'queued' ? Clock : AlertTriangle;
+
   const successfulRelays = resultData.relayResults.filter(r => r.success).length;
   const totalRelays = resultData.relayResults.length;
 
@@ -75,7 +98,9 @@ export default function Result() {
           <CheckCircle2 className="h-7 w-7 sm:h-8 sm:w-8 text-green-500 flex-shrink-0" />
           Payment Successful
         </h1>
-        <p className="text-sm sm:text-base text-muted-foreground">Transaction confirmed and published to Nostr relays</p>
+        <p className="text-sm sm:text-base text-muted-foreground">
+          {delivery ? delivery.subtitle : 'Transaction confirmed and published to Nostr relays'}
+        </p>
       </div>
 
       {/* Transaction Summary */}
@@ -130,7 +155,23 @@ export default function Result() {
         </CardContent>
       </Card>
 
-      {/* Relay Publishing Results */}
+      {delivery ? (
+        /* The confirmation did not (only) travel from this device */
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DeliveryIcon
+                className={`h-5 w-5 flex-shrink-0 ${resultData.confirmations?.mode === 'server' ? 'text-green-500' : resultData.confirmations?.mode === 'queued' ? 'text-muted-foreground' : 'text-destructive'}`}
+              />
+              {delivery.title}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">{delivery.detail}</p>
+          </CardContent>
+        </Card>
+      ) : (
+      /* Relay Publishing Results */
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -187,6 +228,7 @@ export default function Result() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">

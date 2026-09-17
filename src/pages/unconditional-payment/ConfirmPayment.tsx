@@ -11,16 +11,23 @@ import { toast } from "sonner";
 import { convertWifToIds } from "@/lib/crypto";
 import { formatLana } from "@/lib/currencyConversion";
 import { supabase } from "@/integrations/supabase/client";
-import { SimplePool, finalizeEvent } from 'nostr-tools';
+import { SimplePool, finalizeEvent, type Event } from 'nostr-tools';
 import { readFromRelaysWithRetry } from "@/lib/relayRead";
 import {
-  findDuplicateConfirmations,
   GUARD_READ_ATTEMPTS,
   GUARD_READ_BUDGET_MS,
   GUARD_READ_PAUSE_MS,
   GUARD_NO_RELAY_LIST_MESSAGE,
-  GUARD_UNVERIFIABLE_MESSAGE,
 } from "@/lib/unconditionalPaymentGuard";
+import {
+  guardAndSend,
+  deliverConfirmations,
+  DELIVERING_CONFIRMATION_PROGRESS,
+  type AlreadyPaid,
+  type DeliveryReport,
+  type RelayPublishResult,
+  type SendResponse,
+} from "@/lib/unconditionalPaymentFlow";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
@@ -50,6 +57,28 @@ interface PaymentData {
   selectedProposals: PaymentRecipient[];
   senderWallet: string;
   totalLana: number;
+}
+
+const API_URL = import.meta.env.VITE_API_URL ?? '';
+
+/**
+ * POST to the payment route, keeping what the supabase shim throws away: the
+ * status and the body of a refusal. The route's 409 names the duplicates, and
+ * its 503 is the refusal that proves nothing was sent — both are lost when
+ * every non-2xx is flattened into `error.message`. Never throws.
+ */
+async function postUnconditionalPayment(body: unknown): Promise<SendResponse> {
+  try {
+    const response = await fetch(`${API_URL}/api/functions/send-unconditional-payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = await response.json().catch(() => undefined);
+    return { status: response.status, body: json };
+  } catch (error) {
+    return { status: null, body: undefined, networkError: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 export default function ConfirmPayment() {
@@ -150,14 +179,96 @@ export default function ConfirmPayment() {
   const { profiles: recipientProfiles } = useNostrProfilesCacheBulk(recipientPubkeys);
 
   /**
-   * The check could not be made, so nothing was attempted. Said on the page as
+   * Nothing was sent, because the check could not be made. Said on the page as
    * well as in a toast: a toast that has faded leaves exactly the doubt this
    * message exists to remove.
    */
   const refuseUnverified = (message: string) => {
-    console.warn('⛔ Payment not attempted — previous payments could not be verified');
+    console.warn('⛔ Payment refused — previous payments could not be verified');
     setVerifyError(message);
     toast.error(message, { duration: 15000 });
+  };
+
+  /**
+   * Nothing was sent: these are paid already — found by this page's own read
+   * or by the server's. They leave the batch; what remains can be confirmed
+   * again with a fresh click.
+   */
+  const dropAlreadyPaid = (data: PaymentData, alreadyPaid: AlreadyPaid[], foundBy: 'device' | 'server') => {
+    const remaining = data.selectedProposals.filter(
+      (p) => !alreadyPaid.some((d) => d.proposalId === p.proposalId),
+    );
+    for (const d of alreadyPaid) {
+      const txNote = d.txId ? ` (tx ${d.txId.substring(0, 12)}…)` : '';
+      toast.error(`"${d.service}" was already paid${txNote} — removed from this batch.`, { duration: 10000 });
+      console.warn(`⛔ Duplicate blocked by the ${foundBy} [${d.via}]: ${d.service}, existing tx ${d.txId || 'unknown'}`);
+    }
+    if (remaining.length === 0) {
+      sessionStorage.removeItem('pendingUnconditionalPayment');
+      navigate('/unconditional-payment');
+    } else {
+      const updated = {
+        ...data,
+        selectedProposals: remaining,
+        totalLana: remaining.reduce((sum, p) => sum + p.lanaAmount, 0),
+      };
+      sessionStorage.setItem('pendingUnconditionalPayment', JSON.stringify(updated));
+      setPaymentData(updated);
+    }
+  };
+
+  /**
+   * This device's own publish of one confirmation — one result per relay:
+   * 10 s per relay, 8 s for the relay's OK, as it always was. Each relay is
+   * recorded once; a late answer after its timeout no longer adds a second row.
+   */
+  const publishFromThisDevice = async (
+    pool: SimplePool,
+    signedEvent: Event,
+    proposalDTag: string,
+  ): Promise<RelayPublishResult[]> => {
+    console.log(`📡 Publishing KIND 90901 for proposal ${proposalDTag}...`);
+    const results: RelayPublishResult[] = [];
+
+    await Promise.all(relays.map((relay: string) => new Promise<void>((resolve) => {
+      let recorded = false;
+      const record = (success: boolean, error?: string) => {
+        if (recorded) return;
+        recorded = true;
+        clearTimeout(timeout);
+        results.push({ proposalId: proposalDTag, relay, success, ...(error ? { error } : {}) });
+        if (success) console.log(`✅ ${relay}: KIND 90901 published for ${proposalDTag}`);
+        else console.error(`❌ ${relay}: ${error} for ${proposalDTag}`);
+        resolve();
+      };
+
+      // Outer timeout: 10s - guards against relay never responding
+      const timeout = setTimeout(() => record(false, 'Connection timeout (10s)'), 10000);
+
+      try {
+        // Publish to SINGLE relay
+        const pubs = pool.publish([relay], signedEvent);
+
+        // Use for-await to consume the async iterable (proven pattern)
+        Promise.race([
+          (async () => {
+            for await (const pub of pubs) {
+              // At least one relay accepted
+              break;
+            }
+          })(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Publish timeout (8s)')), 8000)
+          )
+        ])
+          .then(() => record(true))
+          .catch((error) => record(false, error instanceof Error ? error.message : 'Unknown error'));
+      } catch (error: any) {
+        record(false, error?.message || 'Unknown error');
+      }
+    })));
+
+    return results;
   };
 
   const handleConfirmPayment = async () => {
@@ -177,336 +288,271 @@ export default function ConfirmPayment() {
     try {
       console.log('🚀 Processing unconditional payment...');
 
-      // ── Duplicate guard — runs BEFORE anything is broadcast ─────────────
-      // A fresh, verified 90901 read for this payer, matched by the shared
-      // matcher (src/lib/unconditionalPaymentGuard.ts): exact proposal
-      // reference, or same service+wallet paid since this proposal set was
-      // minted (the generator re-mints settled obligations under new d-tags).
-      // Fails CLOSED: if no relay answers, we cannot verify — so we do not pay.
+      // ── Duplicate guard — nothing is broadcast until it has passed ─────────
+      // One matcher (src/lib/unconditionalPaymentGuard.ts), two checks: this
+      // page's read of the payer's KIND 90901, and the server route's, which
+      // runs in front of the broadcast and fails CLOSED on its own (409 when
+      // already paid, 503 when no relay answered). If this device gets an
+      // answer, it refuses a duplicate itself, before the key leaves the page.
+      // If no relay answers it after every retry, the server's check decides:
+      // a network that blocks relay WebSockets must not make a verifiable
+      // payment impossible (src/lib/unconditionalPaymentFlow.ts has the why).
       if (relays.length === 0) {
         refuseUnverified(GUARD_NO_RELAY_LIST_MESSAGE);
         return;
       }
 
-      // Retried, each attempt on its OWN pool, because what fails here is the
-      // phone rather than the relays: the camera sheet that scans the key
-      // suspends the page, and sockets opened around that moment can be dead
-      // without the page being told. readFromRelaysWithRetry explains why a
-      // fresh pool is the only thing that actually re-dials.
-      let priorConfirmations;
-      try {
-        priorConfirmations = await readFromRelaysWithRetry(
-          () => new SimplePool(),
-          relays,
-          { kinds: [90901], authors: [session.nostrHexId], limit: 500 },
-          {
-            budgetMs: GUARD_READ_BUDGET_MS,
-            attempts: GUARD_READ_ATTEMPTS,
-            pauseMs: GUARD_READ_PAUSE_MS,
-            onAttempt: (attempt, total) =>
-              setVerifyProgress(
-                attempt === 1
-                  ? 'Checking your previous payments…'
-                  : `No relay answered — trying again (${attempt} of ${total})…`,
-              ),
-          },
-        );
-      } finally {
-        setVerifyProgress(null);
-      }
+      const obligations = paymentData.selectedProposals.map((item) => ({
+        proposalId: item.proposalId,
+        proposalDTag: item.proposalDTag,
+        recipientWallet: item.recipientWallet,
+        service: item.service,
+        // Snapshots written before this change carry no mint time; 0 makes
+        // Rule B match ANY prior confirmation for the service+wallet —
+        // the fail-closed direction for stale data.
+        proposalCreatedAt: item.proposalCreatedAt || 0,
+      }));
 
-      if (priorConfirmations.answered.length === 0) {
-        // Still fail-CLOSED after every attempt: unverifiable is never "unpaid".
-        refuseUnverified(GUARD_UNVERIFIABLE_MESSAGE);
-        return;
-      }
+      // Set while the outputs are built; the confirmations publish the
+      // recipient's net share, which depends on it.
+      let hasFeeWallet = false;
 
-      const alreadyPaid = findDuplicateConfirmations(
-        paymentData.selectedProposals.map((item) => ({
-          proposalId: item.proposalId,
-          proposalDTag: item.proposalDTag,
-          recipientWallet: item.recipientWallet,
-          service: item.service,
-          // Snapshots written before this change carry no mint time; 0 makes
-          // Rule B match ANY prior confirmation for the service+wallet —
-          // the fail-closed direction for stale data.
-          proposalCreatedAt: item.proposalCreatedAt || 0,
-        })),
-        priorConfirmations.events,
-      );
+      const outcome = await guardAndSend(obligations, {
+        // Retried, each attempt on its OWN pool — readFromRelaysWithRetry
+        // explains why a fresh pool is the only thing that actually re-dials.
+        readPriorConfirmations: async () => {
+          try {
+            return await readFromRelaysWithRetry(
+              () => new SimplePool(),
+              relays,
+              { kinds: [90901], authors: [session.nostrHexId], limit: 500 },
+              {
+                budgetMs: GUARD_READ_BUDGET_MS,
+                attempts: GUARD_READ_ATTEMPTS,
+                pauseMs: GUARD_READ_PAUSE_MS,
+                onAttempt: (attempt, total) =>
+                  setVerifyProgress(
+                    attempt === 1
+                      ? 'Checking your previous payments…'
+                      : `No relay answered — trying again (${attempt} of ${total})…`,
+                  ),
+              },
+            );
+          } finally {
+            setVerifyProgress(null);
+          }
+        },
 
-      if (alreadyPaid.length > 0) {
-        // Abort the WHOLE batch — nothing is broadcast on this attempt. The
-        // matched items are removed from the pending set; what remains can be
-        // re-confirmed by the user with a fresh click.
-        const remaining = paymentData.selectedProposals.filter(
-          (p) => !alreadyPaid.some((d) => d.obligation.proposalId === p.proposalId),
-        );
-        for (const d of alreadyPaid) {
-          const txNote = d.txId ? ` (tx ${d.txId.substring(0, 12)}…)` : '';
-          toast.error(`"${d.obligation.service}" was already paid${txNote} — removed from this batch.`, { duration: 10000 });
-          console.warn(`⛔ Duplicate blocked [${d.via}]: ${d.obligation.service} → ${d.obligation.recipientWallet}, existing tx ${d.txId || 'unknown'}`);
-        }
-        if (remaining.length === 0) {
-          sessionStorage.removeItem('pendingUnconditionalPayment');
-          navigate('/unconditional-payment');
-        } else {
-          const updated = {
-            ...paymentData,
-            selectedProposals: remaining,
-            totalLana: remaining.reduce((sum, p) => sum + p.lanaAmount, 0),
-          };
-          sessionStorage.setItem('pendingUnconditionalPayment', JSON.stringify(updated));
-          setPaymentData(updated);
-        }
-        return;
-      }
-      // ── End duplicate guard ──────────────────────────────────────────────
+        send: async () => {
+          // Fetch fee wallet for service fee (10%)
+          const { data: feeWalletSetting } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'mentor_unconditional_payment')
+            .maybeSingle();
 
-      // Fetch fee wallet for service fee (10%)
-      const { data: feeWalletSetting } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'mentor_unconditional_payment')
-        .maybeSingle();
+          let feeWallet = '';
+          if (feeWalletSetting?.value) {
+            const raw = feeWalletSetting.value as string;
+            feeWallet = raw.startsWith('"') ? JSON.parse(raw) : raw;
+            console.log('💰 Fee wallet loaded:', feeWallet);
+          }
+          hasFeeWallet = !!feeWallet;
 
-      let feeWallet = '';
-      if (feeWalletSetting?.value) {
-        const raw = feeWalletSetting.value as string;
-        feeWallet = raw.startsWith('"') ? JSON.parse(raw) : raw;
-        console.log('💰 Fee wallet loaded:', feeWallet);
-      }
-      const hasFeeWallet = !!feeWallet;
+          // Build recipients with 90/10 split (90% to recipient, 10% service fee)
+          const recipients: { address: string; amount: number }[] = [];
+          let totalFeeLanoshis = 0;
 
-      // Build recipients with 90/10 split (90% to recipient, 10% service fee)
-      const recipients: { address: string; amount: number }[] = [];
-      let totalFeeLanoshis = 0;
+          for (const r of recipientSummary) {
+            const totalLanoshis = Math.floor(r.amount * 100000000);
+            const feeLanoshis = hasFeeWallet ? Math.floor(totalLanoshis * 0.10) : 0;
+            const recipientLanoshis = totalLanoshis - feeLanoshis;
 
-      for (const r of recipientSummary) {
-        const totalLanoshis = Math.floor(r.amount * 100000000);
-        const feeLanoshis = hasFeeWallet ? Math.floor(totalLanoshis * 0.10) : 0;
-        const recipientLanoshis = totalLanoshis - feeLanoshis;
-
-        recipients.push({ address: r.wallet, amount: recipientLanoshis / 100000000 });
-        totalFeeLanoshis += feeLanoshis;
-      }
-
-      // Single aggregated fee output (only if total fee exceeds dust threshold)
-      if (hasFeeWallet && totalFeeLanoshis > 546) {
-        recipients.push({ address: feeWallet, amount: totalFeeLanoshis / 100000000 });
-        console.log(`📊 Service fee: ${totalFeeLanoshis} lanoshis (${(totalFeeLanoshis / 100000000).toFixed(8)} LANA) to ${feeWallet}`);
-      }
-
-      // Get Electrum servers from session storage or use defaults
-      const storedServers = sessionStorage.getItem('electrumServers');
-      const electrum_servers = storedServers 
-        ? JSON.parse(storedServers)
-        : [
-            { host: "electrum1.lanacoin.com", port: 5097 },
-            { host: "electrum2.lanacoin.com", port: 5097 }
-          ];
-
-      console.log('📤 Calling edge function with:', {
-        sender_address: paymentData.senderWallet,
-        recipients: recipients,
-        electrum_servers: electrum_servers
-      });
-
-      // Call the edge function. payer_pubkey + proposals let the SERVER run
-      // the same duplicate guard as the chokepoint before broadcasting —
-      // protection against stale bundles and direct API callers.
-      const { data, error } = await supabase.functions.invoke('send-unconditional-payment', {
-        body: {
-          sender_address: paymentData.senderWallet,
-          recipients: recipients,
-          private_key: privateKey,
-          electrum_servers: electrum_servers,
-          payer_pubkey: session.nostrHexId,
-          proposals: paymentData.selectedProposals.map((p) => ({
-            proposalId: p.proposalId,
-            proposalDTag: p.proposalDTag,
-            recipientWallet: p.recipientWallet,
-            service: p.service,
-            proposalCreatedAt: p.proposalCreatedAt || 0
-          }))
-        }
-      });
-
-      if (error) {
-        console.error('Edge function error:', error);
-        throw new Error(error.message || 'Payment transaction failed');
-      }
-
-      if (!data.success) {
-        throw new Error(data.error || 'Payment transaction failed');
-      }
-
-      console.log('✅ Transaction successful:', data.txid);
-      
-      // Create and publish KIND 90901 events for each proposal
-      const pool = new SimplePool();
-      const relayResults: Array<{ proposalId: string; relay: string; success: boolean; error?: string }> = [];
-
-      console.log(`📝 Creating KIND 90901 events for ${paymentData.selectedProposals.length} proposals...`);
-
-      for (const proposal of paymentData.selectedProposals) {
-        try {
-          // Create KIND 90901 event (publish only the recipient's 90% share)
-          const netLanoshis = hasFeeWallet
-            ? Math.floor(proposal.lanoshiAmount * 0.90)
-            : proposal.lanoshiAmount;
-          const netLana = netLanoshis / 100000000;
-
-          // Build tags - only include 'p' tag if recipientPubkey is a valid 64-char hex string
-          // Relays reject events with invalid p-tag sizes ("unexpected size for fixed-size tag: p")
-          const isValidHexPubkey = (pk: string) => /^[0-9a-f]{64}$/i.test(pk);
-          const tags: string[][] = [
-            ['proposal', proposal.proposalDTag],
-            ['from_wallet', paymentData.senderWallet],
-            ['to_wallet', proposal.recipientWallet],
-            ['amount_lana', netLana.toString()],
-            ['amount_lanoshi', netLanoshis.toString()],
-            ['tx', data.txid],
-            ['service', proposal.service],
-            ['timestamp_paid', Math.floor(Date.now() / 1000).toString()],
-            ['e', proposal.proposalId, '', 'proposal'],
-            ['type', 'unconditional_payment_confirmation']
-          ];
-
-          // Obligation cycle identity — lets future duplicate guards match this
-          // confirmation even against a REGENERATED proposal set (new d-tag).
-          if (proposal.billingDay) {
-            tags.push(['billing_day', proposal.billingDay]);
+            recipients.push({ address: r.wallet, amount: recipientLanoshis / 100000000 });
+            totalFeeLanoshis += feeLanoshis;
           }
 
-          // Only add p-tag if pubkey is valid 64-char hex (NIP-01 requirement)
-          if (proposal.recipientPubkey && isValidHexPubkey(proposal.recipientPubkey)) {
-            tags.splice(1, 0, ['p', proposal.recipientPubkey]);
-          } else {
-            console.warn(`⚠️ Skipping invalid p-tag for proposal ${proposal.proposalDTag}: "${proposal.recipientPubkey}" (length: ${proposal.recipientPubkey?.length || 0})`);
+          // Single aggregated fee output (only if total fee exceeds dust threshold)
+          if (hasFeeWallet && totalFeeLanoshis > 546) {
+            recipients.push({ address: feeWallet, amount: totalFeeLanoshis / 100000000 });
+            console.log(`📊 Service fee: ${totalFeeLanoshis} lanoshis (${(totalFeeLanoshis / 100000000).toFixed(8)} LANA) to ${feeWallet}`);
           }
 
-          const eventTemplate = {
-            kind: 90901,
-            created_at: Math.floor(Date.now() / 1000),
-            tags,
-            content: `Unconditional payment successfully received for proposal ${proposal.proposalDTag}.`,
-            pubkey: session.nostrHexId
-          };
+          // Get Electrum servers from session storage or use defaults
+          const storedServers = sessionStorage.getItem('electrumServers');
+          const electrum_servers = storedServers
+            ? JSON.parse(storedServers)
+            : [
+                { host: "electrum1.lanacoin.com", port: 5097 },
+                { host: "electrum2.lanacoin.com", port: 5097 }
+              ];
 
-          // Sign the event
-          const privateKeyBytes = new Uint8Array(
-            session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
-          );
-          const signedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
-
-          // Queue event to server DB as fallback (fire-and-forget)
-          // If relay publishing fails, heartbeat will retry from the DB
-          supabase.functions.invoke('queue-relay-event', {
-            body: { signedEvent, userPubkey: session.nostrHexId }
-          }).catch(() => {}); // silent — best-effort
-
-          console.log(`📡 Publishing KIND 90901 for proposal ${proposal.proposalDTag}...`);
-
-          // Publish to each relay individually (DonationProposalDialog pattern with for-await)
-          const publishPromises = relays.map((relay: string) => {
-            return new Promise<void>((resolve) => {
-              // Outer timeout: 10s - guards against relay never responding
-              const timeout = setTimeout(() => {
-                relayResults.push({
-                  proposalId: proposal.proposalDTag,
-                  relay,
-                  success: false,
-                  error: 'Connection timeout (10s)'
-                });
-                console.error(`❌ ${relay}: Timeout for ${proposal.proposalDTag}`);
-                resolve();
-              }, 10000);
-
-              try {
-                // Publish to SINGLE relay
-                const pubs = pool.publish([relay], signedEvent);
-
-                // Use for-await to consume the async iterable (proven pattern)
-                Promise.race([
-                  (async () => {
-                    for await (const pub of pubs) {
-                      // At least one relay accepted
-                      break;
-                    }
-                  })(),
-                  new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Publish timeout (8s)')), 8000)
-                  )
-                ]).then(() => {
-                  clearTimeout(timeout);
-                  relayResults.push({
-                    proposalId: proposal.proposalDTag,
-                    relay,
-                    success: true
-                  });
-                  console.log(`✅ ${relay}: KIND 90901 published for ${proposal.proposalDTag}`);
-                  resolve();
-                }).catch((error) => {
-                  clearTimeout(timeout);
-                  relayResults.push({
-                    proposalId: proposal.proposalDTag,
-                    relay,
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Unknown error'
-                  });
-                  console.error(`❌ ${relay}: ${error instanceof Error ? error.message : 'Unknown error'} for ${proposal.proposalDTag}`);
-                  resolve();
-                });
-              } catch (error: any) {
-                clearTimeout(timeout);
-                relayResults.push({
-                  proposalId: proposal.proposalDTag,
-                  relay,
-                  success: false,
-                  error: error.message || 'Unknown error'
-                });
-                console.error(`❌ ${relay}: ${error.message} for ${proposal.proposalDTag}`);
-                resolve();
-              }
-            });
+          console.log('📤 Calling edge function with:', {
+            sender_address: paymentData.senderWallet,
+            recipients: recipients,
+            electrum_servers: electrum_servers
           });
 
-          // Wait for all relays to complete or timeout
-          await Promise.all(publishPromises);
+          // payer_pubkey + proposals are what the SERVER's guard checks before
+          // it broadcasts — for every caller, and the only check that runs when
+          // this device could not reach a relay.
+          return postUnconditionalPayment({
+            sender_address: paymentData.senderWallet,
+            recipients: recipients,
+            private_key: privateKey,
+            electrum_servers: electrum_servers,
+            payer_pubkey: session.nostrHexId,
+            proposals: obligations,
+          });
+        },
 
-        } catch (error) {
-          console.error(`❌ Error creating KIND 90901 for proposal ${proposal.proposalDTag}:`, error);
-        }
+        onProgress: setVerifyProgress,
+      });
+
+      if (outcome.kind === 'already-paid') {
+        dropAlreadyPaid(paymentData, outcome.alreadyPaid, outcome.foundBy);
+        return;
+      }
+      if (outcome.kind === 'refused') {
+        refuseUnverified(outcome.message);
+        return;
+      }
+      if (outcome.kind === 'failed') {
+        console.error('Edge function error:', outcome.message);
+        throw new Error(outcome.message);
+      }
+      // ── End duplicate guard — the transaction is out ─────────────────────
+
+      const txid = outcome.txid;
+      console.log('✅ Transaction successful:', txid);
+
+      // Paid. Whatever happens from here on, this batch must not be payable
+      // again from this page.
+      sessionStorage.removeItem('pendingUnconditionalPayment');
+      setVerifyProgress(DELIVERING_CONFIRMATION_PROGRESS);
+
+      // The KIND 90901 confirmations are what mark these obligations paid —
+      // the pending list and both guards read them. Saved on the server first,
+      // published from this device if it can reach relays, and published by
+      // the server now for whatever the device could not land.
+      console.log(`📝 Creating KIND 90901 events for ${paymentData.selectedProposals.length} proposals...`);
+      const pool = outcome.deviceReachedRelays ? new SimplePool() : null;
+      let delivery: DeliveryReport | null = null;
+      try {
+        delivery = await deliverConfirmations(paymentData.selectedProposals, outcome.deviceReachedRelays, {
+          sign: (proposal) => {
+            // Create KIND 90901 event (publish only the recipient's 90% share)
+            const netLanoshis = hasFeeWallet
+              ? Math.floor(proposal.lanoshiAmount * 0.90)
+              : proposal.lanoshiAmount;
+            const netLana = netLanoshis / 100000000;
+
+            // Build tags - only include 'p' tag if recipientPubkey is a valid 64-char hex string
+            // Relays reject events with invalid p-tag sizes ("unexpected size for fixed-size tag: p")
+            const isValidHexPubkey = (pk: string) => /^[0-9a-f]{64}$/i.test(pk);
+            const tags: string[][] = [
+              ['proposal', proposal.proposalDTag],
+              ['from_wallet', paymentData.senderWallet],
+              ['to_wallet', proposal.recipientWallet],
+              ['amount_lana', netLana.toString()],
+              ['amount_lanoshi', netLanoshis.toString()],
+              ['tx', txid],
+              ['service', proposal.service],
+              ['timestamp_paid', Math.floor(Date.now() / 1000).toString()],
+              ['e', proposal.proposalId, '', 'proposal'],
+              ['type', 'unconditional_payment_confirmation']
+            ];
+
+            // Obligation cycle identity — lets future duplicate guards match this
+            // confirmation even against a REGENERATED proposal set (new d-tag).
+            if (proposal.billingDay) {
+              tags.push(['billing_day', proposal.billingDay]);
+            }
+
+            // Only add p-tag if pubkey is valid 64-char hex (NIP-01 requirement)
+            if (proposal.recipientPubkey && isValidHexPubkey(proposal.recipientPubkey)) {
+              tags.splice(1, 0, ['p', proposal.recipientPubkey]);
+            } else {
+              console.warn(`⚠️ Skipping invalid p-tag for proposal ${proposal.proposalDTag}: "${proposal.recipientPubkey}" (length: ${proposal.recipientPubkey?.length || 0})`);
+            }
+
+            const eventTemplate = {
+              kind: 90901,
+              created_at: Math.floor(Date.now() / 1000),
+              tags,
+              content: `Unconditional payment successfully received for proposal ${proposal.proposalDTag}.`,
+              pubkey: session.nostrHexId
+            };
+
+            // Sign the event
+            const privateKeyBytes = new Uint8Array(
+              session.nostrPrivateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
+            );
+            return finalizeEvent(eventTemplate, privateKeyBytes);
+          },
+
+          // The heartbeat republishes from this queue until a relay accepts.
+          queue: async (signedEvent) => {
+            const { data, error } = await supabase.functions.invoke('queue-relay-event', {
+              body: { signedEvent, userPubkey: session.nostrHexId }
+            });
+            return !error && data?.success === true;
+          },
+
+          publishFromDevice: (signedEvent, proposal) =>
+            publishFromThisDevice(pool!, signedEvent, proposal.proposalDTag),
+
+          publishFromServer: async (signedEvent) => {
+            const { data, error } = await supabase.functions.invoke('publish-dm-event', {
+              body: { event: signedEvent }
+            });
+            return !error && data?.success === true && Number(data?.publishedTo) > 0;
+          },
+        });
+      } catch (error) {
+        // The money has moved: nothing here may turn into "Payment failed".
+        console.error('❌ Error delivering KIND 90901 confirmations:', error);
+      } finally {
+        pool?.close(relays);
       }
 
-      // Close pool only after ALL proposals published to ALL relays
-      pool.close(relays);
+      const total = paymentData.selectedProposals.length;
+      console.log(delivery
+        ? `📬 Confirmations: ${delivery.deliveredByDevice} from this device, ${delivery.deliveredByServer} by the server, ${delivery.savedForServer} queued on the server, ${delivery.undelivered} undelivered (${delivery.mode})`
+        : '📬 Confirmations: delivery did not complete');
 
       // Store result data for result page
       const resultData = {
-        txid: data.txid,
+        txid,
         totalAmount: paymentData.totalLana,
         recipients: recipientSummary,
-        relayResults: relayResults,
+        relayResults: delivery?.relayResults ?? [],
+        confirmations: delivery
+          ? {
+              mode: delivery.mode,
+              total: delivery.total,
+              deliveredByDevice: delivery.deliveredByDevice,
+              deliveredByServer: delivery.deliveredByServer,
+              savedForServer: delivery.savedForServer,
+              undelivered: delivery.undelivered,
+            }
+          : { mode: 'undelivered', total, deliveredByDevice: 0, deliveredByServer: 0, savedForServer: 0, undelivered: total },
         timestamp: new Date().toISOString()
       };
 
       sessionStorage.setItem('unconditionalPaymentResult', JSON.stringify(resultData));
-      
-      // Clear pending payment data
-      sessionStorage.removeItem('pendingUnconditionalPayment');
-      
+
       // Show success toast
-      toast.success(`Payment sent successfully! TX: ${data.txid.substring(0, 8)}...`);
-      
+      toast.success(`Payment sent successfully! TX: ${txid.substring(0, 8)}...`);
+
       // Navigate to result page
       navigate('/unconditional-payment/result');
-      
+
     } catch (error) {
       console.error('❌ Payment error:', error);
       toast.error(error instanceof Error ? error.message : 'Payment failed');
     } finally {
+      setVerifyProgress(null);
       setIsProcessing(false);
     }
   };

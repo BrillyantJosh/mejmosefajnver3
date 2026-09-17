@@ -153,13 +153,20 @@ export function findDuplicateConfirmations(
  *
  * The guard is fail-closed: no answer from any relay means we do not pay. That
  * is right, and it stays. What was wrong is how little it took to get no
- * answer. On 2026-09-15 a payer on an iPhone scanned her key with the camera
- * and was refused on a 66.41 LANA batch while all four relays were healthy —
- * measured the same day at 356–912 ms to EOSE for exactly her filter. A single
- * attempt on a phone whose sockets had just been suspended was the whole story.
+ * answer. On 2026-09-15 a payer on an iPhone was refused on a 66.41 LANA batch
+ * while all four relays were healthy — measured the same day at 356–912 ms to
+ * EOSE for exactly her filter.
  *
  * Hence: several attempts, each on a fresh pool (see readFromRelaysWithRetry),
  * and a per-attempt budget with real headroom over the healthy case.
+ *
+ * Retries did not help her: on 2026-09-17 all three failed, because her
+ * network blocks WebSocket connections to every relay. So when the browser
+ * gets no answer at all, it no longer refuses by itself — the server route
+ * runs this same matcher over the same read, from a network that reaches the
+ * relays, and refuses on its own when it cannot verify (see
+ * unconditionalPaymentFlow.ts). Fail-closed is kept end to end; it is decided
+ * by the check that can actually be made.
  */
 
 /**
@@ -170,8 +177,8 @@ export function findDuplicateConfirmations(
 export const GUARD_READ_BUDGET_MS = 12_000;
 
 /**
- * Attempts including the first. Attempt 2 is the one that recovers a socket
- * killed by the camera sheet; attempt 3 covers a network still re-associating.
+ * Attempts including the first. Attempt 2 recovers a socket that died while
+ * the page was suspended; attempt 3 covers a network still re-associating.
  */
 export const GUARD_READ_ATTEMPTS = 3;
 
@@ -179,8 +186,9 @@ export const GUARD_READ_ATTEMPTS = 3;
 export const GUARD_READ_PAUSE_MS = 1_200;
 
 /**
- * Worst case before the guard refuses: 3 × 12 s + 2 × 1.2 s ≈ 38 s. Bounded on
- * purpose — the user is shown which attempt is running while it runs.
+ * Worst case before the page gives up on its own read and lets the server's
+ * check decide: 3 × 12 s + 2 × 1.2 s ≈ 38 s. Bounded on purpose — the user is
+ * shown which attempt is running while it runs.
  */
 export const GUARD_READ_WORST_CASE_MS =
   GUARD_READ_ATTEMPTS * GUARD_READ_BUDGET_MS + (GUARD_READ_ATTEMPTS - 1) * GUARD_READ_PAUSE_MS;
@@ -189,12 +197,16 @@ export const GUARD_READ_WORST_CASE_MS =
  * What we say when the check could not be made. Someone who has just typed a
  * private key and pressed a payment button must not have to wonder whether the
  * money went: the first sentence answers that, before the reason.
+ *
+ * It is shown when the SERVER's check fails (its 503), which is the last word
+ * since the browser defers to it — so it does not send the payer off to fix an
+ * internet connection that just reached our server fine.
  */
 export const GUARD_UNVERIFIABLE_MESSAGE =
   'Nothing was sent — no LANA has left your wallet. ' +
-  'We could not reach any relay to check whether these payments were already made, ' +
+  'Our server could not reach any relay to check whether these payments were already made, ' +
   'and we never pay without that check. ' +
-  'Check your internet connection and press Confirm & Send Payment again.';
+  'Please try again in a few minutes.';
 
 /** Same promise first, for the case where the relay list itself never loaded. */
 export const GUARD_NO_RELAY_LIST_MESSAGE =

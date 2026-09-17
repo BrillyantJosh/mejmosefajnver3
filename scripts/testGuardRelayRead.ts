@@ -12,7 +12,9 @@
  * The relays here are fakes, so these are decisions about time and retries,
  * not a network test (scripts/testRelayRead.ts already reads the real ones).
  * What must hold, in both directions:
- *   - no relay ever answers        → still refuses, after every attempt;
+ *   - no relay ever answers        → reported unanswered, after every attempt
+ *                                    (the page then lets the server's fail-closed
+ *                                    guard decide: scripts/testPaymentServerDecides.ts);
  *   - one relay answers, slowly    → succeeds, where 8 s missed it;
  *   - first attempt dies, then ok  → succeeds, without the user pressing again;
  *   - one relay answers, fast      → succeeds on attempt 1, no pointless retry;
@@ -93,7 +95,7 @@ const SILENT: Plan = { eoseMs: undefined };
 const DEAD: Plan = { connectFails: true, connectMs: 20 };
 
 async function main() {
-  console.log('— an unverifiable read still refuses, however many attempts —');
+  console.log('— an unverifiable read is reported as unanswered, however many attempts —');
   {
     const f = poolFactory(() => SILENT);
     const t0 = Date.now();
@@ -180,14 +182,20 @@ async function main() {
       !/^Could not verify previous payments/.test(GUARD_UNVERIFIABLE_MESSAGE), GUARD_UNVERIFIABLE_MESSAGE);
   }
 
-  console.log('\n— the page reads through the retry, and still fails CLOSED —');
+  console.log('\n— the page reads through the retry; an unanswered read goes to the server\'s fail-closed guard —');
   {
     const page = readFileSync(new URL('../src/pages/unconditional-payment/ConfirmPayment.tsx', import.meta.url), 'utf8');
     check('the guard read is the retrying one', page.includes('readFromRelaysWithRetry('));
     check('a fresh pool per attempt', page.includes('() => new SimplePool()'));
     check('the budget is the shared constant, not a literal 8000', page.includes('budgetMs: GUARD_READ_BUDGET_MS') && !page.includes('budgetMs: 8000'));
-    check('an unanswered read still refuses', page.includes('priorConfirmations.answered.length === 0'));
-    check('and refuses with the honest message', page.includes('refuseUnverified(GUARD_UNVERIFIABLE_MESSAGE)'));
+    // Since 2026-09-17 the page no longer refuses on its own empty read: a
+    // network that blocks relay WebSockets made payment impossible. The read
+    // feeds guardAndSend, and the refusal comes from the server's 503.
+    const flow = readFileSync(new URL('../src/lib/unconditionalPaymentFlow.ts', import.meta.url), 'utf8');
+    check('an unanswered read is decided by guardAndSend, not by the page alone',
+      page.includes('guardAndSend(') && !page.includes('answered.length === 0'));
+    check("the server's refusal maps to the honest message", flow.includes("kind: 'refused', message: GUARD_UNVERIFIABLE_MESSAGE"));
+    check('and the page shows it', page.includes('refuseUnverified(outcome.message)'));
     check('the old wording is gone', !page.includes('no relay answered. Please try again.'));
     check('nothing was turned into a "pay anyway"', !/pay\s*anyway/i.test(page));
   }
