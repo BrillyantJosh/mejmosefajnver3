@@ -70,7 +70,7 @@ type ProfileFormData = z.infer<typeof profileSchema>;
 
 export default function Profile() {
   const { toast } = useToast();
-  const { session } = useAuth();
+  const { session, applyProfileEvent } = useAuth();
   const { profile, isLoading, isPublishing, publishProfile } = useNostrProfile();
   const { languages, isLoading: languagesLoading } = useLanguages();
   const [isEditing, setIsEditing] = useState(false);
@@ -214,6 +214,12 @@ export default function Profile() {
           updated_at: new Date().toISOString(),
         }], { onConflict: 'nostr_hex_id' });
       }
+
+      // The app now speaks as the profile just published — in its language
+      // above all, which used to wait for the next sign-in. After the cache
+      // write: a changed session makes the profile be read from that cache
+      // again, and it has to find the new profile there.
+      if (result.event) applyProfileEvent(result.event);
 
       toast({
         title: "Profile updated",

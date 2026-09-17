@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { supabase } from '@/integrations/supabase/client';
 import { sanitizeLanaWalletId } from '@/lib/crypto';
+import type { ProfileEvent } from '@/lib/sessionProfile';
 
 export interface NostrProfile {
   // Standard fields
@@ -203,7 +204,9 @@ export const useNostrProfile = () => {
     fetchProfile();
   }, [fetchProfile]);
 
-  const publishProfile = async (profileData: NostrProfile): Promise<{ success: boolean; error?: string }> => {
+  const publishProfile = async (
+    profileData: NostrProfile,
+  ): Promise<{ success: boolean; error?: string; /** What was published, for the session. */ event?: ProfileEvent }> => {
     if (!session?.nostrPrivateKey || !session?.nostrHexId) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -303,7 +306,7 @@ export const useNostrProfile = () => {
       // the new event yet, causing stale data (without tags) to overwrite the DB.
       // Background refreshStaleProfiles() (every 30min) will sync from relay later.
 
-      return { success: true };
+      return { success: true, event: signedEvent };
     } catch (error) {
       console.error('Error publishing profile:', error);
       return {

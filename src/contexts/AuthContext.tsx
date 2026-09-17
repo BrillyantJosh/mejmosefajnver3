@@ -4,6 +4,7 @@ import { convertWifToIds } from '@/lib/crypto';
 import { befClient } from '@/lib/bef/config';
 import { forgetBefPerson } from '@/lib/bef/personToken';
 import { SimplePool } from 'nostr-tools';
+import { newestOwnProfile, sessionProfileFromKind0, withProfile, type ProfileEvent, type SessionProfileFields } from '@/lib/sessionProfile';
 
 // TypeScript declaration for document.wasDiscarded (Chrome Memory Saver feature)
 declare global {
@@ -28,6 +29,7 @@ interface UserSession {
   profileLang?: string; // Language from KIND 0 profile
   profileCountry?: string; // Country code from KIND 0 profile
   profileCurrency?: string; // Currency from KIND 0 profile
+  profileEventAt?: number; // created_at of the KIND 0 the profile fields were read from
   expiresAt: number; // Unix timestamp when session expires
 }
 
@@ -37,6 +39,11 @@ interface AuthContextType {
   login: (wif: string, relays?: string[], rememberMe?: boolean) => Promise<void>;
   logout: () => void;
   refreshSession: () => void;
+  /**
+   * Hand the session a KIND 0 of the signed-in person — one just published, or
+   * one read from the relays. Only a newer one changes anything.
+   */
+  applyProfileEvent: (event: ProfileEvent) => void;
   /** Set when a commission decision stands; the app renders nothing else. */
   frozenOut: FreezeVerdict | null;
   setFrozenOut: (v: FreezeVerdict | null) => void;
@@ -45,6 +52,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const SESSION_KEY = 'lana_user_session';
+const API_URL = import.meta.env.VITE_API_URL ?? '';
+const PROFILE_REFRESH_EVERY_MS = 10 * 60 * 1000;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<UserSession | null>(null);
@@ -162,6 +171,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
+  const applyProfileEvent = useCallback((event: ProfileEvent) => {
+    setSession((current) => (current ? withProfile(current, event) : current));
+  }, []);
+
+  // A refreshed profile is written back, so the next visit — and every other
+  // tab — starts from the newer reading.
+  useEffect(() => {
+    if (!session || session.profileEventAt === undefined) return;
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } catch (e) {
+      console.warn('Failed to save refreshed profile to localStorage:', e);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.profileEventAt]);
+
+  // The profile was read once, at sign-in, and kept for the whole session: a
+  // language chosen later — here or in any other Lana app — never arrived. It
+  // is read again when the app opens and when the person comes back to it (at
+  // most every 10 minutes). The Profile page hands over what it has just
+  // published at once, without waiting for this.
+  useEffect(() => {
+    const hexId = session?.nostrHexId;
+    if (!hexId) return;
+    let stopped = false;
+    let lastCheck = 0;
+
+    const check = async () => {
+      if (stopped || Date.now() - lastCheck < PROFILE_REFRESH_EVERY_MS) return;
+      lastCheck = Date.now();
+      try {
+        const res = await fetch(`${API_URL}/api/functions/query-nostr-events`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filter: { kinds: [0], authors: [hexId], limit: 10 }, timeout: 8000 }),
+        });
+        if (!res.ok || stopped) return;
+        const body = await res.json();
+        const newest = newestOwnProfile(body?.events, hexId);
+        if (newest && !stopped) applyProfileEvent(newest);
+      } catch {
+        // Offline, or no relay answered: the session keeps what it has.
+      }
+    };
+
+    void check();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void check();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stopped = true;
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [session?.nostrHexId, applyProfileEvent]);
+
   const login = async (wif: string, relays?: string[], rememberMe: boolean = false) => {
     try {
       const derivedIds = await convertWifToIds(wif);
@@ -175,13 +240,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('Sign-in refused: commission gross-violation decision stands');
         throw new FrozenOutError(gate);
       }
-      let lanaWalletID: string | undefined = undefined;
-      let lanoshi2lash: string | undefined = undefined;
-      let profileName: string | undefined = undefined;
-      let profileDisplayName: string | undefined = undefined;
-      let profileLang: string | undefined = undefined;
-      let profileCountry: string | undefined = undefined;
-      let profileCurrency: string | undefined = undefined;
+      let profileFields: SessionProfileFields = {};
+      let profileEventAt: number | undefined = undefined;
       
       // Check if user has a KIND 0 profile on relays
       if (relays && relays.length > 0) {
@@ -211,51 +271,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('KIND 0 profile found');
             profileFound = true;
             
-            // Extract lanaWalletID, lanoshi2lash, name, display_name, lang, currency from profile
-            try {
-              const profileContent = JSON.parse(profileEvent.content);
-              if (profileContent.lanaWalletID) {
-                lanaWalletID = profileContent.lanaWalletID;
-                console.log('LanaWalletID extracted:', profileContent.lanaWalletID);
-              }
-              if (profileContent.lanoshi2lash) {
-                lanoshi2lash = profileContent.lanoshi2lash;
-                console.log('lanoshi2lash extracted:', profileContent.lanoshi2lash);
-              }
-              // Extract name and display_name for AI personalization
-              if (profileContent.name) {
-                profileName = profileContent.name;
-                console.log('Profile name extracted:', profileContent.name);
-              }
-              if (profileContent.display_name) {
-                profileDisplayName = profileContent.display_name;
-                console.log('Profile display_name extracted:', profileContent.display_name);
-              }
-              // Extract language: check content fields first, then event tags
-              if (profileContent.lang || profileContent.language) {
-                profileLang = profileContent.lang || profileContent.language;
-                console.log('Profile lang extracted from content:', profileLang);
-              }
-              if (!profileLang && profileEvent.tags) {
-                const langTag = profileEvent.tags.find((tag: string[]) => tag[0] === 'lang');
-                if (langTag && langTag[1]) {
-                  profileLang = langTag[1];
-                  console.log('Profile lang extracted from tags:', profileLang);
-                }
-              }
-              // Extract country code
-              if (profileContent.country) {
-                profileCountry = profileContent.country;
-                console.log('Profile country extracted:', profileContent.country);
-              }
-              // Extract currency
-              if (profileContent.currency) {
-                profileCurrency = profileContent.currency;
-                console.log('Profile currency extracted:', profileContent.currency);
-              }
-            } catch (e) {
-              console.warn('Could not parse profile content:', e);
-            }
+            // The same reading every later refresh of the session uses.
+            profileFields = sessionProfileFromKind0(profileEvent);
+            profileEventAt = profileEvent.created_at;
+            console.log('Profile read:', {
+              lanaWalletID: profileFields.lanaWalletID,
+              lang: profileFields.profileLang,
+              country: profileFields.profileCountry,
+              currency: profileFields.profileCurrency,
+            });
           } else {
             console.log('KIND 0 profile not found (null result)');
             profileFound = false;
@@ -296,13 +320,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         nostrHexId: derivedIds.nostrHexId,
         nostrNpubId: derivedIds.nostrNpubId,
         nostrPrivateKey: derivedIds.nostrPrivateKey,
-        lanaWalletID,
-        lanoshi2lash,
-        profileName,
-        profileDisplayName,
-        profileLang,
-        profileCountry,
-        profileCurrency,
+        ...profileFields,
+        profileEventAt,
         expiresAt
       };
       
@@ -328,7 +347,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ session, isLoading, login, logout, refreshSession, frozenOut, setFrozenOut }}>
+    <AuthContext.Provider value={{ session, isLoading, login, logout, refreshSession, applyProfileEvent, frozenOut, setFrozenOut }}>
       {children}
     </AuthContext.Provider>
   );

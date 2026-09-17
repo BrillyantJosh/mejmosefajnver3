@@ -1,5 +1,6 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { profileLanguageChanged } from '@/lib/sessionProfile';
 import { SupportedLang, SUPPORTED_LANGS, DEFAULT_LANG, TranslationDict } from './types';
 
 interface I18nContextValue {
@@ -118,6 +119,18 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('[i18n] lang:', JSON.stringify(session?.profileLang), '| country:', JSON.stringify(session?.profileCountry), '| browser:', fromBrowser, '→', resolved);
     return resolved;
   }, [session?.profileLang, session?.profileCountry]);
+
+  // The person's own newer choice outranks a language picked earlier in this
+  // browser. When the profile language of the signed-in person changes — saved
+  // on the Profile page, or in another app and read back — an older pick is
+  // let go; otherwise the new language would be saved and never seen.
+  const lastProfile = useRef({ hexId: session?.nostrHexId, lang: session?.profileLang });
+  useEffect(() => {
+    const before = lastProfile.current;
+    const after = { hexId: session?.nostrHexId, lang: session?.profileLang };
+    lastProfile.current = after;
+    if (profileLanguageChanged(before, after)) setLang(null);
+  }, [session?.nostrHexId, session?.profileLang, setLang]);
 
   const lang = override ?? derived;
 
