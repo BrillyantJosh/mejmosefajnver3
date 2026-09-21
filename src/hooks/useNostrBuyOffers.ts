@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
@@ -35,20 +36,17 @@ export const useNostrBuyOffers = (userCurrency?: string) => {
       return;
     }
 
-    const pool = new SimplePool();
     
     try {
       console.log('Fetching KIND 91991 sell offers for currency:', userCurrency);
       
       // Fetch all sell offers (91991) that match user's currency
-      const sellEvents = await Promise.race([
-        pool.querySync(relays, {
-          kinds: [91991],
-        }),
-        new Promise<Event[]>((_, reject) => 
-          setTimeout(() => reject(new Error('Sell offers fetch timeout')), 10000)
-        )
-      ]) as Event[];
+      // Through this app's server — see src/lib/relayReadViaServer.ts. This one
+      // asks for EVERY sell offer and filters by currency here, so a queue the
+      // library cut short simply hid offers from the buyer.
+      const sellEvents = await queryEventsViaServer<Event>({
+        kinds: [91991],
+      }, { timeout: 10000, label: 'all sell offers (KIND 91991)' });
       
       console.log('Found', sellEvents.length, 'total sell offers');
       
@@ -67,15 +65,10 @@ export const useNostrBuyOffers = (userCurrency?: string) => {
       let buyEvents: Event[] = [];
       
       if (sellOfferIds.length > 0) {
-        buyEvents = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [91992],
-            '#e': sellOfferIds,
-          }),
-          new Promise<Event[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Buy requests fetch timeout')), 10000)
-          )
-        ]) as Event[];
+        buyEvents = await queryEventsViaServer<Event>({
+          kinds: [91992],
+          '#e': sellOfferIds,
+        }, { timeout: 10000, label: 'buy requests (KIND 91992)' });
         
         console.log('Found', buyEvents.length, 'buy requests for these offers');
       }
@@ -139,7 +132,6 @@ export const useNostrBuyOffers = (userCurrency?: string) => {
       setOffers([]);
     } finally {
       setIsLoading(false);
-      pool.close(relays);
     }
   }, [session?.nostrHexId, relays, userCurrency]);
 

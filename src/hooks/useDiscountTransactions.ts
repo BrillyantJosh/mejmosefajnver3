@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
@@ -123,14 +123,16 @@ export const useDiscountTransactions = () => {
     setLoading(true);
     setError(null);
 
-    const pool = new SimplePool();
-
     try {
       // Fetch ALL KIND 30936 and 30937 events, then filter client-side by user_hex tag
       // (Nostr relays don't index multi-char tag names like "user_hex")
+      // Through this app's server: both reads ask for EVERYONE's rows and pick
+      // out this person's here, so anything the library dropped from its queue
+      // was a buyback or a payout missing from their own history — with the
+      // list still looking complete. See src/lib/relayReadViaServer.ts.
       const [buybackEvents, payoutEvents] = await Promise.all([
-        pool.querySync(parameters.relays, { kinds: [30936 as number], limit: 500 }),
-        pool.querySync(parameters.relays, { kinds: [30937 as number], limit: 500 }),
+        queryEventsViaServer({ kinds: [30936 as number], limit: 500 }, { label: 'discount buybacks (KIND 30936)' }),
+        queryEventsViaServer({ kinds: [30937 as number], limit: 500 }, { label: 'discount payouts (KIND 30937)' }),
       ]);
 
       console.log(`[discount] Fetched ${buybackEvents.length} KIND 30936 events, ${payoutEvents.length} KIND 30937 events`);
@@ -179,7 +181,6 @@ export const useDiscountTransactions = () => {
       setError(err instanceof Error ? err.message : 'Failed to fetch transactions');
     } finally {
       setLoading(false);
-      pool.close(parameters.relays);
     }
   }, [session?.nostrHexId, parameters?.relays]);
 

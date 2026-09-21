@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, ActivitySquare, ChevronDown, ChevronUp } from "lucide-react";
-import { SimplePool, Event } from "nostr-tools";
+import { Event } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 
 type KindConfig = {
   kind: number;
@@ -36,7 +37,6 @@ export default function Kinds() {
     setSelectedKind(kindConfig.kind);
     setEvents([]);
 
-    const pool = new SimplePool();
 
     try {
       let filter: any = {
@@ -50,7 +50,10 @@ export default function Kinds() {
         filter['#p'] = [session.nostrHexId];
       }
 
-      const fetchedEvents = await pool.querySync(parameters.relays, filter);
+      // Through this app's server — see src/lib/relayReadViaServer.ts. This page
+      // exists to show what a kind holds, so a list the library cut short was
+      // the one thing it must never show.
+      const fetchedEvents = await queryEventsViaServer<Event>(filter, { label: `KIND ${kindConfig.kind} browser` });
       
       // Filter KIND 30889 events to only include those from LanaRegistrar trusted signers
       let filteredEvents = fetchedEvents;
@@ -72,7 +75,6 @@ export default function Kinds() {
       console.error("Failed to fetch events:", error);
     } finally {
       setIsLoading(false);
-      pool.close(parameters.relays);
     }
   };
 

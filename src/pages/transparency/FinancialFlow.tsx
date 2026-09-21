@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { SimplePool } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import {
   Activity,
   Banknote,
@@ -85,17 +85,23 @@ const PROCESSOR_SIGNER_KEYS = ["LanaPaysUs", "LanaPays", "Processor", "Brain"];
 
 // ── shared fetch helpers ────────────────────────────────────────────────
 
+/**
+ * Every section of this page goes through here, so this one function is where
+ * the whole page stopped opening relay sockets in the browser. nostr-tools
+ * invents an EOSE 4.4 s after a subscription opens and discards every event
+ * still queued behind it — on a page whose sections ask for 500 and 1000
+ * events each, that is somebody's money history with rows missing and nothing
+ * saying so. See src/lib/relayReadViaServer.ts.
+ *
+ * `relays` is no longer used: the server reads the relays KIND 38888 names,
+ * which is the same list this page was passing in. The parameter stays so the
+ * thirteen call sites keep reading as they did.
+ */
 async function relayQuery(relays: string[], filter: Record<string, unknown>, timeoutMs = 12000): Promise<FlowEvent[]> {
-  const pool = new SimplePool();
-  try {
-    const events = await Promise.race([
-      pool.querySync(relays, filter as never),
-      new Promise<FlowEvent[]>((_, reject) => setTimeout(() => reject(new Error("relay timeout")), timeoutMs)),
-    ]);
-    return events as FlowEvent[];
-  } finally {
-    try { pool.close(relays); } catch { /* sockets already gone */ }
-  }
+  return (await queryEventsViaServer(filter, {
+    timeout: timeoutMs,
+    label: `financial flow, kinds ${JSON.stringify(filter.kinds ?? "?")}`,
+  })) as unknown as FlowEvent[];
 }
 
 /**

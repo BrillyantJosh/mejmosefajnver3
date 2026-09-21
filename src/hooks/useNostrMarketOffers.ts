@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event as NostrEvent } from 'nostr-tools';
+import { Event as NostrEvent } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 export interface MarketOffer {
@@ -48,7 +49,6 @@ export const useNostrMarketOffers = (options: UseNostrMarketOffersOptions = {}) 
     }
 
     const fetchOffers = async () => {
-      const pool = new SimplePool();
       
       try {
         const filter: any = {
@@ -66,12 +66,8 @@ export const useNostrMarketOffers = (options: UseNostrMarketOffersOptions = {}) 
 
         console.log('[Marketplace] Fetching offers with filter:', filter);
         
-        const events = await Promise.race([
-          pool.querySync(relays, filter),
-          new Promise<NostrEvent[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Offer fetch timeout')), 15000)
-          )
-        ]);
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const events = await queryEventsViaServer<NostrEvent>(filter, { timeout: 15000, label: 'marketplace offers' });
 
         console.log('[Marketplace] Received events:', events.length);
 
@@ -136,7 +132,6 @@ export const useNostrMarketOffers = (options: UseNostrMarketOffersOptions = {}) 
         console.error('Error fetching market offers:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 

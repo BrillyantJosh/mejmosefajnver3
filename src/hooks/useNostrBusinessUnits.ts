@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 const SHOP_BASE_URL = 'https://shop.lanapays.us';
@@ -201,17 +201,16 @@ export const useNostrBusinessUnits = () => {
     }
 
     const fetchAll = async () => {
-      const pool = new SimplePool();
 
       try {
-        const timeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
-          Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))]);
-
-        // Fetch all 3 KINDs in parallel
+        // Through this app's server — see src/lib/relayReadViaServer.ts. The
+        // 30903 read carries a unit's status, so an event dropped from the queue
+        // showed a suspended provider as open for business. It also had no limit
+        // and so was capped at whatever one relay answered; it now pages.
         const [unitEvents, feeEvents, suspensionEvents] = await Promise.all([
-          timeout(pool.querySync(relays, { kinds: [30901], limit: 500 }), 15000),
-          timeout(pool.querySync(relays, { kinds: [30902], authors: [PROCESSOR_PUBKEY] }), 12000).catch(() => [] as NostrTagEvent[]),
-          timeout(pool.querySync(relays, { kinds: [30903] }), 12000).catch(() => [] as NostrTagEvent[]),
+          queryEventsViaServer<NostrTagEvent>({ kinds: [30901], limit: 500 }, { timeout: 15000, label: 'business units (KIND 30901)' }),
+          queryEventsViaServer<NostrTagEvent>({ kinds: [30902], authors: [PROCESSOR_PUBKEY] }, { timeout: 12000, label: 'cashback fees (KIND 30902)' }).catch(() => [] as NostrTagEvent[]),
+          queryEventsViaServer<NostrTagEvent>({ kinds: [30903] }, { timeout: 12000, label: 'unit suspensions (KIND 30903)' }).catch(() => [] as NostrTagEvent[]),
         ]);
 
         console.log('📦 Fetched: units=%d, fees=%d, suspensions=%d', unitEvents.length, feeEvents.length, suspensionEvents.length);
@@ -254,7 +253,6 @@ export const useNostrBusinessUnits = () => {
         console.error('Error fetching business units:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 

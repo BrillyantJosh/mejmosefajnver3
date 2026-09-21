@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
@@ -29,21 +30,18 @@ export const useNostrSellOffers = () => {
       return;
     }
 
-    const pool = new SimplePool();
     
     try {
       console.log('Fetching KIND 91991 sell offers for:', session.nostrHexId);
       
       // First, fetch sell offers (91991) from current user
-      const sellEvents = await Promise.race([
-        pool.querySync(relays, {
-          kinds: [91991],
-          authors: [session.nostrHexId],
-        }),
-        new Promise<Event[]>((_, reject) => 
-          setTimeout(() => reject(new Error('Sell offers fetch timeout')), 10000)
-        )
-      ]) as Event[];
+      // Through this app's server — see src/lib/relayReadViaServer.ts. A buy
+      // request or a confirmation dropped from the queue showed an offer as
+      // still open after somebody had already taken it.
+      const sellEvents = await queryEventsViaServer<Event>({
+        kinds: [91991],
+        authors: [session.nostrHexId],
+      }, { timeout: 10000, label: 'my sell offers (KIND 91991)' });
       
       // Get all sell offer IDs to fetch related events
       const sellOfferIds = sellEvents.map(e => e.id);
@@ -55,24 +53,14 @@ export const useNostrSellOffers = () => {
       
       if (sellOfferIds.length > 0) {
         [buyEvents, confirmEvents] = await Promise.all([
-          Promise.race([
-            pool.querySync(relays, {
-              kinds: [91992],
-              '#e': sellOfferIds,
-            }),
-            new Promise<Event[]>((_, reject) => 
-              setTimeout(() => reject(new Error('Buy requests fetch timeout')), 10000)
-            )
-          ]),
-          Promise.race([
-            pool.querySync(relays, {
-              kinds: [91993],
-              '#e': sellOfferIds,
-            }),
-            new Promise<Event[]>((_, reject) => 
-              setTimeout(() => reject(new Error('Confirmations fetch timeout')), 10000)
-            )
-          ])
+          queryEventsViaServer<Event>({
+            kinds: [91992],
+            '#e': sellOfferIds,
+          }, { timeout: 10000, label: 'buy requests (KIND 91992)' }),
+          queryEventsViaServer<Event>({
+            kinds: [91993],
+            '#e': sellOfferIds,
+          }, { timeout: 10000, label: 'trade confirmations (KIND 91993)' }),
         ]);
         
         console.log('Found', buyEvents.length, 'buy requests (KIND 91992)');
@@ -152,7 +140,6 @@ export const useNostrSellOffers = () => {
       setOffers([]);
     } finally {
       setIsLoading(false);
-      pool.close(relays);
     }
   }, [session?.nostrHexId, relays]);
 

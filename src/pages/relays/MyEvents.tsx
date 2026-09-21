@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, ListOrdered, Trash2, ChevronDown, ChevronUp, Search, Filter } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SimplePool, Event, finalizeEvent, getPublicKey } from "nostr-tools";
+import { readFromRelays } from "@/lib/relayRead";
 import { toast } from "@/hooks/use-toast";
 import {
   Pagination,
@@ -63,12 +64,25 @@ export default function MyEvents() {
 
       try {
         console.log(`Fetching events from ${selectedRelays.length} selected relays:`, selectedRelays);
-        const fetchedEvents = await pool.querySync(selectedRelays, {
-          authors: [session.nostrHexId],
-          limit: 1000
-        });
+        // readFromRelays, not pool.querySync, and NOT the server path: this
+        // page is about these particular relays, chosen by hand, so the read has
+        // to happen here and has to say which of them answered. querySync could
+        // say neither — it counts a relay that never connected as one that
+        // answered with nothing, and nostr-tools discards whatever is still
+        // queued 4.4 s in, which on a thousand events is most of them.
+        const read = await readFromRelays(
+          pool,
+          selectedRelays,
+          { authors: [session.nostrHexId], limit: 1000 },
+          { budgetMs: 15000 },
+        );
+        if (read.failed.length > 0) {
+          console.warn(
+            `📡 ${read.failed.length}/${selectedRelays.length} relays did not answer: ${read.failed.map((f) => `${f.url}: ${f.reason}`).join(' | ')}`,
+          );
+        }
 
-        const sortedEvents = fetchedEvents.sort((a, b) => b.created_at - a.created_at);
+        const sortedEvents = [...read.events].sort((a, b) => b.created_at - a.created_at);
         setEvents(sortedEvents);
       } catch (error) {
         console.error("Failed to fetch events:", error);
@@ -117,13 +131,26 @@ export default function MyEvents() {
 
     try {
       console.log(`Searching all history for Kind ${kindFilter} from ${selectedRelays.length} selected relays`);
-      const fetchedEvents = await pool.querySync(selectedRelays, {
-        authors: [session.nostrHexId],
-        kinds: [parseInt(kindFilter)],
-        limit: 10000 // Much higher limit to get all historical events
-      });
+      // readFromRelays, for the same reason as above — and it matters more
+      // here: ten thousand events is far more than the library's 4.4 s window
+      // ever drained, so "search all history" returned a slice of it.
+      const read = await readFromRelays(
+        pool,
+        selectedRelays,
+        {
+          authors: [session.nostrHexId],
+          kinds: [parseInt(kindFilter)],
+          limit: 10000 // Much higher limit to get all historical events
+        },
+        { budgetMs: 30000 },
+      );
+      if (read.failed.length > 0) {
+        console.warn(
+          `📡 ${read.failed.length}/${selectedRelays.length} relays did not answer: ${read.failed.map((f) => `${f.url}: ${f.reason}`).join(' | ')}`,
+        );
+      }
 
-      const sortedEvents = fetchedEvents.sort((a, b) => b.created_at - a.created_at);
+      const sortedEvents = [...read.events].sort((a, b) => b.created_at - a.created_at);
       
       // Merge with existing events, removing duplicates
       setEvents(prev => {

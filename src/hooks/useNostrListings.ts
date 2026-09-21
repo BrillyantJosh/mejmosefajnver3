@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrBusinessUnits } from './useNostrBusinessUnits';
 
@@ -149,18 +149,15 @@ export const useNostrListings = () => {
     }
 
     const fetchListings = async () => {
-      const pool = new SimplePool();
 
       try {
-        const events = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [36502],
-            limit: 2000,
-          }),
-          new Promise<any[]>((_, reject) =>
-            setTimeout(() => reject(new Error('Listings fetch timeout')), 15000)
-          ),
-        ]);
+        // Through this app's server: two thousand listings never fitted inside
+        // the 4.4 s nostr-tools allows itself before it invents an EOSE and
+        // discards the rest of the queue. See src/lib/relayReadViaServer.ts.
+        const events = await queryEventsViaServer({
+          kinds: [36502],
+          limit: 2000,
+        }, { timeout: 15000, maxPages: 6, label: 'shop listings (KIND 36502)' });
 
         console.log('📦 Fetched listings:', events.length);
 
@@ -196,7 +193,6 @@ export const useNostrListings = () => {
         console.error('Error fetching listings:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 
