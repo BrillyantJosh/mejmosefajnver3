@@ -141,7 +141,18 @@ function LegCard({
   );
 }
 
-/** A label on the left and its figure on the right; the arithmetic under both spans the row. */
+/**
+ * A label on the left and its figure on the right; the arithmetic under both
+ * spans the row. On a narrow screen the figure drops to its own line rather
+ * than being squeezed.
+ *
+ * It was a two-column grid, `minmax(0,1fr) auto`. Safari and every iPhone
+ * browser size that `auto` column from the row's other, spanning items, not
+ * from the figure: "€0,3110" was given 14 pixels and painted the rest outside
+ * the card, past the edge of the screen (Brilly, 21. 9. 2026). Flex sizes the
+ * figure from the figure, wraps when there is no room, and lays out the same
+ * in every engine.
+ */
 function LegRow({
   label,
   value,
@@ -159,11 +170,13 @@ function LegRow({
 }) {
   const large = emphasis != null;
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-dashed border-border py-2 last:border-b-0">
-      <dt className={cn("text-sm", large ? "font-semibold text-foreground" : "text-muted-foreground")}>{label}</dt>
+    <div className="flex flex-wrap items-baseline gap-x-3 border-b border-dashed border-border py-2 last:border-b-0">
+      <dt className={cn("min-w-0 flex-[1_1_7rem] text-sm", large ? "font-semibold text-foreground" : "text-muted-foreground")}>{label}</dt>
       <dd
         className={cn(
-          "text-right font-semibold tabular-nums",
+          // ml-auto keeps the figure on the right whether it shares the line
+          // with its label or has wrapped onto its own.
+          "ml-auto min-w-0 text-right font-semibold tabular-nums",
           large ? "text-xl font-bold" : "text-base text-foreground",
           emphasis === "positive" && "text-emerald-700 dark:text-emerald-400",
           emphasis === "negative" && "text-red-700 dark:text-red-400",
@@ -174,7 +187,7 @@ function LegRow({
       {aside && (
         <dd
           className={cn(
-            "col-span-2 text-right text-xs font-semibold tabular-nums",
+            "w-full text-right text-xs font-semibold tabular-nums",
             emphasis === "positive" && "text-emerald-700 dark:text-emerald-400",
             emphasis === "negative" && "text-red-700 dark:text-red-400",
           )}
@@ -182,7 +195,7 @@ function LegRow({
           {aside}
         </dd>
       )}
-      {note && <dd className="col-span-2 mt-0.5 text-xs leading-relaxed text-muted-foreground tabular-nums">{note}</dd>}
+      {note && <dd className="mt-0.5 w-full text-xs leading-relaxed text-muted-foreground tabular-nums">{note}</dd>}
     </div>
   );
 }

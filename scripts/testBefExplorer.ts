@@ -559,6 +559,22 @@ async function main() {
     check('its links out are befexplorer.com’s, opened in a new tab', external.length > 0 && external.every((href) => /BEF_CALCULATOR_URL|risksUrl/.test(href)) && EXPLORER_SOURCES.every((rel) => [...read(rel).matchAll(/<a\s[^>]*>/g)].every((m) => /target="_blank"/.test(m[0]) && /rel="noopener noreferrer"/.test(m[0]))), external);
   }
 
+  /* ─────────────────────────────────────────── the figures on a phone ── */
+  // A grid column sized `auto` next to `minmax(0,1fr)` is sized by Safari (so
+  // by every iPhone browser) from the row's spanning items instead of the
+  // figure in it: "€0,3110" was given 14 pixels and painted the rest outside
+  // the card and off the screen (Brilly, 21. 9. 2026). Chrome laid the very
+  // same markup out correctly, so only reading the file catches a relapse.
+  console.log('— the figures stay inside their card on a phone —');
+  {
+    const autoTrack = EXPLORER_SOURCES.filter((rel) => /grid-cols-\[[^\]]*_auto\]/.test(read(rel)));
+    check('no grid column left for the engine to guess at (Safari guesses wrong)', autoTrack.length === 0, autoTrack);
+    const legs = read(`${EXPLORER_DIR}/ScenarioLegs.tsx`);
+    check('the figure row wraps instead of squeezing', /flex flex-wrap items-baseline/.test(legs));
+    check('the label may shrink, the figure keeps the right', /min-w-0 flex-\[1_1_/.test(legs) && /ml-auto min-w-0 text-right/.test(legs));
+    check('the breakdown and the second figure span the row', (legs.match(/w-full text-right/g) || []).length === 1 && /mt-0\.5 w-full text-xs/.test(legs) && !legs.includes('col-span-2'));
+  }
+
   /* ───────────────────────────────────────────────────────────────── copy ── */
   console.log('— no promise vocabulary in the Explorer’s own words —');
   {

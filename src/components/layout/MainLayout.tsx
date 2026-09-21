@@ -703,8 +703,9 @@ export default function MainLayout() {
         <Outlet />
       </main>
 
-      {/* Version indicator for debugging */}
-      <div className="fixed bottom-2 right-2 text-[10px] text-muted-foreground/50 pointer-events-none z-50">
+      {/* Version indicator for debugging — under any bottom bar (z-50), which
+          on a phone it used to sit on top of, over the last tab's name. */}
+      <div className="fixed bottom-2 right-2 text-[10px] text-muted-foreground/50 pointer-events-none z-40">
         v{appVersion}
       </div>
     </div>
