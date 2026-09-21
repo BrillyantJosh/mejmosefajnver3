@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -38,19 +38,20 @@ export const useNostrOwnCases = () => {
       }
 
       const relays = parameters.relays;
-      const pool = new SimplePool();
-      
       try {
         // Fetch both cases created by user and cases where user is a participant
-        const authoredEvents = await pool.querySync(relays, {
-          kinds: [87044],
-          authors: [session.nostrHexId],
-        });
-        
-        const participantEvents = await pool.querySync(relays, {
-          kinds: [87044],
-          "#p": [session.nostrHexId],
-        });
+        // Through this app's server — see src/lib/relayReadViaServer.ts. Both
+        // reads now run at once as well; they never depended on each other.
+        const [authoredEvents, participantEvents] = await Promise.all([
+          queryEventsViaServer({
+            kinds: [87044],
+            authors: [session.nostrHexId],
+          }, { label: 'my OWN cases (KIND 87044)' }),
+          queryEventsViaServer({
+            kinds: [87044],
+            "#p": [session.nostrHexId],
+          }, { label: 'OWN cases I take part in (KIND 87044)' }),
+        ]);
         
         // Combine and deduplicate events
         const allEvents = [...authoredEvents];
@@ -96,7 +97,6 @@ export const useNostrOwnCases = () => {
         console.error('Error fetching OWN cases:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 

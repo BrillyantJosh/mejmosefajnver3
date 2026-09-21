@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 // Reads the beings' OWN-process CHANGE COMMITMENTS for one case root — the
@@ -73,11 +73,13 @@ export const useOwnCommitments = (caseRoot: string | null) => {
     let cancelled = false;
     setCommitments([]); setIsLoading(true);
     const relays = parameters.relays;
-    const pool = new SimplePool();
 
     (async () => {
       try {
-        const evs = await pool.querySync(relays, { kinds: [CHANGE_COMMITMENT_KIND], '#e': [caseRoot], limit: 500 });
+        // Through this app's server: nostr-tools invents an EOSE 4.4 s after a
+        // subscription opens and throws away every event still queued behind it,
+        // so on a phone this list came back as a part of itself, silently.
+        const evs = await queryEventsViaServer({ kinds: [CHANGE_COMMITMENT_KIND], '#e': [caseRoot], limit: 500 }, { label: 'change commitments' });
         if (cancelled) return;
         // Param-replaceable: newest per (being, d-tag) FIRST — dedupe must run
         // BEFORE the withdrawn filter, otherwise dropping a withdrawn newest
@@ -159,7 +161,7 @@ export const useOwnCommitments = (caseRoot: string | null) => {
       }
     })();
 
-    return () => { cancelled = true; pool.close(relays); };
+    return () => { cancelled = true; };
   }, [caseRoot, parameters?.relays]);
 
   return { commitments, isLoading };

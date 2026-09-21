@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 // Reads the beings' OWN-process assessments for one case root. The beings
@@ -291,7 +292,6 @@ export const useOwnAssessments = (caseRoot: string | null) => {
     // Clear the previous process's data immediately on switch.
     setEntries([]); setStates([]); setIsLoading(true);
     const relays = parameters.relays;
-    const pool = new SimplePool();
 
     (async () => {
       try {
@@ -304,9 +304,16 @@ export const useOwnAssessments = (caseRoot: string | null) => {
         // (24 and 30 July), while the two assessed that morning came through.
         // The data was on the relays the whole time. own-matrix.js already
         // carries this exact fix; this hook never got it.
+        // Read through this app's server, not relay sockets in the browser.
+        // This is the longest list in the OWN process — up to 5000 entries, each
+        // schnorr-verified as nostr-tools hands it over — and the library gives
+        // the subscription 4.4 s before it invents an EOSE and discards the rest
+        // of the queue. That is the same shape as the bug this hook already
+        // carries a note about: verdicts that were on the relays the whole time
+        // showing as "Še ni ocene". maxPages covers all 5000 at 500 a page.
         const [entryEvs, stateEvs] = await Promise.all([
-          pool.querySync(relays, { kinds: [ASSESSMENT_ENTRY_KIND], '#e': [caseRoot], limit: 5000 }),
-          pool.querySync(relays, { kinds: [ASSESSMENT_STATE_KIND], '#e': [caseRoot], limit: 500 }),
+          queryEventsViaServer<Event>({ kinds: [ASSESSMENT_ENTRY_KIND], '#e': [caseRoot], limit: 5000 }, { maxPages: 12, label: 'assessment entries' }),
+          queryEventsViaServer<Event>({ kinds: [ASSESSMENT_STATE_KIND], '#e': [caseRoot], limit: 500 }, { label: 'assessment phase states' }),
         ]);
         const evs = [...entryEvs, ...stateEvs];
         if (cancelled) return;
@@ -365,7 +372,7 @@ export const useOwnAssessments = (caseRoot: string | null) => {
       }
     })();
 
-    return () => { cancelled = true; pool.close(relays); };
+    return () => { cancelled = true; };
   }, [caseRoot, parameters?.relays]);
 
   return { entries, states, isLoading };

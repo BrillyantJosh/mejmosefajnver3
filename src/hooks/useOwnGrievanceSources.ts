@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { SimplePool, nip44 } from 'nostr-tools';
+import { nip44 } from 'nostr-tools';
+import { getEventViaServer, queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNostrGroupKey } from '@/hooks/useNostrGroupKey';
@@ -175,16 +176,18 @@ export const useOwnGrievanceSources = (caseRoot: string | null): {
     setSourcesByBeing(new Map());
     setIsLoading(true);
     const relays = parameters.relays;
-    const pool = new SimplePool();
     const groupKeyBytes = hexToBytes(groupKey);
 
     (async () => {
       try {
-        const evs = await pool.querySync(relays, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts. The
+        // content stays sealed either way; it is decrypted here, with the group
+        // key, exactly as before.
+        const evs = await queryEventsViaServer({
           kinds: [GRIEVANCE_SOURCE_KIND],
           '#e': [caseRoot],
           limit: 500,
-        });
+        }, { label: 'grievance sources' });
         if (cancelled) return;
 
         // Newest replaceable event per being wins.
@@ -244,7 +247,7 @@ export const useOwnGrievanceSources = (caseRoot: string | null): {
       }
     })();
 
-    return () => { cancelled = true; pool.close(relays); };
+    return () => { cancelled = true; };
   }, [caseRoot, groupKey, parameters?.relays]);
 
   // Open the ORIGINAL message a source points to: fetch the 87046 event by id,
@@ -253,10 +256,8 @@ export const useOwnGrievanceSources = (caseRoot: string | null): {
   const fetchOriginal = useCallback(async (msgId: string): Promise<OriginalMessage | null> => {
     const relays = parameters?.relays;
     if (!groupKey || !relays?.length || !/^[0-9a-f]{64}$/i.test(msgId)) return null;
-    const pool = new SimplePool();
     try {
-      const evs = await pool.querySync(relays, { ids: [msgId], kinds: [GROUP_MESSAGE_KIND] });
-      const ev = evs[0];
+      const ev = await getEventViaServer({ ids: [msgId], kinds: [GROUP_MESSAGE_KIND] });
       if (!ev) return null;
       const convKey = nip44.v2.utils.getConversationKey(hexToBytes(groupKey), ev.pubkey);
       const payload = JSON.parse(nip44.v2.decrypt(ev.content, convKey));
@@ -270,8 +271,6 @@ export const useOwnGrievanceSources = (caseRoot: string | null): {
       };
     } catch {
       return null;   // undecryptable / not found / malformed
-    } finally {
-      pool.close(relays);
     }
   }, [groupKey, parameters?.relays]);
 

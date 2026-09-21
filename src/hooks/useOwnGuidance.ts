@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 // Reads the beings' OWN-process GUIDANCE entries (KIND 87048) for one case
@@ -45,11 +46,13 @@ export const useOwnGuidance = (caseRoot: string | null) => {
     let cancelled = false;
     setEntries([]); setIsLoading(true);
     const relays = parameters.relays;
-    const pool = new SimplePool();
 
     (async () => {
       try {
-        const evs = await pool.querySync(relays, { kinds: [GUIDANCE_ENTRY_KIND], '#e': [caseRoot], limit: 500 });
+        // Through this app's server: nostr-tools invents an EOSE 4.4 s after a
+        // subscription opens and throws away every event still queued behind it,
+        // so on a phone this list came back as a part of itself, silently.
+        const evs = await queryEventsViaServer({ kinds: [GUIDANCE_ENTRY_KIND], '#e': [caseRoot], limit: 500 }, { label: 'guidance entries' });
         if (cancelled) return;
         const seen = new Set<string>();
         const out: GuidanceEntry[] = [];
@@ -85,7 +88,7 @@ export const useOwnGuidance = (caseRoot: string | null) => {
       }
     })();
 
-    return () => { cancelled = true; pool.close(relays); };
+    return () => { cancelled = true; };
   }, [caseRoot, parameters?.relays]);
 
   return { entries, isLoading };

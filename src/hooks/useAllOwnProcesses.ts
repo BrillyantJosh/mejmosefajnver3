@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 // Reads ALL active OWN process records (KIND 37044) — not just the current
@@ -68,10 +69,12 @@ export const useAllOwnProcesses = () => {
     let cancelled = false;
     setIsLoading(true);
     const relays = parameters.relays;
-    const pool = new SimplePool();
     (async () => {
       try {
-        const evs = await pool.querySync(relays, { kinds: [37044], limit: 500 });
+        // Through this app's server: nostr-tools invents an EOSE 4.4 s after a
+        // subscription opens and throws away every event still queued behind it,
+        // so on a phone this list came back as a part of itself, silently.
+        const evs = await queryEventsViaServer<Event>({ kinds: [37044], limit: 500 }, { label: 'OWN process records (KIND 37044)' });
         if (cancelled) return;
         const byD = new Map<string, Event>();
         for (const ev of evs) {
@@ -89,7 +92,7 @@ export const useAllOwnProcesses = () => {
         if (!cancelled) setIsLoading(false);
       }
     })();
-    return () => { cancelled = true; pool.close(relays); };
+    return () => { cancelled = true; };
   }, [parameters?.relays]);
 
   return { processes, isLoading };

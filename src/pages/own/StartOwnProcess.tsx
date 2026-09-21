@@ -9,6 +9,7 @@ import { ArrowLeft, Triangle, Loader2, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { SimplePool, finalizeEvent } from 'nostr-tools';
+import { getEventViaServer } from '@/lib/relayReadViaServer';
 import { toast } from 'sonner';
 
 interface PostAuthor {
@@ -36,23 +37,23 @@ export default function StartOwnProcess() {
       if (!postId) return;
       
       setIsLoadingAuthor(true);
-      const pool = new SimplePool();
 
       try {
-        // First fetch the post to get author pubkey
-        const post = await pool.get(relays, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts. It also
+        // takes the NEWEST match rather than whichever relay answered first.
+        const post = await getEventViaServer({
           ids: [postId],
           kinds: [1]
-        });
+        }, { label: 'the post this process starts from' });
 
         if (post) {
           const authorPubkey = post.pubkey;
           
           // Then fetch author profile
-          const profile = await pool.get(relays, {
+          const profile = await getEventViaServer({
             authors: [authorPubkey],
             kinds: [0]
-          });
+          }, { label: 'the author profile (KIND 0)' });
 
           let displayName = authorPubkey.slice(0, 8) + '...';
           let picture: string | undefined;
@@ -77,7 +78,6 @@ export default function StartOwnProcess() {
         console.error('Error fetching post author:', error);
       } finally {
         setIsLoadingAuthor(false);
-        pool.close(relays);
       }
     };
 
