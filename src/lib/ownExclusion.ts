@@ -1,5 +1,6 @@
 import { SimplePool } from 'nostr-tools';
 import type { Event } from 'nostr-tools';
+import { readFromRelays } from './relayRead';
 
 /**
  * Who is EXCLUDED by a commission gross-violation report (KIND 87058).
@@ -30,9 +31,6 @@ export interface Exclusion {
   eventId: string;
 }
 
-const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
-  Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
-
 const parseUntil = (raw?: string): number | null => {
   const t = (raw ?? '').trim();
   // Absent or non-positive means no end — never an expiry already passed.
@@ -46,9 +44,22 @@ export const hasLapsed = (untilSplit: number | null, currentSplit: number | null
   return currentSplit >= untilSplit;
 };
 
+/**
+ * readFromRelays, not pool.querySync, for both reads below.
+ *
+ * An exclusion that still stands is a refusal, so a list that came back short
+ * lets someone back in. nostr-tools invents an EOSE 4.4 s after a subscription
+ * opens and discards every event still queued behind it — on a phone that is
+ * most of a 300-event answer — and it counts a relay that never connected as
+ * having sent EOSE, so an outage is delivered as a confident empty list.
+ */
+const READ_BUDGET_MS = 9000;
+
 async function trustedPublishers(pool: SimplePool, relays: string[]): Promise<string[]> {
   try {
-    const evs = (await withTimeout(pool.querySync(relays, { kinds: [38888], limit: 5 }), 8000)) as Event[];
+    const evs = [
+      ...(await readFromRelays(pool, relays, { kinds: [38888], limit: 5 }, { budgetMs: READ_BUDGET_MS })).events,
+    ] as Event[];
     evs.sort((a, b) => b.created_at - a.created_at);
     const named = JSON.parse(evs[0]?.content || '{}')?.trusted_signers?.LanaSelfResponsibility;
     return (Array.isArray(named) ? named : named ? [named] : []).map((k: string) => String(k).toLowerCase());
@@ -75,10 +86,13 @@ export async function listActiveExclusions(
     const publishers = await trustedPublishers(pool, relays);
     if (publishers.length === 0) return [];
 
-    const evs = (await withTimeout(
-      pool.querySync(relays, { kinds: [VIOLATION_KIND], limit: 300 }),
-      9000,
-    )) as Event[];
+    const read = await readFromRelays(pool, relays, { kinds: [VIOLATION_KIND], limit: 300 }, { budgetMs: READ_BUDGET_MS });
+    if (read.answered.length === 0) {
+      console.warn(
+        `📡 No relay answered for KIND ${VIOLATION_KIND} (${read.failed.map((f) => `${f.url}: ${f.reason}`).join(' | ')}) — exclusions unknown, not "none".`,
+      );
+    }
+    const evs = read.events as Event[];
 
     const byViolation = new Map<string, Event>();
     for (const e of evs) {

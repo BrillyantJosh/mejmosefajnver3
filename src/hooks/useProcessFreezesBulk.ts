@@ -17,6 +17,7 @@ import { useState, useEffect } from 'react';
 import { SimplePool } from 'nostr-tools';
 import type { Event } from 'nostr-tools/pure';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { readFromRelays } from '@/lib/relayRead';
 import { fetchFacilitatorRegistry } from '@/lib/facilitatorRegistry';
 import {
   PERSON_FREEZE_KIND,
@@ -79,11 +80,34 @@ export const useProcessFreezesBulk = (caseRoots: string[]): BulkFreezes => {
         // case's authorised authors. Each case is then filtered against ITS OWN
         // allow-list below, so a facilitator of case A can never freeze someone
         // in case B just by being in the shared author filter.
-        const events: Event[] = await pool.querySync(relays, {
-          kinds: [PERSON_FREEZE_KIND], '#e': [...authorityByRoot.keys()],
-          authors: [...everyAuthor], limit: 2000,
-        });
+        //
+        // readFromRelays, not pool.querySync, and for the same reason as the
+        // single-case hook: a notice dropped on the way here releases someone.
+        // This is the worst-placed read of the two — up to 2000 events, every
+        // one schnorr-verified as it is handed over, while nostr-tools gives the
+        // subscription 4.4 s before it invents an EOSE and throws away the rest
+        // of the queue. On a phone that is a board of cases quietly showing
+        // nobody as frozen.
+        const read = await readFromRelays(
+          pool,
+          relays,
+          {
+            kinds: [PERSON_FREEZE_KIND], '#e': [...authorityByRoot.keys()],
+            authors: [...everyAuthor], limit: 2000,
+          },
+          { budgetMs: 15000 },
+        );
         if (cancelled) return;
+
+        if (read.answered.length === 0) {
+          console.warn(
+            `📡 No relay answered for KIND ${PERSON_FREEZE_KIND} (${read.failed.map((f) => `${f.url}: ${f.reason}`).join(' | ')}) — asserting nothing about anyone`,
+          );
+          setByCase(new Map());
+          setIsLoading(false);
+          return;
+        }
+        const events: Event[] = read.events as Event[];
 
         const currentSplit = parseSplit(splitRaw);
         const noticesByRoot = new Map<string, ReturnType<typeof parseFreezeNotice>[]>();

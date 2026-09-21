@@ -125,3 +125,51 @@ export async function readRelayEventsViaServer<E extends PagedEvent>(
   });
   return { ...read, events: genuine, forged: read.events.length - genuine.length };
 }
+
+/**
+ * The two drop-ins the sweep uses in place of `pool.querySync` / `pool.get`.
+ *
+ * They exist so that replacing a client-side read is a one-line change at the
+ * call site: same shape in, same shape out. What they add over the raw
+ * `readRelayEventsViaServer` is that a read which did NOT return everything
+ * says so in the console instead of returning a plausible-looking short list —
+ * the failure mode this whole change is about.
+ *
+ * `label` is what that line names, so a truncated list can be traced back to
+ * the screen it feeds without a stack trace.
+ */
+export interface ServerReadOptions extends RelayReadViaServerOptions {
+  label?: string;
+}
+
+/** Same in and out as `pool.querySync(relays, filter)`, read through our server. */
+export async function queryEventsViaServer<E extends PagedEvent>(
+  filter: Record<string, unknown>,
+  { label, ...opts }: ServerReadOptions = {},
+): Promise<E[]> {
+  const read = await readRelayEventsViaServer<E>(filter, opts);
+  const what = label ?? `kinds ${JSON.stringify((filter as { kinds?: unknown }).kinds ?? '?')}`;
+  if (!read.complete) {
+    console.warn(
+      `📄 ${what}: stopped at the page cap after ${read.pages} pages (${read.events.length} events) — this list is the newest part, not all of it.`,
+    );
+  }
+  if (read.forged > 0) {
+    console.warn(`🚫 ${what}: ${read.forged} event(s) dropped, the signature did not check out.`);
+  }
+  return read.events;
+}
+
+/**
+ * Same in and out as `pool.get(relays, filter)`: the newest single match, or
+ * null. `pool.get` takes whichever relay answered first; this takes the newest
+ * across all of them, which is what every caller here actually meant.
+ */
+export async function getEventViaServer<E extends PagedEvent>(
+  filter: Record<string, unknown>,
+  opts: ServerReadOptions = {},
+): Promise<E | null> {
+  const events = await queryEventsViaServer<E>(filter, { maxPages: 1, ...opts });
+  if (events.length === 0) return null;
+  return events.reduce((newest, e) => (e.created_at > newest.created_at ? e : newest));
+}

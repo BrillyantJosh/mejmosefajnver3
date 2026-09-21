@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { SimplePool } from 'nostr-tools';
+import { readFromRelays } from '@/lib/relayRead';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { evaluateCashOut, type InFlightCashOut } from '@/lib/cashOutDue';
@@ -58,18 +59,30 @@ export function useLana8WonderCashOut() {
       const pool = new SimplePool();
 
       try {
-        // 1. Fetch KIND 88888 annuity plan
-        const events = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [88888],
-            '#p': [session.nostrHexId],
-          }),
-          new Promise<never[]>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), 10000)
-          )
-        ]);
+        // 1. Fetch KIND 88888 annuity plan.
+        //
+        // readFromRelays, not pool.querySync: this count is how a holder learns
+        // a level is due for pay-out, so a missed plan is missed money. querySync
+        // counts a relay that never connected as having sent EOSE and nostr-tools
+        // invents an EOSE 4.4 s in, discarding whatever is still queued — either
+        // way an unread plan arrives as "nothing pending".
+        const read = await readFromRelays(
+          pool,
+          relays,
+          { kinds: [88888], '#p': [session.nostrHexId] },
+          { budgetMs: 10000 },
+        );
+        const events = [...read.events];
 
-        if (!events || events.length === 0) {
+        if (read.answered.length === 0) {
+          // Silence. Leave the badge as it stands rather than clearing it.
+          console.warn(
+            `📡 No relay answered for KIND 88888 (${read.failed.map((f) => `${f.url}: ${f.reason}`).join(' | ')}) — pay-out count left as it was`,
+          );
+          return;
+        }
+
+        if (events.length === 0) {
           setPendingCount(0);
           return;
         }

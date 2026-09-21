@@ -3,6 +3,7 @@ import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { SimplePool } from 'nostr-tools';
+import { readFromRelays } from '@/lib/relayRead';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { finalizeEvent, VerifiedEvent } from 'nostr-tools';
 import { useState } from 'react';
@@ -68,9 +69,30 @@ export default function WalletCard({
           limit: 1
         };
 
+        // Deleting one wallet means REPUBLISHING the whole list, so whatever is
+        // read here decides which wallets survive. Two ways that read could lie,
+        // and both cost the person wallets:
+        //  - pool.querySync counts a relay that never connected as having sent
+        //    EOSE, and nostr-tools invents an EOSE 4.4 s in and discards what is
+        //    still queued — so an outage and a slow phone both arrive as `[]`.
+        //  - `events[0]` was whichever relay replied first, not the newest
+        //    revision: a lagging relay's older list would be republished as
+        //    current, quietly removing every wallet added since.
         console.log('🔄 Fetching existing wallet list...');
-        const events = await queryPool.querySync(parameters.relays, filter);
-        const existingEvent = events[0];
+        const read = await readFromRelays(queryPool, parameters.relays, filter, { budgetMs: 10000 });
+        const existingEvent = read.events.reduce<typeof read.events[number] | undefined>(
+          (newest, e) => (!newest || e.created_at > newest.created_at ? e : newest),
+          undefined,
+        );
+
+        if (read.answered.length === 0) {
+          console.warn(
+            `📡 No relay answered for KIND 30289 (${read.failed.map((f) => `${f.url}: ${f.reason}`).join(' | ')})`,
+          );
+          toast.error('Could not reach the relays — nothing was changed');
+          setIsDeleting(false);
+          return;
+        }
 
         if (!existingEvent) {
           toast.error('Wallet list not found');

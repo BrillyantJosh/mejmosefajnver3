@@ -1,5 +1,6 @@
 import { SimplePool, finalizeEvent, nip44, getPublicKey } from 'nostr-tools';
 import type { Event } from 'nostr-tools';
+import { readFromRelays } from './relayRead';
 
 /**
  * KIND 87059 — a re-entry request, published by the excluded person.
@@ -30,9 +31,22 @@ const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
   Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 
 /** The platform key from KIND 38888 — who the answers are encrypted TO. */
+/**
+ * readFromRelays, not pool.querySync, for both reads here.
+ *
+ * Whom the answers are encrypted TO must not come from a half-read list, and
+ * "we found no request of yours" must not be what an unreachable relay looks
+ * like — someone would be invited to apply a second time. nostr-tools invents
+ * an EOSE 4.4 s after a subscription opens, discards whatever is still queued,
+ * and counts a relay that never connected as having answered.
+ */
+const READ_BUDGET_MS = 8000;
+
 async function platformPubkey(pool: SimplePool, relays: string[]): Promise<string | null> {
   try {
-    const evs = (await withTimeout(pool.querySync(relays, { kinds: [38888], limit: 5 }), 8000)) as Event[];
+    const evs = [
+      ...(await readFromRelays(pool, relays, { kinds: [38888], limit: 5 }, { budgetMs: READ_BUDGET_MS })).events,
+    ] as Event[];
     evs.sort((a, b) => b.created_at - a.created_at);
     const signers = JSON.parse(evs[0]?.content || '{}')?.trusted_signers?.LanaSelfResponsibility;
     const key = Array.isArray(signers) ? signers[0] : signers;
@@ -117,10 +131,15 @@ export async function findOwnReentryRequest(params: {
 
   const pool = new SimplePool();
   try {
-    const evs = (await withTimeout(
-      pool.querySync(relays, { kinds: [REENTRY_KIND], '#p': [pubkey.toLowerCase()] }),
-      8000,
-    )) as Event[];
+    const read = await readFromRelays(
+      pool,
+      relays,
+      { kinds: [REENTRY_KIND], '#p': [pubkey.toLowerCase()] },
+      { budgetMs: READ_BUDGET_MS },
+    );
+    // Nobody answered: unreadable, not "you never applied".
+    if (read.answered.length === 0) return null;
+    const evs = read.events as Event[];
 
     const mine = evs
       // Nobody applies on another's behalf — the signature must be the applicant's.

@@ -1,4 +1,5 @@
 import { SimplePool, type Event } from 'nostr-tools';
+import { readFromRelays } from './relayRead';
 
 /**
  * Is this person frozen by a commission gross-violation decision?
@@ -53,8 +54,20 @@ const writeCache = (pubkey: string, v: FreezeVerdict) => {
   } catch { /* private mode — the live check still runs every time */ }
 };
 
-const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
-  Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+/**
+ * Every read here goes through readFromRelays, never pool.querySync.
+ *
+ * Two reasons, and this gate is hit by both. A relay that fails to CONNECT is
+ * counted by nostr-tools as having sent EOSE, so a total outage resolves to
+ * `[]` — which here would read as "no registrar record for this person", a
+ * verdict rather than a silence. And 4.4 s after a subscription opens the
+ * library synthesises an EOSE of its own, closes the subscription and DISCARDS
+ * every message still queued; on a phone that can throw away the very KIND
+ * 30889 that carries the freeze. readFromRelays reports WHICH relays answered,
+ * so "nobody answered" stays distinguishable from "answered, nothing there",
+ * and its eoseTimeout sits above the budget so no EOSE it sees is invented.
+ */
+const READ_BUDGET_MS = 8000;
 
 /**
  * A frozen verdict, once seen, survives a later failure to read.
@@ -77,10 +90,10 @@ async function trustedSigners(
   relays: string[],
 ): Promise<{ registrar: string[]; platform: string[] }> {
   try {
-    const evs = (await withTimeout(
-      pool.querySync(relays, { kinds: [38888], limit: 5 }),
-      8000,
-    )) as Event[];
+    const read = await readFromRelays(pool, relays, { kinds: [38888], limit: 5 }, { budgetMs: READ_BUDGET_MS });
+    // No relay answered: an empty signer list, which the caller already treats
+    // as "no verdict can be formed" rather than "not frozen".
+    const evs = [...read.events] as Event[];
     evs.sort((a, b) => b.created_at - a.created_at);
     const content = JSON.parse(evs[0]?.content || '{}');
     const list = (v: unknown): string[] =>
@@ -113,12 +126,17 @@ export async function checkGrossViolationFreeze(
       // against, so no new verdict can be formed.
       return cached?.frozen ? { ...cached } : { frozen: false, unknown: true };
     }
-    const walletEvents = (await withTimeout(
-      pool.querySync(relays, { kinds: [30889], '#d': [hex] }),
-      8000,
-    )) as Event[];
+    const walletRead = await readFromRelays(pool, relays, { kinds: [30889], '#d': [hex] }, { budgetMs: READ_BUDGET_MS });
+    if (walletRead.answered.length === 0) {
+      // Silence, not an answer. Deciding "not frozen" on this would release a
+      // sanctioned person the moment the network wobbled.
+      console.warn(
+        `📡 No relay answered for KIND 30889 (${walletRead.failed.map((f) => `${f.url}: ${f.reason}`).join(' | ')}) — the freeze gate reports UNKNOWN, not "not frozen"`,
+      );
+      return cached?.frozen ? { ...cached } : { frozen: false, unknown: true };
+    }
 
-    const trusted = walletEvents.filter((e) => registrarSigners.includes(e.pubkey));
+    const trusted = (walletRead.events as Event[]).filter((e) => registrarSigners.includes(e.pubkey));
     if (trusted.length === 0) {
       return cached?.frozen ? { ...cached } : { frozen: false, unknown: true };
     }
@@ -139,10 +157,9 @@ export async function checkGrossViolationFreeze(
     let since: number | undefined;
     let violationEventId: string | undefined;
     try {
-      const reports = (await withTimeout(
-        pool.querySync(relays, { kinds: [VIOLATION_KIND], '#p': [hex] }),
-        8000,
-      )) as Event[];
+      const reports = (
+        await readFromRelays(pool, relays, { kinds: [VIOLATION_KIND], '#p': [hex] }, { budgetMs: READ_BUDGET_MS })
+      ).events as Event[];
 
       const honoured = reports
         .filter((e) => platformSigners.length === 0 || platformSigners.includes(e.pubkey))
@@ -165,10 +182,10 @@ export async function checkGrossViolationFreeze(
     // most: it is all they will see.
     let lang: string | undefined;
     try {
-      const profile = (await withTimeout(
-        pool.querySync(relays, { kinds: [0], authors: [hex], limit: 1 }),
-        6000,
-      )) as Event[];
+      const profile = (
+        await readFromRelays(pool, relays, { kinds: [0], authors: [hex], limit: 1 }, { budgetMs: 6000 })
+      ).events as Event[];
+      profile.sort((a, b) => b.created_at - a.created_at);
       const content = JSON.parse(profile[0]?.content || '{}');
       const raw = String(content?.lang || content?.language || '').toLowerCase().split(/[-_]/)[0];
       if (raw) lang = raw;

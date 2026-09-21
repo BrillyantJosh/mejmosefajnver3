@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SimplePool, Filter } from 'nostr-tools';
+import { readFromRelays } from '@/lib/relayRead';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 export interface UnregisteredWallet {
@@ -39,16 +40,23 @@ export function useNostrUnregisteredWallets() {
         limit: 100
       };
 
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Query timeout')), 15000)
-      );
+      // readFromRelays, not pool.querySync: these lists are wallets, and a list
+      // that came back short is one a person will add again by hand, believing
+      // it lost. nostr-tools invents an EOSE 4.4 s after the subscription opens
+      // and discards every event still queued behind it, and counts a relay that
+      // never connected as having answered — so both a slow phone and a dead
+      // network arrive here as a short, confident list.
+      const read = await readFromRelays(pool, relays, filter, { budgetMs: 15000 });
+      const events = read.events;
 
-      const events = await Promise.race([
-        pool.querySync(relays, filter),
-        timeout
-      ]);
+      if (read.answered.length === 0) {
+        console.warn(
+          `📡 No relay answered for KIND 30289 (${read.failed.map((f) => `${f.url}: ${f.reason}`).join(' | ')}) — keeping the lists already on screen`,
+        );
+        return;
+      }
 
-      console.log(`✅ Fetched ${events.length} unregistered wallet list events`);
+      console.log(`✅ Fetched ${events.length} unregistered wallet list events from ${read.answered.length}/${relays.length} relays`);
 
       // Process events
       const processedLists: UnregisteredWalletList[] = [];

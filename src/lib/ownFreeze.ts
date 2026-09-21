@@ -24,6 +24,7 @@
  */
 import type { Event } from 'nostr-tools/pure';
 import type { SimplePool } from 'nostr-tools';
+import { readFromRelays } from './relayRead';
 
 export const PERSON_FREEZE_KIND = 87057;
 const CASE_KIND = 87044;
@@ -156,6 +157,9 @@ export interface RosterResolution {
 
 const UNVERIFIED: RosterResolution = { allow: null, contested: false };
 
+/** Per relay, and above the library's own 4.4 s invented EOSE by construction. */
+const ROSTER_BUDGET_MS = 9000;
+
 /**
  * The per-case roster arm — FAIL CLOSED.
  *
@@ -183,10 +187,22 @@ export const resolveFacilitatorAllowList = async (
   const root = lower(caseRoot);
   if (!HEX64.test(root)) return UNVERIFIED;
 
-  const [caseEvents, records] = await Promise.all([
-    pool.querySync(relays, { ids: [root], kinds: [CASE_KIND], limit: 1 }),
-    pool.querySync(relays, { kinds: [PROCESS_RECORD_KIND], '#d': [`own:${root}`], limit: 200 }),
+  // readFromRelays, not pool.querySync. Both halves of this are fail-closed, so
+  // a short read is a wrong verdict, not a thin one: nostr-tools invents an EOSE
+  // 4.4 s after the subscription opens and throws away whatever is still queued,
+  // which on a phone can drop the very 37044 that carries the authority — and it
+  // counts a relay that never connected as having answered, so total silence
+  // arrives here as a confident empty list. A missing record turns an authorised
+  // facilitator into an intruder, or a genuine roster into a contested one.
+  const [caseRead, recordRead] = await Promise.all([
+    readFromRelays(pool, relays, { ids: [root], kinds: [CASE_KIND], limit: 1 }, { budgetMs: ROSTER_BUDGET_MS }),
+    readFromRelays(pool, relays, { kinds: [PROCESS_RECORD_KIND], '#d': [`own:${root}`], limit: 200 }, { budgetMs: ROSTER_BUDGET_MS }),
   ]);
+  // Nobody answered about the records: unreadable, which is not the same fact as
+  // "no such process" and must not authorise anyone.
+  if (recordRead.answered.length === 0) return UNVERIFIED;
+  const caseEvents = caseRead.events as Event[];
+  const records = recordRead.events as Event[];
   if (records.length === 0) return UNVERIFIED; // nothing to anchor to
 
   // Per author keep TWO things: the newest record (their current state) and

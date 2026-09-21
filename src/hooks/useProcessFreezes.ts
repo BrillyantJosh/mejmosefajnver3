@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react';
 import { SimplePool } from 'nostr-tools';
 import type { Event } from 'nostr-tools/pure';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { readFromRelays } from '@/lib/relayRead';
 import { fetchFacilitatorRegistry } from '@/lib/facilitatorRegistry';
 import {
   PERSON_FREEZE_KIND,
@@ -84,11 +85,28 @@ export const useProcessFreezes = (caseRoot: string | null): ProcessFreezes => {
           return;
         }
 
-        const events: Event[] = await pool.querySync(relays, {
-          kinds: [PERSON_FREEZE_KIND], '#e': [caseRoot.toLowerCase()],
-          authors: [...authority], limit: 500,
-        });
+        // readFromRelays, not pool.querySync: this read decides a sanction, so a
+        // notice that never arrives releases someone. nostr-tools invents an
+        // EOSE 4.4 s after the subscription opens and discards every event still
+        // queued behind it — on a phone that is most of a 500-event answer — and
+        // it counts a relay that never connected as having sent EOSE, so an
+        // outage is delivered here as "no freezes on this case".
+        const read = await readFromRelays(
+          pool,
+          relays,
+          { kinds: [PERSON_FREEZE_KIND], '#e': [caseRoot.toLowerCase()], authors: [...authority], limit: 500 },
+          { budgetMs: 10000 },
+        );
         if (cancelled) return;
+
+        if (read.answered.length === 0) {
+          console.warn(
+            `📡 No relay answered for KIND ${PERSON_FREEZE_KIND} (${read.failed.map((f) => `${f.url}: ${f.reason}`).join(' | ')}) — unverified, not "nobody is frozen"`,
+          );
+          setResult({ states: new Map(), isLoading: false, unverified: true, contested: false, currentSplit: parseSplit(splitRaw) });
+          return;
+        }
+        const events: Event[] = read.events as Event[];
 
         const notices = events.map(parseFreezeNotice).filter((n): n is NonNullable<typeof n> => n !== null);
         const currentSplit = parseSplit(splitRaw);
