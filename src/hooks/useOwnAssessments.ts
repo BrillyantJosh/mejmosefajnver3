@@ -310,9 +310,10 @@ export const useOwnAssessments = (caseRoot: string | null) => {
         // the subscription 4.4 s before it invents an EOSE and discards the rest
         // of the queue. That is the same shape as the bug this hook already
         // carries a note about: verdicts that were on the relays the whole time
-        // showing as "Še ni ocene". maxPages covers all 5000 at 500 a page.
+        // showing as "Še ni ocene". The 5000 are read ten pages of 500 at a
+        // time, because that is what the limit asks for.
         const [entryEvs, stateEvs] = await Promise.all([
-          queryEventsViaServer<Event>({ kinds: [ASSESSMENT_ENTRY_KIND], '#e': [caseRoot], limit: 5000 }, { maxPages: 12, label: 'assessment entries' }),
+          queryEventsViaServer<Event>({ kinds: [ASSESSMENT_ENTRY_KIND], '#e': [caseRoot], limit: 5000 }, { label: 'assessment entries' }),
           queryEventsViaServer<Event>({ kinds: [ASSESSMENT_STATE_KIND], '#e': [caseRoot], limit: 500 }, { label: 'assessment phase states' }),
         ]);
         const evs = [...entryEvs, ...stateEvs];

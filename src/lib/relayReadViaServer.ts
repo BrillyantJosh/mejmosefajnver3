@@ -108,25 +108,29 @@ export async function readRelayEventsViaServer<E extends PagedEvent>(
   filter: Record<string, unknown>,
   { timeout, signal, verify = true, ...paging }: RelayReadViaServerOptions = {},
 ): Promise<PagedRead<E>> {
-  // A caller who asked for `limit: 50` meant 50, not "page through everything
-  // fifty at a time" and not "500 because that is what a page holds". One page
-  // of exactly that size is what pool.querySync would have done, so a read
-  // moved onto this path fetches no more than it used to. A limit above what a
-  // relay will answer in one go (500) is a request for everything up to it, and
-  // pages normally.
+  // A caller's `limit` is a number they meant, in both directions.
+  //
+  // `limit: 50` means fifty, in one page — not five hundred because that is
+  // what a page holds, and not "page through everything fifty at a time". A
+  // read moved onto this path must not fetch more than pool.querySync did.
+  // `limit: 1000` means a thousand, so it is read as two pages of five hundred
+  // rather than the six the default allows: a phone asked for a thousand
+  // should not be handed three. Only a caller who names no limit at all is
+  // asking for everything the filter matches.
   const asked = Number((filter as { limit?: unknown }).limit);
-  const bounded = Number.isFinite(asked) && asked > 0 && asked <= RELAY_PAGE_SIZE;
-  const pageSize = paging.pageSize ?? (bounded ? asked : RELAY_PAGE_SIZE);
-  const maxPages = paging.maxPages ?? (bounded ? 1 : undefined);
+  const bounded = Number.isFinite(asked) && asked > 0;
+  const pageSize = paging.pageSize ?? Math.min(bounded ? asked : RELAY_PAGE_SIZE, RELAY_PAGE_SIZE);
+  const maxPages = paging.maxPages ?? (bounded ? Math.ceil(asked / pageSize) : undefined);
   const read = await readAllPages<E>(
     (until) =>
       fetchRelayPage<E>({ ...filter, limit: pageSize, ...(until === undefined ? {} : { until }) }, { timeout, signal }),
     { ...paging, pageSize, ...(maxPages === undefined ? {} : { maxPages }) },
   );
-  // `complete` means "everything the filter asked for", so a bounded read that
-  // came back full is complete — it is not the truncation this reports on, and
-  // warning about it on every `limit: 1` lookup would bury the real ones.
-  if (bounded) read.complete = true;
+  // `complete` means "everything the filter asked for". A read that stopped
+  // because it had delivered the caller's own limit is complete, so a
+  // `limit: 1` lookup does not warn about a list cut short and bury the reads
+  // that really were cut short.
+  if (bounded && read.events.length >= Math.min(asked, maxPages! * pageSize)) read.complete = true;
   if (!verify) return { ...read, forged: 0 };
 
   const genuine = read.events.filter((event) => {

@@ -157,7 +157,7 @@ export const useNostrListings = () => {
         const events = await queryEventsViaServer({
           kinds: [36502],
           limit: 2000,
-        }, { timeout: 15000, maxPages: 6, label: 'shop listings (KIND 36502)' });
+        }, { timeout: 15000, label: 'shop listings (KIND 36502)' });
 
         console.log('📦 Fetched listings:', events.length);
 

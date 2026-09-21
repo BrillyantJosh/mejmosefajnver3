@@ -142,6 +142,27 @@ console.log('— a caller that asked for a fixed number gets that many —');
   }
 
   {
+    // A limit above one page is still a number the caller meant: two pages for
+    // a thousand, not the six a limitless read is allowed.
+    const page = (n) => Array.from({ length: 500 }, (_, i) => event(1_700_010_000 - n * 500 - i));
+    const s = server([page(0), page(1), page(2), page(3), page(4), page(5), page(6)]);
+    try {
+      const events = await queryEventsViaServer({ kinds: [36500], limit: 1000 });
+      check('a thousand is read as two pages, not six', s.asked.length === 2, s.asked.length);
+      check('…and a thousand is what comes back', events.length === 1000, events.length);
+    } finally { s.restore(); }
+  }
+
+  {
+    const page = (n) => Array.from({ length: 500 }, (_, i) => event(1_700_020_000 - n * 500 - i));
+    const s = server([page(0), page(1), page(2), [event(1_600_000_001)]]);
+    try {
+      const read = await readRelayEventsViaServer({ kinds: [36500], limit: 2000 });
+      check('two thousand asked, four pages allowed, and it stops early when the relay runs out', read.pages === 4 && read.complete, { pages: read.pages, complete: read.complete });
+    } finally { s.restore(); }
+  }
+
+  {
     const older = event(1_700_004_000);
     const newer = event(1_700_004_500);
     const s = server([[older, newer]]);
