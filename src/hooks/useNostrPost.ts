@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { SimplePool } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 
 interface NostrProfile {
   name?: string;
@@ -31,7 +31,6 @@ export function useNostrPost(eventId: string, relays: string[]) {
       return;
     }
 
-    const pool = new SimplePool();
     let isMounted = true;
     const isMobile = /Mobile|Android|iPhone/i.test(navigator.userAgent);
     const POST_TIMEOUT = isMobile ? 15000 : 10000;
@@ -50,15 +49,11 @@ export function useNostrPost(eventId: string, relays: string[]) {
         setError(null);
 
         // Fetch post by ID with timeout (optimized for mobile)
-        const events = await Promise.race([
-          pool.querySync(relays, {
-            ids: [eventId],
-            kinds: [1]
-          }),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout')), POST_TIMEOUT)
-          )
-        ]);
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const events = await queryEventsViaServer({
+          ids: [eventId],
+          kinds: [1]
+        }, { timeout: POST_TIMEOUT, label: 'this post (KIND 1)' });
 
         if (!isMounted) return;
 
@@ -75,15 +70,10 @@ export function useNostrPost(eventId: string, relays: string[]) {
         setPost(event as NostrPost);
 
         // Fetch author profile with mobile-optimized timeout
-        const profileEvents = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [0],
-            authors: [event.pubkey]
-          }),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout')), PROFILE_TIMEOUT)
-          )
-        ]);
+        const profileEvents = await queryEventsViaServer({
+          kinds: [0],
+          authors: [event.pubkey]
+        }, { timeout: PROFILE_TIMEOUT, label: 'post author profile (KIND 0)' });
 
         if (!isMounted) return;
 
@@ -109,7 +99,6 @@ export function useNostrPost(eventId: string, relays: string[]) {
 
     return () => {
       isMounted = false;
-      pool.close(relays);
     };
   }, [eventId, relays]);
 

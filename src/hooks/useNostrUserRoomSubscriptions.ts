@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 interface RoomSubscription {
@@ -29,7 +30,6 @@ export const useNostrUserRoomSubscriptions = ({ userPubkey, userPrivateKey }: Us
       return;
     }
 
-    const pool = new SimplePool();
     try {
       setLoading(true);
       
@@ -43,7 +43,8 @@ export const useNostrUserRoomSubscriptions = ({ userPubkey, userPrivateKey }: Us
         limit: 1
       };
 
-      const events = await pool.querySync(RELAYS, filter);
+      // Through this app's server — see src/lib/relayReadViaServer.ts.
+      const events = await queryEventsViaServer<Event>(filter, { label: 'my room subscriptions' });
       
       console.log('📨 Found', events.length, 'subscription events');
       
@@ -89,7 +90,6 @@ export const useNostrUserRoomSubscriptions = ({ userPubkey, userPrivateKey }: Us
       setSubscriptions([]);
     } finally {
       setLoading(false);
-      pool.close(RELAYS);
     }
   }, [userPubkey, RELAYS]);
 

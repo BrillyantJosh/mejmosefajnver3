@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Filter, Event, nip44 } from 'nostr-tools';
+import { Filter, Event, nip44 } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 const hexToBytes = (hex: string): Uint8Array => {
@@ -54,7 +55,6 @@ export const useNostrGroupKey = (
     }
 
     const fetchGroupKey = async () => {
-      const pool = new SimplePool();
       
       try {
         console.log('🔍 Fetching KIND 87045 (group key) for:', {
@@ -70,7 +70,9 @@ export const useNostrGroupKey = (
           limit: 50
         };
 
-        const events = await pool.querySync(parameters.relays, filter);
+        // Through this app's server — see src/lib/relayReadViaServer.ts. The key itself
+        // stays sealed to this person; only the envelope travels.
+        const events = await queryEventsViaServer<Event>(filter as Record<string, unknown>, { label: 'group keys (KIND 87045)' });
         
         console.log(`📦 Found ${events.length} group key events (KIND 87045)`);
 
@@ -155,7 +157,6 @@ export const useNostrGroupKey = (
         console.error('Error fetching group key:', error);
       } finally {
         setIsLoading(false);
-        pool.close(parameters.relays);
       }
     };
 

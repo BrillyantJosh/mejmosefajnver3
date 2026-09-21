@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 export interface RoomLatestPost {
@@ -104,7 +105,6 @@ export function useNostrRoomLatestPosts(roomSlugs: string[]) {
       return;
     }
 
-    const pool = new SimplePool();
     let isMounted = true;
 
     const fetchLatestPosts = async () => {
@@ -116,19 +116,20 @@ export function useNostrRoomLatestPosts(roomSlugs: string[]) {
         // Fetch posts for each room slug
         for (const slug of roomSlugs) {
           try {
+            // Through this app's server — see src/lib/relayReadViaServer.ts.
             // Query with 't' tag
-            const events = await pool.querySync(RELAYS, {
+            const events = await queryEventsViaServer<Event>({
               kinds: [1],
               '#t': [slug],
               limit: 10
-            });
+            }, { label: `room ${slug}, latest #t post` });
 
             // Also query with 'a' tag
-            const eventsA = await pool.querySync(RELAYS, {
+            const eventsA = await queryEventsViaServer<Event>({
               kinds: [1],
               '#a': [slug],
               limit: 10
-            });
+            }, { label: `room ${slug}, latest #a post` });
 
             const allEvents = [...events, ...eventsA];
 
@@ -183,7 +184,6 @@ export function useNostrRoomLatestPosts(roomSlugs: string[]) {
 
     return () => {
       isMounted = false;
-      pool.close(RELAYS);
     };
   }, [roomSlugs.join(','), RELAYS]);
 

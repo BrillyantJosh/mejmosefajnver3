@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { SimplePool, Filter, Event } from 'nostr-tools';
+import { Filter, Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { EncryptedRoom, RoomMember } from '@/types/encryptedRooms';
@@ -56,7 +57,6 @@ export const useEncryptedRooms = () => {
   const fetchRooms = useCallback(async () => {
     if (!userPubkey || !parameters?.relays) return;
 
-    const pool = new SimplePool();
     try {
       console.log('🔒 Fetching encrypted rooms for user:', userPubkey.slice(0, 16));
 
@@ -66,7 +66,9 @@ export const useEncryptedRooms = () => {
         limit: 100,
       };
 
-      const events = await pool.querySync(parameters.relays, filter);
+      // Through this app's server — see src/lib/relayReadViaServer.ts. The room list
+      // is public metadata; what is inside a room stays encrypted.
+      const events = await queryEventsViaServer<Event>(filter, { label: 'encrypted rooms (KIND 30100)' });
       console.log(`📦 Found ${events.length} room events (KIND 30100)`);
 
       const parsedRooms = events
@@ -80,7 +82,6 @@ export const useEncryptedRooms = () => {
       console.error('Error fetching encrypted rooms:', error);
     } finally {
       setIsLoading(false);
-      pool.close(parameters.relays);
     }
   }, [userPubkey, parameters?.relays]);
 

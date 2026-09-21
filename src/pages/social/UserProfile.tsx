@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
-import { SimplePool } from "nostr-tools";
+import { getEventViaServer, queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Badge } from "@/components/ui/badge";
@@ -48,18 +48,16 @@ export default function UserProfile() {
 
     const fetchData = async () => {
       setLoading(true);
-      const pool = new SimplePool();
 
       try {
         // Fetch KIND 0 profile
-        const profileEvent = await Promise.race([
-          pool.get(relays, {
-            kinds: [0],
-            authors: [pubkey],
-            limit: 1
-          }),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000))
-        ]);
+        // Through this app's server — see src/lib/relayReadViaServer.ts. It
+        // takes the NEWEST profile rather than whichever relay answered first.
+        const profileEvent = await getEventViaServer({
+          kinds: [0],
+          authors: [pubkey],
+          limit: 1
+        }, { timeout: 10000, label: 'this person profile (KIND 0)' });
 
         if (profileEvent?.content) {
           try {
@@ -80,14 +78,11 @@ export default function UserProfile() {
         }
 
         // Fetch user's posts (KIND 1)
-        const userPostsEvents = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [1],
-            authors: [pubkey],
-            limit: 50
-          }),
-          new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 15000))
-        ]);
+        const userPostsEvents = await queryEventsViaServer({
+          kinds: [1],
+          authors: [pubkey],
+          limit: 50
+        }, { timeout: 15000, label: 'this person posts (KIND 1)' });
 
         // Filter out replies (posts with 'e' tag are comments)
         const userPosts: UserPost[] = userPostsEvents
@@ -111,7 +106,6 @@ export default function UserProfile() {
         console.error('Error fetching user data:', error);
       } finally {
         setLoading(false);
-        pool.close(relays);
       }
     };
 

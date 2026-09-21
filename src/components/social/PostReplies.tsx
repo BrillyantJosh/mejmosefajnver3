@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { Loader2, Heart, Send, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -49,16 +50,12 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
 
     try {
       // Fetch all posts that reference this post ID with mobile-optimized timeout
-      const replyEvents = await Promise.race([
-        pool.querySync(relays, {
-          kinds: [1],
-          '#e': [postId], // Posts that reference this event
-          limit: 100
-        }),
-        new Promise<Event[]>((_, reject) => 
-          setTimeout(() => reject(new Error('Replies query timeout')), FETCH_TIMEOUT)
-        )
-      ]).catch(err => {
+      // Through this app's server — see src/lib/relayReadViaServer.ts.
+      const replyEvents = await queryEventsViaServer<Event>({
+        kinds: [1],
+        '#e': [postId], // Posts that reference this event
+        limit: 100
+      }, { timeout: FETCH_TIMEOUT, label: 'replies to this post' }).catch(err => {
         console.error('❌ Replies query failed:', err);
         return [];
       });
@@ -81,11 +78,11 @@ export function PostReplies({ postId, relays, onLashComment, isSendingLash, lash
       
       for (const pubkey of uniqueAuthors) {
         try {
-          const profileEvent = await pool.querySync(relays, {
+          const profileEvent = await queryEventsViaServer({
             kinds: [0],
             authors: [pubkey],
             limit: 1
-          });
+          }, { label: 'reply author profile (KIND 0)' });
 
           if (profileEvent && profileEvent.length > 0) {
             const profileData = JSON.parse(profileEvent[0].content) as NostrProfile;

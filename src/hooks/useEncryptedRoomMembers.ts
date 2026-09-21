@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { SimplePool, Filter, Event } from 'nostr-tools';
+import { Filter, Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import type { RoomMember } from '@/types/encryptedRooms';
 
@@ -18,25 +19,26 @@ export const useEncryptedRoomMembers = (roomEventId: string | null) => {
   const fetchMembers = useCallback(async () => {
     if (!roomEventId || !parameters?.relays) return;
 
-    const pool = new SimplePool();
     try {
       // Fetch room creation, accepts (KIND 1103), and leaves/removals (KIND 1105) in parallel
+      // Through this app's server — see src/lib/relayReadViaServer.ts. A
+      // dropped 1105 would leave someone in the member list who has left.
       const [roomEvents, acceptEvents, leaveEvents] = await Promise.all([
-        pool.querySync(parameters.relays, {
+        queryEventsViaServer<Event>({
           kinds: [30100],
           ids: [roomEventId],
           limit: 1,
-        } as Filter),
-        pool.querySync(parameters.relays, {
+        } as Filter as Record<string, unknown>, { label: 'this room (KIND 30100)' }),
+        queryEventsViaServer<Event>({
           kinds: [1103],
           '#e': [roomEventId],
           limit: 200,
-        } as Filter),
-        pool.querySync(parameters.relays, {
+        } as Filter as Record<string, unknown>, { label: 'room accepts (KIND 1103)' }),
+        queryEventsViaServer<Event>({
           kinds: [1105],
           '#e': [roomEventId],
           limit: 200,
-        } as Filter),
+        } as Filter as Record<string, unknown>, { label: 'room leaves (KIND 1105)' }),
       ]);
 
       if (roomEvents.length === 0) {
@@ -109,7 +111,6 @@ export const useEncryptedRoomMembers = (roomEventId: string | null) => {
       console.error('Error fetching room members:', error);
     } finally {
       setIsLoading(false);
-      pool.close(parameters.relays);
     }
   }, [roomEventId, parameters?.relays]);
 

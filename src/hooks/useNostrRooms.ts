@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 const ROOMS_PUBKEY = "b66ccf84bc6cf1a56ba9941f29932824f4986803358a0bed03769a1cbf480101";
@@ -30,7 +31,6 @@ export const useNostrRooms = () => {
   }, [parameters]);
 
   useEffect(() => {
-    const pool = new SimplePool();
     let isMounted = true;
 
     const fetchRooms = async () => {
@@ -44,7 +44,8 @@ export const useNostrRooms = () => {
           limit: 1
         };
 
-        const events = await pool.querySync(RELAYS, filter);
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const events = await queryEventsViaServer<Event>(filter, { label: 'rooms manifest' });
         
         if (!isMounted) return;
 
@@ -133,7 +134,6 @@ export const useNostrRooms = () => {
 
     return () => {
       isMounted = false;
-      pool.close(RELAYS);
     };
   }, [RELAYS]);
 

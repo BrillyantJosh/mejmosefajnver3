@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { sanitizeLanaWalletId } from '@/lib/crypto';
 
@@ -26,18 +26,12 @@ export const useNostrProfileCache = (pubkey: string | null) => {
   const relays = parameters?.relays || [];
 
   const fetchFromNostr = useCallback(async (hexId: string): Promise<CachedProfile | null> => {
-    const pool = new SimplePool();
-    
     try {
-      const events = await Promise.race([
-        pool.querySync(relays, {
-          kinds: [0],
-          authors: [hexId],
-        }),
-        new Promise<any[]>((_, reject) => 
-          setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
-        )
-      ]);
+      // Through this app's server — see src/lib/relayReadViaServer.ts.
+      const events = await queryEventsViaServer({
+        kinds: [0],
+        authors: [hexId],
+      }, { timeout: 10000, label: 'profile (KIND 0)' });
 
       if (events.length > 0) {
         const event = events[0];
@@ -62,7 +56,6 @@ export const useNostrProfileCache = (pubkey: string | null) => {
       console.error('Error fetching from Nostr:', error);
       return null;
     } finally {
-      pool.close(relays);
     }
   }, [relays]);
 

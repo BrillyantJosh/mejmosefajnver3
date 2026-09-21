@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrProfilesCacheBulk } from './useNostrProfilesCacheBulk';
 
@@ -22,7 +23,6 @@ export function useNostrRoomFeed(roomSlug: string | undefined) {
   const [hasMore, setHasMore] = useState(true);
   const [oldestTimestamp, setOldestTimestamp] = useState<number | null>(null);
   
-  const pool = useMemo(() => new SimplePool(), []);
   
   const RELAYS = useMemo(() => {
     return systemParameters?.relays || [];
@@ -55,14 +55,12 @@ export function useNostrRoomFeed(roomSlug: string | undefined) {
         console.log('📡 Room feed querying for #t and #a tags:', roomSlug);
 
         // Query both #t and #a tags (some posts use alternative tag)
-        const [eventsT, eventsA] = await Promise.race([
-          Promise.all([
-            pool.querySync(RELAYS, { kinds: [1], '#t': [roomSlug], limit: 20 }),
-            pool.querySync(RELAYS, { kinds: [1], '#a': [roomSlug], limit: 20 })
-          ]),
-          new Promise<[Event[], Event[]]>((_, reject) => 
-            setTimeout(() => reject(new Error('Query timeout')), 15000)
-          )
+        // Through this app's server — see src/lib/relayReadViaServer.ts. The
+        // Promise.race timeout goes with it: the server bounds its own wait, and
+        // racing a whole read against one clock threw away answers already in.
+        const [eventsT, eventsA] = await Promise.all([
+          queryEventsViaServer<Event>({ kinds: [1], '#t': [roomSlug], limit: 20 }, { timeout: 15000, label: `room ${roomSlug}, #t posts` }),
+          queryEventsViaServer<Event>({ kinds: [1], '#a': [roomSlug], limit: 20 }, { timeout: 15000, label: `room ${roomSlug}, #a posts` }),
         ]);
 
         // Combine and deduplicate by event id
@@ -131,7 +129,7 @@ export function useNostrRoomFeed(roomSlug: string | undefined) {
     return () => {
       isSubscribed = false;
     };
-  }, [roomSlug, RELAYS, pool]);
+  }, [roomSlug, RELAYS]);
 
   // Load more posts function
   const loadMore = useCallback(async () => {
@@ -144,14 +142,9 @@ export function useNostrRoomFeed(roomSlug: string | undefined) {
       const until = oldestTimestamp - 1;
 
       // Query both #t and #a tags for older posts
-      const [eventsT, eventsA] = await Promise.race([
-        Promise.all([
-          pool.querySync(RELAYS, { kinds: [1], '#t': [roomSlug], until, limit: 20 }),
-          pool.querySync(RELAYS, { kinds: [1], '#a': [roomSlug], until, limit: 20 })
-        ]),
-        new Promise<[Event[], Event[]]>((_, reject) => 
-          setTimeout(() => reject(new Error('Query timeout')), 15000)
-        )
+      const [eventsT, eventsA] = await Promise.all([
+        queryEventsViaServer<Event>({ kinds: [1], '#t': [roomSlug], until, limit: 20 }, { timeout: 15000, label: `room ${roomSlug}, older #t posts` }),
+        queryEventsViaServer<Event>({ kinds: [1], '#a': [roomSlug], until, limit: 20 }, { timeout: 15000, label: `room ${roomSlug}, older #a posts` }),
       ]);
 
       // Combine and deduplicate
@@ -215,7 +208,7 @@ export function useNostrRoomFeed(roomSlug: string | undefined) {
       console.error('❌ Error loading more posts:', error);
       setLoadingMore(false);
     }
-  }, [roomSlug, oldestTimestamp, loadingMore, hasMore, RELAYS, pool]);
+  }, [roomSlug, oldestTimestamp, loadingMore, hasMore, RELAYS]);
 
   // Merge posts with profiles and reply counts
   const postsWithProfiles = useMemo(() => {
@@ -225,13 +218,6 @@ export function useNostrRoomFeed(roomSlug: string | undefined) {
       replyCount: replyCounts.get(post.id) || 0
     }));
   }, [posts, cachedProfiles, replyCounts]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      pool.close(RELAYS);
-    };
-  }, [pool, RELAYS]);
 
   return {
     posts: postsWithProfiles,

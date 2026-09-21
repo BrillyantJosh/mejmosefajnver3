@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { getProxiedImageUrl } from '@/lib/imageProxy';
 import { sanitizeLanaWalletId } from '@/lib/crypto';
@@ -83,18 +83,14 @@ export const useNostrProfilesCacheBulk = (pubkeys: string[]) => {
       
       if (pubkeysToFetch.length > 0) {
         console.log('📡 Fetching from Nostr:', pubkeysToFetch.length, 'pubkeys');
-        const pool = new SimplePool();
-        
         try {
-          const events = await Promise.race([
-            pool.querySync(relays, {
-              kinds: [0],
-              authors: pubkeysToFetch,
-            }),
-            new Promise<any[]>((_, reject) => 
-              setTimeout(() => reject(new Error('Bulk profile fetch timeout')), 15000)
-            )
-          ]);
+          // Through this app's server: this is the read behind every name and
+          // avatar on a feed, so when nostr-tools dropped the tail of its queue
+          // the page filled with anonymous posts. See relayReadViaServer.ts.
+          const events = await queryEventsViaServer({
+            kinds: [0],
+            authors: pubkeysToFetch,
+          }, { timeout: 15000, label: 'profiles in bulk (KIND 0)' });
 
           console.log('✅ Fetched', events.length, 'KIND 0 events from relays');
 
@@ -168,7 +164,6 @@ export const useNostrProfilesCacheBulk = (pubkeys: string[]) => {
         } catch (error) {
           console.error('Error fetching from Nostr:', error);
         } finally {
-          pool.close(relays);
         }
       }
     } catch (error) {

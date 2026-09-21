@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useNostrProfilesCacheBulk } from './useNostrProfilesCacheBulk';
 
@@ -24,7 +25,6 @@ export function useNostrFeed(customRelays?: string[], tagFilter?: string) {
   const [visiblePosts, setVisiblePosts] = useState(10);
   const [relayStatus, setRelayStatus] = useState<Map<string, { success: number; failures: number; avgTime: number }>>(new Map());
   const [refreshCounter, setRefreshCounter] = useState(0);
-  const pool = useMemo(() => new SimplePool(), []);
 
   // Stabilize RELAYS reference — only change when actual URLs change, not array reference
   const relaysKey = useMemo(() => {
@@ -90,12 +90,12 @@ export function useNostrFeed(customRelays?: string[], tagFilter?: string) {
         let quickEvents: Event[] = [];
         
         try {
-          quickEvents = await Promise.race([
-            pool.querySync(RELAYS, quickFilter),
-            new Promise<Event[]>((_, reject) => 
-              setTimeout(() => reject(new Error('Quick query timeout')), 10000) // 10s for quick load
-            )
-          ]);
+          // Read through this app's server instead of opening relay sockets
+          // here: the feed is the longest list on a phone, and nostr-tools
+          // invents an EOSE 4.4 s after a subscription opens, closes it and
+          // discards every event still queued behind it. The Promise.race
+          // timeouts go with it — the server bounds its own wait.
+          quickEvents = await queryEventsViaServer<Event>(quickFilter, { timeout: 10000, label: 'feed, first posts' });
           
           const phase1Time = Date.now() - phase1Start;
           console.log(`✅ Phase 1 completed in ${phase1Time}ms - ${quickEvents.length} events`);
@@ -182,12 +182,7 @@ export function useNostrFeed(customRelays?: string[], tagFilter?: string) {
           let events: Event[] = [];
           
           try {
-            events = await Promise.race([
-              pool.querySync(RELAYS, fullFilter),
-              new Promise<Event[]>((_, reject) => 
-                setTimeout(() => reject(new Error('Full query timeout')), 30000) // 30s for full load
-              )
-            ]);
+            events = await queryEventsViaServer<Event>(fullFilter, { timeout: 20000, label: 'feed, full page' });
             
             const phase2Time = Date.now() - phase2Start;
             console.log(`✅ Phase 2 completed in ${phase2Time}ms - ${events.length} events`);
@@ -255,16 +250,11 @@ export function useNostrFeed(customRelays?: string[], tagFilter?: string) {
           if (allPostIds.length > 0) {
             try {
               console.log('💬 Fetching reply counts for', allPostIds.length, 'posts...');
-              const replyEvents = await Promise.race([
-                pool.querySync(RELAYS, {
-                  kinds: [1],
-                  '#e': allPostIds,
-                  limit: 500
-                }),
-                new Promise<Event[]>((_, reject) =>
-                  setTimeout(() => reject(new Error('Reply count timeout')), 10000)
-                )
-              ]).catch(() => [] as Event[]);
+              const replyEvents = await queryEventsViaServer<Event>({
+                kinds: [1],
+                '#e': allPostIds,
+                limit: 500
+              }, { timeout: 10000, label: 'reply counts' }).catch(() => [] as Event[]);
 
               const replyCountMap = new Map<string, number>();
               const postIdSet = new Set(allPostIds);
@@ -316,12 +306,7 @@ export function useNostrFeed(customRelays?: string[], tagFilter?: string) {
               pollFilter['#t'] = [stableTagFilter, stableTagFilter.toLowerCase()];
             }
 
-            const newEvents = await Promise.race([
-              pool.querySync(RELAYS, pollFilter),
-              new Promise<Event[]>((_, reject) => 
-                setTimeout(() => reject(new Error('Poll timeout')), 5000)
-              )
-            ]).catch(() => []);
+            const newEvents = await queryEventsViaServer<Event>(pollFilter, { timeout: 5000, label: 'feed poll' }).catch(() => [] as Event[]);
 
             if (newEvents.length === 0) {
               console.log('📭 No new posts');
@@ -406,9 +391,8 @@ export function useNostrFeed(customRelays?: string[], tagFilter?: string) {
       isSubscribed = false;
       if (pollInterval) clearInterval(pollInterval);
       if (phase2Timeout) clearTimeout(phase2Timeout);
-      pool.close(RELAYS);
     };
-  }, [RELAYS, pool, refreshCounter, stableTagFilter]);
+  }, [RELAYS, refreshCounter, stableTagFilter]);
 
   // Merge posts with profiles and reply counts
   const postsWithProfiles = useMemo(() => {

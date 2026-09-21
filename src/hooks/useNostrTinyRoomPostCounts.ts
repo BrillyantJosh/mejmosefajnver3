@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { SimplePool } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 
 export function useNostrTinyRoomPostCounts(roomEventIds: string[]) {
@@ -15,7 +15,6 @@ export function useNostrTinyRoomPostCounts(roomEventIds: string[]) {
 
     const RELAYS = parameters?.relays || [];
 
-    const pool = new SimplePool();
 
     const fetchCounts = async () => {
       try {
@@ -26,11 +25,12 @@ export function useNostrTinyRoomPostCounts(roomEventIds: string[]) {
         const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
 
         for (const roomId of roomEventIds) {
-          const events = await pool.querySync(RELAYS, {
+          // Through this app's server — see src/lib/relayReadViaServer.ts.
+          const events = await queryEventsViaServer({
             kinds: [1],
             "#e": [roomId],
             since: thirtyDaysAgo,
-          });
+          }, { label: `tiny room ${roomId.slice(0, 8)} post count` });
 
           counts[roomId] = events.length;
         }
@@ -46,7 +46,6 @@ export function useNostrTinyRoomPostCounts(roomEventIds: string[]) {
     fetchCounts();
 
     return () => {
-      pool.close(RELAYS);
     };
   }, [roomEventIds.join(","), parameters]);
 

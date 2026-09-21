@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { SimplePool, Event as NostrEvent } from "nostr-tools";
+import { Event as NostrEvent } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 
 export interface TinyRoom {
@@ -30,17 +31,17 @@ export function useNostrTinyRooms(userPubkey?: string) {
 
     const RELAYS = parameters?.relays || [];
 
-    const pool = new SimplePool();
     
     const fetchRooms = async () => {
       try {
         setLoading(true);
 
         // Fetch all KIND 30150 events where user is mentioned in 'p' tags
-        const events = await pool.querySync(RELAYS, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const events = await queryEventsViaServer<NostrEvent>({
           kinds: [30150],
           "#p": [userPubkey],
-        });
+        }, { label: 'my tiny rooms (KIND 30150)' });
 
         const parsedRooms: TinyRoom[] = events.map((event: NostrEvent) => {
           const dTag = event.tags.find(t => t[0] === "d")?.[1] || "";
@@ -82,7 +83,6 @@ export function useNostrTinyRooms(userPubkey?: string) {
     fetchRooms();
 
     return () => {
-      pool.close(RELAYS);
     };
   }, [userPubkey, parameters]);
 

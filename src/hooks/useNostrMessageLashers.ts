@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { isLashExpired } from '@/lib/lashExpiration';
 
@@ -20,7 +20,6 @@ export function useNostrMessageLashers(messageIds: string[]) {
   const { parameters } = useSystemParameters();
   const [messageLashers, setMessageLashers] = useState<Map<string, Lasher[]>>(new Map());
   const [loading, setLoading] = useState(false);
-  const pool = useMemo(() => new SimplePool(), []);
 
   const relays = parameters?.relays || [];
 
@@ -36,15 +35,13 @@ export function useNostrMessageLashers(messageIds: string[]) {
 
       try {
         // Fetch all recent KIND 39991 LASH events
-        const allRecentLashEvents = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [39991],
-            limit: 1000
-          }),
-          new Promise<any[]>((_, reject) => 
-            setTimeout(() => reject(new Error('LASH query timeout')), 5000)
-          )
-        ]).catch(err => {
+        // Through this app's server: a thousand LASH events, each verified one
+        // at a time, never fitted inside the 4.4 s nostr-tools allows itself
+        // before it invents an EOSE and drops the rest. See relayReadViaServer.
+        const allRecentLashEvents = await queryEventsViaServer({
+          kinds: [39991],
+          limit: 1000
+        }, { timeout: 10000, label: 'recent LASH events (KIND 39991)' }).catch(err => {
           console.error('❌ LASH query failed:', err);
           return [];
         });
@@ -66,15 +63,10 @@ export function useNostrMessageLashers(messageIds: string[]) {
         // Fetch profiles for all LASHers
         const profiles = new Map<string, any>();
         if (uniquePubkeys.length > 0) {
-          const profileEvents = await Promise.race([
-            pool.querySync(relays, {
-              kinds: [0],
-              authors: uniquePubkeys
-            }),
-            new Promise<any[]>((_, reject) => 
-              setTimeout(() => reject(new Error('Profile query timeout')), 3000)
-            )
-          ]).catch(() => []);
+          const profileEvents = await queryEventsViaServer({
+            kinds: [0],
+            authors: uniquePubkeys
+          }, { timeout: 5000, label: 'LASHer profiles (KIND 0)' }).catch(() => []);
 
           for (const event of profileEvents) {
             try {
@@ -143,7 +135,7 @@ export function useNostrMessageLashers(messageIds: string[]) {
     return () => {
       isSubscribed = false;
     };
-  }, [messageIds.join(','), relays.join(','), pool]);
+  }, [messageIds.join(','), relays.join(',')]);
 
   return { messageLashers, loading };
 }

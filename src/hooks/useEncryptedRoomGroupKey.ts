@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import {
   getRoomKeyFromCache,
@@ -53,18 +53,14 @@ export const useEncryptedRoomGroupKey = (
     }
 
     // Slow path: fetch KIND 1102 from relays
-    const pool = new SimplePool();
     try {
-      const inviteEvents = await Promise.race([
-        pool.querySync(relays, {
-          kinds: [1102],
-          '#p': [userPubkey],
-          limit: 50,
-        }),
-        new Promise<any[]>((_, reject) =>
-          setTimeout(() => reject(new Error('Invite fetch timeout')), 15000)
-        ),
-      ]);
+      // Through this app's server — see src/lib/relayReadViaServer.ts. The
+      // invite stays sealed to this person's key; only the envelope travels.
+      const inviteEvents = await queryEventsViaServer({
+        kinds: [1102],
+        '#p': [userPubkey],
+        limit: 50,
+      }, { timeout: 15000, label: 'room invites (KIND 1102)' });
 
       // Sort by created_at descending so we try the newest invites first
       inviteEvents.sort((a, b) => b.created_at - a.created_at);
@@ -116,7 +112,6 @@ export const useEncryptedRoomGroupKey = (
       setGroupKey(null);
     } finally {
       setIsLoading(false);
-      pool.close(relays);
     }
   }, [roomEventId, keyVersion, userPubkey, userPrivateKeyHex, parameters?.relays, roomId]);
 

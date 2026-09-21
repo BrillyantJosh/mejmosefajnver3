@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -34,20 +35,15 @@ export const useNostrPostComments = () => {
     }
 
     const fetchCommentsOnMyPosts = async () => {
-      const pool = new SimplePool();
       
       try {
         // Step 1: Fetch my posts (kind 1, author = me)
-        const myPosts = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [1],
-            authors: [nostrPublicKey],
-            limit: 100,
-          }),
-          new Promise<Event[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout fetching posts')), 10000)
-          )
-        ]);
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const myPosts = await queryEventsViaServer<Event>({
+          kinds: [1],
+          authors: [nostrPublicKey],
+          limit: 100,
+        }, { timeout: 10000, label: 'my posts (KIND 1)' });
 
         if (myPosts.length === 0) {
           setIsLoading(false);
@@ -62,15 +58,10 @@ export const useNostrPostComments = () => {
         const myPostIds = Array.from(postMap.keys());
 
         // Step 2: Fetch all comments (kind 1 events with "e" tag referencing my posts)
-        const commentEvents = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [1],
-            '#e': myPostIds,
-          }),
-          new Promise<Event[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout fetching comments')), 10000)
-          )
-        ]);
+        const commentEvents = await queryEventsViaServer<Event>({
+          kinds: [1],
+          '#e': myPostIds,
+        }, { timeout: 10000, label: 'comments on my posts' });
 
         // Filter out my own comments
         const otherComments = commentEvents.filter(comment => comment.pubkey !== nostrPublicKey);
@@ -82,15 +73,10 @@ export const useNostrPostComments = () => {
 
         // Step 3: Fetch profiles for comment authors
         const authorPubkeys = Array.from(new Set(otherComments.map(c => c.pubkey)));
-        const profileEvents = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [0],
-            authors: authorPubkeys,
-          }),
-          new Promise<Event[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout fetching profiles')), 5000)
-          )
-        ]);
+        const profileEvents = await queryEventsViaServer<Event>({
+          kinds: [0],
+          authors: authorPubkeys,
+        }, { timeout: 5000, label: 'commenter profiles (KIND 0)' });
 
         const profileMap = new Map(
           profileEvents.map(event => {
@@ -132,7 +118,6 @@ export const useNostrPostComments = () => {
         console.error('Error fetching post comments:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 

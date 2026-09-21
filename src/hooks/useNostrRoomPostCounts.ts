@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 interface RoomPostCounts {
@@ -27,7 +27,6 @@ export const useNostrRoomPostCounts = (roomSlugs: string[]) => {
     }
 
     const fetchPostCounts = async () => {
-      const pool = new SimplePool();
       setLoading(true);
 
       try {
@@ -44,7 +43,8 @@ export const useNostrRoomPostCounts = (roomSlugs: string[]) => {
           since: thirtyDaysAgo,
         };
 
-        const events = await pool.querySync(RELAYS, filter);
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const events = await queryEventsViaServer(filter, { label: 'room post counts' });
         
         console.log('📨 Total events received:', events.length);
 
@@ -72,7 +72,6 @@ export const useNostrRoomPostCounts = (roomSlugs: string[]) => {
         setPostCounts({});
       } finally {
         setLoading(false);
-        pool.close(RELAYS);
       }
     };
 
