@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { SimplePool } from "nostr-tools";
-import { useSystemParameters } from "@/contexts/SystemParametersContext";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNostrBusinessUnits } from "@/hooks/useNostrBusinessUnits";
+import { readRelayEventsViaServer } from "@/lib/relayReadViaServer";
 import {
   FOOD_CORNER_ALLOCATION_KIND,
   FOOD_CORNER_DELIVERY_KIND,
@@ -53,14 +52,22 @@ interface FoodCornerData {
   getNodeByRef: (nodeRef?: string) => FoodCornerNode | undefined;
 }
 
-const fetchTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> =>
-  Promise.race([
-    promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Eco Point fetch timeout")), ms)),
-  ]);
+/**
+ * Read in two groups, each its own request: what can be ordered, and what has
+ * happened. Mixing all seven kinds in one query meant the busier kinds could
+ * crowd the offers out of the relays' 500-event answer as activity piled up —
+ * and nothing would have said so.
+ */
+const CATALOG_KINDS = [FOOD_CORNER_NODE_KIND, FOOD_CORNER_LISTING_KIND, FOOD_CORNER_BEAUTY_LISTING_KIND];
+const ACTIVITY_KINDS = [
+  FOOD_CORNER_ORDER_KIND,
+  FOOD_CORNER_FULFILLMENT_KIND,
+  FOOD_CORNER_ALLOCATION_KIND,
+  FOOD_CORNER_DELIVERY_KIND,
+];
+const READ_TIMEOUT_MS = 15000;
 
 export function useFoodCornerData(): FoodCornerData {
-  const { parameters } = useSystemParameters();
   const { businessUnits, isLoading: businessUnitsLoading } = useNostrBusinessUnits();
   const [nodes, setNodes] = useState<FoodCornerNode[]>([]);
   const [allListings, setAllListings] = useState<FoodCornerListing[]>([]);
@@ -70,39 +77,37 @@ export function useFoodCornerData(): FoodCornerData {
   const [deliveries, setDeliveries] = useState<FoodCornerSupplierDelivery[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const relays = useMemo(() => parameters?.relays || [], [parameters?.relays]);
+  /** Only the newest read may write to the page; a slow earlier one is dropped. */
+  const readCounter = useRef(0);
 
   const refetch = useCallback(async () => {
-    if (relays.length === 0) {
-      setIsLoading(false);
-      return;
-    }
+    const mine = ++readCounter.current;
+    const isCurrent = () => mine === readCounter.current;
 
     setIsLoading(true);
     setError(null);
-    const pool = new SimplePool();
 
     try {
-      // Primary query — ALL kinds in one pass. This is the load-bearing fetch:
-      // orders, nodes and everything else must come from here.
-      const baseEvents = (await fetchTimeout(
-        pool.querySync(relays, {
-          kinds: [
-            FOOD_CORNER_NODE_KIND,
-            FOOD_CORNER_LISTING_KIND,
-            FOOD_CORNER_BEAUTY_LISTING_KIND,
-            FOOD_CORNER_ORDER_KIND,
-            FOOD_CORNER_FULFILLMENT_KIND,
-            FOOD_CORNER_ALLOCATION_KIND,
-            FOOD_CORNER_DELIVERY_KIND,
-          ],
-          limit: 4000,
-        }),
-        18000,
-      )) as FoodCornerRawEvent[];
+      // The load-bearing read: everything the module shows comes from these.
+      // Both go through this app's server rather than the phone opening its
+      // own relay sockets — see src/lib/relayReadViaServer.ts for why.
+      const [catalog, activity] = await Promise.allSettled([
+        readRelayEventsViaServer<FoodCornerRawEvent>({ kinds: CATALOG_KINDS }, { timeout: READ_TIMEOUT_MS }),
+        readRelayEventsViaServer<FoodCornerRawEvent>({ kinds: ACTIVITY_KINDS }, { timeout: READ_TIMEOUT_MS }),
+      ]);
+      if (!isCurrent()) return;
 
-      const rawEvents = baseEvents;
+      // What can be ordered is the point of the page: without it there is
+      // nothing to show, so that failure is the one that stops everything.
+      if (catalog.status === "rejected") throw catalog.reason;
+      const rawEvents = [
+        ...catalog.value.events,
+        ...(activity.status === "fulfilled" ? activity.value.events : []),
+      ];
+      if (activity.status === "rejected") {
+        console.error("Eco Point: orders and deliveries could not be read:", activity.reason);
+        setError("Orders could not be read just now — the offers below are complete.");
+      }
 
       const parsedNodes = dedupeReplaceable(
         rawEvents
@@ -151,10 +156,12 @@ export function useFoodCornerData(): FoodCornerData {
         const dTags = [...new Set(refs.map((r) => r.d).filter(Boolean))];
         if (kinds.length > 0 && authors.length > 0 && dTags.length > 0) {
           try {
-            const recovered = (await fetchTimeout(
-              pool.querySync(relays, { kinds, authors, "#d": dTags, limit: 1000 }),
-              10000,
-            )) as FoodCornerRawEvent[];
+            const recovered = (
+              await readRelayEventsViaServer<FoodCornerRawEvent>(
+                { kinds, authors, "#d": dTags },
+                { timeout: 10000, maxPages: 2 },
+              )
+            ).events;
             for (const event of recovered) {
               const listing = parseFoodCornerListing(event);
               if (listing && !listingMap.has(listing.ref)) {
@@ -200,6 +207,7 @@ export function useFoodCornerData(): FoodCornerData {
           .filter(Boolean) as FoodCornerSupplierDelivery[],
       ).sort((a, b) => b.createdAt - a.createdAt);
 
+      if (!isCurrent()) return;
       setNodes(parsedNodes);
       setAllListings(parsedListings);
       setFulfillments(parsedFulfillments);
@@ -207,14 +215,14 @@ export function useFoodCornerData(): FoodCornerData {
       setDeliveries(parsedDeliveries);
       setOrders(enrichOrders(parsedOrders, parsedFulfillments, parsedAllocations));
     } catch (err) {
+      if (!isCurrent()) return;
       const message = err instanceof Error ? err.message : "Failed to fetch Eco Point data";
       console.error("Eco Point fetch failed:", err);
       setError(message);
     } finally {
-      setIsLoading(false);
-      pool.close(relays);
+      if (isCurrent()) setIsLoading(false);
     }
-  }, [relays]);
+  }, []);
 
   useEffect(() => {
     refetch();
