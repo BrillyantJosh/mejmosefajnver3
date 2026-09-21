@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event as NostrEvent } from 'nostr-tools';
+import { Event as NostrEvent } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -28,16 +29,16 @@ export const useNostrRockReceived = () => {
       }
 
       const relays = parameters.relays;
-      const pool = new SimplePool();
 
       try {
         console.log('🪨 Fetching KIND 87033 references received by user...');
         
-        const events = await pool.querySync(relays, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const events = await queryEventsViaServer<NostrEvent>({
           kinds: [87033],
           '#p': [session.nostrHexId],
           limit: 500
-        });
+        }, { label: 'rocks I received (KIND 87033)' });
 
         console.log(`📋 Found ${events.length} KIND 87033 references received`);
 
@@ -64,7 +65,6 @@ export const useNostrRockReceived = () => {
         console.error('❌ Error fetching rock references received:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 

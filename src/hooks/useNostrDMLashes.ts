@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { SimplePool, type Event } from 'nostr-tools';
+import { type Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { supabase } from '@/integrations/supabase/client';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
@@ -60,16 +61,16 @@ export const useNostrDMLashes = (
 
     const syncFromRelays = async () => {
       setRelaySyncing(true);
-      const pool = new SimplePool();
 
       try {
         console.log('🔄 Syncing LASHes from relays for', messageIds.length, 'messages...');
 
-        const events: Event[] = await pool.querySync(relays, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const events: Event[] = await queryEventsViaServer<Event>({
           kinds: [39991],
           '#e': messageIds,
           limit: 1000
-        });
+        }, { label: 'LASHes on these messages (KIND 39991)' });
         console.log('📥 Fetched', events.length, 'LASH events from relays');
 
         // Upsert to Supabase (ignore duplicates)
@@ -112,7 +113,6 @@ export const useNostrDMLashes = (
         console.error('❌ Error syncing LASHes from relays:', error);
       } finally {
         setRelaySyncing(false);
-        pool.close(relays);
       }
     };
 

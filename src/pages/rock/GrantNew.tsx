@@ -12,6 +12,7 @@ import { useNostrKind0Profiles } from "@/hooks/useNostrKind0Profiles";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { SimplePool, Event as NostrEvent, finalizeEvent } from 'nostr-tools';
+import { getEventViaServer } from '@/lib/relayReadViaServer';
 import { toast } from "sonner";
 
 const familiarityOptions = [
@@ -79,13 +80,16 @@ export default function GrantNew() {
     try {
       // Find the target's KIND 0 event ID
       const pool = new SimplePool();
-      const kind0Events = await pool.querySync(parameters.relays, {
+      // Through this app's server — see src/lib/relayReadViaServer.ts. It takes
+      // the NEWEST profile rather than whichever relay answered first, so a rock
+      // is anchored to the event the rest of the fleet would also resolve.
+      const kind0Event = await getEventViaServer({
         kinds: [0],
         authors: [selectedProfile.pubkey],
         limit: 1
-      });
+      }, { label: 'the profile this rock is granted to (KIND 0)' });
 
-      const kind0EventId = kind0Events[0]?.id;
+      const kind0EventId = kind0Event?.id;
 
       // Create KIND 87033 event
       const eventTemplate = {

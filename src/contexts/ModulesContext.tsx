@@ -8,6 +8,7 @@ export const moduleDescription = (m: ModuleConfig, lang: string) =>
   lang === 'sl' && m.descriptionSl ? m.descriptionSl : m.description;
 export const moduleImage = (m: ModuleConfig, lang: string) => (lang === 'sl' && m.imageSl ? m.imageSl : m.image);
 import { SimplePool, Event, finalizeEvent } from 'nostr-tools';
+import { getEventViaServer } from '@/lib/relayReadViaServer';
 import { nip19 } from 'nostr-tools';
 import { useSystemParameters } from './SystemParametersContext';
 import { useAuth } from './AuthContext';
@@ -619,17 +620,17 @@ export function ModulesProvider({ children }: { children: ReactNode }) {
     try {
       console.log('📥 Fetching KIND 37334 settings from relays...');
 
-      const event = await Promise.race([
-        pool.get(parameters.relays, {
-          kinds: [37334],
-          authors: [publicKey],
-          '#d': [SETTINGS_D_TAG],
-          limit: 1
-        }),
-        new Promise<Event | null>((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 5000)
-        )
-      ]) as Event | null;
+      // Through this app's server — see src/lib/relayReadViaServer.ts. It takes
+      // the NEWEST settings event rather than whichever relay replied first, so
+      // a lagging relay can no longer hand back a superseded module list.
+      const event = await getEventViaServer<Event>({
+        kinds: [37334],
+        authors: [publicKey],
+        '#d': [SETTINGS_D_TAG],
+        limit: 1
+      }, { timeout: 5000, label: 'module settings (KIND 37334)' }).catch(() => {
+        throw new Error('Timeout');
+      });
 
       if (event) {
         console.log('✅ KIND 37334 event received:', event);

@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { SimplePool, Event } from 'nostr-tools';
+import { readFromRelays } from '@/lib/relayRead';
+import { choosePlanEvent } from '@/lib/planRead';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNostrWallets } from '@/hooks/useNostrWallets';
@@ -99,26 +101,32 @@ export const useDashboardData = (options: DashboardDataOptions = {}): DashboardD
       const pool = new SimplePool();
       
       try {
-        const events = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [88888],
-            '#p': [session.nostrHexId],
-          }),
-          new Promise<Event[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout')), 15000)
-          )
-        ]) as Event[];
-
-        if (events && events.length > 0) {
-          const latestEvent = events.sort((a, b) => b.created_at - a.created_at)[0];
-          const plan = JSON.parse(latestEvent.content) as AnnuityPlan;
-          setAnnuityPlan(plan);
-        } else {
+        // readFromRelays and choosePlanEvent, the same pair the Lana8Wonder
+        // page and the plan gate use: a plan is money, and "no relay answered"
+        // must not be shown as "you have no plan". querySync could not tell
+        // them apart — it counts a relay that never connected as one that
+        // answered with nothing.
+        const read = await readFromRelays(
+          pool,
+          relays,
+          { kinds: [88888], '#p': [session.nostrHexId] },
+          { budgetMs: 15000 },
+        );
+        const outcome = choosePlanEvent(read);
+        if (outcome.status === 'found') {
+          setAnnuityPlan(JSON.parse(outcome.event.content) as AnnuityPlan);
+        } else if (outcome.status === 'none') {
           setAnnuityPlan(null);
+        } else {
+          // Unreachable: keep whatever the dashboard already shows.
+          console.warn(
+            `📡 No relay answered for KIND 88888 (${read.failed.map((f) => `${f.url}: ${f.reason}`).join(' | ')}) — the plan card keeps what it had`,
+          );
         }
       } catch (error) {
+        // readFromRelays never rejects, so this is a fault on our side — still
+        // not evidence that this person has no plan.
         console.error('Error fetching annuity plan:', error);
-        setAnnuityPlan(null);
       } finally {
         setLana8WonderLoading(false);
         pool.close(relays);

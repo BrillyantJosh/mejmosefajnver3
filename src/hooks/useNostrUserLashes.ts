@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -12,7 +12,6 @@ export function useNostrUserLashes() {
   const { session } = useAuth();
   const [lashedEventIds, setLashedEventIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
-  const pool = useMemo(() => new SimplePool(), []);
 
   const relays = parameters?.relays || [];
 
@@ -28,16 +27,14 @@ export function useNostrUserLashes() {
         console.log('💜 Fetching user LASHes from relays...');
 
         // Fetch all KIND 39991 events authored by current user
-        const userLashEvents = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [39991],
-            authors: [session.nostrHexId],
-            limit: 1000
-          }),
-          new Promise<any[]>((_, reject) => 
-            setTimeout(() => reject(new Error('User LASH query timeout')), 5000)
-          )
-        ]).catch(err => {
+        // Through this app's server: a thousand LASH events never drained
+        // inside the 4.4 s nostr-tools allows itself before it invents an EOSE
+        // and discards the queue. See src/lib/relayReadViaServer.ts.
+        const userLashEvents = await queryEventsViaServer({
+          kinds: [39991],
+          authors: [session.nostrHexId],
+          limit: 1000
+        }, { timeout: 10000, label: 'LASHes I gave (KIND 39991)' }).catch(err => {
           console.error('❌ User LASH query failed:', err);
           return [];
         });
@@ -71,7 +68,7 @@ export function useNostrUserLashes() {
     return () => {
       isSubscribed = false;
     };
-  }, [session?.nostrHexId, relays.join(','), pool]);
+  }, [session?.nostrHexId, relays.join(',')]);
 
   return { lashedEventIds, loading };
 }

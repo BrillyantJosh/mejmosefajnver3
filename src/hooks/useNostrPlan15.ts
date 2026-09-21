@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SimplePool, Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { signNostrEvent } from '@/lib/nostrSigning';
@@ -128,8 +129,11 @@ export const useNostrPlan15 = () => {
     try {
       // 1) Members (31515) + Offers (31516) — global, keep latest per NIP-33 key
       const [memberEvents, offerEvents] = await Promise.all([
-        withTimeout(pool.querySync(relays, { kinds: [PLAN15_MEMBERSHIP_KIND] }), 10000, 'members') as Promise<Event[]>,
-        withTimeout(pool.querySync(relays, { kinds: [PLAN15_OFFER_KIND] }), 10000, 'offers') as Promise<Event[]>,
+        // Through this app's server — see src/lib/relayReadViaServer.ts. These
+        // four reads are the whole PLAN 15 board; each was capped at whatever a
+        // phone could verify inside the 4.4 s nostr-tools allows itself.
+        queryEventsViaServer<Event>({ kinds: [PLAN15_MEMBERSHIP_KIND] }, { timeout: 10000, label: 'PLAN 15 members' }),
+        queryEventsViaServer<Event>({ kinds: [PLAN15_OFFER_KIND] }, { timeout: 10000, label: 'PLAN 15 offers' }),
       ]);
 
       // Dedup members: latest per author
@@ -180,8 +184,8 @@ export const useNostrPlan15 = () => {
       let payoutEvents: Event[] = [];
       if (offerAddresses.length > 0) {
         [acceptEvents, payoutEvents] = await Promise.all([
-          withTimeout(pool.querySync(relays, { kinds: [PLAN15_ACCEPTANCE_KIND], '#a': offerAddresses }), 10000, 'acceptances') as Promise<Event[]>,
-          withTimeout(pool.querySync(relays, { kinds: [PLAN15_PAYOUT_KIND], '#a': offerAddresses }), 10000, 'payouts') as Promise<Event[]>,
+          queryEventsViaServer<Event>({ kinds: [PLAN15_ACCEPTANCE_KIND], '#a': offerAddresses }, { timeout: 10000, label: 'PLAN 15 acceptances' }),
+          queryEventsViaServer<Event>({ kinds: [PLAN15_PAYOUT_KIND], '#a': offerAddresses }, { timeout: 10000, label: 'PLAN 15 payouts' }),
         ]);
       }
 

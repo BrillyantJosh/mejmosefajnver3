@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { SimplePool, Filter, Event as NostrEvent } from 'nostr-tools';
+import { Filter, Event as NostrEvent } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -25,7 +26,6 @@ export const useNostrUserPayments = (): UseNostrUserPaymentsResult => {
       setIsLoading(true);
 
       const relays = parameters.relays;
-      const pool = new SimplePool();
 
       try {
         const filter: Filter = {
@@ -40,7 +40,8 @@ export const useNostrUserPayments = (): UseNostrUserPaymentsResult => {
           filter,
         });
 
-        const events = await pool.querySync(relays, filter);
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const events = await queryEventsViaServer<NostrEvent>(filter as Record<string, unknown>, { label: 'payment proposals naming me (KIND 90900)' });
         console.log(`💳 Found ${events.length} KIND 90900 events for user as #p`);
 
         const ids = new Set<string>();
@@ -80,7 +81,6 @@ export const useNostrUserPayments = (): UseNostrUserPaymentsResult => {
         setPaidProcessIds(new Set());
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 

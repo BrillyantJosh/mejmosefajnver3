@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { SimplePool, finalizeEvent, type Event } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { formatDistanceToNow } from "date-fns";
 import { sl as slLocale } from "date-fns/locale";
 import { Loader2, MessageCircle, Reply as ReplyIcon, Send, X } from "lucide-react";
@@ -90,16 +91,13 @@ const UFComments = ({ requestId, requestPubkey, recipientPubkey }: UFCommentsPro
     if (!skipLoadingState) setLoading(true);
     try {
       let queryFailed = false;
-      const events = await Promise.race([
-        pool.querySync(relays, {
-          kinds: [UF_COMMENT_KIND],
-          "#a": [aTag],
-          limit: 500,
-        }),
-        new Promise<Event[]>((_, reject) =>
-          setTimeout(() => reject(new Error("Comments query timeout")), FETCH_TIMEOUT)
-        ),
-      ]).catch((err) => {
+      // Through this app's server — see src/lib/relayReadViaServer.ts. A failed
+      // read still throws, which is what keeps the thread on screen below.
+      const events = await queryEventsViaServer<Event>({
+        kinds: [UF_COMMENT_KIND],
+        "#a": [aTag],
+        limit: 500,
+      }, { timeout: FETCH_TIMEOUT, label: 'comments on this request' }).catch((err) => {
         console.error("❌ UF comments query failed:", err);
         queryFailed = true;
         return [] as Event[];

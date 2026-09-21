@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { isLashExpired } from '@/lib/lashExpiration';
@@ -33,18 +33,19 @@ export const useNostrUnpaidLashDetails = () => {
 
   const relays = parameters?.relays || [];
 
-  const fetchRecipientProfile = async (pool: SimplePool, pubkey: string) => {
+  const fetchRecipientProfile = async (pubkey: string) => {
     // Check cache first
     if (profileCache.current.has(pubkey)) {
       return profileCache.current.get(pubkey)!;
     }
 
     try {
-      const profileEvents = await pool.querySync(relays, {
+      // Through this app's server — see src/lib/relayReadViaServer.ts.
+      const profileEvents = await queryEventsViaServer({
         kinds: [0],
         authors: [pubkey],
         limit: 1
-      });
+      }, { label: 'recipient profile (KIND 0)' });
 
       if (profileEvents.length > 0) {
         const content = JSON.parse(profileEvents[0].content);
@@ -70,15 +71,17 @@ export const useNostrUnpaidLashDetails = () => {
     }
 
     setIsLoading(true);
-    const pool = new SimplePool();
 
     try {
       // Fetch all payment records (KIND 39991) by this user
-      const paymentRecords = await pool.querySync(relays, {
+      // Through this app's server: these are what this person still owes, and
+      // a thousand of them never drained inside the 4.4 s nostr-tools allows
+      // itself before it discards the queue. See src/lib/relayReadViaServer.ts.
+      const paymentRecords = await queryEventsViaServer({
         kinds: [39991],
         authors: [session.nostrHexId],
         limit: 1000
-      });
+      }, { timeout: 10000, label: 'my unpaid LASHes (KIND 39991)' });
 
       // Filter out expired and paid records
       const activeRecords = paymentRecords.filter(event => {
@@ -93,7 +96,6 @@ export const useNostrUnpaidLashDetails = () => {
         setAllUnpaidLashes([]);
         setDisplayedLashes([]);
         setIsLoading(false);
-        pool.close(relays);
         return;
       }
 
@@ -110,7 +112,7 @@ export const useNostrUnpaidLashDetails = () => {
         const postId = event.tags.find(tag => tag[0] === 'e')?.[1];
 
         // Fetch recipient profile
-        const profile = await fetchRecipientProfile(pool, recipientPubkey);
+        const profile = await fetchRecipientProfile(recipientPubkey);
 
         const amountNum = parseInt(amount);
         const amountLana = (amountNum / 100000000).toFixed(8);
@@ -145,7 +147,6 @@ export const useNostrUnpaidLashDetails = () => {
       setDisplayedLashes([]);
     } finally {
       setIsLoading(false);
-      pool.close(relays);
     }
   }, [session?.nostrHexId, relays]);
 

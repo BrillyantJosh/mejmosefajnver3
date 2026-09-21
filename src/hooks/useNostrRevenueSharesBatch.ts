@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event as NostrEvent } from 'nostr-tools';
+import { Event as NostrEvent } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { RevenueShareEvent, RevenueShareData } from './useNostrRevenueShare';
 
@@ -16,15 +17,15 @@ export const useNostrRevenueSharesBatch = (processRecordIds: string[]) => {
       }
 
       const relays = parameters.relays;
-      const pool = new SimplePool();
 
       try {
         // Fetch all revenue share configurations for the given process record IDs
-        const revenueEvents = await pool.querySync(relays, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const revenueEvents = await queryEventsViaServer<NostrEvent>({
           kinds: [87945],
           '#e': processRecordIds,
           limit: 500
-        });
+        }, { label: 'revenue shares in bulk (KIND 87945)' });
 
         const sharesMap: Record<string, RevenueShareEvent> = {};
 
@@ -66,7 +67,6 @@ export const useNostrRevenueSharesBatch = (processRecordIds: string[]) => {
         console.error('Error fetching revenue shares batch:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 

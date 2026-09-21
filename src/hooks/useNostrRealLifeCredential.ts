@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -30,17 +30,17 @@ export const useNostrRealLifeCredential = () => {
       }
 
       const relays = parameters.relays;
-      const pool = new SimplePool();
 
       try {
         console.log('🔐 Fetching KIND 87033 real_life credentials for user:', session.nostrHexId);
         
         // Query for KIND 87033 where user is in p tag
-        const events = await pool.querySync(relays, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const events = await queryEventsViaServer({
           kinds: [87033],
           '#p': [session.nostrHexId],
           limit: 100
-        });
+        }, { label: 'real-life credentials (KIND 87033)' });
 
         console.log(`📋 Found ${events.length} KIND 87033 reference events`);
 
@@ -75,7 +75,6 @@ export const useNostrRealLifeCredential = () => {
         setStatus({ hasRealLifeReference: false, referenceCount: 0 });
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
@@ -174,12 +174,11 @@ export function useAiAdvisorEvents(): { eventsContext: AiEventsContext | null; i
     setIsLoading(true);
 
     try {
-      const pool = new SimplePool();
-      
-      const rawEvents = await pool.querySync(relays, {
+      // Through this app's server — see src/lib/relayReadViaServer.ts.
+      const rawEvents = await queryEventsViaServer({
         kinds: [36677],
         limit: 100
-      });
+      }, { label: 'events for the advisor (KIND 36677)' });
 
       const parsedEvents: ParsedEvent[] = [];
       const seenDTags = new Set<string>();

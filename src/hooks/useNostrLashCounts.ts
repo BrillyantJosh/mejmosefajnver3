@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { isLashExpired } from '@/lib/lashExpiration';
 
@@ -16,7 +16,6 @@ export function useNostrLashCounts(postIds: string[]) {
   const { parameters } = useSystemParameters();
   const [lashCounts, setLashCounts] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(false);
-  const pool = useMemo(() => new SimplePool(), []);
 
   const relays = parameters?.relays || [];
 
@@ -33,15 +32,13 @@ export function useNostrLashCounts(postIds: string[]) {
       try {
         // Fetch ALL recent KIND 39991 LASH events and filter client-side
         // (relay tag filtering may not work correctly on all relays)
-        const allRecentLashEvents = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [39991],
-            limit: 1000
-          }),
-          new Promise<any[]>((_, reject) => 
-            setTimeout(() => reject(new Error('LASH query timeout')), 5000)
-          )
-        ]).catch(err => {
+        // Through this app's server — see src/lib/relayReadViaServer.ts. The
+        // count is taken from this list, so a list cut short was a wrong number
+        // shown as a fact.
+        const allRecentLashEvents = await queryEventsViaServer({
+          kinds: [39991],
+          limit: 1000
+        }, { timeout: 10000, label: 'LASH counts (KIND 39991)' }).catch(err => {
           console.error('❌ LASH query failed:', err);
           return [];
         });
@@ -101,7 +98,7 @@ export function useNostrLashCounts(postIds: string[]) {
     return () => {
       isSubscribed = false;
     };
-  }, [postIds.join(','), relays.join(','), pool]);
+  }, [postIds.join(','), relays.join(',')]);
 
   return { lashCounts, loading };
 }

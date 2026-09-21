@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { SimplePool, Event } from 'nostr-tools';
+import { Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -79,7 +80,6 @@ export function useAiAdvisorRecentChats() {
     }
 
     let isSubscribed = true;
-    const pool = new SimplePool();
 
     const loadRecentMessages = async () => {
       setIsLoading(true);
@@ -94,28 +94,21 @@ export function useAiAdvisorRecentChats() {
         console.log('📥 Fetching recent DMs for AI context (last 7 days)...');
         
         // Query sent messages
-        const sentPromise = Promise.race([
-          pool.querySync(RELAYS, {
-            kinds: [4],
-            authors: [session.nostrHexId],
-            since: oneWeekAgo
-          }),
-          new Promise<Event[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Query timeout')), 8000)
-          )
-        ]).catch(() => [] as Event[]);
+        // Through this app's server — see src/lib/relayReadViaServer.ts. These
+        // are NIP-04 DMs: the server moves the ciphertext, nothing more, and it
+        // is still decrypted here with this person's key.
+        const sentPromise = queryEventsViaServer<Event>({
+          kinds: [4],
+          authors: [session.nostrHexId],
+          since: oneWeekAgo
+        }, { timeout: 8000, label: 'DMs I sent' }).catch(() => [] as Event[]);
 
         // Query received messages
-        const receivedPromise = Promise.race([
-          pool.querySync(RELAYS, {
-            kinds: [4],
-            '#p': [session.nostrHexId],
-            since: oneWeekAgo
-          }),
-          new Promise<Event[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Query timeout')), 8000)
-          )
-        ]).catch(() => [] as Event[]);
+        const receivedPromise = queryEventsViaServer<Event>({
+          kinds: [4],
+          '#p': [session.nostrHexId],
+          since: oneWeekAgo
+        }, { timeout: 8000, label: 'DMs I received' }).catch(() => [] as Event[]);
 
         const [sentEvents, receivedEvents] = await Promise.all([sentPromise, receivedPromise]);
 
@@ -177,7 +170,6 @@ export function useAiAdvisorRecentChats() {
         console.error('❌ Error loading recent chats for AI:', error);
         setIsLoading(false);
       } finally {
-        pool.close(RELAYS);
       }
     };
 

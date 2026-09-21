@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SimplePool, Filter, Event, finalizeEvent } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -63,7 +64,6 @@ export function useNostrUserAcknowledgement(proposalDTag: string, proposalEventI
       return;
     }
 
-    const pool = new SimplePool();
     setIsLoading(true);
     setError(null);
 
@@ -78,7 +78,8 @@ export function useNostrUserAcknowledgement(proposalDTag: string, proposalEventI
       };
 
       console.log('🔍 Fetching acknowledgement with filter:', { dTagValue, filter });
-      const events = await pool.querySync(parameters.relays, filter);
+      // Through this app's server — see src/lib/relayReadViaServer.ts.
+      const events = await queryEventsViaServer<Event>(filter as Record<string, unknown>, { label: 'my acknowledgement' });
       console.log('📋 Found acknowledgement events:', events.length, events);
       
       // Get the newest acknowledgement
@@ -96,7 +97,6 @@ export function useNostrUserAcknowledgement(proposalDTag: string, proposalEventI
       setError('Failed to fetch vote status');
     } finally {
       setIsLoading(false);
-      pool.close(parameters.relays);
     }
   }, [parameters?.relays, session?.nostrHexId, proposalDTag]);
 

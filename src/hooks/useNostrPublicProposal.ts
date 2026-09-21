@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Filter, Event } from 'nostr-tools';
+import { Filter, Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { AwarenessProposal } from './useNostrAwarenessProposals';
 
@@ -62,7 +63,6 @@ export function useNostrPublicProposal(dTag: string, systemRelays?: string[]) {
     }
 
     const relays = systemRelays && systemRelays.length > 0 ? systemRelays : (parameters?.relays || []);
-    const pool = new SimplePool();
     let isMounted = true;
     let foundProposal = false;
 
@@ -76,7 +76,8 @@ export function useNostrPublicProposal(dTag: string, systemRelays?: string[]) {
           '#d': [dTag],
         };
 
-        let events = await pool.querySync(relays, filterWithD);
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        let events = await queryEventsViaServer<Event>(filterWithD as Record<string, unknown>, { label: 'this proposal by #d (KIND 38883)' });
         console.log(`Received ${events.length} events with #d filter for dTag:`, dTag);
 
         // If no results, try fetching all and filter manually (some relays don't support #d for parameterized events)
@@ -87,7 +88,7 @@ export function useNostrPublicProposal(dTag: string, systemRelays?: string[]) {
             limit: 100,
           };
           
-          const allEvents = await pool.querySync(relays, filterAll);
+          const allEvents = await queryEventsViaServer<Event>(filterAll as Record<string, unknown>, { label: 'all proposals, filtered here (KIND 38883)' });
           console.log(`Received ${allEvents.length} total KIND 38883 events`);
           
           // Filter by d-tag manually
@@ -144,7 +145,6 @@ export function useNostrPublicProposal(dTag: string, systemRelays?: string[]) {
     return () => {
       isMounted = false;
       clearTimeout(timeout);
-      pool.close(relays);
     };
   }, [dTag, systemRelays]);
 

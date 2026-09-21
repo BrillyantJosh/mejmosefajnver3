@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event as NostrEvent } from 'nostr-tools';
+import { Event as NostrEvent } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -38,7 +39,6 @@ export const useNostrQuorumStatus = () => {
       }
 
       const relays = parameters.relays;
-      const pool = new SimplePool();
 
       try {
         console.log('🎯 Fetching KIND 38806 quorum status for user...');
@@ -47,22 +47,23 @@ export const useNostrQuorumStatus = () => {
         
         // First try with npub
         console.log('🔍 Trying query with NPUB...');
-        let events = await pool.querySync(relays, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        let events = await queryEventsViaServer<NostrEvent>({
           kinds: [38806],
           '#p': [session.nostrNpubId],
           limit: 10
-        });
+        }, { label: 'quorum status by npub (KIND 38806)' });
 
         console.log(`📋 Found ${events.length} KIND 38806 events with NPUB`);
 
         // If no results, try with HEX
         if (events.length === 0) {
           console.log('🔍 No results with NPUB, trying with HEX...');
-          events = await pool.querySync(relays, {
+          events = await queryEventsViaServer<NostrEvent>({
             kinds: [38806],
             '#p': [session.nostrHexId],
             limit: 10
-          });
+          }, { label: 'quorum status by hex (KIND 38806)' });
           console.log(`📋 Found ${events.length} KIND 38806 events with HEX`);
         }
 
@@ -71,7 +72,6 @@ export const useNostrQuorumStatus = () => {
         if (events.length === 0) {
           setQuorumStatus(null);
           setIsLoading(false);
-          pool.close(relays);
           return;
         }
 
@@ -110,7 +110,6 @@ export const useNostrQuorumStatus = () => {
         console.error('❌ Error fetching quorum status:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 

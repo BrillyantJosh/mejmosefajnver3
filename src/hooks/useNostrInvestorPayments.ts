@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 const DIRECT_FUND_PUBKEY = '79730aba75d71584e8a4f9d0cc1173085e75590ce489760078d2bf6f5210d692';
@@ -46,17 +46,16 @@ export const useNostrInvestorPayments = (hexId: string | null | undefined) => {
     let cancelled = false;
     const fetchPayments = async () => {
       setIsLoading(true);
-      const pool = new SimplePool();
 
       try {
         // Relay doesn't index custom tags — fetch all from author, filter client-side
-        const allEvents = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [30939],
-            authors: [DIRECT_FUND_PUBKEY],
-          }),
-          new Promise<never[]>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000)),
-        ]);
+        // Through this app's server: this asks for EVERY payment and picks out
+        // this investor's here, so a list the library cut short hid payments
+        // that had been made. See src/lib/relayReadViaServer.ts.
+        const allEvents = await queryEventsViaServer({
+          kinds: [30939],
+          authors: [DIRECT_FUND_PUBKEY],
+        }, { timeout: 10000, label: 'investor payments (KIND 30939)' });
         const events = allEvents.filter(e =>
           e.tags.some(t => t[0] === 'investor_hex' && t[1] === hexId)
         );
@@ -101,7 +100,6 @@ export const useNostrInvestorPayments = (hexId: string | null | undefined) => {
         if (!cancelled) setPayments([]);
       } finally {
         if (!cancelled) setIsLoading(false);
-        pool.close(relays);
       }
     };
 

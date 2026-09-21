@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Filter, Event } from 'nostr-tools';
+import { Filter, Event } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 export interface AwarenessProposal {
@@ -89,7 +90,6 @@ export function useNostrAwarenessProposals() {
         return;
       }
 
-      const pool = new SimplePool();
       setIsLoading(true);
       setError(null);
 
@@ -100,7 +100,8 @@ export function useNostrAwarenessProposals() {
           kinds: [38883],
         };
 
-        const events = await pool.querySync(parameters.relays, filter);
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const events = await queryEventsViaServer<Event>(filter as Record<string, unknown>, { label: 'awareness proposals (KIND 38883)' });
         console.log(`Received ${events.length} KIND 38883 events`);
 
         // Parse and deduplicate by d tag (keep newest)
@@ -126,7 +127,6 @@ export function useNostrAwarenessProposals() {
         setError('Failed to fetch proposals');
       } finally {
         setIsLoading(false);
-        pool.close(parameters.relays);
       }
     };
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event as NostrEvent } from 'nostr-tools';
+import { Event as NostrEvent } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 export interface DonationProposal {
@@ -34,16 +35,16 @@ export const useNostrDonationProposal = (
       }
 
       const relays = parameters.relays;
-      const pool = new SimplePool();
 
       try {
         // Fetch KIND 90900 events created by this user for this process
-        const events = await pool.querySync(relays, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const events = await queryEventsViaServer<NostrEvent>({
           kinds: [90900],
           authors: [userPubkey],
           '#e': [processRecordId],
           limit: 10
-        });
+        }, { label: 'my donation proposal (KIND 90900)' });
 
         if (events.length > 0) {
           // Use the most recent proposal
@@ -80,7 +81,6 @@ export const useNostrDonationProposal = (
         console.error('Error fetching donation proposal:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 

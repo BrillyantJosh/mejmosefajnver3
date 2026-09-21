@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -24,7 +24,6 @@ export function useNostrReceivedLashes() {
   const { session } = useAuth();
   const [receivedLashes, setReceivedLashes] = useState<ReceivedLash[]>([]);
   const [loading, setLoading] = useState(false);
-  const pool = useMemo(() => new SimplePool(), []);
   const profileCache = useRef<Map<string, any>>(new Map());
   const postCache = useRef<Map<string, any>>(new Map());
 
@@ -45,16 +44,13 @@ export function useNostrReceivedLashes() {
         console.log('💜 Fetching received LASHes...');
 
         // Fetch KIND 39991 events where "p" tag equals current user's pubkey
-        const paymentRecords = await Promise.race([
-          pool.querySync(relays, {
-            kinds: [39991],
-            '#p': [session.nostrHexId],
-            limit: 1000
-          }),
-          new Promise<any[]>((_, reject) => 
-            setTimeout(() => reject(new Error('Payment intents query timeout')), 5000)
-          )
-        ]).catch(err => {
+        // Through this app's server — see src/lib/relayReadViaServer.ts. These
+        // are what somebody owes this person; a short list is money not shown.
+        const paymentRecords = await queryEventsViaServer({
+          kinds: [39991],
+          '#p': [session.nostrHexId],
+          limit: 1000
+        }, { timeout: 10000, label: 'LASHes I received (KIND 39991)' }).catch(err => {
           console.error('❌ Payment intents query failed:', err);
           return [];
         });
@@ -141,11 +137,11 @@ export function useNostrReceivedLashes() {
 
       if (uncachedPubkeys.length > 0) {
         try {
-          const profileEvents = await pool.querySync(relays, {
+          const profileEvents = await queryEventsViaServer({
             kinds: [0],
             authors: uncachedPubkeys,
             limit: uncachedPubkeys.length
-          });
+          }, { label: 'LASHer profiles (KIND 0)' });
 
           for (const event of profileEvents) {
             try {
@@ -176,11 +172,11 @@ export function useNostrReceivedLashes() {
 
       if (uncachedPostIds.length > 0) {
         try {
-          const postEvents = await pool.querySync(relays, {
+          const postEvents = await queryEventsViaServer({
             kinds: [1], // Text notes
             ids: uncachedPostIds,
             limit: uncachedPostIds.length
-          });
+          }, { label: 'posts behind the LASHes (KIND 1)' });
 
           for (const event of postEvents) {
             postCache.current.set(event.id, {
@@ -208,7 +204,7 @@ export function useNostrReceivedLashes() {
     return () => {
       isSubscribed = false;
     };
-  }, [session?.nostrHexId, relays.join(','), pool]);
+  }, [session?.nostrHexId, relays.join(',')]);
 
   return { receivedLashes, loading };
 }

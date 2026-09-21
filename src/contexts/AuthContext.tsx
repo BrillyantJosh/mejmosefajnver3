@@ -3,7 +3,7 @@ import { checkGrossViolationFreeze, FrozenOutError, type FreezeVerdict } from '@
 import { convertWifToIds } from '@/lib/crypto';
 import { befClient } from '@/lib/bef/config';
 import { forgetBefPerson } from '@/lib/bef/personToken';
-import { SimplePool } from 'nostr-tools';
+import { getEventViaServer } from '@/lib/relayReadViaServer';
 import { newestOwnProfile, sessionProfileFromKind0, withProfile, type ProfileEvent, type SessionProfileFields } from '@/lib/sessionProfile';
 
 // TypeScript declaration for document.wasDiscarded (Chrome Memory Saver feature)
@@ -248,26 +248,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Check if user has a KIND 0 profile on relays
       if (relays && relays.length > 0) {
-        const pool = new SimplePool();
         let profileFound = false;
         
         try {
           console.log('Checking for KIND 0 profile on relays...');
           
-          // Create timeout promise
-          const timeoutPromise = new Promise<null>((_, reject) => 
-            setTimeout(() => reject(new Error('TIMEOUT')), 5000)
-          );
-          
-          // Get profile with timeout
-          const profileEvent = await Promise.race([
-            pool.get(relays, {
-              kinds: [0],
-              authors: [derivedIds.nostrHexId],
-              limit: 1
-            }),
-            timeoutPromise
-          ]);
+          // Through this app's server — see src/lib/relayReadViaServer.ts.
+          // Signing in is refused when no profile is found, so this read must
+          // not confuse "no profile" with "could not look": a read that fails
+          // throws, and the catch below turns it into the network message
+          // rather than a rejected sign-in.
+          const profileEvent = await getEventViaServer({
+            kinds: [0],
+            authors: [derivedIds.nostrHexId],
+            limit: 1
+          }, { timeout: 5000, label: 'this profile at sign-in (KIND 0)' }).catch(() => {
+            throw new Error('TIMEOUT');
+          });
 
           // Check if profile was actually found
           if (profileEvent && profileEvent.kind === 0) {
@@ -297,15 +294,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           if (profileError instanceof Error) {
             if (profileError.message === 'TIMEOUT') {
-              pool.close(relays);
               throw new Error('Unable to verify profile. Network timeout. Please try again.');
             }
           }
           
           // Any other error means profile check failed
           profileFound = false;
-        } finally {
-          pool.close(relays);
         }
         
         // Reject login if profile was not found

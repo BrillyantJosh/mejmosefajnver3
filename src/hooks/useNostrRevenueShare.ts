@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { SimplePool, Event as NostrEvent } from 'nostr-tools';
+import { Event as NostrEvent } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
 export interface RevenueRecipient {
@@ -43,15 +44,15 @@ export const useNostrRevenueShare = (processRecordId: string | null) => {
       }
 
       const relays = parameters.relays;
-      const pool = new SimplePool();
 
       try {
         // First, check if transcript exists (KIND 87944)
-        const transcriptEvents = await pool.querySync(relays, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const transcriptEvents = await queryEventsViaServer({
           kinds: [87944],
           '#e': [processRecordId],
           limit: 1
-        });
+        }, { label: 'process transcript (KIND 87944)' });
 
         if (transcriptEvents.length > 0) {
           setHasTranscript(true);
@@ -59,11 +60,11 @@ export const useNostrRevenueShare = (processRecordId: string | null) => {
         }
 
         // Fetch revenue share configurations (KIND 87945)
-        const revenueEvents = await pool.querySync(relays, {
+        const revenueEvents = await queryEventsViaServer<NostrEvent>({
           kinds: [87945],
           '#e': [processRecordId],
           limit: 10
-        });
+        }, { label: 'revenue share (KIND 87945)' });
 
         const shares: RevenueShareEvent[] = revenueEvents
           .map((event: NostrEvent) => {
@@ -104,7 +105,6 @@ export const useNostrRevenueShare = (processRecordId: string | null) => {
         console.error('Error fetching revenue share:', error);
       } finally {
         setIsLoading(false);
-        pool.close(relays);
       }
     };
 
