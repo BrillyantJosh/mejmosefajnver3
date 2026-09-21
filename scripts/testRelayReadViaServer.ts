@@ -11,7 +11,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools';
-import { readAllPages, readRelayEventsViaServer } from '../src/lib/relayReadViaServer.js';
+import { getEventViaServer, queryEventsViaServer, readAllPages, readRelayEventsViaServer } from '../src/lib/relayReadViaServer.js';
 
 let failures = 0;
 const check = (name: string, cond: boolean, detail?: unknown) => {
@@ -96,6 +96,59 @@ console.log('— what the server hands over is still checked —');
     check('…and it says how many were dropped', read.forged === 2, read.forged);
   } finally {
     globalThis.fetch = realFetch;
+  }
+}
+
+console.log('— a caller that asked for a fixed number gets that many —');
+{
+  /** Serves one page per call and records the filter it was asked for. */
+  const server = (pages: unknown[][]) => {
+    const asked: Record<string, unknown>[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: string, init: { body: string }) => {
+      asked.push(JSON.parse(init.body).filter);
+      return new Response(JSON.stringify({ events: pages.shift() ?? [] }), { headers: { 'content-type': 'application/json' } });
+    }) as unknown as typeof fetch;
+    return { asked, restore: () => { globalThis.fetch = realFetch; } };
+  };
+
+  {
+    // Fifty posts on a profile page: the old pool.querySync asked for fifty.
+    const fifty = Array.from({ length: 50 }, (_, i) => event(1_700_001_000 - i));
+    const s = server([fifty, fifty]);
+    try {
+      const events = await queryEventsViaServer({ kinds: [36500], authors: ['abc'], limit: 50 });
+      check('it asks the relays for the fifty the caller wanted, not five hundred', s.asked[0]?.limit === 50, s.asked[0]);
+      check('and it stops there instead of paging on', s.asked.length === 1 && events.length === 50, { calls: s.asked.length, events: events.length });
+    } finally { s.restore(); }
+  }
+
+  {
+    const s = server([[event(1_700_002_000)]]);
+    try {
+      const read = await readRelayEventsViaServer({ kinds: [36500], limit: 1 });
+      check('a limit the read honoured is complete, not "cut short"', read.complete === true, read);
+    } finally { s.restore(); }
+  }
+
+  {
+    // No limit named: everything, and a full page means there is more.
+    const full = Array.from({ length: 500 }, (_, i) => event(1_700_003_000 - i));
+    const s = server([full, [event(1_600_000_000)]]);
+    try {
+      await queryEventsViaServer({ kinds: [36500] });
+      check('with no limit named it still pages to the end', s.asked.length === 2 && s.asked[0]?.limit === 500, s.asked.map((f) => f.limit));
+    } finally { s.restore(); }
+  }
+
+  {
+    const older = event(1_700_004_000);
+    const newer = event(1_700_004_500);
+    const s = server([[older, newer]]);
+    try {
+      const one = await getEventViaServer({ kinds: [36500], authors: ['abc'], limit: 1 });
+      check('one event means the NEWEST, not whichever relay spoke first', one?.id === newer.id);
+    } finally { s.restore(); }
   }
 }
 

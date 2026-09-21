@@ -11,7 +11,7 @@ import { toPng } from "html-to-image";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
-import { SimplePool } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { LanaEvent } from "@/hooks/useNostrEvents";
 
 interface TicketData {
@@ -146,11 +146,11 @@ export default function EventTicket() {
 
         // 2. Fetch event from Nostr relays
         if (relays.length > 0) {
-          const pool = new SimplePool();
-          const rawEvents = await pool.querySync(relays, {
+          // Through this app's server — see src/lib/relayReadViaServer.ts.
+          const rawEvents = await queryEventsViaServer({
             kinds: [36677],
             "#d": [ticketData.event_dtag]
-          });
+          }, { label: 'this event (KIND 36677)' });
 
           if (rawEvents.length > 0) {
             const latest = rawEvents.reduce((a, b) => b.created_at > a.created_at ? b : a);
@@ -158,11 +158,11 @@ export default function EventTicket() {
           }
 
           // 3. Fetch attendee profile (KIND 0)
-          const profiles = await pool.querySync(relays, {
+          const profiles = await queryEventsViaServer({
             kinds: [0],
             authors: [ticketData.nostr_hex_id],
             limit: 1
-          });
+          }, { label: 'attendee profile (KIND 0)' });
 
           if (profiles.length > 0) {
             try {

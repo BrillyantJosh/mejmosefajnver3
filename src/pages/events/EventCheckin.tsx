@@ -9,7 +9,7 @@ import { UserAvatar } from "@/components/ui/UserAvatar";
 import {
   ArrowLeft, QrCode, Users, CheckCircle2, Loader2, AlertTriangle,
 } from "lucide-react";
-import { SimplePool } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { LanaEvent } from "@/hooks/useNostrEvents";
@@ -184,11 +184,11 @@ export default function EventCheckin() {
       try {
         // Fetch event
         if (relays.length > 0) {
-          const pool = new SimplePool();
-          const rawEvents = await pool.querySync(relays, {
+          // Through this app's server — see src/lib/relayReadViaServer.ts.
+          const rawEvents = await queryEventsViaServer({
             kinds: [36677],
             "#d": [decodedDTag],
-          });
+          }, { label: 'this event (KIND 36677)' });
           if (rawEvents.length > 0) {
             const latest = rawEvents.reduce((a, b) =>
               b.created_at > a.created_at ? b : a

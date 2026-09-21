@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { ArrowLeft, Users, Calendar, Edit, QrCode } from "lucide-react";
 import { format } from "date-fns";
-import { SimplePool } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
@@ -143,13 +143,12 @@ export default function EventRegistrations() {
       setLoading(true);
 
       try {
-        const pool = new SimplePool();
-        
-        // Fetch by d tag for replaceable events
-        const rawEvents = await pool.querySync(relays, {
+        // Fetch by d tag for replaceable events, through this app's server —
+        // see src/lib/relayReadViaServer.ts.
+        const rawEvents = await queryEventsViaServer({
           kinds: [36677],
           "#d": [decodedDTag]
-        });
+        }, { label: 'this event (KIND 36677)' });
 
         if (rawEvents.length > 0) {
           // Get the most recent event (by created_at) since it's a replaceable event

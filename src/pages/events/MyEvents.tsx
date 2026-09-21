@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { SimplePool, finalizeEvent } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -422,13 +423,15 @@ export default function MyEvents() {
     setLoading(true);
 
     try {
-      const pool = new SimplePool();
-      
-      const rawEvents = await pool.querySync(relays, {
+      // Read through this app's server, not a relay socket in the browser:
+      // nostr-tools invents an EOSE 4.4 s after a subscription opens and throws
+      // away every event still queued behind it, which on a phone is most of a
+      // long list. See src/lib/relayReadViaServer.ts.
+      const rawEvents = await queryEventsViaServer({
         kinds: [36677],
         authors: [session.nostrHexId],
         limit: 100
-      });
+      }, { label: 'my events (KIND 36677)' });
 
       console.log('Fetched my events:', rawEvents.length);
 

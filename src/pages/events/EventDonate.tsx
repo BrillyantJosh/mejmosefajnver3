@@ -17,6 +17,7 @@ import { ArrowLeft, Wallet, Loader2, ExternalLink, Copy, CheckCircle, CreditCard
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { SimplePool, finalizeEvent } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { LanaEvent } from "@/hooks/useNostrEvents";
 
 interface WalletBalance {
@@ -193,12 +194,11 @@ const EventDonate = () => {
       setEventLoading(true);
 
       try {
-        const pool = new SimplePool();
-
-        const rawEvents = await pool.querySync(relays, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const rawEvents = await queryEventsViaServer({
           kinds: [36677],
           "#d": [decodedDTag]
-        });
+        }, { label: 'this event (KIND 36677)' });
 
         if (rawEvents.length > 0) {
           const latestEvent = rawEvents.reduce((latest, current) =>

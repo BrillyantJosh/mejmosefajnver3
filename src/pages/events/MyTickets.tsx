@@ -9,7 +9,7 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
-import { SimplePool } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { LanaEvent } from "@/hooks/useNostrEvents";
 
 interface TicketData {
@@ -132,11 +132,13 @@ export default function MyTickets() {
         const eventMap = new Map<string, LanaEvent>();
 
         if (relays.length > 0 && uniqueDTags.length > 0) {
-          const pool = new SimplePool();
-          const rawEvents = await pool.querySync(relays, {
+          // Through this app's server: nostr-tools invents an EOSE 4.4 s after
+          // a subscription opens and discards whatever is still queued, so on a
+          // phone some tickets lost the event they belong to.
+          const rawEvents = await queryEventsViaServer({
             kinds: [36677],
             "#d": uniqueDTags
-          });
+          }, { label: 'events behind my tickets (KIND 36677)' });
 
           // Keep most recent version per dTag
           const latestByDTag = new Map<string, any>();

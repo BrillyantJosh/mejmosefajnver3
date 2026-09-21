@@ -9,7 +9,7 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
-import { SimplePool } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
 
 interface TicketStats {
@@ -113,12 +113,12 @@ export default function MyCheckins() {
           return;
         }
 
-        const pool = new SimplePool();
-        const rawEvents = await pool.querySync(relays, {
+        // Through this app's server — see src/lib/relayReadViaServer.ts.
+        const rawEvents = await queryEventsViaServer({
           kinds: [36677],
           authors: [session.nostrHexId],
           limit: 100
-        });
+        }, { label: 'my events for check-in (KIND 36677)' });
 
         // Parse and deduplicate by dTag
         const parsedEvents: LanaEvent[] = [];

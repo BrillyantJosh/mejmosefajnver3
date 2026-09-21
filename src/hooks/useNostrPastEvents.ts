@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
@@ -93,12 +93,14 @@ export function useNostrPastEvents() {
     setError(null);
 
     try {
-      const pool = new SimplePool();
-      
-      const rawEvents = await pool.querySync(relays, {
+      // Read through this app's server, not a relay socket in the browser:
+      // nostr-tools invents an EOSE 4.4 s after a subscription opens and throws
+      // away every event still queued behind it, which on a phone is most of a
+      // long list. See src/lib/relayReadViaServer.ts.
+      const rawEvents = await queryEventsViaServer({
         kinds: [36677],
         limit: 200
-      });
+      }, { label: 'past events (KIND 36677)' });
 
       console.log('Fetched raw events for past:', rawEvents.length);
 

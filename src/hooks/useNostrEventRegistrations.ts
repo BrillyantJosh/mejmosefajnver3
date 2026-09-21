@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { SimplePool } from 'nostr-tools';
+import { queryEventsViaServer } from '@/lib/relayReadViaServer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 
@@ -72,15 +72,16 @@ export function useNostrEventRegistrations(eventSlug: string | undefined) {
     setLoading(true);
 
     try {
-      const pool = new SimplePool();
-      
       console.log('Fetching registrations for event slug:', eventSlug);
-      
-      // Fetch all KIND 53333 and filter client-side
-      const rawEvents = await pool.querySync(relays, {
+
+      // Read through this app's server rather than the browser opening its own
+      // relay sockets: nostr-tools invents an EOSE 4.4 s after a subscription
+      // opens and discards every event still queued behind it, so on a phone a
+      // 500-strong registration list arrived as a random part of itself.
+      const rawEvents = await queryEventsViaServer({
         kinds: [53333],
         limit: 500
-      });
+      }, { label: 'event registrations (KIND 53333)' });
 
       console.log('Fetched all KIND 53333 events:', rawEvents.length);
 
@@ -142,13 +143,11 @@ export function useNostrEventRegistrationsBatch(eventSlugs: string[]) {
     setLoading(true);
 
     try {
-      const pool = new SimplePool();
-      
-      // Fetch all KIND 53333 registrations
-      const rawEvents = await pool.querySync(relays, {
+      // Fetch all KIND 53333 registrations — through the server, as above.
+      const rawEvents = await queryEventsViaServer({
         kinds: [53333],
         limit: 1000
-      });
+      }, { label: 'registrations for several events (KIND 53333)' });
 
       console.log('Fetched all registrations:', rawEvents.length);
 

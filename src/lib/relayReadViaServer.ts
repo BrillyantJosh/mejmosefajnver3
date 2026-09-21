@@ -1,4 +1,4 @@
-import { verifyEvent } from 'nostr-tools';
+import { verifyEvent, type Event as NostrEvent } from 'nostr-tools';
 
 /**
  * Reading a long list off the relays without the phone doing the collecting.
@@ -108,12 +108,25 @@ export async function readRelayEventsViaServer<E extends PagedEvent>(
   filter: Record<string, unknown>,
   { timeout, signal, verify = true, ...paging }: RelayReadViaServerOptions = {},
 ): Promise<PagedRead<E>> {
-  const pageSize = paging.pageSize ?? RELAY_PAGE_SIZE;
+  // A caller who asked for `limit: 50` meant 50, not "page through everything
+  // fifty at a time" and not "500 because that is what a page holds". One page
+  // of exactly that size is what pool.querySync would have done, so a read
+  // moved onto this path fetches no more than it used to. A limit above what a
+  // relay will answer in one go (500) is a request for everything up to it, and
+  // pages normally.
+  const asked = Number((filter as { limit?: unknown }).limit);
+  const bounded = Number.isFinite(asked) && asked > 0 && asked <= RELAY_PAGE_SIZE;
+  const pageSize = paging.pageSize ?? (bounded ? asked : RELAY_PAGE_SIZE);
+  const maxPages = paging.maxPages ?? (bounded ? 1 : undefined);
   const read = await readAllPages<E>(
     (until) =>
       fetchRelayPage<E>({ ...filter, limit: pageSize, ...(until === undefined ? {} : { until }) }, { timeout, signal }),
-    { ...paging, pageSize },
+    { ...paging, pageSize, ...(maxPages === undefined ? {} : { maxPages }) },
   );
+  // `complete` means "everything the filter asked for", so a bounded read that
+  // came back full is complete — it is not the truncation this reports on, and
+  // warning about it on every `limit: 1` lookup would bury the real ones.
+  if (bounded) read.complete = true;
   if (!verify) return { ...read, forged: 0 };
 
   const genuine = read.events.filter((event) => {
@@ -143,7 +156,7 @@ export interface ServerReadOptions extends RelayReadViaServerOptions {
 }
 
 /** Same in and out as `pool.querySync(relays, filter)`, read through our server. */
-export async function queryEventsViaServer<E extends PagedEvent>(
+export async function queryEventsViaServer<E extends PagedEvent = NostrEvent>(
   filter: Record<string, unknown>,
   { label, ...opts }: ServerReadOptions = {},
 ): Promise<E[]> {
@@ -165,7 +178,7 @@ export async function queryEventsViaServer<E extends PagedEvent>(
  * null. `pool.get` takes whichever relay answered first; this takes the newest
  * across all of them, which is what every caller here actually meant.
  */
-export async function getEventViaServer<E extends PagedEvent>(
+export async function getEventViaServer<E extends PagedEvent = NostrEvent>(
   filter: Record<string, unknown>,
   opts: ServerReadOptions = {},
 ): Promise<E | null> {

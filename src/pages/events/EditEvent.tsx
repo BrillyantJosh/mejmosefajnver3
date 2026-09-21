@@ -14,6 +14,7 @@ import LocationPicker from "@/components/LocationPicker";
 import { AddressSearch } from "@/components/AddressSearch";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { SimplePool, finalizeEvent } from "nostr-tools";
+import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -153,11 +154,11 @@ export default function EditEvent() {
     }
 
     try {
-      const pool = new SimplePool();
-      const rawEvents = await pool.querySync(relays, {
+      // Through this app's server — see src/lib/relayReadViaServer.ts.
+      const rawEvents = await queryEventsViaServer({
         kinds: [36677],
         ids: [eventId]
-      });
+      }, { label: 'the event being edited (KIND 36677)' });
 
       if (rawEvents.length === 0) {
         toast({ title: t('toast.eventNotFound'), variant: "destructive" });
