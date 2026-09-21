@@ -11,6 +11,7 @@
  * The rule these assertions hold: the facilitator LEADING a process can pause
  * it — and nobody else gains anything.
  */
+import { readFileSync } from 'node:fs';
 import type { Event } from 'nostr-tools';
 import { toOpenProcesses, canPauseProcess } from '../src/lib/ownProcessRecords.js';
 
@@ -95,6 +96,22 @@ console.log('— the edges —');
     canPauseProcess({ facilitator: JURE, facilitators: [] }, JURE) === true);
   check('and it does not hand the button to anyone else',
     canPauseProcess({ facilitator: JURE, facilitators: [] }, MOJCA) === false);
+}
+
+console.log('— what the pause and exit events say about who did it —');
+{
+  const src = readFileSync(new URL('../src/pages/own/Own.tsx', import.meta.url), 'utf8');
+  const pausePublish = src.slice(src.indexOf('const publishPauseEvent'), src.indexOf('const publishPauseEvent') + 1600);
+  const exitPublish = src.slice(src.indexOf('const publishExitEvent'), src.indexOf('const publishExitEvent') + 1400);
+  // Tanja's pause of 9. 9. 2026 went out tagged "facilitator: Jure Pirc",
+  // because the event named the first name on the roster instead of the
+  // person who pressed the button.
+  check('a pause names the facilitator who made it',
+    /tags\.push\(\['p', session\.nostrHexId, '', 'facilitator'\]\)/.test(pausePublish) &&
+    !/selectedProcess\.facilitator,\s*'',\s*'facilitator'/.test(pausePublish));
+  check('an exit notice reaches every facilitator, not only the first',
+    /facilitators\?\.length \? selectedProcess\.facilitators : \[selectedProcess\.facilitator\]/.test(exitPublish) &&
+    /tags\.push\(\['p', f, '', 'facilitator'\]\)/.test(exitPublish));
 }
 
 console.log(failures ? `\n❌ ${failures} FAILED` : '\n✅ all passed');

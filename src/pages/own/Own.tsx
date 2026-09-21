@@ -570,7 +570,11 @@ export default function Own() {
         ['client', 'lana-own'],
       ];
       if (selectedProcess.initiator) tags.push(['p', selectedProcess.initiator, '', 'initiator']);
-      if (selectedProcess.facilitator) tags.push(['p', selectedProcess.facilitator, '', 'facilitator']);
+      // Every facilitator, not just the first: a co-led process has more than
+      // one, and a notice that names only one leaves the other out of it.
+      for (const f of (selectedProcess.facilitators?.length ? selectedProcess.facilitators : [selectedProcess.facilitator])) {
+        if (f) tags.push(['p', f, '', 'facilitator']);
+      }
 
       const signedEvent = finalizeEvent({
         kind: PROCESS_EXIT_KIND,
@@ -610,7 +614,10 @@ export default function Own() {
       // WITHOUT it the event locks the whole room.
       if (subject) tags.push(['p', subject, '', 'subject']);
       if (selectedProcess.initiator) tags.push(['p', selectedProcess.initiator, '', 'initiator']);
-      if (selectedProcess.facilitator) tags.push(['p', selectedProcess.facilitator, '', 'facilitator']);
+      // The facilitator named here is the one who paused, not whoever happens
+      // to be first on the roster: Tanja Hruševar's pause of 9. 9. went out
+      // saying Jure Pirc had made it.
+      tags.push(['p', session.nostrHexId, '', 'facilitator']);
 
       const signedEvent = finalizeEvent({
         kind: PROCESS_PAUSE_KIND,
