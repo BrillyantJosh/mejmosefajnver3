@@ -9,8 +9,14 @@
  * relays return (88888 is outside the replaceable ranges, so relays are expected
  * to retain every version; if one keeps only the newest copy, enrolledAt is that
  * copy's date — later, never earlier, so the error is always on the refusing side).
- * completed = COUNT(split_history rows started after enrolledAt).
- * Grandfather: enrolled before our recorded history began → long-time member.
+ * completed = the Splits that have happened AND are over since enrolledAt,
+ * counted from the signed KIND 38888 calendar (./ufSplitCount.ts).
+ *
+ * There is NO exception for "long-time members". There used to be one: the
+ * count came from a table this server fills as it watches a Split begin, that
+ * table only started at Split 8 (two rows on 5. 10. 2026), so nobody could
+ * reach four and every requester got in through the exception instead —
+ * 371 of 499 members allowed, 288 once counted for real.
  *
  * WHO SIGNED THE PLAN MATTERS. The relays accept an event of any kind from
  * anyone, dated as far back as its signer likes, so a KIND 88888 "plan" that a
@@ -25,6 +31,7 @@
  * file does not depend on nostr.ts, which depends on it.
  */
 import { verifyEvent } from 'nostr-tools';
+import { completedSplitsSince, readSplitCalendar, type CalendarReading } from './ufSplitCount.js';
 
 /** How many completed Splits of Lana8Wonder membership a requester needs. */
 export const UF_REQUIRED_COMPLETED_SPLITS = 4;
@@ -49,7 +56,6 @@ export interface Eligibility {
   exists: boolean;
   enrolledAt: number | null;
   completedSplitsSinceEnrollment: number;
-  grandfathered?: boolean;
   requiredSplits: number;
   currentSplit: number;
 }
@@ -91,6 +97,16 @@ export function currentSplitOf(db: any): number {
     return splitTag ? parseInt(splitTag[1]) || 0 : 0;
   } catch {
     return 0;
+  }
+}
+
+/** The Split calendar, read from the stored (signed, author-pinned) KIND 38888. */
+export function splitCalendarOf(db: any): CalendarReading {
+  try {
+    const row = db.prepare('SELECT raw_event FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+    return readSplitCalendar(row?.raw_event ?? null);
+  } catch {
+    return { ok: false, reason: 'the stored system parameters could not be read' };
   }
 }
 
@@ -146,21 +162,22 @@ export async function computeEligibility(
   }
 
   const enrolledAt = Math.min(...plans.map((e: any) => e.created_at));
-  const history = db.prepare('SELECT split, started_at FROM split_history ORDER BY split ASC').all() as any[];
-  const earliestRecorded = history.length > 0 ? Math.min(...history.map(h => h.started_at)) : null;
-  const completedSince = history.filter(h => h.started_at > enrolledAt).length;
 
-  const grandfathered = earliestRecorded !== null && enrolledAt < earliestRecorded
-    && completedSince < UF_REQUIRED_COMPLETED_SPLITS;
-  const eligible = grandfathered || completedSince >= UF_REQUIRED_COMPLETED_SPLITS;
+  // A calendar that cannot be read, or that contradicts itself, is not "no
+  // Splits": it is an answer we do not have. The route says 503 and the
+  // indexer waits for the next scan — never "not eligible".
+  const reading = splitCalendarOf(db);
+  if (reading.ok === false) {
+    return { error: `Split calendar unavailable — ${reading.reason}` };
+  }
+  const completed = completedSplitsSince(enrolledAt, reading.calendar);
 
   return {
-    eligible,
+    eligible: completed >= UF_REQUIRED_COMPLETED_SPLITS,
     exists: true,
     enrolledAt,
-    completedSplitsSinceEnrollment: completedSince,
-    grandfathered,
+    completedSplitsSinceEnrollment: completed,
     requiredSplits: UF_REQUIRED_COMPLETED_SPLITS,
-    currentSplit: currentSplitOf(db),
+    currentSplit: reading.calendar.current,
   };
 }

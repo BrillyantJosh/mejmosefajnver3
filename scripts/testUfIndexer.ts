@@ -164,23 +164,36 @@ const setSetting = (db: any, key: string, value: string) =>
   db.prepare(`INSERT INTO app_settings (key, value) VALUES (?, ?)
               ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(key, value);
 
-interface DbOpts { relayUrl?: string; relayUrls?: string[]; lastScanAt?: number }
+/**
+ * The signed calendar production publishes (KIND 38888 split_history), moved so that
+ * "now" is this test's now: Split 9 has been running for 27 days, Splits 5-8 are over
+ * (95, 125, 155 and 185 days ago), 1-4 earlier. A member who enrolled 200 days ago has
+ * four Splits behind them; one who enrolled 120 days ago has one; a newcomer of 10
+ * days has none. (Until 5. 10. 2026 the count came from a server table that held two
+ * rows, and everyone enrolled before it passed through a "long-time member" exception.)
+ */
+const calendarEvent = (now: number, day: number) => ({
+  tags: [
+    ['split', '9'], ['split_started_at', String(now - 27 * day)],
+    ...[[1, 305], [2, 275], [3, 245], [4, 215], [5, 185], [6, 155], [7, 125], [8, 95], [9, 27]]
+      .map(([n, d]) => ['split_history', String(n), String(now - d * day)]),
+  ],
+  content: '{}',
+});
+
+interface DbOpts { relayUrl?: string; relayUrls?: string[]; lastScanAt?: number; calendar?: unknown }
 function freshDb(o: DbOpts = {}) {
   const db = new Database(':memory:');
   initializeSchema(db);
   db.prepare(`INSERT INTO kind_38888 (event_id, pubkey, created_at, relays, electrum_servers, exchange_rates, split, trusted_signers, raw_event)
               VALUES ('test', 'x', ?, ?, '[]', '{}', '9', ?, ?)`)
-    .run(now, JSON.stringify(o.relayUrls ?? [o.relayUrl ?? RELAY_URL]), JSON.stringify({ Lana8Wonder: [service.pk] }), JSON.stringify({ tags: [['split', '9']] }));
+    .run(now, JSON.stringify(o.relayUrls ?? [o.relayUrl ?? RELAY_URL]), JSON.stringify({ Lana8Wonder: [service.pk] }), JSON.stringify(o.calendar ?? calendarEvent(now, DAY)));
   setSetting(db, 'unconditional_financing_maturing_days', String(MATURING_DAYS));
   if (o.lastScanAt) setSetting(db, 'unconditional_financing_last_indexed_at', String(o.lastScanAt));
-  // production's split history: only the splits this server has seen (8 and 9)
-  const addSplit = db.prepare('INSERT INTO split_history (split, started_at) VALUES (?, ?)');
-  addSplit.run(8, now - 95 * DAY);
-  addSplit.run(9, now - 27 * DAY);
   return db;
 }
 
-/** A long-time member: a plan signed by the service key, enrolled before the recorded history began. */
+/** A member with enough Splits: a plan signed by the service key, enrolled 200 days ago — four Splits are over since. */
 function member(): Key {
   const k = newKey();
   relay.store.push(plan(service, k.pk, now - 200 * DAY));
@@ -268,9 +281,10 @@ console.log('— the attack: backdating, published straight to the relays —');
   reset();
   const lastScan = now - 600;                       // a normal scan, ten minutes ago
   const honest = member(), tagOnly = member(), allDates = member(), future = member();
-  const stranger = newKey(), selfVouched = newKey(), newcomer = newKey();
+  const stranger = newKey(), selfVouched = newKey(), newcomer = newKey(), oldException = newKey();
   relay.store.push(plan(selfVouched, selfVouched.pk, now - 400 * DAY));   // signs a plan about THEMSELVES, long ago
   relay.store.push(plan(service, newcomer.pk, now - 10 * DAY));            // a real plan, but enrolled 10 days ago
+  relay.store.push(plan(service, oldException.pk, now - 120 * DAY));       // real, and older than the table the server used to count from — but only ONE Split is over since
 
   relay.store.push(
     request(honest,   'uf:honest',        { createdAt: now, publishedAt: now, fundingOpensAt: now + M }),
@@ -282,6 +296,7 @@ console.log('— the attack: backdating, published straight to the relays —');
     request(stranger,   'uf:stranger',   { createdAt: now, publishedAt: now - 30 * DAY }),
     request(selfVouched, 'uf:self',      { createdAt: now, publishedAt: now - 30 * DAY }),
     request(newcomer,   'uf:newcomer',   { createdAt: now, publishedAt: now - 30 * DAY }),
+    request(oldException, 'uf:old-exception', { createdAt: now, publishedAt: now - 30 * DAY }),
   );
   const db = freshDb({ lastScanAt: lastScan });
   await quiet(() => scan(db));
@@ -301,6 +316,7 @@ console.log('— the attack: backdating, published straight to the relays —');
   check('a stranger with no Lana8Wonder plan is NOT listed', !r('uf:stranger'));
   check('a plan signed by the person ABOUT THEMSELVES, dated long ago, does not make them a member', !r('uf:self'));
   check('a real member enrolled 10 days ago (too new) is NOT listed', !r('uf:newcomer'));
+  check('a real member with ONE finished Split is NOT listed — the old "long-time member" exception is gone', !r('uf:old-exception'));
 
   console.log('— a second scan changes nothing —');
   const before = ['uf:honest', 'uf:tag-backdated', 'uf:all-backdated', 'uf:future'].map((id) => ({ ...r(id) }));
@@ -309,7 +325,7 @@ console.log('— the attack: backdating, published straight to the relays —');
   check('windows and publication dates are stable across scans',
     before.every((b, i) => b.published_at === after[i].published_at && b.funding_opens_at === after[i].funding_opens_at), { before, after });
   check('the scan watermark moved to this scan', near(watermarkOf(db), now, 15), watermarkOf(db));
-  check('the ineligible are still not listed', !r('uf:stranger') && !r('uf:self') && !r('uf:newcomer'));
+  check('the ineligible are still not listed', !r('uf:stranger') && !r('uf:self') && !r('uf:newcomer') && !r('uf:old-exception'));
 }
 
 // ════════════════════════════════════════════════════════
@@ -328,6 +344,28 @@ console.log('— a membership check nobody could answer never lists a request �
   await new Promise((r) => setTimeout(r, 50));
   await quiet(() => scan(db));
   check('the next scan, once it can be asked, lists it', !!rowOf(db, 'uf:waits'), rowOf(db, 'uf:waits'));
+}
+
+// ════════════════════════════════════════════════════════
+console.log('— a Split calendar that cannot be read is "unknown", never "not eligible" —');
+{
+  reset();
+  const m = member();
+  relay.store.push(request(m, 'uf:calendar-gap', { createdAt: now, publishedAt: now }));
+  // Split 3 is missing from the published history: a calendar in the middle of an edit
+  const gapped = calendarEvent(now, DAY);
+  gapped.tags = gapped.tags.filter((t) => !(t[0] === 'split_history' && t[1] === '3'));
+  const db = freshDb({ lastScanAt: now - 600, calendar: gapped });
+  const mark = watermarkOf(db);
+
+  await quiet(() => scan(db));
+  check('a gapped calendar lists nothing', !rowOf(db, 'uf:calendar-gap'));
+  check('…and the scan is not counted as done: the watermark did not move', watermarkOf(db) === mark, { before: mark, after: watermarkOf(db) });
+
+  // the authority fixes the calendar: the very next scan lists it
+  db.prepare('UPDATE kind_38888 SET raw_event = ?').run(JSON.stringify(calendarEvent(now, DAY)));
+  await quiet(() => scan(db));
+  check('once the calendar is whole again, the next scan lists it', !!rowOf(db, 'uf:calendar-gap'), rowOf(db, 'uf:calendar-gap'));
 }
 
 // ════════════════════════════════════════════════════════

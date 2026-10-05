@@ -120,8 +120,10 @@ async function syncKind38888ToDb(): Promise<boolean> {
       // Record split transitions into split_history. The 38888 event is
       // addressable (relays replace it) and the kind_38888 table is DELETEd on
       // every update below, so this history table is the ONLY durable record of
-      // when each split started — needed by the Unconditional Financing
-      // eligibility rule ("Lana8Wonder member for >= 4 completed Splits").
+      // when each split started here. It is NOT what the Unconditional Financing
+      // eligibility rule counts from any more: that reads the dated Split history
+      // the signed 38888 itself carries (server/lib/ufSplitCount.ts), because this
+      // table only began at Split 8 and could never show four.
       // Audited upsert: a NEWER trusted 38888 event may CORRECT a split's
       // started_at, but a stale relay (older event) can never regress one.
       try {

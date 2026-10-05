@@ -1,7 +1,8 @@
 /**
  * Unconditional Financing — "Lana8Wonder member for >= 4 completed Splits" gate.
- * The heavy lifting (fetch ALL KIND 88888 versions, min created_at, compare
- * against the server-recorded split_history) happens server-side at
+ * The heavy lifting (fetch ALL KIND 88888 versions signed by the Lana8Wonder
+ * key, min created_at, count the Splits that are over since then from the
+ * signed KIND 38888 calendar) happens server-side at
  * GET /api/unconditional-financing/eligibility/:pubkey.
  */
 import { useEffect, useState } from 'react';
@@ -12,7 +13,6 @@ export interface UfEligibility {
   exists: boolean;          // has a Lana8Wonder plan at all
   enrolledAt: number | null;
   completedSplitsSinceEnrollment: number;
-  grandfathered?: boolean;
   requiredSplits: number;
   currentSplit: number;
 }

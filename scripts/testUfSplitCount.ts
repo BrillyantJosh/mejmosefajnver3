@@ -151,6 +151,13 @@ console.log('— the old count, for the record —');
 console.log('— where it is used —');
 {
   const lib = readFileSync(new URL('../server/lib/ufSplitCount.ts', import.meta.url), 'utf8');
+  const elig = readFileSync(new URL('../server/lib/ufEligibility.ts', import.meta.url), 'utf8');
+  const code = elig.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');   // what runs, not what is said about it
+
+  check('eligibility counts from the signed calendar', /from '\.\/ufSplitCount\.js'/.test(code) && /completedSplitsSince\(enrolledAt, reading\.calendar\)/.test(code));
+  check('it does not read the table the server fills as it watches Splits (two rows on 5. 10. 2026)', !/split_history/i.test(code));
+  check('there is no exception for long-time members', !/grandfather/i.test(code) && !/earliestRecorded/.test(code));
+  check('a calendar that cannot be read is an error (503), never "not eligible"', /if \(reading\.ok === false\) \{\s*return \{ error:/.test(code));
   check('a Split that is not over is not "completed" (one named switch, off)', /export const COUNT_RUNNING_SPLIT = false;/.test(lib));
   check('only Splits before the running one are counted by default', /row\.split < calendar\.current && row\.happenedAt > enrolledAt/.test(lib));
 }

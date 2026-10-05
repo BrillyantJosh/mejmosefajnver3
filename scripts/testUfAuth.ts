@@ -72,6 +72,23 @@ wss.on('connection', (ws) => {
   });
 });
 
+/**
+ * The signed calendar production publishes (KIND 38888 split_history), moved so that
+ * "now" is this test's now: Split 9 has been running for 27 days, Splits 5-8 are over
+ * (95, 125, 155 and 185 days ago), 1-4 earlier. A member who enrolled 200 days ago has
+ * four Splits behind them; one who enrolled 120 days ago has one; a newcomer of 10
+ * days has none. (Until 5. 10. 2026 the count came from a server table that held two
+ * rows, and everyone enrolled before it passed through a "long-time member" exception.)
+ */
+const calendarEvent = (now: number, day: number) => ({
+  tags: [
+    ['split', '9'], ['split_started_at', String(now - 27 * day)],
+    ...[[1, 305], [2, 275], [3, 245], [4, 215], [5, 185], [6, 155], [7, 125], [8, 95], [9, 27]]
+      .map(([n, d]) => ['split_history', String(n), String(now - d * day)]),
+  ],
+  content: '{}',
+});
+
 // ── the app: the real router, its own database ─────────────────
 const db = getDb();
 // What the seed put there (a fresh database starts with a placeholder row of system parameters).
@@ -79,11 +96,10 @@ const seededParametersDate = (db.prepare('SELECT created_at FROM kind_38888 ORDE
 db.prepare('DELETE FROM kind_38888').run();   // the seed points at the real relays — replace it before anything can read it
 db.prepare(`INSERT INTO kind_38888 (event_id, pubkey, created_at, relays, electrum_servers, exchange_rates, split, trusted_signers, raw_event)
             VALUES ('test', 'x', ?, ?, '[]', '{}', '9', ?, ?)`)
-  .run(now, JSON.stringify([RELAY_URL]), JSON.stringify({ Lana8Wonder: [service.pk] }), JSON.stringify({ tags: [['split', '9']] }));
+  .run(now, JSON.stringify([RELAY_URL]), JSON.stringify({ Lana8Wonder: [service.pk] }), JSON.stringify(calendarEvent(now, DAY)));
 const setSetting = (key: string, value: string) =>
   db.prepare(`INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(key, value);
 setSetting('unconditional_financing_maturing_days', String(MATURING_DAYS));
-db.prepare('INSERT INTO split_history (split, started_at) VALUES (8, ?), (9, ?)').run(now - 95 * DAY, now - 27 * DAY);
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -349,6 +365,18 @@ console.log('— membership: who signed the plan matters —');
   r = await call('GET', `/eligibility/${noPlan.pk}`);
   check('no plan at all: not eligible', r.status === 200 && r.data.eligible === false && r.data.exists === false, r);
 
+  // The count is real: from the signed calendar, no exception for "long-time members"
+  // (it used to come from a table that held two rows, and everyone older than it got in).
+  const oldException = newKey();
+  relay.store.push(plan(service, oldException.pk, now - 120 * DAY));       // real, older than that table — but only ONE Split is over since
+  r = await call('GET', `/eligibility/${member.pk}`);
+  check('enrolled 200 days ago: four finished Splits, counted from the signed calendar',
+    r.data.completedSplitsSinceEnrollment === 4 && r.data.requiredSplits === 4 && r.data.currentSplit === 9, r.data);
+  check('…and there is no "grandfathered" any more', !('grandfathered' in r.data), r.data);
+  r = await call('GET', `/eligibility/${oldException.pk}`);
+  check('enrolled 120 days ago: ONE finished Split, not eligible (the old exception let them in)',
+    r.status === 200 && r.data.eligible === false && r.data.exists === true && r.data.completedSplitsSinceEnrollment === 1, r);
+
   const requestBy = (who: Key, id: string, publishedAt = now) => finalizeEvent({
     kind: 31240, created_at: now,
     tags: [['d', id], ['service', 'unconditional-financing'], ['title', 't'], ['summary', 's'], ['request_type', 'personal_hardship'],
@@ -362,6 +390,8 @@ console.log('— membership: who signed the plan matters —');
   check('POST /requests/upsert: a self-vouched key is refused → 403', r.status === 403 && !exists('uf:m-self'), r);
   r = await call('POST', '/requests/upsert', { event: requestBy(noPlan, 'uf:m-none') });
   check('POST /requests/upsert: a stranger is refused → 403', r.status === 403 && !exists('uf:m-none'), r);
+  r = await call('POST', '/requests/upsert', { event: requestBy(oldException, 'uf:m-old') });
+  check('POST /requests/upsert: one finished Split is refused → 403', r.status === 403 && !exists('uf:m-old'), r);
 
   r = await call('POST', '/requests/upsert', { event: requestBy(member, 'uf:m-backdated', now - 30 * DAY) });
   check('POST /requests/upsert: a backdated published_at is held at one hour back (unchanged rule)',
@@ -409,6 +439,22 @@ console.log('— membership: who signed the plan matters —');
   r = await call('POST', '/requests/upsert', { event: requestBy(member, 'uf:m-blind') });
   check('POST /requests/upsert with no relay answering → 503, nothing listed', r.status === 503 && !exists('uf:m-blind'), r);
   relay.refuse88888 = false;
+
+  console.log('— …and a Split calendar nobody can read is "unknown" too —');
+  const stored = (db.prepare('SELECT raw_event FROM kind_38888').get() as any).raw_event;
+  const gapped = calendarEvent(now, DAY);
+  gapped.tags = gapped.tags.filter((t) => !(t[0] === 'split_history' && t[1] === '3'));   // Split 3 missing: a calendar mid-edit
+  db.prepare('UPDATE kind_38888 SET raw_event = ?').run(JSON.stringify(gapped));
+  await new Promise((res) => setTimeout(res, 50));
+  r = await call('GET', `/eligibility/${member.pk}`);
+  check('a calendar with a hole → 503 that says so, not a false "not eligible"', r.status === 503 && /calendar/i.test(r.data.error || ''), r);
+  r = await call('POST', '/requests/upsert', { event: requestBy(member, 'uf:m-gap') });
+  check('POST /requests/upsert with a gapped calendar → 503, nothing listed', r.status === 503 && !exists('uf:m-gap'), r);
+  r = await call('GET', `/eligibility/${noPlan.pk}`);
+  check('a stranger still gets a plain "not eligible": no calendar is needed to say there is no plan', r.status === 200 && r.data.eligible === false && r.data.exists === false, r);
+  db.prepare('UPDATE kind_38888 SET raw_event = ?').run(stored);
+  r = await call('GET', `/eligibility/${member.pk}`);
+  check('the calendar whole again: eligible again', r.status === 200 && r.data.eligible === true, r);
 }
 
 closeRelayPool();
