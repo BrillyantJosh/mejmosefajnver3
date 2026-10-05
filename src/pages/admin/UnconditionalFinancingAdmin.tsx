@@ -4,9 +4,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { HandCoins, Clock, Info, HeartHandshake, Leaf, Globe, type LucideIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { HandCoins, Clock, Info, HeartHandshake, Leaf, Globe, AlertTriangle, type LucideIcon } from "lucide-react";
+import { maturingSkipsReview } from "@/lib/ufSettings";
 import type { UfMaxAmounts } from "@/types/admin";
+
+// What 0 days really does, said once and used wherever it is offered or shown.
+const NO_REVIEW_EXPLANATION =
+  "With 0 days there is no maturing period: a request is open for funding the moment it is " +
+  "published, before anyone has had time to read it or ask a question. The setting applies to " +
+  "every request published while it stays at 0, not only the one you had in mind.";
 
 const GROUPS: { key: keyof UfMaxAmounts; label: string; icon: LucideIcon; desc: string }[] = [
   {
@@ -44,6 +61,7 @@ export default function UnconditionalFinancingAdmin() {
     ...(appSettings?.uf_max_amounts || {}),
   });
   const [saving, setSaving] = useState(false);
+  const [confirmNoMaturing, setConfirmNoMaturing] = useState(false);
 
   useEffect(() => {
     if (appSettings) {
@@ -60,8 +78,7 @@ export default function UnconditionalFinancingAdmin() {
     setMaxAmounts((prev) => ({ ...prev, [key]: Number.isFinite(num) && num > 0 ? num : 0 }));
   };
 
-  const handleSave = async () => {
-    if (!daysValid) return;
+  const save = async () => {
     setSaving(true);
     try {
       await updateUnconditionalFinancingSettings({
@@ -72,6 +89,21 @@ export default function UnconditionalFinancingAdmin() {
       setSaving(false);
     }
   };
+
+  // 0 days is never saved by accident: it has to be confirmed, every time.
+  const handleSave = () => {
+    if (!daysValid) return;
+    if (maturingSkipsReview(daysNum)) {
+      setConfirmNoMaturing(true);
+      return;
+    }
+    void save();
+  };
+
+  // What is SAVED, not what is typed: the page is opened long after the setting
+  // was made, and that is exactly when a forgotten 0 has to be seen.
+  const savedDays = appSettings?.uf_maturing_days;
+  const savedSkipsReview = typeof savedDays === "number" && maturingSkipsReview(savedDays);
 
   return (
     <div className="space-y-6">
@@ -84,6 +116,17 @@ export default function UnconditionalFinancingAdmin() {
           </p>
         </div>
       </div>
+
+      {savedSkipsReview && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Requests are opening for funding the moment they are published</AlertTitle>
+          <AlertDescription>
+            The maturing period is saved as <strong>0 days</strong>. {NO_REVIEW_EXPLANATION} Set the
+            number of days below and save to end it.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Maturing period */}
       <Card>
@@ -116,6 +159,13 @@ export default function UnconditionalFinancingAdmin() {
               <p className="text-xs text-destructive">Enter a whole number of days between 0 and 365.</p>
             )}
           </div>
+
+          {daysValid && maturingSkipsReview(daysNum) && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-xs">{NO_REVIEW_EXPLANATION}</AlertDescription>
+            </Alert>
+          )}
 
           <Alert>
             <Info className="h-4 w-4" />
@@ -179,6 +229,26 @@ export default function UnconditionalFinancingAdmin() {
           </p>
         </CardContent>
       </Card>
+
+      <AlertDialog open={confirmNoMaturing} onOpenChange={setConfirmNoMaturing}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Open every new request for funding at once?</AlertDialogTitle>
+            <AlertDialogDescription>{NO_REVIEW_EXPLANATION}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep a maturing period</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmNoMaturing(false);
+                void save();
+              }}
+            >
+              Yes, no maturing period
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

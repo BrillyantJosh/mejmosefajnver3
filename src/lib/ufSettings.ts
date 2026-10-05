@@ -9,6 +9,18 @@ import type { UfRequestType } from "@/hooks/useUFData";
 
 export const UF_DEFAULT_MATURING_DAYS = 8;
 
+/**
+ * A maturing length of 0 is a legitimate admin choice — and the most dangerous
+ * one: a request is open for funding the moment it is published, with no time
+ * for anyone to read it or ask a question first. It is also module-wide, so it
+ * stays in force for every request after the one it was set for, until someone
+ * remembers. Three of the four requests this module has ever had opened that
+ * way, the last one on 5. 10. 2026.
+ */
+export function maturingSkipsReview(days: number): boolean {
+  return Number.isFinite(days) && days <= 0;
+}
+
 export type UfMaxAmounts = Record<UfRequestType, number>;
 
 /** 0 = no cap. The module ships uncapped until an admin sets real limits. */
