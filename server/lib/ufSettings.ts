@@ -33,9 +33,9 @@ export interface UfSettings {
   maxAmounts: UfMaxAmounts;
 }
 
-function readSetting(key: string): unknown {
+function readSetting(db: any | undefined, key: string): unknown {
   try {
-    const row = getDb().prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as any;
+    const row = (db ?? getDb()).prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as any;
     if (!row?.value) return undefined;
     try { return JSON.parse(row.value); } catch { return row.value; }
   } catch {
@@ -60,9 +60,10 @@ function sanitizeAmount(raw: unknown): number {
   return n;
 }
 
-export function getUfSettings(): UfSettings {
-  const maturingDays = sanitizeDays(readSetting('unconditional_financing_maturing_days'));
-  const stored = readSetting('unconditional_financing_max_amounts') as Partial<UfMaxAmounts> | undefined;
+/** The rules in force, read from `db` (default: the app's own database). */
+export function getUfSettings(db?: any): UfSettings {
+  const maturingDays = sanitizeDays(readSetting(db, 'unconditional_financing_maturing_days'));
+  const stored = readSetting(db, 'unconditional_financing_max_amounts') as Partial<UfMaxAmounts> | undefined;
   const maxAmounts: UfMaxAmounts = {
     personal_hardship: sanitizeAmount(stored?.personal_hardship),
     lifestyle_transition: sanitizeAmount(stored?.lifestyle_transition),

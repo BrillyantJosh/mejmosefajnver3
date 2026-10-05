@@ -3,6 +3,9 @@
  * Fetches KIND 38888 system parameters from official Lana relays
  */
 
+import { verifyEvent } from 'nostr-tools';
+import { computeEligibility } from './ufEligibility.js';
+import { isWalletPinned, resolveKnownFundingOpensAt, resolveNewRequestTiming } from './ufMaturing.js';
 import WebSocket from 'ws';
 import { poolQuery } from './relayPool.js';
 import { getUfSettings } from './ufSettings.js';
@@ -1247,10 +1250,53 @@ export async function indexLanacrowdFromRelays(db: any): Promise<void> {
 }
 
 /**
+ * How many people one scan may ask the relays about. A request the database has
+ * not seen before has to pass the eligibility check before it is listed; a flood
+ * of requests from throwaway keys must not turn every scan into a flood of relay
+ * queries. Whatever is not reached is looked at again by the next scan — and
+ * until it has been, the scan watermark does not move (see the end of the scan).
+ * The time budget, not this number, is the real bound: a lookup is ~100 ms.
+ */
+export const UF_MAX_ELIGIBILITY_LOOKUPS_PER_SCAN = 100;
+const UF_ELIGIBILITY_BUDGET_MS = 60_000;
+/** Someone judged "not a member" is not asked about again for this long (the scan runs every 30 minutes). */
+const UF_NOT_ELIGIBLE_TTL_MS = 60 * 60 * 1000;
+const ufNotEligibleUntil = new Map<string, number>();
+
+/** For tests: forget who was judged not eligible. */
+export function resetUfIndexerCaches(): void {
+  ufNotEligibleUntil.clear();
+}
+
+/** When this database last completed a scan of the relays (unix seconds); 0 = never. */
+function readUfScanWatermark(db: any): number {
+  try {
+    const row = db.prepare("SELECT value FROM app_settings WHERE key = 'unconditional_financing_last_indexed_at'").get() as any;
+    const n = parseInt(row?.value ?? '0', 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Index Unconditional Financing state from relays into SQLite.
  * KIND 31240 requests, 60210 contributions, 60211 repayments.
  * Mirrors indexLanacrowdFromRelays: relays are the source of truth, SQLite is
  * the fast read cache; admin/derived flags (is_hidden) are preserved.
+ *
+ * It is a safety net for the REST route (the app publishes to the relays first
+ * and the route may not be reached), so it must never be a way AROUND the
+ * route. Every rule the route enforces on a new request is enforced here too:
+ *   • the event's signature holds;
+ *   • the signer is a Lana8Wonder member of at least 4 completed Splits
+ *     (server/lib/ufEligibility.ts — the same function the route calls);
+ *   • the review period starts when the database first SAW the request, never
+ *     earlier than the dates it can believe (server/lib/ufMaturing.ts holds the
+ *     rule and the reasoning, including why a database rebuilt from the relays
+ *     does not restart every window).
+ * A request that fails any of them is simply not listed, and is looked at again
+ * by the next scan.
  */
 export async function indexUnconditionalFinancingFromRelays(db: any): Promise<void> {
   const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
@@ -1267,14 +1313,34 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
   }
 
   // Same rules the REST route enforces, so both write paths agree.
-  const { maturingSeconds } = getUfSettings();
+  const { maturingSeconds } = getUfSettings(db);
+
+  // What this database knows about its own past: when it last completed a scan.
+  // It decides how far back a request we have never seen may claim to date.
+  const scanStartedAt = Math.floor(Date.now() / 1000);
+  const lastScanAt = readUfScanWatermark(db);
+
+  const nowMs = Date.now();
+  for (const [key, until] of ufNotEligibleUntil) if (until <= nowMs) ufNotEligibleUntil.delete(key);
+  if (ufNotEligibleUntil.size > 5000) ufNotEligibleUntil.clear();
 
   try {
-    let [requestEvents, contributionEvents, repaymentEvents] = await Promise.all([
-      queryEventsFromRelays(relays, { kinds: [31240], limit: 1000 }, 20000),
+    const [requestRead, contributionRead, repaymentRead] = await Promise.all([
+      queryEventsWithRelayStatus(relays, { kinds: [31240], limit: 1000 }, 20000),
       queryEventsFromRelays(relays, { kinds: [60210], limit: 5000 }, 20000),
       queryEventsFromRelays(relays, { kinds: [60211], limit: 5000 }, 20000),
     ]);
+
+    // Not one relay reached EOSE for the requests: we saw nothing, which is not
+    // the same as "there is nothing". Index nothing, and leave the watermark
+    // where it was — it must only ever move past a scan that really happened.
+    if (requestRead.answered.length === 0) {
+      console.warn('⚠️ indexUnconditionalFinancingFromRelays: no relay answered the request query — nothing indexed, scan watermark unchanged');
+      return;
+    }
+    let requestEvents = requestRead.events;
+    let contributionEvents = contributionRead;
+    let repaymentEvents = repaymentRead;
 
     // Only index events that explicitly belong to this module — another app
     // reusing these kind numbers on the shared relays must never leak into
@@ -1285,6 +1351,18 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
     requestEvents = requestEvents.filter(isUf);
     contributionEvents = contributionEvents.filter(isUf);
     repaymentEvents = repaymentEvents.filter(isUf);
+
+    // The REST route verifies every signature; so does this. The relays are
+    // trusted to have checked on the way in — here nothing that decides who a
+    // request, a contribution or a repayment BELONGS to is taken on their word.
+    const validSignature = (evt: any): boolean => {
+      try { return verifyEvent(evt); } catch { return false; }
+    };
+    const requestsBeforeSignatures = requestEvents.length;
+    requestEvents = requestEvents.filter(validSignature);
+    if (requestEvents.length < requestsBeforeSignatures) {
+      console.warn(`⚠️ indexUnconditionalFinancingFromRelays: ignored ${requestsBeforeSignatures - requestEvents.length} KIND 31240 event(s) with an invalid signature`);
+    }
 
     console.log(`📦 indexUnconditionalFinancingFromRelays: ${requestEvents.length} KIND 31240, ${contributionEvents.length} KIND 60210, ${repaymentEvents.length} KIND 60211`);
 
@@ -1335,6 +1413,33 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         updated_at = datetime('now')
     `);
 
+    // A request the database has not seen must pass the eligibility check
+    // before it is listed. Only a real answer counts: if nobody could be asked,
+    // that is not a verdict — the request waits and is asked about again.
+    const eligibilityVerdicts = new Map<string, boolean>();
+    const eligibilityDeadline = Date.now() + UF_ELIGIBILITY_BUDGET_MS;
+    let eligibilityLookups = 0;
+    const waiting = { notListed: 0, deferred: 0, unavailable: 0 };
+    const mayBeListed = async (pubkey: string): Promise<boolean> => {
+      const verdict = eligibilityVerdicts.get(pubkey);
+      if (verdict !== undefined) return verdict;
+      if ((ufNotEligibleUntil.get(pubkey) ?? 0) > Date.now()) return false;
+      if (eligibilityLookups >= UF_MAX_ELIGIBILITY_LOOKUPS_PER_SCAN || Date.now() > eligibilityDeadline) {
+        waiting.deferred++;
+        return false;
+      }
+      eligibilityLookups++;
+      const result = await computeEligibility(db, pubkey, queryEventsWithRelayStatus) as any;
+      if (result.error) {
+        waiting.unavailable++;
+        return false;
+      }
+      const eligible = !!result.eligible;
+      eligibilityVerdicts.set(pubkey, eligible);
+      if (!eligible) ufNotEligibleUntil.set(pubkey, Date.now() + UF_NOT_ELIGIBLE_TTL_MS);
+      return eligible;
+    };
+
     let requestsIndexed = 0;
     for (const evt of requestsByKey.values()) {
       try {
@@ -1352,39 +1457,69 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         // Preserve admin/derived flags + enforce addressable identity: the
         // nostr identity of an addressable event is (pubkey, d) — a different
         // author may never take over an existing row by reusing its d-tag.
-        const existing = db.prepare(
-          'SELECT pubkey, is_hidden, is_repaid, funding_opens_at, wallet FROM uf_requests WHERE id = ?'
+        const readExisting = () => db.prepare(
+          'SELECT pubkey, is_hidden, is_repaid, published_at, funding_opens_at, wallet FROM uf_requests WHERE id = ?'
         ).get(evt.dTag) as any;
+        let existing = readExisting();
         if (existing && existing.pubkey && existing.pubkey !== evt.pubkey) continue;
 
-        // The publication date comes from a STABLE tag — never from created_at,
-        // which changes on every edit of an addressable event. Sanity:
-        // published_at may not lie in the future of the event itself (a
-        // backdated tag would open funding instantly).
-        let publishedAt = parseInt(getTag('published_at') || '0') || evt.created_at;
-        if (publishedAt > evt.created_at + 3600) publishedAt = evt.created_at;
-
-        // funding_opens_at is ALWAYS derived, never taken from a client tag.
-        // Mirrors the REST route: a request refined WHILE MATURING restarts the
-        // review period from the moment of that edit, so the community gets a
-        // full window on the version it will fund. Once funding is open the
-        // window is frozen, and the value can only ever move later — an edit can
-        // never make funding open sooner than already announced.
-        let fundingOpensAt = publishedAt + maturingSeconds;
-        if (existing && existing.funding_opens_at > 0) {
-          fundingOpensAt =
-            evt.created_at < existing.funding_opens_at
-              ? Math.max(existing.funding_opens_at, evt.created_at + maturingSeconds)
-              : existing.funding_opens_at;
+        // A request this database has not seen must pass the same gate as the
+        // REST route: members only. Asking takes relay round-trips, during which
+        // the route may list the very same request — so the row is read again.
+        if (!existing) {
+          if (!(await mayBeListed(evt.pubkey))) {
+            waiting.notListed++;
+            continue;
+          }
+          existing = readExisting();
+          if (existing && existing.pubkey && existing.pubkey !== evt.pubkey) continue;
         }
 
-        // Same rule as the REST route: the receiving address may still change
-        // while the request matures, but is PINNED once funding is open — an
-        // edit must never redirect contributions away from the address people
-        // are giving to.
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        // What the EVENT claims. Every one of these is written by the signer —
+        // they are evidence to weigh, never facts (see ufMaturing.ts).
+        const timing = resolveNewRequestTiming({
+          claimedPublishedAt: parseInt(getTag('published_at') || '0') || evt.created_at,
+          claimedFundingOpensAt: parseInt(getTag('funding_opens_at') || '0') || 0,
+          createdAt: evt.created_at,
+          now: nowSec,
+          maturingSeconds,
+          lastScanAt,
+        });
+
+        let publishedAt: number;
+        let fundingOpensAt: number;
         let wallet = getTag('wallet') || '';
-        if (existing && existing.wallet && evt.created_at >= (existing.funding_opens_at || 0)) {
-          wallet = existing.wallet;
+
+        if (existing && existing.funding_opens_at > 0) {
+          // KNOWN request: the database is the memory of its window. The
+          // publication date is first-seen-wins (the SQL keeps it); the
+          // window only ever moves later, and is decided by OUR clock, so a
+          // backdated edit cannot pass for "refined while maturing".
+          publishedAt = existing.published_at > 0 ? existing.published_at : timing.publishedAt;
+          fundingOpensAt = resolveKnownFundingOpensAt({
+            existingOpensAt: existing.funding_opens_at,
+            eventCreatedAt: evt.created_at,
+            now: nowSec,
+            maturingSeconds,
+          });
+          // The receiving address may still change while the request matures,
+          // but is PINNED once funding is open — an edit must never redirect
+          // contributions away from the address people are giving to.
+          if (existing.wallet && isWalletPinned(existing.funding_opens_at, nowSec)) {
+            wallet = existing.wallet;
+          }
+        } else {
+          // A request this database has not seen (or a row that never got a window).
+          publishedAt = timing.publishedAt;
+          fundingOpensAt = timing.fundingOpensAt;
+          if (timing.publishedAtClamped) {
+            console.warn(
+              `⚠️ indexUnconditionalFinancingFromRelays: ${evt.dTag} claims an earlier publication date than a scan can vouch for — ` +
+              `counted from ${new Date(timing.publishedAt * 1000).toISOString()} (${timing.mode})`,
+            );
+          }
         }
 
         upsertRequest.run(
@@ -1397,7 +1532,7 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
           getTag('request_type') || 'personal_hardship',
           parseFloat(getTag('fiat_goal') || '0') || 0,
           getTag('currency') || 'EUR',
-          getTag('wallet') || '',
+          wallet,
           coverImage,
           JSON.stringify(galleryImages),
           JSON.stringify(crowdfundingRefs),
@@ -1413,6 +1548,12 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         console.error('❌ indexUnconditionalFinancingFromRelays: failed to upsert request', evt.dTag, err);
       }
     }
+    if (waiting.notListed > 0) {
+      console.warn(
+        `⚠️ indexUnconditionalFinancingFromRelays: ${waiting.notListed} unknown request(s) not listed ` +
+        `(deferred past this scan's lookup budget: ${waiting.deferred}; eligibility could not be checked: ${waiting.unavailable})`,
+      );
+    }
 
     // Contributions (regular events; keyed by event id)
     const upsertContribution = db.prepare(`
@@ -1425,6 +1566,11 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
       ON CONFLICT(id) DO UPDATE SET
         message = COALESCE(uf_contributions.message, excluded.message)
     `);
+    const knownContributionIds = new Set<string>(
+      (db.prepare('SELECT id FROM uf_contributions').all() as any[]).map(r => r.id),
+    );
+    const datedBeforeOpening = new Map<string, number>();
+    let unsignedContributions = 0;
 
     let contributionsIndexed = 0;
     for (const evt of contributionEvents) {
@@ -1452,7 +1598,20 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         // server-side 409 rule within one heartbeat re-index.
         const timestampPaid = parseInt(getTag('timestamp_paid') || '0') || evt.created_at;
         const effectiveTs = Math.min(evt.created_at, timestampPaid);
-        if ((parentReq.funding_opens_at || 0) > effectiveTs) continue;
+        if ((parentReq.funding_opens_at || 0) > effectiveTs) {
+          // Said out loud: if a window were ever wrong, this is where real
+          // contributions would vanish, and a silent `continue` hides it.
+          if (!knownContributionIds.has(evt.id)) {
+            datedBeforeOpening.set(requestId, (datedBeforeOpening.get(requestId) || 0) + 1);
+          }
+          continue;
+        }
+
+        // Not in the database yet: the signature has to hold before it is believed.
+        if (!knownContributionIds.has(evt.id) && !validSignature(evt)) {
+          unsignedContributions++;
+          continue;
+        }
 
         upsertContribution.run(
           evt.id,
@@ -1475,6 +1634,16 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         console.error('❌ indexUnconditionalFinancingFromRelays: failed to upsert contribution', evt.id, err);
       }
     }
+    if (datedBeforeOpening.size > 0) {
+      const total = [...datedBeforeOpening.values()].reduce((a, b) => a + b, 0);
+      console.warn(
+        `⚠️ indexUnconditionalFinancingFromRelays: ${total} contribution(s) are dated before their request opened for funding and were not indexed: ` +
+        [...datedBeforeOpening].map(([id, n]) => `${id} ×${n}`).join(', '),
+      );
+    }
+    if (unsignedContributions > 0) {
+      console.warn(`⚠️ indexUnconditionalFinancingFromRelays: ignored ${unsignedContributions} KIND 60210 event(s) with an invalid signature`);
+    }
 
     // Repayments (regular events; keyed by event id). Per-financier outputs are
     // rebuilt from the repeatable `out` tags: [out, pubkey, wallet, lanoshis, fiat]
@@ -1486,6 +1655,10 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO NOTHING
     `);
+    const knownRepaymentIds = new Set<string>(
+      (db.prepare('SELECT id FROM uf_repayments').all() as any[]).map(r => r.id),
+    );
+    let unsignedRepayments = 0;
 
     let repaymentsIndexed = 0;
     for (const evt of repaymentEvents) {
@@ -1516,6 +1689,12 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         if (totalFiat <= 0 || Math.abs(sumFiat - totalFiat) > Math.max(0.05, totalFiat * 0.01)) continue;
         if (totalLanoshis <= 0 || sumLanoshis !== totalLanoshis) continue;
 
+        // Not in the database yet: the signature has to hold before it is believed.
+        if (!knownRepaymentIds.has(evt.id) && !validSignature(evt)) {
+          unsignedRepayments++;
+          continue;
+        }
+
         upsertRepayment.run(
           evt.id,
           requestId,
@@ -1533,6 +1712,9 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         console.error('❌ indexUnconditionalFinancingFromRelays: failed to upsert repayment', evt.id, err);
       }
     }
+    if (unsignedRepayments > 0) {
+      console.warn(`⚠️ indexUnconditionalFinancingFromRelays: ignored ${unsignedRepayments} KIND 60211 event(s) with an invalid signature`);
+    }
 
     // Recompute repaid status for all requests from the indexed data
     const toCheck = db.prepare(`
@@ -1549,10 +1731,26 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
       if (result.changes > 0) repaidChanges++;
     }
 
-    db.prepare(`
-      INSERT INTO app_settings (key, value, updated_at) VALUES ('unconditional_financing_last_indexed_at', ?, datetime('now'))
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
-    `).run(String(Math.floor(Date.now() / 1000)));
+    // The watermark is the moment this scan STARTED reading. It is what the next
+    // scan believes about how far back an unknown request can honestly date, so
+    // it may only move past a scan that SETTLED every request it did not know:
+    // listed, or refused for good. A request still waiting for its membership
+    // check (the relays did not answer, or the scan's lookup budget ran out) has
+    // not been looked at yet — if the watermark moved on, the next scan would
+    // distrust its dates, restart its window and drop its real contributions.
+    // On a database being rebuilt this is what keeps "from scratch" in force
+    // until the whole relay record has been taken in.
+    if (waiting.deferred === 0 && waiting.unavailable === 0) {
+      db.prepare(`
+        INSERT INTO app_settings (key, value, updated_at) VALUES ('unconditional_financing_last_indexed_at', ?, datetime('now'))
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+      `).run(String(scanStartedAt));
+    } else {
+      console.warn(
+        `⚠️ indexUnconditionalFinancingFromRelays: scan watermark left where it was — ` +
+        `${waiting.deferred + waiting.unavailable} unknown request(s) still wait for a membership verdict`,
+      );
+    }
 
     console.log(`✅ indexUnconditionalFinancingFromRelays: ${requestsIndexed} requests, ${contributionsIndexed} contributions, ${repaymentsIndexed} repayments, ${repaidChanges} repaid changes`);
   } catch (error) {
