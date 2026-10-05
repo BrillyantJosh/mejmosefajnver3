@@ -8,39 +8,52 @@
  * derives ALL fields from the verified event's tags — the JSON body is never
  * trusted for identity or amounts.
  *
- * Lifecycle: publish → 8-day MATURING (comments only; enforced server-side and
- * in the indexer) → REPAYING (open for funding AND repayable) → REPAID
- * (repaid_fiat >= funded_fiat, auto-recomputed).
+ * Deleting and hiding a request follow the same rule: the caller signs a
+ * kind 27235 event (see server/lib/ufSignedAction.ts) and the SIGNER — owner or
+ * administrator — is the only identity there is.
+ *
+ * Lifecycle: publish → MATURING (comments only; enforced server-side and in the
+ * indexer; the length is an admin setting) → REPAYING (open for funding AND
+ * repayable) → REPAID (repaid_fiat >= funded_fiat, auto-recomputed).
  */
 
 import { Router } from 'express';
 import { verifyEvent } from 'nostr-tools';
 import { getDb } from '../db/connection.js';
-import { queryEventsFromRelays } from '../lib/nostr.js';
+import { queryEventsWithRelayStatus } from '../lib/nostr.js';
 import { getUfSettings, maxAmountFor } from '../lib/ufSettings.js';
+import { computeEligibility } from '../lib/ufEligibility.js';
+import { UF_FUTURE_SKEW_SECONDS, UF_PAST_SKEW_SECONDS } from '../lib/ufMaturing.js';
+import {
+  UF_ACTION_DELETE_REQUEST,
+  UF_ACTION_SET_HIDDEN,
+  isRefused,
+  verifySignedAction,
+} from '../lib/ufSignedAction.js';
 
 const router = Router();
 
-// How many completed Splits of Lana8Wonder membership a requester needs.
-const REQUIRED_COMPLETED_SPLITS = 4;
 const SERVICE_TAG = 'unconditional-financing';
 
 // ──────────────────────────────────────────────
 // helpers
 // ──────────────────────────────────────────────
 
-function getRelays(): string[] {
-  const db = getDb();
-  const row = db.prepare('SELECT relays FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
-  if (!row?.relays) return [];
-  try { return JSON.parse(row.relays); } catch { return []; }
-}
-
 function getAdmins(): string[] {
   const db = getDb();
   const row = db.prepare("SELECT value FROM app_settings WHERE key = 'unconditional_financing_admins'").get() as any;
   if (!row?.value) return [];
   try { return JSON.parse(row.value); } catch { return []; }
+}
+
+/**
+ * An administrator is a key in admin_users — the same list that may rewrite
+ * app_settings — or one named in this module's own admin list. Both lists are
+ * only writable by an administrator, so naming a second place widens nothing.
+ */
+function isAdministrator(db: any, pubkey: string): boolean {
+  const row = db.prepare('SELECT 1 FROM admin_users WHERE nostr_hex_id = ?').get(pubkey) as any;
+  return !!row || getAdmins().includes(pubkey);
 }
 
 function parseJsonArray(val: any): any[] {
@@ -181,68 +194,6 @@ function recomputeRepaid(db: any, requestId: string): void {
   const isRepaid = row && row.funded > 0 && row.repaid >= row.funded * 0.99 ? 1 : 0;
   db.prepare(`UPDATE uf_requests SET is_repaid = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(isRepaid, requestId);
-}
-
-function getCurrentSplit(db: any): number {
-  try {
-    const row = db.prepare('SELECT raw_event FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
-    if (!row?.raw_event) return 0;
-    const evt = JSON.parse(row.raw_event);
-    const splitTag = evt.tags?.find((t: string[]) => t[0] === 'split');
-    return splitTag ? parseInt(splitTag[1]) || 0 : 0;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * "Lana8Wonder member for at least 4 completed Splits."
- * enrolledAt = MIN(created_at) across ALL of the user's KIND 88888 events
- * (88888 is outside the replaceable ranges → relays retain every version).
- * completed = COUNT(split_history rows started after enrolledAt).
- * Grandfather: enrolled before our recorded history began → long-time member.
- */
-async function computeEligibility(db: any, pubkey: string) {
-  const relays = getRelays();
-  if (relays.length === 0) {
-    return { error: 'No relays available' };
-  }
-
-  // One retry — a transient relay failure must not read as "not a member".
-  let events = await queryEventsFromRelays(relays, { kinds: [88888], '#p': [pubkey], limit: 100 }, 15000);
-  if (!events || events.length === 0) {
-    events = await queryEventsFromRelays(relays, { kinds: [88888], '#p': [pubkey], limit: 100 }, 15000);
-  }
-
-  if (!events || events.length === 0) {
-    return {
-      eligible: false,
-      exists: false,
-      enrolledAt: null,
-      completedSplitsSinceEnrollment: 0,
-      requiredSplits: REQUIRED_COMPLETED_SPLITS,
-      currentSplit: getCurrentSplit(db),
-    };
-  }
-
-  const enrolledAt = Math.min(...events.map((e: any) => e.created_at));
-  const history = db.prepare('SELECT split, started_at FROM split_history ORDER BY split ASC').all() as any[];
-  const earliestRecorded = history.length > 0 ? Math.min(...history.map(h => h.started_at)) : null;
-  const completedSince = history.filter(h => h.started_at > enrolledAt).length;
-
-  const grandfathered = earliestRecorded !== null && enrolledAt < earliestRecorded
-    && completedSince < REQUIRED_COMPLETED_SPLITS;
-  const eligible = grandfathered || completedSince >= REQUIRED_COMPLETED_SPLITS;
-
-  return {
-    eligible,
-    exists: true,
-    enrolledAt,
-    completedSplitsSinceEnrollment: completedSince,
-    grandfathered,
-    requiredSplits: REQUIRED_COMPLETED_SPLITS,
-    currentSplit: getCurrentSplit(db),
-  };
 }
 
 // ──────────────────────────────────────────────
@@ -461,11 +412,11 @@ router.post('/requests/upsert', async (req, res) => {
       // derived from the admin-configured maturing length — a client can never
       // open its own funding early.
       const claimed = parseInt(getTag(evt, 'published_at') || '0') || nowSec;
-      publishedAt = Math.min(Math.max(claimed, nowSec - 3600), nowSec + 300);
+      publishedAt = Math.min(Math.max(claimed, nowSec - UF_PAST_SKEW_SECONDS), nowSec + UF_FUTURE_SKEW_SECONDS);
       fundingOpensAt = publishedAt + settings.maturingSeconds;
 
       // Eligibility: Lana8Wonder member for >= 4 completed Splits.
-      const elig = await computeEligibility(db, evt.pubkey);
+      const elig = await computeEligibility(db, evt.pubkey, queryEventsWithRelayStatus);
       if ((elig as any).error) return res.status(503).json({ error: (elig as any).error });
       if (!(elig as any).eligible) {
         return res.status(403).json({
@@ -543,22 +494,33 @@ router.post('/requests/upsert', async (req, res) => {
 
 // ──────────────────────────────────────────────
 // PATCH /api/unconditional-financing/requests/:id/admin
+// Body: { event: <signed kind 27235> }
+//   content: {"action":"uf-request-set-hidden","id":"<request id>","is_hidden":true|false}
+//   tags:    ['u', <this url>], ['method', 'PATCH']
+// The SIGNER must be an administrator, and is_hidden is read from the signed
+// content — neither a public key nor a flag in the JSON body decides anything.
 // ──────────────────────────────────────────────
 router.patch('/requests/:id/admin', (req, res) => {
   const db = getDb();
-  const { adminPubkey, is_hidden } = req.body;
+  const signed = verifySignedAction(req.body?.event, {
+    method: 'PATCH',
+    action: UF_ACTION_SET_HIDDEN,
+    target: req.params.id,
+  });
+  if (isRefused(signed)) return res.status(signed.status).json({ error: signed.error });
 
-  if (!adminPubkey || !getAdmins().includes(adminPubkey)) {
-    return res.status(403).json({ error: 'Not authorized' });
+  if (!isAdministrator(db, signed.pubkey)) {
+    return res.status(403).json({ error: 'Not an administrator' });
   }
-  if (is_hidden === undefined) {
+  const isHidden = signed.payload.is_hidden;
+  if (typeof isHidden !== 'boolean') {
     return res.status(400).json({ error: 'No fields to update' });
   }
 
   try {
     const result = db.prepare(`
       UPDATE uf_requests SET is_hidden = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(is_hidden ? 1 : 0, req.params.id);
+    `).run(isHidden ? 1 : 0, req.params.id);
 
     if (result.changes === 0) return res.status(404).json({ error: 'Request not found' });
     res.json({ success: true });
@@ -570,22 +532,36 @@ router.patch('/requests/:id/admin', (req, res) => {
 
 // ──────────────────────────────────────────────
 // DELETE /api/unconditional-financing/requests/:id
-// Owner (or admin) may delete a request with NO contributions. Note: rows are
-// re-indexed from relays, so deletion is only durable when the KIND 5 deletion
-// event is also published client-side.
+// Body: { event: <signed kind 27235> }
+//   content: {"action":"uf-request-delete","id":"<request id>"}
+//   tags:    ['u', <this url>], ['method', 'DELETE']
+// The owner (the request's signer) or an administrator may delete a request
+// with NO contributions; who is asking is the signer, nothing else. Note: rows
+// are re-indexed from relays, so deletion is only durable when the KIND 5
+// deletion event is also published client-side.
 // ──────────────────────────────────────────────
 router.delete('/requests/:id', (req, res) => {
   const db = getDb();
-  const requesterPubkey = (req.body?.requesterPubkey || '').trim();
-  if (!requesterPubkey) return res.status(400).json({ error: 'requesterPubkey required' });
+  const signed = verifySignedAction(req.body?.event, {
+    method: 'DELETE',
+    action: UF_ACTION_DELETE_REQUEST,
+    target: req.params.id,
+  });
+  if (isRefused(signed)) return res.status(signed.status).json({ error: signed.error });
 
   try {
-    const request = db.prepare('SELECT pubkey FROM uf_requests WHERE id = ?').get(req.params.id) as any;
+    const request = db.prepare('SELECT pubkey, is_hidden FROM uf_requests WHERE id = ?').get(req.params.id) as any;
     if (!request) return res.status(404).json({ error: 'Request not found' });
 
-    const isOwner = request.pubkey === requesterPubkey;
-    const isAdmin = getAdmins().includes(requesterPubkey);
+    const isOwner = request.pubkey === signed.pubkey;
+    const isAdmin = isAdministrator(db, signed.pubkey);
     if (!isOwner && !isAdmin) return res.status(403).json({ error: 'Not authorized to delete this request' });
+
+    // A request an administrator hid stays an administrator's to deal with: the
+    // indexer re-creates a deleted row from the relays, and the new row is NOT hidden.
+    if (request.is_hidden && !isAdmin) {
+      return res.status(403).json({ error: 'This request was hidden by an administrator — only an administrator can delete it' });
+    }
 
     const check = db.prepare(
       'SELECT COUNT(*) AS cnt FROM uf_contributions WHERE request_id = ?'
@@ -595,7 +571,7 @@ router.delete('/requests/:id', (req, res) => {
     }
 
     db.prepare('DELETE FROM uf_requests WHERE id = ?').run(req.params.id);
-    console.log(`🗑️ Deleted UF request ${req.params.id} by ${requesterPubkey.slice(0, 16)}…`);
+    console.log(`🗑️ Deleted UF request ${req.params.id} by ${signed.pubkey.slice(0, 16)}…`);
     res.json({ success: true });
   } catch (err: any) {
     console.error('❌ DELETE /api/unconditional-financing/requests/:id error:', err);
@@ -887,7 +863,7 @@ router.get('/eligibility/:pubkey', async (req, res) => {
   }
 
   try {
-    const result = await computeEligibility(db, pubkey);
+    const result = await computeEligibility(db, pubkey, queryEventsWithRelayStatus);
     if ((result as any).error) return res.status(503).json({ error: (result as any).error });
     res.json(result);
   } catch (err: any) {

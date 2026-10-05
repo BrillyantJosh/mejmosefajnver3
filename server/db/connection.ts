@@ -6,7 +6,11 @@ import { seedData } from './seed.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DB_PATH = path.resolve(__dirname, '../../data/mejmosefajn.db');
+// MEJMO_DB_PATH exists for tests that mount a real router against a throwaway
+// database (scripts/testUfAuth.ts). Nothing sets it in production.
+const DB_PATH = process.env.MEJMO_DB_PATH
+  ? path.resolve(process.env.MEJMO_DB_PATH)
+  : path.resolve(__dirname, '../../data/mejmosefajn.db');
 
 let db: Database.Database;
 
