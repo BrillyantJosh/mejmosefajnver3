@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, PlusCircle, Sparkles, Loader2, Hourglass } from "lucide-react";
+import { AlertTriangle, ArrowLeft, PlusCircle, RefreshCw, Sparkles, Loader2, Hourglass } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/i18n/I18nContext";
 import { useUFEligibility } from "@/hooks/useUFEligibility";
@@ -15,7 +15,7 @@ export default function UFCreateRequest() {
   const navigate = useNavigate();
   const sl = useLang() === "sl";
   const { session } = useAuth();
-  const { eligibility, isLoading } = useUFEligibility(session?.nostrHexId);
+  const { eligibility, isLoading, error, retry } = useUFEligibility(session?.nostrHexId);
 
   // While we resolve the user's eligibility, show a small loader rather than
   // flashing a form they may not actually be allowed to submit.
@@ -24,6 +24,43 @@ export default function UFCreateRequest() {
       <div className="container mx-auto p-4 sm:p-6 pb-24 max-w-2xl">
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  // The server could not tell (no relay answered, or the Split calendar could not be read).
+  // That is neither "no plan" nor "not enough Splits": say so, and let the person ask again.
+  if (error) {
+    return (
+      <div className="container mx-auto p-4 sm:p-6 pb-24 max-w-2xl">
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="h-16 w-16 rounded-full bg-amber-500/10 flex items-center justify-center mb-4">
+            <AlertTriangle className="h-8 w-8 text-amber-500" />
+          </div>
+          <h2 className="text-lg font-semibold">
+            {sl ? "Preverjanje trenutno ni mogoče" : "We cannot check this right now"}
+          </h2>
+          <p className="text-sm text-muted-foreground mt-2 max-w-sm">
+            {sl
+              ? "Strežnik zdaj ne more preveriti tvojega članstva v Lana8Wonder in zaključenih Splitov. To ne pomeni, da ne izpolnjuješ pogojev — poskusi znova čez nekaj minut."
+              : "The server cannot check your Lana8Wonder membership and completed Splits right now. That does not mean you do not qualify — please try again in a few minutes."}
+          </p>
+          <p className="text-xs text-muted-foreground mt-3 max-w-sm break-words">{error}</p>
+          <div className="flex flex-col sm:flex-row gap-2 mt-6">
+            <Button onClick={retry} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              {sl ? "Poskusi znova" : "Try again"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => navigate("/unconditional-financing/requests")}
+              className="gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              {sl ? "Nazaj na modul" : "Back to module"}
+            </Button>
+          </div>
         </div>
       </div>
     );

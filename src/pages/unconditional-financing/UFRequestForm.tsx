@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,7 @@ import {
 } from "@/hooks/useUFData";
 import { useUfSettings } from "@/hooks/useUFSettings";
 import { formatDays, formatDaysAfter } from "@/lib/ufSettings";
+import { upsertOutcome } from "@/lib/ufUpsertOutcome";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 
@@ -69,6 +70,10 @@ interface UFRequestFormProps {
 
 export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProps) {
   const isEdit = !!existing;
+  // A NEW request's id is chosen once per form, not once per click: the request is already on
+  // the relays when the server answers, so if it cannot list it and the person publishes
+  // again, the second event REPLACES the first instead of becoming a second request.
+  const newRequestId = useRef<string | null>(null);
   // Refining is a maturing-phase freedom; once funding is open the date is fixed.
   const isStillMaturing = !!existing && Math.floor(Date.now() / 1000) < existing.fundingOpensAt;
   const sl = useLang() === "sl";
@@ -429,7 +434,8 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
       const nowTs = Math.floor(Date.now() / 1000);
       // An edit keeps the request's identity (d-tag) and its ORIGINAL publication
       // date; only the event's created_at moves. A new request gets both fresh.
-      const dTag = existing ? existing.id : `uf:${crypto.randomUUID()}`;
+      if (!existing && !newRequestId.current) newRequestId.current = `uf:${crypto.randomUUID()}`;
+      const dTag = existing ? existing.id : (newRequestId.current as string);
       const pubTs = existing ? existing.publishedAt : nowTs;
       // The server re-derives this and ignores our value; we publish the same
       // number so the event is self-consistent on relays. Editing during
@@ -497,23 +503,31 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
 
       // Immediately upsert into server SQLite. The server verifies the SIGNED
       // EVENT and derives all fields from it (hardened contract). It also
-      // enforces the Lana8Wonder 4-Splits eligibility for new requests — a 403
-      // here means the request is on relays but will not be listed by the app.
+      // enforces the Lana8Wonder 4-Splits eligibility for new requests. The
+      // request is on the relays by now, so what the person needs to hear is
+      // whether the server has LISTED it (see upsertOutcome): refused (403 and
+      // the like) stays on the form with the reason; "cannot tell right now"
+      // (503, 5xx) is published but not listed yet — never the success message.
+      // An unreachable server is the one case the relay indexer covers silently.
+      let upsert: Response | null = null;
       try {
-        const res = await fetch(`${UF_API}/requests/upsert`, {
+        upsert = await fetch(`${UF_API}/requests/upsert`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ event: signedEvent }),
         });
-        if (res.status === 403) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.error || (sl ? "Zahtevek ni bil sprejet" : "Request was not accepted"));
-        }
       } catch (upsertErr) {
-        if (upsertErr instanceof Error && upsertErr.message && !upsertErr.message.includes("fetch")) {
-          throw upsertErr;
+        console.warn("UF request upsert could not reach the server (the indexer will pick it up):", upsertErr);
+      }
+      if (upsert && !upsert.ok) {
+        const body = await upsert.json().catch(() => ({}));
+        const outcome = upsertOutcome(upsert.status, body?.error, sl);
+        if (outcome.kind === "refused") throw new Error(outcome.message);
+        if (outcome.kind === "pending") {
+          toast.warning(outcome.message, { duration: 20000 });
+          onSuccess();
+          return;
         }
-        console.warn("UF request upsert failed (indexer will pick it up):", upsertErr);
       }
 
       // Report the date that was actually saved, so the requester knows exactly

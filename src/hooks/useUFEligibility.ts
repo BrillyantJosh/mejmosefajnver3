@@ -4,8 +4,12 @@
  * key, min created_at, count the Splits that are over since then from the
  * signed KIND 38888 calendar) happens server-side at
  * GET /api/unconditional-financing/eligibility/:pubkey.
+ *
+ * "The server could not tell" (no relay answered, or the Split calendar could not
+ * be read — HTTP 503) is an ERROR here, never an `eligibility` that says "no plan":
+ * the page has to say "cannot check right now", not "you are not a member".
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { UF_API } from './useUFData';
 
 export interface UfEligibility {
@@ -21,18 +25,27 @@ export function useUFEligibility(pubkey: string | undefined) {
   const [eligibility, setEligibility] = useState<UfEligibility | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!pubkey) { setIsLoading(false); return; }
     let alive = true;
     setIsLoading(true);
+    setError(null);
     fetch(`${UF_API}/eligibility/${encodeURIComponent(pubkey)}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then(async (r) => {
+        if (r.ok) return r.json();
+        // The server says WHY it cannot tell; keep that, it is what someone reports back.
+        const body = await r.json().catch(() => null);
+        throw new Error(typeof body?.error === 'string' && body.error ? body.error : `HTTP ${r.status}`);
+      })
       .then((d) => { if (alive) { setEligibility(d); setError(null); } })
-      .catch((e) => alive && setError(e.message))
+      .catch((e) => { if (alive) { setEligibility(null); setError(e?.message || 'unavailable'); } })
       .finally(() => alive && setIsLoading(false));
     return () => { alive = false; };
-  }, [pubkey]);
+  }, [pubkey, attempt]);
 
-  return { eligibility, isLoading, error };
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+
+  return { eligibility, isLoading, error, retry };
 }

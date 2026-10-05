@@ -31,6 +31,7 @@ import {
   UF_MAX_ELIGIBILITY_LOOKUPS_PER_SCAN,
 } from '../server/lib/nostr.js';
 import { closeRelayPool } from '../server/lib/relayPool.js';
+import { CALENDAR_DAY_SKEW_SECONDS } from '../server/lib/ufSplitCount.js';
 import { computeEligibility } from '../server/lib/ufEligibility.js';
 import {
   isWalletPinned,
@@ -366,6 +367,67 @@ console.log('— a Split calendar that cannot be read is "unknown", never "not e
   db.prepare('UPDATE kind_38888 SET raw_event = ?').run(JSON.stringify(calendarEvent(now, DAY)));
   await quiet(() => scan(db));
   check('once the calendar is whole again, the next scan lists it', !!rowOf(db, 'uf:calendar-gap'), rowOf(db, 'uf:calendar-gap'));
+}
+
+// ════════════════════════════════════════════════════════
+console.log('— membership at the edges: three Splits is not four, and a Split joined halfway does not count —');
+{
+  reset();
+  // Split 5 is dated 185 days ago in the seeded calendar; a Split begins two hours before its
+  // row says. Splits 5-8 are the four that are over: they are all behind anyone who enrolled
+  // before Split 5 BEGAN.
+  const began5 = now - 185 * DAY - CALENDAR_DAY_SKEW_SECONDS;
+  const people: [string, string, number, number][] = [
+    ['one second before Split 5 began', 'before', began5 - 1, 4],
+    ['the very second Split 5 began', 'start', began5, 3],
+    ['an hour into Split 5', 'halfway', began5 + 3600, 3],
+    ['160 days ago (Splits 6, 7, 8)', 'three', now - 160 * DAY, 3],
+    ['190 days ago (Splits 5-8)', 'four', now - 190 * DAY, 4],
+  ];
+  const keys = new Map<string, Key>();
+  for (const [, id, enrolled] of people) {
+    const k = newKey();
+    keys.set(id, k);
+    relay.store.push(plan(service, k.pk, enrolled), request(k, `uf:edge-${id}`, { createdAt: now, publishedAt: now }));
+  }
+  const db = freshDb({ lastScanAt: now - 600 });
+  await quiet(() => scan(db));
+  for (const [who, id, , splits] of people) {
+    check(`enrolled ${who}: ${splits} Splits → ${splits >= 4 ? 'listed' : 'NOT listed'}`, splits >= 4 ? !!rowOf(db, `uf:edge-${id}`) : !rowOf(db, `uf:edge-${id}`), rowOf(db, `uf:edge-${id}`));
+  }
+  // the very same people, asked directly: the count the indexer judged them by
+  const asked = async (id: string): Promise<any> => computeEligibility(db, keys.get(id)!.pk, async (_relays, f) => ({
+    events: relay.store.filter((e) => e.kind === 88888 && f.authors.includes(e.pubkey) && e.tags.some((t) => t[0] === 'p' && f['#p'].includes(t[1]))),
+    answered: ['x'], failed: [],
+  }));
+  for (const [who, id, , splits] of people) {
+    const e = await asked(id);
+    check(`…and counted directly: ${who} has ${splits}`, e.completedSplitsSinceEnrollment === splits && e.eligible === (splits >= 4), e);
+  }
+}
+
+// ════════════════════════════════════════════════════════
+console.log('— a calendar that breaks AFTER a sound scan: the last sound one answers, and admits nobody new —');
+{
+  reset();
+  const a = member(), b = member();
+  const oneSplit = newKey();
+  relay.store.push(plan(service, oneSplit.pk, now - 120 * DAY));   // one finished Split since
+  relay.store.push(request(a, 'uf:before-break', { createdAt: now, publishedAt: now }));
+  const db = freshDb({ lastScanAt: now - 600 });
+  await quiet(() => scan(db));
+  check('a sound calendar: the first request is listed', !!rowOf(db, 'uf:before-break'));
+
+  // the authority's calendar loses Split 3 (mid-edit) — and two more requests arrive
+  const gapped = calendarEvent(now, DAY);
+  gapped.tags = gapped.tags.filter((t) => !(t[0] === 'split_history' && t[1] === '3'));
+  db.prepare('UPDATE kind_38888 SET raw_event = ?').run(JSON.stringify(gapped));
+  relay.store.push(request(b, 'uf:during-break', { createdAt: now, publishedAt: now }));
+  relay.store.push(request(oneSplit, 'uf:during-break-no', { createdAt: now, publishedAt: now }));
+  await quiet(() => scan(db));
+  check('the member whose request arrives while it is broken is listed (the calendar from before answers)', !!rowOf(db, 'uf:during-break'), rowOf(db, 'uf:during-break'));
+  check('…while one finished Split is still refused: standing in admits nobody new', !rowOf(db, 'uf:during-break-no'));
+  check('…and that scan settled: the watermark moved (nothing is waiting on the calendar)', near(watermarkOf(db), now, 15), watermarkOf(db));
 }
 
 // ════════════════════════════════════════════════════════

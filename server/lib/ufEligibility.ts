@@ -10,7 +10,9 @@
  * to retain every version; if one keeps only the newest copy, enrolledAt is that
  * copy's date — later, never earlier, so the error is always on the refusing side).
  * completed = the Splits that have happened AND are over since enrolledAt,
- * counted from the signed KIND 38888 calendar (./ufSplitCount.ts).
+ * counted from the signed KIND 38888 calendar (./ufSplitCount.ts). A calendar
+ * that cannot be read is an error (503) — unless a sound one was read within the
+ * last week, which then stands in (it can only count fewer Splits, never more).
  *
  * There is NO exception for "long-time members". There used to be one: the
  * count came from a table this server fills as it watches a Split begin, that
@@ -31,7 +33,7 @@
  * file does not depend on nostr.ts, which depends on it.
  */
 import { verifyEvent } from 'nostr-tools';
-import { completedSplitsSince, readSplitCalendar, type CalendarReading } from './ufSplitCount.js';
+import { completedSplitsSince, LastGoodCalendar, readSplitCalendar, type CalendarReading } from './ufSplitCount.js';
 
 /** How many completed Splits of Lana8Wonder membership a requester needs. */
 export const UF_REQUIRED_COMPLETED_SPLITS = 4;
@@ -100,14 +102,38 @@ export function currentSplitOf(db: any): number {
   }
 }
 
-/** The Split calendar, read from the stored (signed, author-pinned) KIND 38888. */
-export function splitCalendarOf(db: any): CalendarReading {
+const lastGoodCalendars = new WeakMap<object, LastGoodCalendar>();
+let lastStaleWarningAt = 0;
+
+/**
+ * The Split calendar, read from the stored (signed, author-pinned) KIND 38888 and
+ * checked for the N newest finished Splits the rule asks for. When the stored one
+ * cannot be read, the last sound reading of THIS database stands in for up to a week
+ * (see LastGoodCalendar), loudly; a process that has not yet read a sound one says
+ * "unavailable".
+ */
+export function splitCalendarOf(db: any, nowSeconds: number = Math.floor(Date.now() / 1000)): CalendarReading {
+  let reading: CalendarReading;
   try {
     const row = db.prepare('SELECT raw_event FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
-    return readSplitCalendar(row?.raw_event ?? null);
+    reading = readSplitCalendar(row?.raw_event ?? null, { now: nowSeconds, finishedNeeded: UF_REQUIRED_COMPLETED_SPLITS });
   } catch {
-    return { ok: false, reason: 'the stored system parameters could not be read' };
+    reading = { ok: false, reason: 'the stored system parameters could not be read' };
   }
+  let keeper = lastGoodCalendars.get(db);
+  if (!keeper) lastGoodCalendars.set(db, (keeper = new LastGoodCalendar()));
+  const settled = keeper.settle(reading, nowSeconds);
+  if (settled.ok && settled.staleBecause && nowSeconds - lastStaleWarningAt > 600) {
+    lastStaleWarningAt = nowSeconds;
+    console.warn(`⚠️ Unconditional Financing: the stored Split calendar cannot be read (${settled.staleBecause}) — answering from the last sound one; a new Split is not seen until it is mended`);
+  }
+  return settled;
+}
+
+/** For tests: this database has never read a sound calendar (a fresh process). */
+export function forgetLastGoodCalendar(db: any): void {
+  lastGoodCalendars.delete(db);
+  lastStaleWarningAt = 0;
 }
 
 /** Only plans that are about `pubkey`, signed by a pinned signer, with a valid signature. */

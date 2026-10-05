@@ -432,9 +432,11 @@ export function initializeSchema(db: Database.Database): void {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
-    -- Split transition history — fed by the KIND 38888 heartbeat sync. Needed to
-    -- compute "Lana8Wonder member for >= 4 completed Splits" (relays replace the
-    -- addressable 38888 event, so without this table past split dates are lost).
+    -- Split transition history — fed by the KIND 38888 heartbeat sync: when each Split
+    -- BEGAN, as this server saw it (it only started at Split 8). Nothing reads it for the
+    -- "Lana8Wonder member for >= 4 completed Splits" rule any more: that counts from the
+    -- dated history the signed KIND 38888 itself carries (server/lib/ufSplitCount.ts),
+    -- which goes back to Split 1.
     CREATE TABLE IF NOT EXISTS split_history (
       split INTEGER PRIMARY KEY,
       started_at INTEGER NOT NULL DEFAULT 0,

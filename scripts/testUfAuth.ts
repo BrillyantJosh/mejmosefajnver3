@@ -36,6 +36,8 @@ const { default: ufRoutes } = await import('../server/routes/unconditionalFinanc
 const { default: dbRoutes } = await import('../server/routes/db.js');
 const { closeRelayPool } = await import('../server/lib/relayPool.js');
 const { UF_PAST_SKEW_SECONDS } = await import('../server/lib/ufMaturing.js');
+const { forgetLastGoodCalendar } = await import('../server/lib/ufEligibility.js');
+const { CALENDAR_DAY_SKEW_SECONDS } = await import('../server/lib/ufSplitCount.js');
 
 const DAY = 86400;
 const MATURING_DAYS = 15;
@@ -393,6 +395,34 @@ console.log('— membership: who signed the plan matters —');
   r = await call('POST', '/requests/upsert', { event: requestBy(oldException, 'uf:m-old') });
   check('POST /requests/upsert: one finished Split is refused → 403', r.status === 403 && !exists('uf:m-old'), r);
 
+  console.log('— membership: the count is exact at the edges (the route, the real calendar) —');
+  {
+    // Split 5 is dated 185 days ago in the seeded calendar; a Split begins two hours before its
+    // row says. Four Splits (5-8) are over for anyone who enrolled before Split 5 BEGAN.
+    const began5 = now - 185 * DAY - CALENDAR_DAY_SKEW_SECONDS;
+    const justBefore = newKey(), atTheStart = newKey(), halfwayIn = newKey(), threeSplits = newKey();
+    relay.store.push(plan(service, justBefore.pk, began5 - 1));       // one second before Split 5 began
+    relay.store.push(plan(service, atTheStart.pk, began5));           // the second it began
+    relay.store.push(plan(service, halfwayIn.pk, began5 + 3600));     // an hour into it
+    relay.store.push(plan(service, threeSplits.pk, now - 160 * DAY)); // Splits 6, 7 and 8 are over since: three
+
+    const expectations: [string, Key, number][] = [
+      ['enrolled one second before Split 5 began', justBefore, 4],
+      ['enrolled the very second Split 5 began', atTheStart, 3],
+      ['enrolled an hour into Split 5', halfwayIn, 3],
+      ['enrolled 160 days ago (Splits 6-8)', threeSplits, 3],
+    ];
+    for (const [who, key, expected] of expectations) {
+      const g = await call('GET', `/eligibility/${key.pk}`);
+      check(`GET /eligibility, ${who}: ${expected} Splits, ${expected >= 4 ? 'eligible' : 'not eligible'}`,
+        g.status === 200 && g.data.completedSplitsSinceEnrollment === expected && g.data.eligible === (expected >= 4), g);
+      const id = `uf:m-edge-${key.pk.slice(0, 6)}`;
+      const u = await call('POST', '/requests/upsert', { event: requestBy(key, id) });
+      check(`POST /requests/upsert, ${who}: ${expected >= 4 ? 'accepted' : 'refused → 403, nothing listed'}`,
+        expected >= 4 ? u.status === 200 && exists(id) : u.status === 403 && !exists(id), u);
+    }
+  }
+
   r = await call('POST', '/requests/upsert', { event: requestBy(member, 'uf:m-backdated', now - 30 * DAY) });
   check('POST /requests/upsert: a backdated published_at is held at one hour back (unchanged rule)',
     r.status === 200 && Math.abs(r.data.fundingOpensAt - (Math.floor(Date.now() / 1000) - UF_PAST_SKEW_SECONDS + MATURING_DAYS * DAY)) <= 5, r);
@@ -444,17 +474,45 @@ console.log('— membership: who signed the plan matters —');
   const stored = (db.prepare('SELECT raw_event FROM kind_38888').get() as any).raw_event;
   const gapped = calendarEvent(now, DAY);
   gapped.tags = gapped.tags.filter((t) => !(t[0] === 'split_history' && t[1] === '3'));   // Split 3 missing: a calendar mid-edit
-  db.prepare('UPDATE kind_38888 SET raw_event = ?').run(JSON.stringify(gapped));
-  await new Promise((res) => setTimeout(res, 50));
+  const breakCalendar = async () => { db.prepare('UPDATE kind_38888 SET raw_event = ?').run(JSON.stringify(gapped)); await new Promise((res) => setTimeout(res, 50)); };
+  const mendCalendar = () => db.prepare('UPDATE kind_38888 SET raw_event = ?').run(stored);
+
+  forgetLastGoodCalendar(db);   // a process that has not yet read a sound calendar
+  await breakCalendar();
   r = await call('GET', `/eligibility/${member.pk}`);
-  check('a calendar with a hole → 503 that says so, not a false "not eligible"', r.status === 503 && /calendar/i.test(r.data.error || ''), r);
+  check('a calendar with a hole, and no sound one seen yet → 503 that says so, not a false "not eligible"', r.status === 503 && /calendar/i.test(r.data.error || ''), r);
   r = await call('POST', '/requests/upsert', { event: requestBy(member, 'uf:m-gap') });
-  check('POST /requests/upsert with a gapped calendar → 503, nothing listed', r.status === 503 && !exists('uf:m-gap'), r);
+  check('POST /requests/upsert with a gapped calendar, none seen before → 503, nothing listed', r.status === 503 && !exists('uf:m-gap'), r);
   r = await call('GET', `/eligibility/${noPlan.pk}`);
   check('a stranger still gets a plain "not eligible": no calendar is needed to say there is no plan', r.status === 200 && r.data.eligible === false && r.data.exists === false, r);
-  db.prepare('UPDATE kind_38888 SET raw_event = ?').run(stored);
+  mendCalendar();
   r = await call('GET', `/eligibility/${member.pk}`);
   check('the calendar whole again: eligible again', r.status === 200 && r.data.eligible === true, r);
+
+  // A history shorter than the rule looks back over is not "fewer Splits": the four newest
+  // dates ARE the decision, and without them nobody can be told yes or no.
+  forgetLastGoodCalendar(db);
+  const short = calendarEvent(now, DAY);
+  short.tags = short.tags.filter((t) => !(t[0] === 'split_history' && Number(t[1]) <= 5));   // only Splits 6-9 listed
+  db.prepare('UPDATE kind_38888 SET raw_event = ?').run(JSON.stringify(short));
+  await new Promise((res) => setTimeout(res, 50));
+  r = await call('GET', `/eligibility/${member.pk}`);
+  check('a history that lists only three finished Splits → 503 (does not list Split 5), not "three, so no"', r.status === 503 && /does not list Split 5/.test(r.data.error || ''), r);
+  mendCalendar();
+  r = await call('GET', `/eligibility/${member.pk}`);
+  check('…and the full history again: eligible', r.status === 200 && r.data.eligible === true, r);
+
+  console.log('— …but one that was read soundly a moment ago keeps answering, and can only be too careful —');
+  await breakCalendar();
+  r = await call('GET', `/eligibility/${member.pk}`);
+  check('the calendar breaks after a sound reading: the member is still eligible, by the same count', r.status === 200 && r.data.eligible === true && r.data.completedSplitsSinceEnrollment === 4, r);
+  r = await call('GET', `/eligibility/${oldException.pk}`);
+  check('…and somebody with one finished Split is still refused (a stale calendar admits nobody new)', r.status === 200 && r.data.eligible === false && r.data.completedSplitsSinceEnrollment === 1, r);
+  r = await call('POST', '/requests/upsert', { event: requestBy(member, 'uf:m-stale-ok') });
+  check('POST /requests/upsert for the member goes through on the last sound calendar', r.status === 200 && exists('uf:m-stale-ok'), r);
+  r = await call('POST', '/requests/upsert', { event: requestBy(oldException, 'uf:m-stale-no') });
+  check('…and one finished Split is still a 403, not a 503', r.status === 403 && !exists('uf:m-stale-no'), r);
+  mendCalendar();
 }
 
 closeRelayPool();
