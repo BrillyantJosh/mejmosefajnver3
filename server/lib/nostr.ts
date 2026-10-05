@@ -1318,7 +1318,9 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
   // What this database knows about its own past: when it last completed a scan.
   // It decides how far back a request we have never seen may claim to date.
   const scanStartedAt = Math.floor(Date.now() / 1000);
-  const lastScanAt = readUfScanWatermark(db);
+  // Never later than now: a watermark written while the server clock ran ahead
+  // must not make every unknown request look as if it were published today.
+  const lastScanAt = Math.min(readUfScanWatermark(db), scanStartedAt);
 
   const nowMs = Date.now();
   for (const [key, until] of ufNotEligibleUntil) if (until <= nowMs) ufNotEligibleUntil.delete(key);

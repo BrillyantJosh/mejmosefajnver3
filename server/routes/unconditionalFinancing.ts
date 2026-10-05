@@ -523,6 +523,7 @@ router.patch('/requests/:id/admin', (req, res) => {
     `).run(isHidden ? 1 : 0, req.params.id);
 
     if (result.changes === 0) return res.status(404).json({ error: 'Request not found' });
+    console.log(`${isHidden ? '🙈 Hid' : '👁️ Unhid'} UF request ${req.params.id} by ${signed.pubkey.slice(0, 16)}…`);
     res.json({ success: true });
   } catch (err: any) {
     console.error('❌ PATCH /api/unconditional-financing/requests/:id/admin error:', err);

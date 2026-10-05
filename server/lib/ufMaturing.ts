@@ -47,6 +47,9 @@
  *      Restarting everything here loses real money records; trusting a plant
  *      costs one request opening early, and only for a signer who still passes
  *      the eligibility check and the signature check.
+ *      KNOWN EXCEPTION: a window an administrator corrected BY HAND lives only in
+ *      the database — the owner's event on the relays still carries the old
+ *      claim — so a rebuild from the relays would not know about it.
  *
  * Failing closed: wherever the answer is in doubt the window is the LATER one.
  * Not listing a request, or opening it later, is recoverable — an unknown

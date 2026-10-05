@@ -440,7 +440,7 @@ console.log('— RESTORE from a backup that is three weeks old —');
 console.log('— a request the database already knows —');
 {
   reset();
-  const open = newKey(), maturing = newKey(), openB = newKey(), signed = newKey(), thief = newKey();
+  const open = newKey(), maturing = newKey(), openB = newKey(), signed = newKey(), thief = newKey(), byHand = newKey(), byHandLater = newKey();
   const db = freshDb({ lastScanAt: now - 600 });
   const seed = db.prepare(`
     INSERT INTO uf_requests (id, event_id, pubkey, title, short_desc, content, request_type, fiat_goal, currency, wallet,
@@ -451,6 +451,11 @@ console.log('— a request the database already knows —');
   seed.run('uf:k-maturing', 'e2', maturing.pk, 'LMaturing', now - 2 * DAY, now + 13 * DAY, now - 2 * DAY);
   seed.run('uf:k-open-b', 'e3', openB.pk, 'LOpenB', OPEN_PUB, OPEN_OPENS, OPEN_PUB);
   seed.run('uf:k-signed', 'e4', signed.pk, 'LSigned', OPEN_PUB, OPEN_OPENS, OPEN_PUB);
+  // Two windows an administrator corrected BY HAND (5. 10. 2026: a request had opened with the
+  // maturing length at 0 days). The owner's signed event on the relays still says 0 days.
+  const HAND_PUB = now - 8 * 3600;
+  seed.run('uf:k-by-hand', 'e5', byHand.pk, 'LByHand', HAND_PUB, HAND_PUB + M, HAND_PUB);
+  seed.run('uf:k-by-hand-later', 'e6', byHandLater.pk, 'LByHandLater', HAND_PUB, HAND_PUB + 20 * DAY, HAND_PUB);
 
   relay.store.push(
     // refined after opening, claiming another wallet and an opening 99 days away
@@ -459,6 +464,9 @@ console.log('— a request the database already knows —');
     request(maturing, 'uf:k-maturing', { createdAt: now, publishedAt: now - 2 * DAY, wallet: 'LCorrected', title: 'Refined while maturing' }),
     // an edit BACKDATED to just before the request opened, to pass for "refined while maturing"
     request(openB, 'uf:k-open-b', { createdAt: OPEN_OPENS - 1, publishedAt: OPEN_PUB, wallet: 'LSwap', title: 'Backdated edit' }),
+    // the owner's event for a hand-corrected request: the form was told "0 days", so funding_opens_at == published_at
+    request(byHand, 'uf:k-by-hand', { createdAt: HAND_PUB, publishedAt: HAND_PUB, fundingOpensAt: HAND_PUB }),
+    request(byHandLater, 'uf:k-by-hand-later', { createdAt: HAND_PUB, publishedAt: HAND_PUB, fundingOpensAt: HAND_PUB }),
     // somebody else's event on an existing d-tag
     request(thief, 'uf:k-signed', { createdAt: now, publishedAt: now, title: 'Hijack' }),
   );
@@ -479,6 +487,60 @@ console.log('— a request the database already knows —');
   check('…nor unpin its wallet', r('uf:k-open-b')?.wallet === 'LOpenB', r('uf:k-open-b')?.wallet);
   check('another author cannot take over an existing id', r('uf:k-signed')?.pubkey === signed.pk && r('uf:k-signed')?.title === 'Seeded', r('uf:k-signed'));
   check('an event whose signature does not hold is ignored', r('uf:k-signed')?.title !== 'Tampered title', r('uf:k-signed')?.title);
+
+  console.log('— a window corrected by hand is never lowered —');
+  check('the owner’s event still claims 0 days: the row keeps the corrected opening', r('uf:k-by-hand')?.funding_opens_at === HAND_PUB + M, r('uf:k-by-hand'));
+  check('a window set even LATER than the maturing length stays where it was', r('uf:k-by-hand-later')?.funding_opens_at === HAND_PUB + 20 * DAY, r('uf:k-by-hand-later'));
+  await quiet(() => scan(db));
+  check('…scan after scan', r('uf:k-by-hand')?.funding_opens_at === HAND_PUB + M && r('uf:k-by-hand-later')?.funding_opens_at === HAND_PUB + 20 * DAY, [r('uf:k-by-hand'), r('uf:k-by-hand-later')]);
+  check('…and they still show as maturing', r('uf:k-by-hand').funding_opens_at > now && r('uf:k-by-hand-later').funding_opens_at > now);
+}
+
+// ════════════════════════════════════════════════════════
+console.log('— the first scan after the deploy, on a database shaped like production’s today —');
+{
+  // Three requests opened the moment they were published (the maturing length was 0), the
+  // oldest two have many contributions; a fourth was published this morning and its window
+  // was corrected by hand. Their owners' events carry funding_opens_at == published_at.
+  // The new indexer must leave ALL of it exactly as it is.
+  reset();
+  const owners = [newKey(), newKey(), newKey(), newKey()];
+  const supporters = [newKey(), newKey(), newKey()];
+  const published = [now - 70 * DAY, now - 60 * DAY, now - 40 * DAY, now - 8 * 3600];
+  const contributionCounts = [32, 8, 4, 0];
+  const db = freshDb({ lastScanAt: now - 25 * 60 });          // the scan runs every 30 minutes
+  const insertRow = db.prepare(`
+    INSERT INTO uf_requests (id, event_id, pubkey, title, wallet, published_at, funding_opens_at, nostr_created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  const insertContribution = db.prepare(`
+    INSERT INTO uf_contributions (id, request_id, supporter_pubkey, recipient_pubkey, amount_fiat, amount_lanoshis, tx_id, nostr_created_at)
+    VALUES (?, ?, ?, ?, 10, 100000000, ?, ?)`);
+  const ids = ['uf:prod-a', 'uf:prod-b', 'uf:prod-c', 'uf:prod-d'];
+  owners.forEach((o, i) => {
+    const opens = i === 3 ? published[i] + M : published[i];                       // d: corrected by hand to published + 15 days
+    insertRow.run(ids[i], `ev-${i}`, o.pk, `Title ${i}`, `LWallet${i}`, published[i], opens, published[i]);
+    // the owner's newest event: published_at as it was, funding_opens_at == published_at (told "0 days"), same wallet
+    relay.store.push(request(o, ids[i], { createdAt: published[i], publishedAt: published[i], fundingOpensAt: published[i], wallet: `LWallet${i}`, title: `Title ${i}` }));
+    for (let n = 0; n < contributionCounts[i]; n++) {
+      const c = contribution(supporters[n % supporters.length], ids[i], published[i] + 3600 + n * 600);
+      relay.store.push(c);
+      insertContribution.run(c.id, ids[i], c.pubkey, o.pk, `tx-${i}-${n}`, c.created_at);
+    }
+  });
+  const snapshot = () => JSON.stringify({
+    rows: db.prepare('SELECT id, pubkey, title, wallet, published_at, funding_opens_at, is_hidden, is_repaid, status FROM uf_requests ORDER BY id').all(),
+    contributions: db.prepare('SELECT id, request_id, supporter_pubkey, amount_fiat FROM uf_contributions ORDER BY id').all(),
+  });
+  const before = snapshot();
+  await quiet(() => scan(db));
+  check('every request and every contribution is exactly as it was (windows, dates, wallets, flags)', snapshot() === before);
+  check('…the 32 + 8 + 4 contributions are all still there',
+    (db.prepare('SELECT COUNT(*) AS n FROM uf_contributions').get() as any).n === 44);
+  check('…nothing new was listed', (db.prepare('SELECT COUNT(*) AS n FROM uf_requests').get() as any).n === 4);
+  check('…the three that opened at publication are still open, the corrected one still matures',
+    [0, 1, 2].every((i) => rowOf(db, ids[i]).funding_opens_at <= now) && rowOf(db, ids[3]).funding_opens_at > now);
+  await quiet(() => scan(db));
+  check('…and the second scan changes nothing either', snapshot() === before);
 }
 
 // ════════════════════════════════════════════════════════
