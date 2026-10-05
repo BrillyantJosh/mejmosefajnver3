@@ -119,7 +119,7 @@ export function seedData(db: Database.Database): void {
     const rawEvent = JSON.stringify({
       id: 'local_seed_event',
       kind: 38888,
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: 0,
       pubkey: '9eb71bf1e9c3189c78800e4c3831c1c1a93ab43b61118818c32e4490891a35b3',
       content: '',
       tags: [],
@@ -135,7 +135,11 @@ export function seedData(db: Database.Database): void {
       'seed_kind_38888',
       'local_seed_event_' + Date.now(),
       '9eb71bf1e9c3189c78800e4c3831c1c1a93ab43b61118818c32e4490891a35b3',
-      Math.floor(Date.now() / 1000),
+      // 0, not "now": the sync only replaces a row with an event that is NEWER, and a
+      // placeholder dated today would shadow the real parameters (published weeks
+      // ago) until the authority's next publication — on a fresh or restored
+      // database every rule that reads them would be blind in the meantime.
+      0,
       JSON.stringify(defaultRelays),
       JSON.stringify(defaultElectrumServers),
       JSON.stringify(defaultExchangeRates),

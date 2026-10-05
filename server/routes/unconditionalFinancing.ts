@@ -27,6 +27,7 @@ import { UF_FUTURE_SKEW_SECONDS, UF_PAST_SKEW_SECONDS } from '../lib/ufMaturing.
 import {
   UF_ACTION_DELETE_REQUEST,
   UF_ACTION_SET_HIDDEN,
+  consumeSignedAction,
   isRefused,
   verifySignedAction,
 } from '../lib/ufSignedAction.js';
@@ -360,13 +361,26 @@ router.post('/requests/upsert', async (req, res) => {
 
   try {
     const existing = db.prepare(
-      'SELECT pubkey, is_hidden, is_repaid, published_at, funding_opens_at, wallet FROM uf_requests WHERE id = ?'
+      'SELECT pubkey, is_hidden, is_repaid, published_at, funding_opens_at, wallet, event_id, nostr_created_at FROM uf_requests WHERE id = ?'
     ).get(dTag) as any;
 
     // Addressable identity is (pubkey, d): a different author may never take
     // over an existing d-tag row.
     if (existing && existing.pubkey && existing.pubkey !== evt.pubkey) {
       return res.status(403).json({ error: 'Request id belongs to a different author' });
+    }
+
+    if (existing) {
+      // A signed event is public, and anyone can post it again. The very event the row
+      // already reflects is applied once: sending it again (a retry, or somebody
+      // replaying the owner's event to restart a window that is maturing) changes nothing.
+      if (existing.event_id && existing.event_id === evt.id) {
+        return res.json({ success: true, fundingOpensAt: existing.funding_opens_at, unchanged: true });
+      }
+      // …and an OLDER version never replaces a newer one (Nostr's rule for an addressable event).
+      if ((evt.created_at || 0) < (existing.nostr_created_at || 0)) {
+        return res.status(409).json({ error: 'A newer version of this request already exists' });
+      }
     }
 
     const settings = getUfSettings();
@@ -516,6 +530,8 @@ router.patch('/requests/:id/admin', (req, res) => {
   if (typeof isHidden !== 'boolean') {
     return res.status(400).json({ error: 'No fields to update' });
   }
+  const spentPatch = consumeSignedAction(signed);
+  if (spentPatch) return res.status(spentPatch.status).json({ error: spentPatch.error });
 
   try {
     const result = db.prepare(`
@@ -537,9 +553,9 @@ router.patch('/requests/:id/admin', (req, res) => {
 //   content: {"action":"uf-request-delete","id":"<request id>"}
 //   tags:    ['u', <this url>], ['method', 'DELETE']
 // The owner (the request's signer) or an administrator may delete a request
-// with NO contributions; who is asking is the signer, nothing else. Note: rows
-// are re-indexed from relays, so deletion is only durable when the KIND 5
-// deletion event is also published client-side.
+// that is STILL MATURING and has no contributions; who is asking is the signer,
+// nothing else. Note: rows are re-indexed from relays, so deletion is only
+// durable when the KIND 5 deletion event is also published client-side.
 // ──────────────────────────────────────────────
 router.delete('/requests/:id', (req, res) => {
   const db = getDb();
@@ -551,7 +567,7 @@ router.delete('/requests/:id', (req, res) => {
   if (isRefused(signed)) return res.status(signed.status).json({ error: signed.error });
 
   try {
-    const request = db.prepare('SELECT pubkey, is_hidden FROM uf_requests WHERE id = ?').get(req.params.id) as any;
+    const request = db.prepare('SELECT pubkey, is_hidden, funding_opens_at FROM uf_requests WHERE id = ?').get(req.params.id) as any;
     if (!request) return res.status(404).json({ error: 'Request not found' });
 
     const isOwner = request.pubkey === signed.pubkey;
@@ -564,12 +580,24 @@ router.delete('/requests/:id', (req, res) => {
       return res.status(403).json({ error: 'This request was hidden by an administrator — only an administrator can delete it' });
     }
 
+    // Only while the review period still runs. Once funding is open, people may be sending
+    // money — a contribution can be on its way (paid, published, not yet recorded here) —
+    // and a deleted row is re-listed by the indexer as a request it has never seen, with a
+    // restarted window that would refuse that contribution. An open request is hidden
+    // (administrator), not deleted.
+    if ((request.funding_opens_at || 0) <= Math.floor(Date.now() / 1000)) {
+      return res.status(409).json({ error: 'The request is already open for funding and can no longer be deleted — an administrator can hide it' });
+    }
+
     const check = db.prepare(
       'SELECT COUNT(*) AS cnt FROM uf_contributions WHERE request_id = ?'
     ).get(req.params.id) as any;
     if (check && check.cnt > 0) {
       return res.status(409).json({ error: 'Request has contributions and cannot be deleted', contributionCount: check.cnt });
     }
+
+    const spentDelete = consumeSignedAction(signed);
+    if (spentDelete) return res.status(spentDelete.status).json({ error: spentDelete.error });
 
     db.prepare('DELETE FROM uf_requests WHERE id = ?').run(req.params.id);
     console.log(`🗑️ Deleted UF request ${req.params.id} by ${signed.pubkey.slice(0, 16)}…`);

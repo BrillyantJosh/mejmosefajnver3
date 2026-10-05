@@ -6,8 +6,12 @@
  * per-group amount cap. Values live in app_settings (publicly readable, written
  * only through the admin update-app-settings function).
  *
- * Changing the maturing length only affects requests published afterwards:
- * funding_opens_at is written once, at first insert, and edits never move it.
+ * The maturing length is read whenever a window is worked out. A NEW request gets
+ * published_at + the length, once. A request refined while it still matures
+ * restarts from the edit. And the relay indexer applies the CURRENT length to every
+ * request that is still maturing at each scan (the later of its window and
+ * edit date + length), so RAISING the length extends reviews that are still
+ * running. A window that has opened never moves back.
  */
 import { getDb } from '../db/connection.js';
 

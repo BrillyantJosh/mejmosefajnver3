@@ -5,8 +5,10 @@
  * AND by the relay indexer (a request it has not seen before), so a request is
  * listed by both paths or by neither.
  *
- * enrolledAt = MIN(created_at) across ALL of the user's KIND 88888 events
- * (88888 is outside the replaceable ranges → relays retain every version).
+ * enrolledAt = MIN(created_at) across the user's KIND 88888 events that the
+ * relays return (88888 is outside the replaceable ranges, so relays are expected
+ * to retain every version; if one keeps only the newest copy, enrolledAt is that
+ * copy's date — later, never earlier, so the error is always on the refusing side).
  * completed = COUNT(split_history rows started after enrolledAt).
  * Grandfather: enrolled before our recorded history began → long-time member.
  *
@@ -126,6 +128,13 @@ export async function computeEligibility(
 
   const plans = genuinePlans(result.events, pubkey, signers);
   if (plans.length === 0) {
+    // "Nothing found" is an answer only if everybody was asked: the plan may sit on
+    // the relay that did not answer. (A plan that WAS found needs no such caution —
+    // it is signed by the pinned key, and finding more of them can only make the
+    // member older, never newer.)
+    if (result.failed.length > 0) {
+      return { error: `Not every relay answered the membership check (${result.failed.map((f) => f.url).join(', ')}) — cannot tell that there is no plan` };
+    }
     return {
       eligible: false,
       exists: false,

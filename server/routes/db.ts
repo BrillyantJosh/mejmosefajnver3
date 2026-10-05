@@ -28,8 +28,16 @@ function validateTable(table: string): boolean {
  * written through this generic route — writing them requires an event signed by
  * an administrator, via /api/functions/update-app-settings. Without this, that
  * signature check would be pointless: anyone could POST the same rows here.
+ *
+ * kind_38888 is the system parameters: which relays are read, which keys are
+ * trusted as registrar / Lana8Wonder signers, the exchange rates, the electrum
+ * servers and the Split calendar. The browser only reads it; the SERVER is the
+ * only writer (the sync from the authority's relays, in server/index.ts and
+ * /api/functions/sync-kind-38888). Left writable here, anyone could replace the
+ * row — and a row dated in the future is never replaced by the sync — and with
+ * it every trust decision that reads it.
  */
-const READ_ONLY_TABLES = new Set(['app_settings', 'admin_users']);
+const READ_ONLY_TABLES = new Set(['app_settings', 'admin_users', 'kind_38888']);
 
 function isWritable(table: string): boolean {
   return !READ_ONLY_TABLES.has(table);

@@ -19,12 +19,19 @@
  * 127.0.0.1 and an in-memory SQLite database built from the real schema.
  *   npx tsx scripts/testUfIndexer.ts
  */
+import { readFileSync } from 'node:fs';
 import Database from 'better-sqlite3';
 import { WebSocketServer } from 'ws';
 import { finalizeEvent, generateSecretKey, getPublicKey, type Event } from 'nostr-tools';
 import { initializeSchema } from '../server/db/schema.js';
-import { indexUnconditionalFinancingFromRelays, resetUfIndexerCaches, UF_MAX_ELIGIBILITY_LOOKUPS_PER_SCAN } from '../server/lib/nostr.js';
+import {
+  indexUnconditionalFinancingFromRelays,
+  isGenuineSystemParameters,
+  resetUfIndexerCaches,
+  UF_MAX_ELIGIBILITY_LOOKUPS_PER_SCAN,
+} from '../server/lib/nostr.js';
 import { closeRelayPool } from '../server/lib/relayPool.js';
+import { computeEligibility } from '../server/lib/ufEligibility.js';
 import {
   isWalletPinned,
   resolveKnownFundingOpensAt,
@@ -52,34 +59,62 @@ interface Key { sk: Uint8Array; pk: string }
 const newKey = (): Key => { const sk = generateSecretKey(); return { sk, pk: getPublicKey(sk) }; };
 const service = newKey();   // stands in for the Lana8Wonder service key (signs every KIND 88888 plan)
 
-// ── a fake relay that answers like a real one ───────────────
-const relay = {
-  store: [] as Event[],
+// ── fake relays that answer like real ones ─────────────────
+interface FakeRelay {
+  store: Event[];
+  url: string;
   /** answer kind 88888 queries with CLOSED, like a relay that refuses the subscription */
-  refuse88888: false,
-};
-const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
-await new Promise<void>((r) => wss.on('listening', () => r()));
-const RELAY_URL = `ws://127.0.0.1:${(wss.address() as any).port}`;
-wss.on('connection', (ws) => {
-  ws.on('message', (raw) => {
-    const m = JSON.parse(raw.toString());
-    if (m[0] !== 'REQ') return;
-    const [, sub, f] = m;
-    if (relay.refuse88888 && f.kinds?.includes(88888)) {
-      ws.send(JSON.stringify(['CLOSED', sub, 'blocked: test']));
-      return;
-    }
-    const hits = relay.store
-      .filter((e) => !f.kinds || f.kinds.includes(e.kind))
-      .filter((e) => !f.authors || f.authors.includes(e.pubkey))
-      .filter((e) => !f['#p'] || e.tags.some((t) => t[0] === 'p' && f['#p'].includes(t[1])))
-      .sort((a, b) => b.created_at - a.created_at)
-      .slice(0, Math.min(f.limit ?? 500, 500));
-    for (const e of hits) ws.send(JSON.stringify(['EVENT', sub, e]));
-    ws.send(JSON.stringify(['EOSE', sub]));
+  refuse88888: boolean;
+  /** answer EVERYTHING with CLOSED: the relay is down for this reader */
+  down: boolean;
+  /** ignore the `authors` and `#p` filters on kind 88888, like a relay that does not honour them */
+  lax88888: boolean;
+  /** answer the next N kind-88888 queries with a clean EOSE and no events (a transient empty answer) */
+  emptyNext88888: number;
+  /** how many kind-88888 queries arrived (answered or not) */
+  count88888: number;
+  close(): void;
+}
+async function makeRelay(): Promise<FakeRelay> {
+  const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+  await new Promise<void>((r) => wss.on('listening', () => r()));
+  const r: FakeRelay = {
+    store: [], url: `ws://127.0.0.1:${(wss.address() as any).port}`,
+    refuse88888: false, down: false, lax88888: false, emptyNext88888: 0, count88888: 0,
+    close: () => wss.close(),
+  };
+  wss.on('connection', (ws) => {
+    ws.on('message', (raw) => {
+      const m = JSON.parse(raw.toString());
+      if (m[0] !== 'REQ') return;
+      const [, sub, f] = m;
+      const is88888 = !!f.kinds?.includes(88888);
+      if (is88888) r.count88888++;
+      if (r.down || (r.refuse88888 && is88888)) {
+        ws.send(JSON.stringify(['CLOSED', sub, 'blocked: test']));
+        return;
+      }
+      if (is88888 && r.emptyNext88888 > 0) {
+        r.emptyNext88888--;
+        ws.send(JSON.stringify(['EOSE', sub]));
+        return;
+      }
+      const honour = !(is88888 && r.lax88888);
+      const hits = r.store
+        .filter((e) => !f.kinds || f.kinds.includes(e.kind))
+        .filter((e) => !honour || !f.authors || f.authors.includes(e.pubkey))
+        .filter((e) => !honour || !f['#p'] || e.tags.some((t) => t[0] === 'p' && f['#p'].includes(t[1])))
+        .sort((a, b) => b.created_at - a.created_at)
+        .slice(0, Math.min(f.limit ?? 500, 500));
+      for (const e of hits) ws.send(JSON.stringify(['EVENT', sub, e]));
+      ws.send(JSON.stringify(['EOSE', sub]));
+    });
   });
-});
+  return r;
+}
+const relay = await makeRelay();     // the relay every scenario uses
+const relay2 = await makeRelay();    // a second one, for scenarios about a relay that is silent
+const RELAY_URL = relay.url;
 
 // ── event builders ─────────────────────────────────────
 function plan(signer: Key, member: string, createdAt: number): Event {
@@ -129,13 +164,13 @@ const setSetting = (db: any, key: string, value: string) =>
   db.prepare(`INSERT INTO app_settings (key, value) VALUES (?, ?)
               ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(key, value);
 
-interface DbOpts { relayUrl?: string; lastScanAt?: number }
+interface DbOpts { relayUrl?: string; relayUrls?: string[]; lastScanAt?: number }
 function freshDb(o: DbOpts = {}) {
   const db = new Database(':memory:');
   initializeSchema(db);
   db.prepare(`INSERT INTO kind_38888 (event_id, pubkey, created_at, relays, electrum_servers, exchange_rates, split, trusted_signers, raw_event)
               VALUES ('test', 'x', ?, ?, '[]', '{}', '9', ?, ?)`)
-    .run(now, JSON.stringify([o.relayUrl ?? RELAY_URL]), JSON.stringify({ Lana8Wonder: [service.pk] }), JSON.stringify({ tags: [['split', '9']] }));
+    .run(now, JSON.stringify(o.relayUrls ?? [o.relayUrl ?? RELAY_URL]), JSON.stringify({ Lana8Wonder: [service.pk] }), JSON.stringify({ tags: [['split', '9']] }));
   setSetting(db, 'unconditional_financing_maturing_days', String(MATURING_DAYS));
   if (o.lastScanAt) setSetting(db, 'unconditional_financing_last_indexed_at', String(o.lastScanAt));
   // production's split history: only the splits this server has seen (8 and 9)
@@ -158,7 +193,10 @@ const contributionsOf = (db: any, id: string) =>
 const watermarkOf = (db: any) =>
   parseInt((db.prepare("SELECT value FROM app_settings WHERE key = 'unconditional_financing_last_indexed_at'").get() as any)?.value ?? '0', 10);
 const scan = async (db: any) => { await indexUnconditionalFinancingFromRelays(db); };
-const reset = () => { relay.store = []; relay.refuse88888 = false; resetUfIndexerCaches(); };
+const reset = () => {
+  for (const r of [relay, relay2]) { r.store = []; r.refuse88888 = false; r.down = false; r.lax88888 = false; r.emptyNext88888 = 0; r.count88888 = 0; }
+  resetUfIndexerCaches();
+};
 const quiet = async <T>(fn: () => Promise<T>): Promise<T> => {
   // the indexer logs a lot, by design; the test output should be the verdicts
   const log = console.log, warn = console.warn;
@@ -200,6 +238,28 @@ console.log('— the rule itself (pure) —');
   check('known: maturing, a SHORTER setting never pulls it closer',
     resolveKnownFundingOpensAt({ existingOpensAt: now + 13 * DAY, eventCreatedAt: now, now, maturingSeconds: 1 * DAY }) === now + 13 * DAY);
   check('wallet is pinned exactly when open', isWalletPinned(now - 1, now) && isWalletPinned(now, now) && !isWalletPinned(now + 1, now));
+}
+
+// ════════════════════════════════════════════════════════
+console.log('— the system parameters are only believed with a valid signature from the authority —');
+{
+  // A real KIND 38888 as production published it (copied from a sibling repo's fixtures; it verifies).
+  const real = JSON.parse(readFileSync(new URL('./fixtures/kind38888.signed.json', import.meta.url), 'utf8'));
+  // nostr-tools remembers a successful verification ON the event object (a symbol key), and an object
+  // spread copies it — so a tampered copy of an event that was already verified would inherit "verified".
+  // Every variant below is therefore built from plain JSON, the way an event arrives from a relay.
+  const variant = (change: (e: any) => void) => { const e = JSON.parse(JSON.stringify(real)); change(e); return e; };
+  check('the real signed event is accepted', isGenuineSystemParameters(variant(() => {})));
+  check('…with one tag changed it is NOT: the signature no longer holds',
+    !isGenuineSystemParameters(variant((e) => { e.tags = e.tags.map((t: string[]) => (t[0] === 'split' ? ['split', '1'] : t)); })));
+  check('…with its content changed it is NOT', !isGenuineSystemParameters(variant((e) => { e.content = '{}'; })));
+  const stranger = newKey();
+  const forged = JSON.parse(JSON.stringify(finalizeEvent({ kind: 38888, created_at: real.created_at + 1, tags: real.tags, content: real.content }, stranger.sk)));
+  check('the same content, perfectly signed by SOMEONE ELSE, is NOT the authority’s', !isGenuineSystemParameters(forged));
+  check('another kind with the authority’s name on it is NOT', !isGenuineSystemParameters(variant((e) => { e.kind = 1; })));
+  check('an event without a valid signature is NOT',
+    !isGenuineSystemParameters(variant((e) => { delete e.sig; })) && !isGenuineSystemParameters(variant((e) => { e.sig = 'local_seed'; })));
+  check('nothing at all is not', !isGenuineSystemParameters(null) && !isGenuineSystemParameters({}));
 }
 
 // ════════════════════════════════════════════════════════
@@ -544,6 +604,265 @@ console.log('— the first scan after the deploy, on a database shaped like prod
 }
 
 // ════════════════════════════════════════════════════════
+console.log('— a relay that does not answer —');
+{
+  const supporter = newKey();
+  const published = now - 3 * DAY;     // opened the moment it was published (the maturing length was 0)
+  const settle = () => new Promise((r) => setTimeout(r, 60));
+  const settingOf = (db: any, key: string) => (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as any)?.value;
+
+  console.log('  · REBUILD while one relay is silent: a request that only that relay holds');
+  {
+    reset();
+    const m1 = member(), m2 = member();
+    relay.store.push(
+      request(m1, 'uf:on-both', { createdAt: published, publishedAt: published, fundingOpensAt: published }),
+      contribution(supporter, 'uf:on-both', now - 1 * DAY),
+    );
+    relay2.store.push(
+      request(m2, 'uf:only-on-2', { createdAt: published, publishedAt: published, fundingOpensAt: published }),
+      contribution(supporter, 'uf:only-on-2', now - 1 * DAY),
+    );
+    const db = freshDb({ relayUrls: [relay.url, relay2.url] });
+    relay2.down = true;
+    await quiet(() => scan(db));
+    check('first scan: what the answering relay holds is listed', !!rowOf(db, 'uf:on-both'));
+    check('…what only the silent relay holds is not seen yet', !rowOf(db, 'uf:only-on-2'));
+    check('…and the database is STILL "from scratch": a scan that missed a relay settled nothing', watermarkOf(db) === 0, watermarkOf(db));
+    relay2.down = false;
+    await settle();
+    await quiet(() => scan(db));
+    check('second scan: the request only the other relay held is listed with the window it really had',
+      rowOf(db, 'uf:only-on-2')?.funding_opens_at === published, rowOf(db, 'uf:only-on-2'));
+    check('…its real contribution kept (a live-mode scan would have dropped it)', contributionsOf(db, 'uf:only-on-2') === 1, contributionsOf(db, 'uf:only-on-2'));
+    check('…and now that every relay answered, the watermark moved', watermarkOf(db) > 0, watermarkOf(db));
+  }
+
+  console.log('  · LIVE: "no plan found" while a relay is silent is not "not a member"');
+  {
+    reset();
+    const m = newKey();
+    relay2.store.push(plan(service, m.pk, now - 200 * DAY));                 // the plan sits on relay 2 only
+    relay.store.push(request(m, 'uf:late-plan', { createdAt: now, publishedAt: now }));
+    const db = freshDb({ relayUrls: [relay.url, relay2.url], lastScanAt: now - 600 });
+    relay2.down = true;
+    await quiet(() => scan(db));
+    check('relay 1 knows no plan and relay 2 is silent → not listed', !rowOf(db, 'uf:late-plan'));
+    check('…the watermark was held back: the request has not been settled', watermarkOf(db) === now - 600, watermarkOf(db));
+    relay2.down = false;
+    await settle();
+    await quiet(() => scan(db));
+    check('once relay 2 answers, the member is listed — not shut out for an hour on the memory of a wrong "no"', !!rowOf(db, 'uf:late-plan'));
+    check('…and the watermark moved', watermarkOf(db) > now - 600, watermarkOf(db));
+  }
+
+  console.log('  · the same rule, on the shared function');
+  {
+    const dbE = freshDb();
+    const stranger = newKey();
+    const reader = (answered: string[], failed: { url: string; reason: string }[], events: any[]) => async () => ({ events, answered, failed });
+    let res: any = await computeEligibility(dbE, stranger.pk, reader(['a'], [{ url: 'b', reason: 'closed' }], []));
+    check('"nothing found" while a relay did not answer is "cannot tell" (an error), never "no plan"', !!res.error && res.exists === undefined, res);
+    res = await computeEligibility(dbE, stranger.pk, reader(['a', 'b'], [], []));
+    check('"nothing found" with EVERY relay answering is a plain "no plan"', !res.error && res.exists === false && res.eligible === false, res);
+    res = await computeEligibility(dbE, stranger.pk, reader([], [{ url: 'a', reason: 'x' }, { url: 'b', reason: 'y' }], []));
+    check('nobody answering is an error too', !!res.error, res);
+  }
+
+  console.log('  · a watermark held back for long moves on — never on a database being rebuilt');
+  {
+    reset();
+    const m = member();
+    relay.store.push(request(m, 'uf:held', { createdAt: now, publishedAt: now }));
+    const HELD = 'unconditional_financing_watermark_held_since';
+    const run = async (o: { lastScanAt?: number; heldSince?: number }) => {
+      const db = freshDb({ lastScanAt: o.lastScanAt });
+      if (o.heldSince) setSetting(db, HELD, String(o.heldSince));
+      relay.refuse88888 = true;              // the membership check cannot be answered: the scan cannot settle
+      resetUfIndexerCaches();
+      await quiet(() => scan(db));
+      relay.refuse88888 = false;
+      return db;
+    };
+    let db = await run({ lastScanAt: now - 600 });
+    check('the first scan that cannot settle records when the hold began', near(parseInt(settingOf(db, HELD) ?? '0', 10), now, 15), settingOf(db, HELD));
+    check('…and keeps the watermark where it was', watermarkOf(db) === now - 600, watermarkOf(db));
+    db = await run({ lastScanAt: now - 600, heldSince: now - 1 * 3600 });
+    check('held for 1 hour: the watermark stays', watermarkOf(db) === now - 600, watermarkOf(db));
+    db = await run({ lastScanAt: now - 600, heldSince: now - 7 * 3600 });
+    check('held for 7 hours on a database that has been scanning: it moves on, so junk cannot hold the horizon for ever', near(watermarkOf(db), now, 15), watermarkOf(db));
+    check('…and the hold is over', settingOf(db, HELD) === undefined, settingOf(db, HELD));
+    db = await run({ heldSince: now - 7 * 3600 });
+    check('held for 7 hours on a database being built from scratch: it does NOT move on', watermarkOf(db) === 0, watermarkOf(db));
+  }
+
+  console.log('  · one person with many unknown requests is asked once per scan, even when nobody answers');
+  {
+    reset();
+    const m = member();
+    for (let i = 0; i < 7; i++) relay.store.push(request(m, `uf:many-${i}`, { createdAt: now, publishedAt: now }));
+    const db = freshDb({ lastScanAt: now - 600 });
+    relay.refuse88888 = true;
+    relay.count88888 = 0;
+    await quiet(() => scan(db));
+    check('7 requests, 1 person: the question and its retry — 2 queries, not 14', relay.count88888 <= 2, relay.count88888);
+  }
+
+  console.log('  · a refusal is remembered between scans, and forgotten on demand');
+  {
+    reset();
+    const k = newKey();
+    relay.store.push(request(k, 'uf:nobody', { createdAt: now, publishedAt: now }));
+    const db = freshDb({ lastScanAt: now - 600 });
+    await quiet(() => scan(db));
+    const asked = relay.count88888;
+    check('a stranger is asked about', asked > 0, asked);
+    await quiet(() => scan(db));
+    check('…and not again by the next scan', relay.count88888 === asked, { asked, now: relay.count88888 });
+    resetUfIndexerCaches();
+    await quiet(() => scan(db));
+    check('…until the memory is cleared', relay.count88888 > asked, { asked, now: relay.count88888 });
+  }
+}
+
+// ════════════════════════════════════════════════════════
+console.log('— the membership gate does not rest on the relay’s filters —');
+{
+  console.log('  · a relay that ignores `authors` and `#p`');
+  {
+    reset();
+    relay.lax88888 = true;
+    const victim = newKey(), liar = newKey(), somebodyElse = member();    // somebodyElse has a GENUINE plan, about themselves
+    relay.store.push(plan(liar, victim.pk, now - 400 * DAY));                // (a) perfectly signed — by the wrong key
+    const tampered = JSON.parse(JSON.stringify(plan(service, victim.pk, now - 300 * DAY)));
+    tampered.content = JSON.stringify({ subject_hex: victim.pk, extra: 1 });  // (b) "by the service key", altered after signing
+    relay.store.push(tampered);
+    // (c) somebodyElse's genuine, service-signed plan is in the store too, and the lax relay hands it out for any question
+    relay.store.push(request(victim, 'uf:victim', { createdAt: now, publishedAt: now }));
+    const db = freshDb({ lastScanAt: now - 600 });
+    await quiet(() => scan(db));
+    check('a plan by the wrong key, an altered plan and somebody else’s plan: none makes the victim a member', !rowOf(db, 'uf:victim'));
+  }
+  console.log('  · a forged ANCIENT plan cannot grandfather a recent member');
+  {
+    reset();
+    relay.lax88888 = true;
+    const recent = newKey(), liar = newKey();
+    relay.store.push(plan(service, recent.pk, now - 10 * DAY), plan(liar, recent.pk, now - 400 * DAY));
+    relay.store.push(request(recent, 'uf:recent', { createdAt: now, publishedAt: now }));
+    const db = freshDb({ lastScanAt: now - 600 });
+    await quiet(() => scan(db));
+    check('enrolled 10 days ago (the forged year-old plan does not count): not listed', !rowOf(db, 'uf:recent'));
+  }
+  console.log('  · the EARLIEST version of a plan is the enrolment');
+  {
+    reset();
+    const m = newKey();
+    relay.store.push(plan(service, m.pk, now - 200 * DAY), plan(service, m.pk, now - 10 * DAY));   // the plan was re-published since
+    relay.store.push(request(m, 'uf:two-versions', { createdAt: now, publishedAt: now }));
+    const db = freshDb({ lastScanAt: now - 600 });
+    await quiet(() => scan(db));
+    check('two versions of one plan: enrolled when the first one was made → listed', !!rowOf(db, 'uf:two-versions'), rowOf(db, 'uf:two-versions'));
+  }
+  console.log('  · a transient empty answer is asked again');
+  {
+    reset();
+    const m = member();
+    relay.store.push(request(m, 'uf:retry', { createdAt: now, publishedAt: now }));
+    relay.emptyNext88888 = 1;
+    const db = freshDb({ lastScanAt: now - 600 });
+    await quiet(() => scan(db));
+    check('the first answer was empty (a clean EOSE, no plan), the second had it → listed', !!rowOf(db, 'uf:retry'), rowOf(db, 'uf:retry'));
+  }
+}
+
+// ════════════════════════════════════════════════════════
+console.log('— what the indexer will not take from the relays —');
+{
+  const seedKnown = (db: any, id: string, owner: Key, opens: number, extra: { title?: string; nostrCreatedAt?: number; published?: number } = {}) =>
+    db.prepare(`INSERT INTO uf_requests (id, event_id, pubkey, title, wallet, published_at, funding_opens_at, nostr_created_at)
+                VALUES (?, ?, ?, ?, 'LW', ?, ?, ?)`).run(id, `ev-${id}`, owner.pk, extra.title ?? 'Seeded', extra.published ?? now - 30 * DAY, opens, extra.nostrCreatedAt ?? 0);
+
+  console.log('  · contributions and repayments need a valid signature, like everything else');
+  {
+    reset();
+    const owner = newKey(), supporter = newKey(), other = newKey();
+    const db = freshDb({ lastScanAt: now - 600 });
+    seedKnown(db, 'uf:signed', owner, now - 15 * DAY);
+    const bad = JSON.parse(JSON.stringify(contribution(other, 'uf:signed', now - 9 * DAY)));
+    bad.tags = bad.tags.map((t: string[]) => (t[0] === 'amount_fiat' ? ['amount_fiat', '999999'] : t));      // altered after signing
+    relay.store.push(contribution(supporter, 'uf:signed', now - 10 * DAY), bad);
+    const repayment = (rate: string) => finalizeEvent({
+      kind: 60211, created_at: now - 1 * DAY,
+      tags: [['service', 'unconditional-financing'], ['request', 'uf:signed'], ['amount_lanoshis_total', '100000000'], ['amount_fiat_total', '10'],
+        ['currency', 'EUR'], ['rate', rate], ['tx', `tx-r-${rate}`], ['out', supporter.pk, 'LSup', '100000000', '10']],
+      content: '',
+    }, owner.sk);
+    const badRepayment = JSON.parse(JSON.stringify(repayment('0.2')));
+    badRepayment.tags = badRepayment.tags.map((t: string[]) => (t[0] === 'rate' ? ['rate', '999'] : t));      // altered after signing
+    relay.store.push(repayment('0.1'), badRepayment);
+    await quiet(() => scan(db));
+    check('a contribution whose signature does not hold is not indexed; the genuine one is', contributionsOf(db, 'uf:signed') === 1, contributionsOf(db, 'uf:signed'));
+    const repayments = (db.prepare("SELECT COUNT(*) AS n FROM uf_repayments WHERE request_id = 'uf:signed'").get() as any).n;
+    check('a repayment whose signature does not hold is not indexed; the genuine one is', repayments === 1, repayments);
+  }
+
+  console.log('  · a contribution dated after the opening, on a request that is still maturing');
+  {
+    reset();
+    const owner = newKey(), supporter = newKey();
+    const db = freshDb({ lastScanAt: now - 600 });
+    seedKnown(db, 'uf:still-maturing', owner, now + 5 * DAY);
+    relay.store.push(contribution(supporter, 'uf:still-maturing', now + 6 * DAY));       // dated in the future: the route answers 409 for it
+    await quiet(() => scan(db));
+    check('not indexed: the request is still maturing by OUR clock, whatever date the event carries', contributionsOf(db, 'uf:still-maturing') === 0, contributionsOf(db, 'uf:still-maturing'));
+  }
+
+  console.log('  · a row with no window (open) is left open');
+  {
+    reset();
+    const owner = newKey();
+    const db = freshDb({ lastScanAt: now - 600 });
+    db.prepare(`INSERT INTO uf_requests (id, event_id, pubkey, title, wallet) VALUES ('uf:legacy', 'ev-legacy', ?, 'Legacy', 'LW')`).run(owner.pk);
+    relay.store.push(request(owner, 'uf:legacy', { createdAt: now - 5 * DAY, publishedAt: now - 30 * DAY, fundingOpensAt: now - 30 * DAY }));
+    await quiet(() => scan(db));
+    check('it does not flip to "maturing", and it did not need to pass the membership gate', rowOf(db, 'uf:legacy')?.funding_opens_at === 0, rowOf(db, 'uf:legacy'));
+  }
+
+  console.log('  · an OLDER version of a request the database has is not applied');
+  {
+    reset();
+    const owner = newKey();
+    const db = freshDb({ lastScanAt: now - 600 });
+    seedKnown(db, 'uf:newest', owner, now + 5 * DAY, { title: 'Newest', nostrCreatedAt: now });
+    relay.store.push(request(owner, 'uf:newest', { createdAt: now - 1 * DAY, publishedAt: now - 10 * DAY, title: 'Stale', wallet: 'LStale' }));
+    await quiet(() => scan(db));
+    check('a relay that kept only an old copy cannot revert the title, or the wallet', rowOf(db, 'uf:newest')?.title === 'Newest' && rowOf(db, 'uf:newest')?.wallet === 'LW', rowOf(db, 'uf:newest'));
+  }
+
+  console.log('  · a watermark that cannot be read is not "never scanned"');
+  {
+    reset();
+    const m = member();
+    relay.store.push(request(m, 'uf:unread', { createdAt: now, publishedAt: now - 30 * DAY, fundingOpensAt: now - 30 * DAY }));
+    const db = freshDb({ lastScanAt: now - 600 });
+    db.prepare("UPDATE app_settings SET value = 'garbage' WHERE key = 'unconditional_financing_last_indexed_at'").run();
+    await quiet(() => scan(db));
+    check('the scan is abandoned instead of guessing "from scratch" (where the signer’s own dates are believed)', !rowOf(db, 'uf:unread'));
+  }
+
+  console.log('  · a tag that parses to infinity');
+  {
+    const huge = '9'.repeat(400);
+    check('is treated as absent: every date stays a real number (both modes)',
+      [0, now - 600].every((lastScanAt) => {
+        const t = resolveNewRequestTiming({ claimedPublishedAt: parseInt('-' + huge), claimedFundingOpensAt: parseInt(huge), createdAt: now, now, maturingSeconds: M, lastScanAt });
+        return Number.isFinite(t.publishedAt) && Number.isFinite(t.fundingOpensAt);
+      }));
+  }
+}
+
+// ════════════════════════════════════════════════════════
 console.log('— no relay answers —');
 {
   reset();
@@ -558,7 +877,8 @@ console.log('— no relay answers —');
 }
 
 closeRelayPool();
-wss.close();
+relay.close();
+relay2.close();
 if (failures > 0) {
   console.error(`\n❌ ${failures} FAILED`);
   process.exit(1);

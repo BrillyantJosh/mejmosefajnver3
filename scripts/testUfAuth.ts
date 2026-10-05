@@ -33,6 +33,7 @@ if (path.resolve(process.env.MEJMO_DB_PATH).startsWith(realData)) throw new Erro
 const { default: express } = await import('express');
 const { getDb } = await import('../server/db/connection.js');
 const { default: ufRoutes } = await import('../server/routes/unconditionalFinancing.js');
+const { default: dbRoutes } = await import('../server/routes/db.js');
 const { closeRelayPool } = await import('../server/lib/relayPool.js');
 const { UF_PAST_SKEW_SECONDS } = await import('../server/lib/ufMaturing.js');
 
@@ -73,6 +74,8 @@ wss.on('connection', (ws) => {
 
 // ── the app: the real router, its own database ─────────────────
 const db = getDb();
+// What the seed put there (a fresh database starts with a placeholder row of system parameters).
+const seededParametersDate = (db.prepare('SELECT created_at FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any)?.created_at;
 db.prepare('DELETE FROM kind_38888').run();   // the seed points at the real relays — replace it before anything can read it
 db.prepare(`INSERT INTO kind_38888 (event_id, pubkey, created_at, relays, electrum_servers, exchange_rates, split, trusted_signers, raw_event)
             VALUES ('test', 'x', ?, ?, '[]', '{}', '9', ?, ?)`)
@@ -85,9 +88,11 @@ db.prepare('INSERT INTO split_history (split, started_at) VALUES (8, ?), (9, ?)'
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 app.use('/api/unconditional-financing', ufRoutes);
+app.use('/api/db', dbRoutes);
 const http = app.listen(0, '127.0.0.1');
 await new Promise<void>((r) => http.on('listening', () => r()));
 const BASE = `http://127.0.0.1:${(http.address() as any).port}/api/unconditional-financing`;
+const DB_BASE = `http://127.0.0.1:${(http.address() as any).port}/api/db`;
 
 async function call(method: string, p: string, body?: unknown) {
   const res = await fetch(BASE + p, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -103,7 +108,9 @@ const seed = db.prepare(`
   INSERT INTO uf_requests (id, event_id, pubkey, title, wallet, published_at, funding_opens_at, is_hidden, nostr_created_at)
   VALUES (?, ?, ?, 'Seeded', 'LW', ?, ?, ?, ?)`);
 let seedN = 0;
-const addRequest = (id: string, who: Key, hidden = 0) => seed.run(id, `ev${++seedN}`, who.pk, now - 30 * DAY, now - 15 * DAY, hidden, now - 30 * DAY);
+/** A request that is OPEN for funding (its review ended 15 days ago) or still MATURING (5 days to go). */
+const addRequest = (id: string, who: Key, hidden = 0, state: 'open' | 'maturing' = 'open') =>
+  seed.run(id, `ev${++seedN}`, who.pk, now - (state === 'open' ? 30 : 10) * DAY, state === 'open' ? now - 15 * DAY : now + 5 * DAY, hidden, now - 30 * DAY);
 const exists = (id: string) => !!db.prepare('SELECT 1 FROM uf_requests WHERE id = ?').get(id);
 const hiddenOf = (id: string) => (db.prepare('SELECT is_hidden FROM uf_requests WHERE id = ?').get(id) as any)?.is_hidden;
 
@@ -138,7 +145,7 @@ console.log('— deleting a request: the old contract (a public key in the body)
 
 console.log('— deleting a request: the signature decides —');
 {
-  addRequest('uf:d2', owner);
+  addRequest('uf:d2', owner, 0, 'maturing');
   let r = await del('uf:d2', { event: signedAction(stranger, 'DELETE', 'uf-request-delete', 'uf:d2') });
   check('someone else’s signature → 403, the request stays', r.status === 403 && exists('uf:d2'), r);
 
@@ -146,7 +153,7 @@ console.log('— deleting a request: the signature decides —');
   r = await del('uf:d2', { event: good });
   check('the owner’s signature → 200, the request is gone', r.status === 200 && !exists('uf:d2'), r);
 
-  addRequest('uf:d2', owner);   // back again, to prove a captured event does not work twice
+  addRequest('uf:d2', owner, 0, 'maturing');   // back again, to prove a captured event does not work twice
   r = await del('uf:d2', { event: good });
   check('the same event again (a replay) → 401, the request stays', r.status === 401 && exists('uf:d2'), r);
 
@@ -178,7 +185,7 @@ console.log('— deleting a request: the signature decides —');
 
 console.log('— deleting: the rules that were always there still hold —');
 {
-  addRequest('uf:d3', owner);
+  addRequest('uf:d3', owner, 0, 'maturing');
   db.prepare(`INSERT INTO uf_contributions (id, request_id, supporter_pubkey, amount_fiat) VALUES ('c1', 'uf:d3', ?, 10)`).run(stranger.pk);
   let r = await del('uf:d3', { event: signedAction(owner, 'DELETE', 'uf-request-delete', 'uf:d3') });
   check('a request with contributions cannot be deleted, even by its owner → 409', r.status === 409 && exists('uf:d3'), r);
@@ -188,7 +195,18 @@ console.log('— deleting: the rules that were always there still hold —');
   r = await del('uf:missing', { event: signedAction(owner, 'DELETE', 'uf-request-delete', 'uf:missing') });
   check('a request that does not exist → 404', r.status === 404, r);
 
-  addRequest('uf:d4', owner, 1);
+  // An OPEN request is not deleted: a contribution can be on its way (paid, published, not yet
+  // recorded), and a deleted row is re-listed by the indexer with a restarted window that would
+  // refuse it. It is hidden by an administrator instead.
+  addRequest('uf:d3b', owner);
+  r = await del('uf:d3b', { event: signedAction(owner, 'DELETE', 'uf-request-delete', 'uf:d3b') });
+  check('a request that is already OPEN for funding cannot be deleted by its owner → 409', r.status === 409 && exists('uf:d3b'), r);
+  r = await del('uf:d3b', { event: signedAction(admin, 'DELETE', 'uf-request-delete', 'uf:d3b') });
+  check('…nor by an administrator → 409', r.status === 409 && exists('uf:d3b'), r);
+  r = await patch('uf:d3b', { event: signedAction(admin, 'PATCH', 'uf-request-set-hidden', 'uf:d3b', { is_hidden: true }) });
+  check('…but an administrator can hide it → 200', r.status === 200 && hiddenOf('uf:d3b') === 1, r);
+
+  addRequest('uf:d4', owner, 1, 'maturing');
   r = await del('uf:d4', { event: signedAction(owner, 'DELETE', 'uf-request-delete', 'uf:d4') });
   check('a request an administrator HID cannot be deleted by its owner (re-indexing would bring it back, visible) → 403', r.status === 403 && exists('uf:d4'), r);
   r = await del('uf:d4', { event: signedAction(moduleAdmin, 'DELETE', 'uf-request-delete', 'uf:d4') });
@@ -233,6 +251,44 @@ console.log('— hiding a request: the signature decides —');
   const second = await patch('uf:h1', { event: n2 });
   check('two quick identical requests with nonces (a double-click) are both accepted', first.status === 200 && second.status === 200, { first, second });
 
+  // The replay memory, with an injected clock.
+  {
+    const { verifySignedAction, consumeSignedAction, isRefused, UF_SIGNED_ACTION_MAX_REMEMBERED } = await import('../server/lib/ufSignedAction.js');
+    const T = 2_000_000_000;
+    const sign = (who: Key, createdAt: number) => finalizeEvent({
+      kind: 27235, created_at: createdAt,
+      tags: [['method', 'PATCH'], ['nonce', Buffer.from(generateSecretKey()).toString('hex').slice(0, 32)]],
+      content: JSON.stringify({ action: 'uf-request-set-hidden', id: 'uf:clock', is_hidden: true }),
+    }, who.sk);
+    const expectAt = (n: number) => ({ method: 'PATCH', action: 'uf-request-set-hidden', target: 'uf:clock', now: n });
+
+    // dated five minutes AHEAD: valid until five minutes after ITS date, i.e. until T + 600
+    const ahead = sign(admin, T + 300);
+    const accepted = verifySignedAction(ahead, expectAt(T));
+    check('an event dated five minutes ahead is accepted', !isRefused(accepted), accepted);
+    if (!isRefused(accepted)) consumeSignedAction(accepted, T);
+    const replayLate = verifySignedAction(ahead, expectAt(T + 600));
+    check('…and its replay at the very end of its life is still refused as USED (not merely expired)', isRefused(replayLate) && /already been used/.test(replayLate.error), replayLate);
+    const replayAfter = verifySignedAction(ahead, expectAt(T + 602));
+    check('…after that it is expired anyway', isRefused(replayAfter) && /expired/.test(replayAfter.error), replayAfter);
+
+    // an event that fails authorisation is never spent: it leaves nothing in the memory
+    const unspent = sign(stranger, T);
+    const first1 = verifySignedAction(unspent, expectAt(T));
+    const again1 = verifySignedAction(unspent, expectAt(T));
+    check('verifying alone spends nothing (the route spends only after authorising)', !isRefused(first1) && !isRefused(again1));
+
+    // the memory has a ceiling and forgets what is over (synthetic accepted events: no signatures needed to fill it)
+    const synthetic = (i: number, createdAt: number) => ({ ok: true as const, pubkey: 'x', eventId: `synthetic-${i}`, createdAt, payload: {} });
+    let refusedAt = -1;
+    for (let i = 0; i < UF_SIGNED_ACTION_MAX_REMEMBERED + 5; i++) {
+      const spentNow = consumeSignedAction(synthetic(i, T + 2000), T + 2000);
+      if (spentNow) { refusedAt = i; check('a full memory refuses with 429, not silently', spentNow.status === 429, spentNow); break; }
+    }
+    check('…at the ceiling, not before', refusedAt === UF_SIGNED_ACTION_MAX_REMEMBERED, refusedAt);
+    check('…and once those events are over, there is room again', consumeSignedAction(synthetic(-1, T + 4000), T + 4000) === null);
+  }
+
   r = await patch('uf:h1', { event: signedAction(admin, 'PATCH', 'uf-request-set-hidden', 'uf:h1', { is_hidden: true }), is_hidden: false });
   check('the flag is read from the SIGNED content — a different one in the body is ignored', r.status === 200 && hiddenOf('uf:h1') === 1, r);
   r = await patch('uf:h1', { event: signedAction(admin, 'PATCH', 'uf-request-set-hidden', 'uf:h1', { is_hidden: false }) });
@@ -246,6 +302,31 @@ console.log('— hiding a request: the signature decides —');
   check('an event signed for another request → 401', r.status === 401 && hiddenOf('uf:h1') === 0, r);
   r = await patch('uf:missing', { event: signedAction(admin, 'PATCH', 'uf-request-set-hidden', 'uf:missing', { is_hidden: true }) });
   check('a request that does not exist → 404', r.status === 404, r);
+}
+
+// ════════════════════════════════════════════════════════
+console.log('— the system parameters cannot be rewritten by whoever asks —');
+{
+  // kind_38888 holds the relay list, the keys trusted as registrar / Lana8Wonder signers, the
+  // exchange rates and the Split calendar. The generic db route used to let anyone write it.
+  const send = async (method: string, p: string, body?: unknown) => {
+    const res = await fetch(`${DB_BASE}/${p}`, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: res.status, data: (await res.json().catch(() => ({}))) as any };
+  };
+  const rows = () => (db.prepare('SELECT COUNT(*) AS n FROM kind_38888').get() as any).n as number;
+  const before = rows();
+
+  let r = await send('POST', 'kind_38888', { event_id: 'forged', pubkey: 'f'.repeat(64), created_at: 4102444800, relays: '["ws://evil"]', electrum_servers: '[]', exchange_rates: '{}', trusted_signers: '{"Lana8Wonder":["' + 'f'.repeat(64) + '"]}', raw_event: '{}' });
+  check('POST /api/db/kind_38888 (a row dated 2100 with its own signer) → 403', r.status === 403, r);
+  r = await send('PATCH', 'kind_38888?event_id=eq.test', { trusted_signers: '{}' });
+  check('PATCH /api/db/kind_38888 → 403', r.status === 403, r);
+  r = await send('DELETE', 'kind_38888?event_id=neq.nothing');
+  check('DELETE /api/db/kind_38888 → 403', r.status === 403, r);
+  check('the table is exactly as it was', rows() === before && !db.prepare("SELECT 1 FROM kind_38888 WHERE event_id = 'forged'").get(), { before, after: rows() });
+  r = await send('GET', 'kind_38888?select=event_id&limit=1');
+  check('…and it can still be READ (the app reads the parameters on every start)', r.status === 200 && Array.isArray(r.data) && r.data.length === 1, r);
+  check('the placeholder a fresh database starts with is dated 0, so the real event always replaces it',
+    seededParametersDate === 0, seededParametersDate);
 }
 
 // ════════════════════════════════════════════════════════
@@ -284,7 +365,41 @@ console.log('— membership: who signed the plan matters —');
 
   r = await call('POST', '/requests/upsert', { event: requestBy(member, 'uf:m-backdated', now - 30 * DAY) });
   check('POST /requests/upsert: a backdated published_at is held at one hour back (unchanged rule)',
-    r.status === 200 && Math.abs(r.data.fundingOpensAt - (now - UF_PAST_SKEW_SECONDS + MATURING_DAYS * DAY)) <= 5, r);
+    r.status === 200 && Math.abs(r.data.fundingOpensAt - (Math.floor(Date.now() / 1000) - UF_PAST_SKEW_SECONDS + MATURING_DAYS * DAY)) <= 5, r);
+
+  console.log('— a signed event is public: posting it again must change nothing —');
+  {
+    // The owner's event is on the relays for everybody to read, and POST /requests/upsert accepts
+    // it from anyone. Posting the very event the row already reflects used to RESTART the review
+    // period (and revert the content) of a request that is maturing — a way for anybody to keep
+    // anybody's request from ever opening.
+    const requestAt = (who: Key, id: string, createdAt: number, title: string) => finalizeEvent({
+      kind: 31240, created_at: createdAt,
+      tags: [['d', id], ['service', 'unconditional-financing'], ['title', title], ['summary', 's'], ['request_type', 'personal_hardship'],
+        ['fiat_goal', '100'], ['currency', 'EUR'], ['wallet', 'LW'], ['published_at', String(createdAt)], ['status', 'active']],
+      content: 'story',
+    }, who.sk);
+    const titleOf = (id: string) => (db.prepare('SELECT title FROM uf_requests WHERE id = ?').get(id) as any)?.title;
+    const T = Math.floor(Date.now() / 1000);
+
+    const e1 = requestAt(member, 'uf:m-replay', T, 'first version');
+    let rr = await call('POST', '/requests/upsert', { event: e1 });
+    check('the owner publishes: accepted', rr.status === 200 && exists('uf:m-replay'), rr);
+
+    db.prepare('UPDATE uf_requests SET funding_opens_at = ? WHERE id = ?').run(T + 3 * DAY, 'uf:m-replay');   // a window that is plainly not "now + 15 days"
+    rr = await call('POST', '/requests/upsert', { event: e1 });
+    check('the SAME event posted again (by anyone) → 200 and nothing changes: the window is not restarted',
+      rr.status === 200 && rr.data.unchanged === true && rr.data.fundingOpensAt === T + 3 * DAY, rr);
+
+    const older = requestAt(member, 'uf:m-replay', T - 100, 'an older version');
+    rr = await call('POST', '/requests/upsert', { event: older });
+    check('an OLDER version of the same request → 409, and the content is not reverted', rr.status === 409 && titleOf('uf:m-replay') === 'first version', { rr, title: titleOf('uf:m-replay') });
+
+    const newer = requestAt(member, 'uf:m-replay', T + 1, 'refined by the owner');
+    rr = await call('POST', '/requests/upsert', { event: newer });
+    check('a genuine NEWER edit by the owner still applies…', rr.status === 200 && titleOf('uf:m-replay') === 'refined by the owner', { rr, title: titleOf('uf:m-replay') });
+    check('…and, while maturing, restarts the review period as before (later, never sooner)', rr.data.fundingOpensAt > T + 3 * DAY && Math.abs(rr.data.fundingOpensAt - (Math.floor(Date.now() / 1000) + MATURING_DAYS * DAY)) <= 5, rr);
+  }
 
   console.log('— …and "nobody answered" is not "not a member" —');
   relay.refuse88888 = true;

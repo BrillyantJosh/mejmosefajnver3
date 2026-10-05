@@ -140,7 +140,8 @@ async function main() {
     // NEW request by a throwaway key → eligibility 403 (no Lana8Wonder plan)
     const fresh = requestEvent(skAttacker, 'uf:test-hardened-fresh', now + 8 * 86400);
     let r = await call('POST', '/requests/upsert', { event: fresh });
-    check('new request without Lana8Wonder → 403 eligibility', r.status === 403, r);
+    // 403 = "not a member". 503 = "cannot tell" (a relay did not answer): also not listed, never a yes.
+    check('new request without Lana8Wonder → refused (403, or 503 while a relay is silent)', r.status === 403 || r.status === 503, r);
 
     // EDIT of the seeded row by its owner → 200; window must be PRESERVED even
     // though the edit event claims a different funding_opens_at.

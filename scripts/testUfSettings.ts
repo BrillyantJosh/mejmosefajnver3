@@ -164,12 +164,22 @@ async function main() {
       check('DELETE /api/db/app_settings → 403', r.status === 403, r);
       r = await send('POST', 'admin_users', { nostr_hex_id: 'f'.repeat(64) });
       check('self-promotion via POST /api/db/admin_users → 403', r.status === 403, r);
+      // The system parameters (relays, trusted signers, rates, Split calendar) are written by the server only.
+      r = await send('POST', 'kind_38888', { event_id: 'forged', pubkey: 'f'.repeat(64), created_at: 4102444800, relays: '[]', electrum_servers: '[]', exchange_rates: '{}', raw_event: '{}' });
+      check('replacing the system parameters via POST /api/db/kind_38888 → 403', r.status === 403, r);
+      r = await send('PATCH', 'kind_38888?event_id=eq.forged', { trusted_signers: '{}' });
+      check('PATCH /api/db/kind_38888 → 403', r.status === 403, r);
+      r = await send('DELETE', 'kind_38888?event_id=neq.forged');
+      check('emptying kind_38888 via DELETE /api/db → 403', r.status === 403, r);
 
       const after = new Database(DB_PATH, { readonly: true });
       const name = (after.prepare("SELECT value FROM app_settings WHERE key = 'app_name'").get() as any)?.value;
       const intruder = after.prepare('SELECT 1 FROM admin_users WHERE nostr_hex_id = ?').get('f'.repeat(64));
+      const forgedParams = after.prepare("SELECT 1 FROM kind_38888 WHERE event_id = 'forged'").get();
+      const paramRows = (after.prepare('SELECT COUNT(*) AS n FROM kind_38888').get() as any).n;
       after.close();
       check('app_name untouched', String(name).indexOf('pwned') === -1, name);
+      check('no forged system-parameters row, and the real one is still there', !forgedParams && paramRows >= 1, { forgedParams, paramRows });
       check('no intruder was added to admin_users', !intruder);
 
       // Reads must keep working — the app loads settings on every start.

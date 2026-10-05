@@ -28,11 +28,13 @@
  *   1. The row, when there is one. A known request keeps the window the
  *      database recorded: an edit can only push it later, and once it is open
  *      nothing closes it again (resolveKnownFundingOpensAt).
- *   2. The time of the last completed scan of the relays — the scan watermark.
- *      A request that was not on the relays then cannot be older than that
- *      scan, so an unknown request's published_at is never believed further
- *      back than the watermark less the hour of clock slack the REST route
- *      allows too. After a normal scan that is what REST allows; after a restore
+ *   2. The time of the last completed scan of the relays — the scan watermark —
+ *      "completed" meaning every relay answered and every request it did not
+ *      know was settled (nostr.ts decides that, and holds the watermark back
+ *      otherwise, for a bounded time). A request that was not on the relays
+ *      then cannot be older than that scan, so an unknown request's
+ *      published_at is never believed further back than the watermark less the
+ *      hour of clock slack the REST route allows too. After a normal scan that is what REST allows; after a restore
  *      from a backup it reaches back to the backup, and no further. The
  *      funding_opens_at tag is ignored: it is the signer's own claim about its
  *      own deadline. The window is published_at + the maturing length in force
@@ -96,7 +98,16 @@ function derivedOpening(publishedAt: number, createdAt: number, maturingSeconds:
  * The window of a request the database has NOT seen before.
  * See the header for why each branch trusts what it trusts.
  */
-export function resolveNewRequestTiming(i: NewRequestTimingInput): NewRequestTiming {
+export function resolveNewRequestTiming(raw: NewRequestTimingInput): NewRequestTiming {
+  // Tags are text from the signer: a 400-digit number parses to ±Infinity, which would
+  // be stored as a date. Anything that is not a finite number counts as absent.
+  const finite = (n: number, fallback: number) => (Number.isFinite(n) ? n : fallback);
+  const i: NewRequestTimingInput = {
+    ...raw,
+    createdAt: finite(raw.createdAt, raw.now),
+    claimedPublishedAt: finite(raw.claimedPublishedAt, finite(raw.createdAt, raw.now)),
+    claimedFundingOpensAt: finite(raw.claimedFundingOpensAt, 0),
+  };
   const ceiling = i.now + UF_FUTURE_SKEW_SECONDS;
 
   if (!(i.lastScanAt > 0)) {
@@ -138,10 +149,12 @@ export interface KnownRequestWindowInput {
 /**
  * The window of a request the database already knows.
  *
- * Decided by OUR clock, never by the date the event carries: an event can be
- * dated anything, and a backdated edit must not be able to pass for "an edit
- * made while the request was maturing" and drag an open request back into
- * review (or unpin its wallet). Mirrors the REST route.
+ * Whether it is open is decided by OUR clock, not by the date an event carries:
+ * an event can be dated anything, and a backdated edit must not be able to pass
+ * for "an edit made while the request was maturing" and drag an open request
+ * back into review (or unpin its wallet). Only while it is still maturing does
+ * the edit's own date matter, and then it can only push the opening later.
+ * Mirrors the REST route.
  */
 export function resolveKnownFundingOpensAt(i: KnownRequestWindowInput): number {
   // Open already: frozen.
