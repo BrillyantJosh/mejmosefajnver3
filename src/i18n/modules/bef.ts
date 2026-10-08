@@ -2,8 +2,8 @@ import { TranslationDict } from '../types';
 
 // MejmoSefajn's own words for the BEF module — only where BEF Explorer's own
 // texts (./befVendor.ts, generated) would not fit a person who is already
-// logged in here: the tabs and the Sell page, signing in without typing a key,
-// and refusals that BEF words as "type your key" or "go to another site".
+// logged in here: the tabs, signing in without typing a key, and refusals
+// that BEF words as "type your key" or "go to another site".
 // English is the required base (fallback); Slovenian, German, Hungarian and
 // Italian mirror every key, in the same voice as BEF's own translations (the
 // Hungarian as ./befVendorHu.ts words BEF's texts).
@@ -16,10 +16,10 @@ const bef = {
   "nav.interest": "Interest",
   "nav.sell": "Sell",
 
-  // ── sell: /bef/sell typed or shared as a link ──
-  "sell.body": "Lana.discount buys LANA for its own treasury, with its own capital, and reviews every proposal on its own merits. An offer is therefore submitted and accepted there, not inside this app.",
-  "sell.cta": "Submit an offer on lana.discount",
-  "sell.title": "Selling happens on Lana.discount",
+  // ── sell ──
+  // The Sell page's words are not here any more: lana.discount no longer buys
+  // LANA (8 Oct 2026), and /bef/sell shows the notice the Lana Discount module
+  // shows (src/components/discount/SellingMovedNotice.tsx, ./sellingMoved.ts).
 
   // ── door: signing in to BEF Explorer with the MejmoSefajn key ──
   "door.accountChanged": "Your MejmoSefajn account changed. Press Try again to sign in to BEF Explorer as the account you are logged in with now.",
@@ -58,11 +58,6 @@ const translations: TranslationDict<BefKey> = {
     "nav.interest": "Interes",
     "nav.sell": "Prodaj",
 
-    // ── sell ──
-    "sell.body": "Lana.discount kupuje LANA za svojo zakladnico, s svojim kapitalom, in vsako ponudbo presodi posebej. Ponudba se zato odda in sprejme tam, ne v tej aplikaciji.",
-    "sell.cta": "Oddaj ponudbo na lana.discount",
-    "sell.title": "Prodaja poteka na Lana.discount",
-
     // ── door ──
     "door.accountChanged": "Tvoj račun v MejmoSefajn se je zamenjal. Pritisni Poskusi znova, da se v BEF Explorer prijaviš z računom, s katerim si zdaj prijavljen.",
     "door.behind": "MejmoSefajn zaostaja za BEF Explorerjem. Dokler MejmoSefajn ni posodobljen, uporabi befexplorer.com.",
@@ -94,11 +89,6 @@ const translations: TranslationDict<BefKey> = {
     "nav.explorer": "Entdecken",
     "nav.interest": "Interesse",
     "nav.sell": "Verkaufen",
-
-    // ── sell ──
-    "sell.body": "Lana.discount kauft LANA für die eigene Treasury, mit eigenem Kapital, und prüft jedes Angebot einzeln. Ein Angebot wird deshalb dort abgegeben und angenommen, nicht in dieser App.",
-    "sell.cta": "Angebot auf lana.discount abgeben",
-    "sell.title": "Verkauft wird auf Lana.discount",
 
     // ── door ──
     "door.accountChanged": "Ihr MejmoSefajn-Konto hat gewechselt. Drücken Sie Erneut versuchen, um sich bei BEF Explorer mit dem Konto anzumelden, mit dem Sie jetzt angemeldet sind.",
@@ -132,11 +122,6 @@ const translations: TranslationDict<BefKey> = {
     "nav.interest": "Érdeklődés",
     "nav.sell": "Eladás",
 
-    // ── sell ──
-    "sell.body": "A Lana.discount a saját kincstárába, saját tőkéjéből vásárol LANA-t, és minden ajánlatot külön mérlegel. Ezért az ajánlatot ott adod be, és ott döntenek róla, nem ebben az alkalmazásban.",
-    "sell.cta": "Ajánlat beadása a lana.discount oldalon",
-    "sell.title": "Az eladás a Lana.discount oldalon történik",
-
     // ── door ──
     "door.accountChanged": "A MejmoSefajn-fiókod megváltozott. Nyomd meg a Próbáld újra gombot, hogy azzal a fiókkal jelentkezz be a BEF Explorerbe, amellyel most be vagy jelentkezve.",
     "door.behind": "A MejmoSefajn le van maradva a BEF Explorerhez képest. Amíg a MejmoSefajnt nem frissítik, használd a befexplorer.com oldalt.",
@@ -168,11 +153,6 @@ const translations: TranslationDict<BefKey> = {
     "nav.explorer": "Esplora",
     "nav.interest": "Interesse",
     "nav.sell": "Vendi",
-
-    // ── sell ──
-    "sell.body": "Lana.discount acquista LANA per la propria tesoreria, con il proprio capitale, e valuta ogni proposta singolarmente. Un’offerta si presenta e si accetta quindi lì, non in questa app.",
-    "sell.cta": "Presenta un’offerta su lana.discount",
-    "sell.title": "La vendita avviene su Lana.discount",
 
     // ── door ──
     "door.accountChanged": "Il tuo account MejmoSefajn è cambiato. Premi Riprova per accedere a BEF Explorer con l’account con cui sei connesso ora.",

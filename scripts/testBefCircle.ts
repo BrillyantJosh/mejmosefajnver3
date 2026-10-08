@@ -49,6 +49,7 @@ import {
 import befCircleText, { befCircleTranslations } from '../src/i18n/modules/befCircle.js';
 import befTranslations from '../src/i18n/modules/bef.js';
 import discountTranslations from '../src/i18n/modules/discount.js';
+import sellingMovedTranslations from '../src/i18n/modules/sellingMoved.js';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 
@@ -695,7 +696,12 @@ async function main() {
       if (fromBef.length) banned = fromBef;
     }
     const circleDir = 'src/components/bef/circle';
-    const sources = ['src/i18n/modules/befCircle.ts', 'src/pages/bef/BefCircle.tsx', 'src/pages/bef/BefSell.tsx', ...readdirSync(path.join(ROOT, circleDir)).map((f) => `${circleDir}/${f}`)];
+    const sources = [
+      'src/i18n/modules/befCircle.ts', 'src/pages/bef/BefCircle.tsx', 'src/pages/bef/BefSell.tsx',
+      // What /bef/sell shows since lana.discount stopped buying LANA (8 Oct 2026).
+      'src/components/discount/SellingMovedNotice.tsx', 'src/i18n/modules/sellingMoved.ts',
+      ...readdirSync(path.join(ROOT, circleDir)).map((f) => `${circleDir}/${f}`),
+    ];
     const found: string[] = [];
     for (const rel of sources) {
       if (!statSync(path.join(ROOT, rel)).isFile()) continue;
@@ -713,23 +719,34 @@ async function main() {
   }
 
   /* ───────────────────────────────────────────────────────────────── sell ── */
-  console.log('— Sell: /bef/sell typed by hand points to lana.discount/offer —');
+  // Lana.discount no longer buys LANA (8 Oct 2026). /bef/sell — now the Sell
+  // tab itself — shows the notice /discount/sell shows: the firms that buy LANA
+  // now, read from the relays (GET /api/buying-dealers). "naredi ta isti
+  // popravek za prodajo tudi na strani https://app.mejmosefajn.org/discount/sell"
+  // (Brilly, 8. 10. 2026). Its words and rules: src/lib/sellingMoved.test.ts.
+  console.log('— Sell: /bef/sell names the firms that buy LANA, as /discount/sell does —');
   {
-    const sell = read('src/pages/bef/BefSell.tsx');
-    const layout = read('src/pages/bef/BefLayout.tsx');
-    check('BEF_SELL_URL is exactly https://lana.discount/offer', layout.includes('export const BEF_SELL_URL = "https://lana.discount/offer";'));
-    check('one link to it, in a new tab, no opener, no referrer', /<a href=\{BEF_SELL_URL\} target="_blank" rel="noopener noreferrer">/.test(sell) && (sell.match(/<a /g) ?? []).length === 1);
-    const keys = [...sell.matchAll(/t\("([^"]+)"\)/g)].map((m) => m[1]);
-    check('the module’s own words: title, body, call to action', /useTranslation\(befText\)/.test(sell) && JSON.stringify(keys) === JSON.stringify(['sell.title', 'sell.body', 'sell.cta']), keys);
-    // The Lana Discount module has these words only in English and Slovenian. The
-    // module says the same there, word for word, and has them in every other language.
-    const PARTS = ['title', 'body', 'cta'];
-    const own = (lang: string, part: string) => (befTranslations as Record<string, Record<string, string> | undefined>)[lang]?.[`sell.${part}`];
-    const discount = (lang: string, part: string) => (discountTranslations as Record<string, Record<string, string> | undefined>)[lang]?.[`sell.moved.${part}`];
-    const differ = ['en', 'sl'].flatMap((lang) => PARTS.filter((part) => own(lang, part) !== discount(lang, part)).map((part) => `${lang}:${part}`));
-    check('…in English and Slovenian, the Lana Discount module’s Sell page word for word', differ.length === 0, differ);
-    const english = ['de', 'hu', 'it'].flatMap((lang) => PARTS.filter((part) => !own(lang, part)?.trim() || own(lang, part) === own('en', part)).map((part) => `${lang}:${part}`));
-    check('…and German, Hungarian and Italian have their own, never English', english.length === 0, english);
+    const code = (rel: string) => read(rel).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const sell = code('src/pages/bef/BefSell.tsx');
+    const layout = code('src/pages/bef/BefLayout.tsx');
+    const discountSell = code('src/pages/discount/DiscountSell.tsx');
+    check('BefSell shows the shared notice, as an h2 under BefLayout’s h1', /<SellingMovedNotice headingLevel="h2" \/>/.test(sell) && /from "@\/components\/discount\/SellingMovedNotice"/.test(sell));
+    check('…the same one /discount/sell shows', /<SellingMovedNotice headingLevel="h1"/.test(discountSell));
+    check('nothing in the BEF Sell tab or page goes to lana.discount/offer', !/lana\.discount\/offer|BEF_SELL_URL/.test(sell + layout), { sell, layout: /BEF_SELL_URL|lana\.discount\/offer/.exec(layout)?.[0] });
+    check('the Sell tab is in-app (no href)', /\{ title: t\("nav\.sell"\), path: "\/bef\/sell", icon: Tag \}/.test(layout));
+    // The old words ("Selling happens on Lana.discount", "Submit an offer on
+    // lana.discount") are gone from every language of both modules.
+    const oldKeys = (dict: Record<string, Record<string, string> | undefined>, pattern: RegExp) =>
+      Object.entries(dict).flatMap(([lang, words]) => Object.keys(words ?? {}).filter((k) => pattern.test(k)).map((k) => `${lang}:${k}`));
+    check('bef.ts: no sell.* words left, in any language', oldKeys(befTranslations as Record<string, Record<string, string> | undefined>, /^sell\./).length === 0);
+    // The Sell page's line about past sales is the notice's own (moved.pastSales), in the notice's language.
+    check('discount.ts: no sell.* words left, in any language', oldKeys(discountTranslations as Record<string, Record<string, string> | undefined>, /^sell\./).length === 0);
+    const allText = JSON.stringify([befTranslations, discountTranslations, sellingMovedTranslations]);
+    check('no "Selling happens on Lana.discount" / "Submit an offer" in any language', !/Selling happens on|Submit an offer|Prodaja poteka na|Oddaj ponudbo|Verkauft wird auf|Angebot auf lana|eladás a Lana\.discount|Ajánlat beadása|La vendita avviene|Presenta un’offerta/i.test(allText));
+    // BEF speaks five languages; so does the notice it shows.
+    const words = sellingMovedTranslations as unknown as Record<string, Record<string, string> | undefined>;
+    const english = ['de', 'hu', 'it'].flatMap((lang) => Object.keys(words.en!).filter((k) => !words[lang]?.[k]?.trim() || words[lang]![k] === words.en![k]).map((k) => `${lang}:${k}`));
+    check('…and German, Hungarian and Italian have the notice in their own words, never English', english.length === 0, english);
   }
 
   if (failures) console.log(`\n❌ ${failures} FAILED${skips ? `, ${skips} skipped` : ''}`);

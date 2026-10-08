@@ -664,7 +664,9 @@ async function main() {
     const layout = read('src/pages/bef/BefLayout.tsx');
     const tabPaths = [...layout.matchAll(/path: "([^"]+)"/g)].map((m) => m[1]);
     check('tabs: Explorer, Interest, Sell, My Circle at the route paths', JSON.stringify(tabPaths) === JSON.stringify(['/bef', '/bef/interest', '/bef/sell', '/bef/circle']), tabPaths);
-    check('Sell opens https://lana.discount/offer', layout.includes('export const BEF_SELL_URL = "https://lana.discount/offer";') && /href: BEF_SELL_URL/.test(layout));
+    // Lana.discount no longer buys LANA (8 Oct 2026): the Sell tab is the in-app
+    // page that names the firms that do (src/pages/bef/BefSell.tsx).
+    check('Sell is the in-app /bef/sell page — no external href, nothing to lana.discount', /\{ title: t\("nav\.sell"\), path: "\/bef\/sell", icon: Tag \}/.test(layout) && !/BEF_SELL_URL|lana\.discount\/offer/.test(layout));
     check('the person provider is keyed by the MejmoSefajn hex', /<BefPersonProvider key={session\?\.nostrHexId/.test(layout));
 
     const authContext = read('src/contexts/AuthContext.tsx');

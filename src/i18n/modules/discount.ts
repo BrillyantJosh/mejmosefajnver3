@@ -10,12 +10,11 @@ const discount = {
   "layout.nav.transactions": "Transactions",
 
   // ── sell ──
-  // Selling itself moved to lana.discount: it decides whether to acquire before
-  // any LANA moves, so an offer cannot be made from inside this app.
-  "sell.moved.body": "Lana.discount buys LANA for its own treasury, with its own capital, and reviews every proposal on its own merits. An offer is therefore submitted and accepted there, not inside this app.",
-  "sell.moved.cta": "Submit an offer on lana.discount",
-  "sell.moved.note": "Your past sales and payouts stay here, under Transactions.",
-  "sell.moved.title": "Selling happens on Lana.discount",
+  // Lana.discount no longer buys LANA (8 Oct 2026): the Sell page names the
+  // firms that do (src/components/discount/SellingMovedNotice.tsx). All of its
+  // words are in ./sellingMoved.ts, the line about past sales under
+  // Transactions too (moved.pastSales): this module has only English and
+  // Slovenian, the notice five languages, and one card speaks one language.
 
   // ── tx ──
   "tx.account": "Account",
@@ -25,7 +24,7 @@ const discount = {
   "tx.badgePartial": "Partial paid",
   "tx.buybackWallet": "Buyback Wallet",
   "tx.commission": "Commission ({percent}%)",
-  "tx.emptyDesc": "Sell LANA through Lana.Discount to see transactions here",
+  "tx.emptyDesc": "Your sales of LANA through Lana.Discount show here",
   "tx.emptyTitle": "No buyback transactions yet",
   "tx.exchangeRate": "Exchange Rate",
   "tx.gross": "Gross",
@@ -62,12 +61,6 @@ const translations: TranslationDict<DiscountKey> = {
     "layout.nav.sell": "Prodaj LANA",
     "layout.nav.transactions": "Transakcije",
 
-    // ── sell ──
-    "sell.moved.body": "Lana.discount kupuje LANA za svojo zakladnico, s svojim kapitalom, in vsako ponudbo presodi posebej. Ponudba se zato odda in sprejme tam, ne v tej aplikaciji.",
-    "sell.moved.cta": "Oddaj ponudbo na lana.discount",
-    "sell.moved.note": "Tvoje pretekle prodaje in izplačila ostanejo tukaj, pod Transakcije.",
-    "sell.moved.title": "Prodaja poteka na Lana.discount",
-
     // ── tx ──
     "tx.account": "Račun",
     "tx.amount": "Znesek",
@@ -76,7 +69,7 @@ const translations: TranslationDict<DiscountKey> = {
     "tx.badgePartial": "Delno plačano",
     "tx.buybackWallet": "Odkupna denarnica",
     "tx.commission": "Provizija ({percent}%)",
-    "tx.emptyDesc": "Prodaj LANA prek Lana.Discount, da se tu prikažejo transakcije",
+    "tx.emptyDesc": "Tu se prikažejo tvoje prodaje LANA prek Lana.Discount",
     "tx.emptyTitle": "Še ni odkupnih transakcij",
     "tx.exchangeRate": "Menjalni tečaj",
     "tx.gross": "Bruto",

@@ -1,47 +1,38 @@
-import { Button } from "@/components/ui/button";
-import { ExternalLink } from "lucide-react";
+import SellingMovedNotice from "@/components/discount/SellingMovedNotice";
 import { useTranslation } from "@/i18n/I18nContext";
 import discountTranslations from "@/i18n/modules/discount";
-
-/** Where an offer is actually made. The page sends a logged-out visitor to its own login. */
-const OFFER_URL = "https://lana.discount/offer";
 
 /**
  * Selling used to happen here: five steps ending in a WIF field, a LANA transfer
  * to the buyback wallet, and a sale booked on lana.discount through its external
- * API — with the exchange rate supplied by this client and no decision on the
- * other side about whether to buy at all.
+ * API. Then this page sent a seller to lana.discount/offer instead — and on
+ * 8 Oct 2026 lana.discount stopped buying LANA altogether: the BEF dealers that
+ * buy it took over. Brilly: "naredi ta isti popravek za prodajo tudi na strani
+ * https://app.mejmosefajn.org/discount/sell preko katere uporabniki isto jih
+ * preusmer na ta podjetja" (Brilly, 8. 10. 2026).
  *
- * Lana.discount now decides before any LANA moves: an offer is submitted, the
- * treasury accepts, declines or reviews it, and only an accepted offer opens the
- * transfer. That decision cannot be made from in here, so this page no longer
- * pretends to sell — it points at the place that does.
+ * So the page names those firms, read from the relays by this app's server
+ * (GET /api/buying-dealers), with each firm's own registration and sell pages —
+ * the notice the BEF module's Sell page shows too
+ * (src/components/discount/SellingMovedNotice.tsx). Nothing is sold from in
+ * here, and nothing links to lana.discount/offer any more.
  *
- * The nav entry and the Transactions page stay: the history of what was sold and
- * paid is still this app's to show.
+ * The nav entry and the Transactions page stay: the history of what was sold to
+ * lana.discount and paid is still this app's to show, and the card ends with a
+ * line saying so. That line is the notice's own words (moved.pastSales), so it
+ * is in the notice's language — this module has only English and Slovenian, and
+ * a German, Hungarian or Italian reader used to get a German, Hungarian or
+ * Italian notice with an English line under it. It names the Transactions tab
+ * exactly as this module labels it, in the language that label is in.
  */
 export default function DiscountSell() {
-  const { t } = useTranslation(discountTranslations);
+  const { t, lang } = useTranslation(discountTranslations);
+  // The language the tab's label really is in: this module's own, or English it falls back to.
+  const tabLang = discountTranslations[lang] ? lang : "en";
 
   return (
-    <div className="mx-auto max-w-xl px-1 py-8 sm:py-12">
-      <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 text-center">
-        <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
-          {t("sell.moved.title")}
-        </h1>
-        <p className="mt-3 text-sm sm:text-base text-muted-foreground leading-relaxed">
-          {t("sell.moved.body")}
-        </p>
-
-        <Button asChild size="lg" className="mt-6 w-full sm:w-auto">
-          <a href={OFFER_URL} target="_blank" rel="noopener noreferrer">
-            {t("sell.moved.cta")}
-            <ExternalLink className="ml-2 h-4 w-4" />
-          </a>
-        </Button>
-
-        <p className="mt-5 text-xs text-muted-foreground">{t("sell.moved.note")}</p>
-      </div>
+    <div className="mx-auto max-w-2xl px-1 py-8 sm:py-12">
+      <SellingMovedNotice headingLevel="h1" pastSalesTab={{ label: t("layout.nav.transactions"), lang: tabLang }} />
     </div>
   );
 }

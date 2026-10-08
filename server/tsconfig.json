@@ -12,6 +12,7 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "outDir": "./dist",
     "baseUrl": ".",
     "paths": {

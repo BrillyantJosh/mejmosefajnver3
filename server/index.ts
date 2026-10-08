@@ -19,6 +19,7 @@ import functionsRoutes, { retryPendingNostrEvents, cleanupDmAudio } from './rout
 import voiceRoutes from './routes/voice.js';
 import beingsRoutes from './routes/beings.js';
 import cashoutsRoutes from './routes/cashouts.js';
+import buyingDealersRoutes from './routes/buyingDealers.js';
 import { processPendingTasks, setSSEHandlers } from './lib/aiTasks.js';
 import { syncUnregisteredLana } from './lib/unregisteredLana.js';
 
@@ -384,6 +385,9 @@ app.use('/api/unconditional-financing', unconditionalFinancingRoutes);
 app.use('/api/beings', beingsRoutes);
 // What a wallet has already sent, so a cash-out is never asked for twice
 app.use('/api/cashouts', cashoutsRoutes);
+// The firms that buy LANA now that lana.discount no longer does (Brilly,
+// 8. 10. 2026) — public, read-only, for /discount/sell and /bef/sell.
+app.use('/api/buying-dealers', buyingDealersRoutes);
 
 // =============================================
 // Health

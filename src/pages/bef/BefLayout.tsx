@@ -8,13 +8,16 @@ import befText from "@/i18n/modules/befText";
 import { setFormatLocale } from "@/lib/bef/vendor/src/lib/format.ts";
 import { BefPersonProvider } from "./BefPersonProvider";
 
-/** Where selling happens. It opens straight from the tab; /bef/sell typed by hand says the same. */
-export const BEF_SELL_URL = "https://lana.discount/offer";
-
 /**
  * The BEF module: BEF Explorer's calculator, interest and cards, inside
  * MejmoSefajn. Its figures and sessions come from befexplorer.com itself
- * (src/lib/bef); selling happens on lana.discount.
+ * (src/lib/bef).
+ *
+ * The Sell tab is the in-app /bef/sell page. It opened lana.discount's offer
+ * page in a new tab until lana.discount stopped buying LANA (8 Oct 2026); now
+ * it names the firms that buy LANA instead (./BefSell.tsx) — "naredi ta isti
+ * popravek za prodajo tudi na strani https://app.mejmosefajn.org/discount/sell"
+ * (Brilly, 8. 10. 2026) — and, being in-app, is highlighted when open.
  */
 export default function BefLayout() {
   const { t } = useTranslation(befText);
@@ -28,7 +31,7 @@ export default function BefLayout() {
   const befNavItems = [
     { title: t("nav.explorer"), path: "/bef", icon: Calculator },
     { title: t("nav.interest"), path: "/bef/interest", icon: HandHeart },
-    { title: t("nav.sell"), path: "/bef/sell", icon: Tag, href: BEF_SELL_URL },
+    { title: t("nav.sell"), path: "/bef/sell", icon: Tag },
     { title: t("nav.circle"), path: "/bef/circle", icon: Users },
   ];
 
