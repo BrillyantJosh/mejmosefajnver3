@@ -7,6 +7,13 @@
  * 127.0.0.1, or both live in memory.
  *   npm run test:sell-moved
  *
+ *   shape      of the kind's own rules, only those of KIND 30972 v1.6.0 (BEF's
+ *              shape tests of 9 Oct 2026, onto checkDealerShape): content
+ *              "1.4.0" names a receive wallet per currency — 1 to 20 ISO 4217
+ *              codes, each once, in alphabetical order, each to exactly a LANA
+ *              address, receive_wallet the default — and is read; anything
+ *              else makes the event invalid, with a sentence. Without "1.4.0"
+ *              a firm that names one would drop off the buying firms;
  *   admission  a key the profile's own website lists for the slug, at least one
  *              of the site's admins a reliable person in KIND 38888 who has
  *              signed a profile of it naming that site (naming a reliable key
@@ -30,8 +37,13 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { fetchDealerEvents, readDealers, type DealerRead } from '../lib/befDealers/dealers.js';
 import { fetchWellKnown, httpsGet, isPublicAddress, publicLookup, websiteHost, type HttpReply } from '../lib/befDealers/wellKnown.js';
 import {
-  dealerContent, dealerEvent, directory, newIdentity, NOW_MS, NOW_S, systemParams,
-  TEST_IBAN, TEST_PAYOUT_WALLET, TEST_RECEIVE_WALLET,
+  checkDealerShape, DEALER_KIND, READ_CONTENT_VERSIONS, RECEIVE_WALLET_KEY_REFUSAL, receiveWalletFor, receiveWalletsProblems, writtenKeysOf,
+} from '../lib/befDealers/dealerShape.js';
+import { isLanaAddress } from '../lib/befDealers/lanaAddress.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import {
+  dealerContent, dealerEvent, dealerTags, directory, newIdentity, signEvent, NOW_MS, NOW_S, systemParams,
+  TEST_EUR_WALLET, TEST_GBP_WALLET, TEST_IBAN, TEST_PAYOUT_WALLET, TEST_RECEIVE_WALLET,
 } from '../lib/befDealers/dealerTestKit.js';
 
 const cleanups: (() => void)[] = [];
@@ -44,6 +56,181 @@ function decided(r: DealerRead) {
 }
 
 const site = (host: string, slug: string, admins: string[]) => ({ [host]: { dealers: { [slug]: { admins } } } });
+
+/* ── shape: a receive wallet per currency ─────────────────────────────────── */
+
+/** Twenty ISO 4217 codes in alphabetical order — the most receive_wallets may name — and a 21st after them. */
+const CODES_20 = ['AUD', 'BGN', 'BRL', 'CAD', 'CHF', 'CNY', 'CZK', 'DKK', 'EUR', 'GBP', 'HKD', 'HUF', 'INR', 'JPY', 'NOK', 'NZD', 'PLN', 'RON', 'SEK', 'USD'];
+
+/** Base58Check of a payload whose first byte is the version byte — to write an address with another version byte. */
+function base58Check(payload: Uint8Array): string {
+  const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  const full = Uint8Array.from([...payload, ...sha256(sha256(payload)).subarray(0, 4)]);
+  let n = BigInt('0x' + Buffer.from(full).toString('hex'));
+  let out = '';
+  while (n > 0n) {
+    out = alphabet[Number(n % 58n)] + out;
+    n /= 58n;
+  }
+  for (const b of full) {
+    if (b !== 0) break;
+    out = '1' + out;
+  }
+  return out;
+}
+
+describe('shape: a receive wallet per currency (KIND 30972 content "1.4.0", spec v1.6.0)', () => {
+  const key = newIdentity();
+  /** The profile a KIND 30972 with this content reads to — refused, the test fails with the reader's sentences. */
+  const read = (content: Record<string, unknown>) => {
+    const shape = checkDealerShape(dealerEvent(key, 'krog-menjave', content));
+    if ('profile' in shape) return shape.profile;
+    throw new Error(`refused: ${shape.errors.join(' | ')}`);
+  };
+  /** The sentences a KIND 30972 whose content is exactly this text (or this object, written as JSON) is refused with. */
+  const errorsOf = (content: Record<string, unknown> | string): string[] => {
+    const raw = typeof content === 'string' ? content : JSON.stringify(content);
+    const shape = checkDealerShape(signEvent(key, { kind: DEALER_KIND, created_at: NOW_S - 60, tags: dealerTags('krog-menjave', JSON.parse(raw)), content: raw }));
+    assert.equal(shape.ok, false, raw.slice(-300));
+    return 'errors' in shape ? shape.errors : [];
+  };
+  /** The sentences a "1.4.0" profile (with a default receive wallet) is refused with when its receive_wallets is `value`. */
+  const wallets = (value: unknown) => errorsOf(dealerContent({ receiveWallet: TEST_RECEIVE_WALLET, receiveWallets: value }));
+  const notCode = /receive_wallets has a key( "[^"]*")? that is not a currency code: each key is an ISO 4217 code, three capital letters \(e\.g\. EUR\)/;
+  const has = (errors: string[], sentence: string) => assert.ok(errors.includes(sentence), `${sentence}\n  not in ${JSON.stringify(errors)}`);
+
+  it('is read — the wallets, the default and the roles — and the one rule picks the wallet of the sale’s currency', () => {
+    assert.deepEqual(READ_CONTENT_VERSIONS, ['1.0.0', '1.1.0', '1.2.0', '1.3.0', '1.4.0']);
+    for (const w of [TEST_EUR_WALLET, TEST_GBP_WALLET]) assert.ok(isLanaAddress(w), w);
+    assert.equal(new Set([TEST_EUR_WALLET, TEST_GBP_WALLET, TEST_RECEIVE_WALLET, TEST_PAYOUT_WALLET]).size, 4);
+
+    // As a writer writes it: "1.4.0" — payout_wallet, receive_wallet (the default), then receive_wallets as the last key.
+    const all = dealerContent({ payoutWallet: TEST_PAYOUT_WALLET, receiveWallet: TEST_RECEIVE_WALLET, receiveWallets: { EUR: TEST_EUR_WALLET, GBP: TEST_GBP_WALLET } });
+    assert.equal(all.version, '1.4.0');
+    assert.deepEqual(Object.keys(all).slice(-3), ['payout_wallet', 'receive_wallet', 'receive_wallets']);
+    const p = read(all);
+    assert.deepEqual(
+      [p.version, p.payoutWallet, p.receiveWallet, p.receiveWallets, p.roles, p.currencies],
+      ['1.4.0', TEST_PAYOUT_WALLET, TEST_RECEIVE_WALLET, { EUR: TEST_EUR_WALLET, GBP: TEST_GBP_WALLET }, ['sells', 'buys'], ['EUR', 'GBP']],
+    );
+    // receive_wallets[C], else receive_wallet, else none — and only an exact code finds an entry.
+    assert.deepEqual(['EUR', 'GBP', 'USD'].map((c) => receiveWalletFor(p, c)), [TEST_EUR_WALLET, TEST_GBP_WALLET, TEST_RECEIVE_WALLET]);
+    for (const other of ['eur', 'EUR ', 'constructor', '__proto__', '']) assert.equal(receiveWalletFor(p, other), TEST_RECEIVE_WALLET, JSON.stringify(other));
+
+    // Without a default, a currency with no entry has no wallet; the same address may serve several currencies.
+    const own = read(dealerContent({ roles: ['buys'], receiveWallets: { EUR: TEST_EUR_WALLET, GBP: TEST_EUR_WALLET } }));
+    assert.deepEqual([own.version, own.payoutWallet, own.receiveWallet, own.roles], ['1.4.0', null, null, ['buys']]);
+    assert.deepEqual(['EUR', 'GBP', 'USD'].map((c) => receiveWalletFor(own, c)), [TEST_EUR_WALLET, TEST_EUR_WALLET, null]);
+
+    // Twenty currencies is the most, and reads; written with spaces and new lines, it reads the same.
+    const twenty = read(dealerContent({ receiveWallets: Object.fromEntries(CODES_20.map((c, i) => [c, i % 2 ? TEST_GBP_WALLET : TEST_EUR_WALLET])) }));
+    assert.deepEqual(Object.keys(twenty.receiveWallets), CODES_20);
+    const pretty = checkDealerShape(signEvent(key, { kind: DEALER_KIND, created_at: NOW_S - 60, tags: dealerTags('krog-menjave', all), content: JSON.stringify(all, null, 2) }));
+    assert.deepEqual('profile' in pretty && pretty.profile.receiveWallets, { EUR: TEST_EUR_WALLET, GBP: TEST_GBP_WALLET });
+
+    // Lower versions name no wallet per currency: the one rule gives their receive_wallet, or none.
+    const v130 = read(dealerContent({ receiveWallet: TEST_RECEIVE_WALLET }));
+    assert.deepEqual([v130.version, v130.receiveWallets, receiveWalletFor(v130, 'GBP')], ['1.3.0', null, TEST_RECEIVE_WALLET]);
+    const v110 = read(dealerContent());
+    assert.deepEqual([v110.version, v110.receiveWallets, receiveWalletFor(v110, 'EUR')], ['1.1.0', null, null]);
+    // Roles are required in "1.4.0" as in "1.1.0".
+    assert.match(
+      errorsOf(dealerContent({ receiveWallets: { EUR: TEST_EUR_WALLET }, roles: null })).join(),
+      /roles is required in content.version "1\.1\.0", "1\.2\.0", "1\.3\.0" and "1\.4\.0"/,
+    );
+  });
+
+  it('a code that is not three capital letters makes the event invalid, with a sentence — a long one is never repeated', () => {
+    for (const code of ['eur', 'Eur', 'eUR', 'EU', 'EURO', 'E1R', '978', '', ' EUR', 'EUR ']) {
+      const errors = wallets({ [code]: TEST_EUR_WALLET });
+      assert.ok(errors.some((e) => notCode.test(e)), `${JSON.stringify(code)}: ${JSON.stringify(errors)}`);
+    }
+    has(wallets({ eur: TEST_EUR_WALLET }), 'receive_wallets has a key "eur" that is not a currency code: each key is an ISO 4217 code, three capital letters (e.g. EUR)');
+    // One bad code beside good ones makes the whole event invalid.
+    assert.match(wallets({ EUR: TEST_EUR_WALLET, GBP: TEST_GBP_WALLET, usd: TEST_EUR_WALLET }).join(), notCode);
+    const hexKey = 'ab'.repeat(32);
+    const longKey = wallets({ [hexKey]: TEST_EUR_WALLET });
+    assert.ok(longKey.some((e) => notCode.test(e)), JSON.stringify(longKey));
+    assert.ok(!JSON.stringify(longKey).includes(hexKey), 'a long key is never repeated');
+  });
+
+  it('a private key where the address belongs is refused with receive_wallet’s own sentence, once, never repeated', () => {
+    const b58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    for (const shaped of [`T${b58.slice(0, 50)}`, `6${b58.slice(1, 52)}`, 'ab'.repeat(32), `0x${'cd'.repeat(32)}`]) {
+      const errors = wallets({ EUR: TEST_EUR_WALLET, GBP: shaped });
+      has(errors, RECEIVE_WALLET_KEY_REFUSAL);
+      assert.ok(!JSON.stringify(errors).includes(shaped), 'the refusal never repeats what was written');
+    }
+    assert.equal(wallets({ EUR: 'ab'.repeat(32), GBP: 'cd'.repeat(32) }).filter((e) => e === RECEIVE_WALLET_KEY_REFUSAL).length, 1);
+  });
+
+  it('a value that is not exactly a LANA address — a checksum that does not hold, another version byte, spaces, another case, not text — is refused, named by its currency', () => {
+    const notAddress = /receive_wallets\.GBP must be the address of a LANA wallet: Base58Check with the version byte 0x30/;
+    const typo = TEST_GBP_WALLET.slice(0, -1) + (TEST_GBP_WALLET.endsWith('2') ? '3' : '2');
+    assert.equal(isLanaAddress(typo), false);
+    assert.match(wallets({ EUR: TEST_EUR_WALLET, GBP: typo }).join(), notAddress);
+    const v31 = base58Check(Uint8Array.from({ length: 21 }, (_, i) => (i === 0 ? 0x31 : i)));
+    assert.equal(v31.length, 34);
+    assert.match(wallets({ GBP: v31 }).join(), notAddress);
+    for (const value of [` ${TEST_GBP_WALLET}`, `${TEST_GBP_WALLET}\n`, TEST_GBP_WALLET.toLowerCase(), '']) {
+      assert.match(wallets({ GBP: value }).join(), notAddress, JSON.stringify(value));
+    }
+    for (const value of [12345, null, [TEST_GBP_WALLET], { address: TEST_GBP_WALLET }, true]) {
+      assert.match(wallets({ GBP: value }).join(), /receive_wallets\.GBP must be text: the address of a LANA wallet/, JSON.stringify(value));
+    }
+  });
+
+  it('not an object, empty, more than 20 currencies, out of order, or a code written twice is refused, with a sentence', () => {
+    for (const value of [[TEST_EUR_WALLET], TEST_EUR_WALLET, null, 1]) {
+      has(wallets(value), 'receive_wallets must be an object: a currency code (ISO 4217, e.g. EUR) to the address of a LANA wallet');
+    }
+    has(wallets({}), 'receive_wallets is empty: it names at least one currency and its wallet (a profile that names none is not content.version "1.4.0")');
+    has(wallets(Object.fromEntries([...CODES_20, 'ZAR'].map((c) => [c, TEST_EUR_WALLET]))), 'receive_wallets names more than 20 currencies: at most 20');
+
+    const order = 'receive_wallets must be written in alphabetical order of the currency codes (e.g. EUR, GBP, USD)';
+    has(wallets({ GBP: TEST_GBP_WALLET, EUR: TEST_EUR_WALLET }), order);
+    has(wallets({ EUR: TEST_EUR_WALLET, USD: TEST_EUR_WALLET, GBP: TEST_GBP_WALLET }), order);
+
+    // A code written twice: JSON.parse keeps only the last, so the text itself is read — an escaped one too.
+    const sorted = JSON.stringify(dealerContent({ receiveWallets: { EUR: TEST_EUR_WALLET, GBP: TEST_GBP_WALLET } }));
+    const twice = sorted.replace(`"EUR":"${TEST_EUR_WALLET}"`, `"EUR":"${TEST_EUR_WALLET}","EUR":"${TEST_GBP_WALLET}"`);
+    assert.notEqual(twice, sorted);
+    assert.deepEqual(JSON.parse(twice).receive_wallets, { EUR: TEST_GBP_WALLET, GBP: TEST_GBP_WALLET }, 'JSON.parse alone sees nothing wrong');
+    has(errorsOf(twice), 'receive_wallets names "EUR" twice: each currency at most once');
+    const escaped = sorted.replace(`"GBP":"${TEST_GBP_WALLET}"`, `"GBP":"${TEST_GBP_WALLET}","GB\\u0050":"${TEST_GBP_WALLET}"`);
+    has(errorsOf(escaped), 'receive_wallets names "GBP" twice: each currency at most once');
+    // receive_wallets itself written twice at the top.
+    const twoObjects = sorted.replace('"receive_wallets":', `"receive_wallets":{"USD":"${TEST_EUR_WALLET}"},"receive_wallets":`);
+    has(errorsOf(twoObjects), 'content names receive_wallets twice: it is written once');
+    // What the rule reads from the text, alone.
+    assert.deepEqual(writtenKeysOf(twice, 'receive_wallets'), [['EUR', 'EUR', 'GBP']]);
+    assert.deepEqual(receiveWalletsProblems({ EUR: TEST_EUR_WALLET }, ['EUR', 'EUR']), ['receive_wallets names "EUR" twice: each currency at most once']);
+    assert.deepEqual(receiveWalletsProblems({ EUR: TEST_EUR_WALLET, GBP: TEST_EUR_WALLET }), []);
+  });
+
+  it('missing in "1.4.0", or written in "1.3.0" and lower, makes the event invalid, with a sentence', () => {
+    assert.match(
+      errorsOf(dealerContent({ version: '1.4.0', receiveWallet: TEST_RECEIVE_WALLET })).join(),
+      /receive_wallets is required in content.version "1\.4\.0": at least one currency and its wallet \(a profile that names none is "1\.3\.0" or lower\)/,
+    );
+    for (const version of ['1.3.0', '1.2.0', '1.1.0', '1.0.0']) {
+      has(
+        errorsOf(dealerContent({ version, receiveWallets: { EUR: TEST_EUR_WALLET } })),
+        `content.version "${version}" has no receive_wallets: a profile that names a receive wallet per currency is content.version "1.4.0"`,
+      );
+    }
+    // A version nobody wrote is refused, wallets or not; the default and the payout wallet are still checked in "1.4.0".
+    errorsOf(dealerContent({ version: '1.5.0', receiveWallets: { EUR: TEST_EUR_WALLET } }));
+    assert.match(
+      errorsOf(dealerContent({ receiveWallet: TEST_RECEIVE_WALLET.toLowerCase(), receiveWallets: { EUR: TEST_EUR_WALLET } })).join(),
+      /receive_wallet must be the address of a LANA wallet/,
+    );
+    assert.match(
+      errorsOf(dealerContent({ payoutWallet: TEST_PAYOUT_WALLET.toLowerCase(), receiveWallets: { EUR: TEST_EUR_WALLET } })).join(),
+      /payout_wallet must be the address of a LANA wallet/,
+    );
+  });
+});
 
 /* ── admission ────────────────────────────────────────────────────────────── */
 
@@ -222,6 +409,49 @@ describe('admission', () => {
     const text = JSON.stringify(dir.listed());
     assert.ok(!text.includes(TEST_PAYOUT_WALLET));
     assert.ok(!text.includes(TEST_RECEIVE_WALLET));
+  });
+
+  it('a newest profile of 1.4.0 (a receive wallet per currency, spec v1.6.0) stays listed — the wallets are read, not kept', async () => {
+    const owner = newIdentity();
+    const dir = directory([owner.hex]);
+    const files = site('krogmenjave.test', 'krog-menjave', [owner.hex]);
+    const v130 = dealerEvent(
+      owner, 'krog-menjave',
+      dealerContent({ name: 'Krog menjave (1.3.0)', payoutWallet: TEST_PAYOUT_WALLET, receiveWallet: TEST_RECEIVE_WALLET }),
+      { at: NOW_S - 7200 },
+    );
+    await dir.read([v130], files);
+    assert.deepEqual(dir.listed().map((d) => d.contentVersion), ['1.3.0']);
+    // The admin names a wallet per currency at the firm's own /admin: the next version is "1.4.0".
+    const v140 = dealerEvent(
+      owner, 'krog-menjave',
+      dealerContent({ payoutWallet: TEST_PAYOUT_WALLET, receiveWallet: TEST_RECEIVE_WALLET, receiveWallets: { EUR: TEST_EUR_WALLET, GBP: TEST_GBP_WALLET } }),
+      { at: NOW_S - 60 },
+    );
+    const r = decided(await dir.read([v130, v140], files));
+    assert.deepEqual(r.removed, []);
+    assert.deepEqual(dir.listed().map((d) => [d.eventId, d.contentVersion, d.name, d.roles]), [[v140.id, '1.4.0', 'Krog menjave d.o.o.', ['sells', 'buys']]]);
+    const wallets = [TEST_EUR_WALLET, TEST_GBP_WALLET, TEST_RECEIVE_WALLET, TEST_PAYOUT_WALLET];
+    const text = JSON.stringify(dir.listed());
+    for (const w of wallets) assert.ok(!text.includes(w), 'a listed dealer carries no wallet');
+
+    // A firm whose only profile is "1.4.0" — wallets per currency only, no default, no payout wallet — is listed from the start.
+    const fresh = directory([owner.hex]);
+    await fresh.read([dealerEvent(owner, 'krog-menjave', dealerContent({ roles: ['buys'], receiveWallets: { EUR: TEST_EUR_WALLET } }))], files);
+    assert.deepEqual(fresh.listed().map((d) => `${d.host}/${d.slug}:${d.contentVersion}:${d.roles}`), ['krogmenjave.test/krog-menjave:1.4.0:buys']);
+
+    // A newer profile whose receive_wallets breaks a rule — out of order, empty, a lower-case code, or the key in
+    // "1.3.0" — is invalid: it is dropped as if never sent, and the 1.4.0 profile stands.
+    const broken = [
+      dealerContent({ name: 'Broken', receiveWallets: { GBP: TEST_GBP_WALLET, EUR: TEST_EUR_WALLET } }),
+      dealerContent({ name: 'Broken', receiveWallets: {} }),
+      dealerContent({ name: 'Broken', receiveWallets: { eur: TEST_EUR_WALLET } }),
+      dealerContent({ name: 'Broken', version: '1.3.0', receiveWallet: TEST_RECEIVE_WALLET, receiveWallets: { EUR: TEST_EUR_WALLET } }),
+    ].map((content, i) => dealerEvent(owner, 'krog-menjave', content, { at: NOW_S - 30 + i }));
+    for (const event of broken) assert.equal(checkDealerShape(event).ok, false);
+    const again = decided(await dir.read([v130, v140, ...broken], files));
+    assert.deepEqual(again.removed, []);
+    assert.deepEqual(dir.listed().map((d) => [d.eventId, d.contentVersion, d.name]), [[v140.id, '1.4.0', 'Krog menjave d.o.o.']]);
   });
 
   it('a profile names no website, or one the reader may not ask — nothing to admit it', async () => {
