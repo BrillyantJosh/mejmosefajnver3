@@ -42,7 +42,7 @@ import {
 } from '../lib/befDealers/dealers.js';
 import {
   dealerContent, dealerEvent, fakeRelays, fakeSites, makeKey, newIdentity, signEvent, NOW_MS, NOW_S,
-  TEST_EUR_WALLET, TEST_GBP_WALLET, TEST_PAYOUT_WALLET, TEST_RECEIVE_WALLET,
+  TEST_EUR_WALLET, TEST_GBP_WALLET, TEST_PAYOUT_EUR_WALLET, TEST_PAYOUT_GBP_WALLET, TEST_PAYOUT_WALLET, TEST_RECEIVE_WALLET,
   type SiteReply, type TestKey,
 } from '../lib/befDealers/dealerTestKit.js';
 import type { NostrEvent } from '../lib/befDealers/relayRead.js';
@@ -261,6 +261,38 @@ describe('the firms that buy LANA', () => {
     for (const wallet of [TEST_EUR_WALLET, TEST_GBP_WALLET, TEST_RECEIVE_WALLET, TEST_PAYOUT_WALLET]) {
       assert.ok(!text.includes(wallet), 'no wallet is in the answer');
     }
+  });
+
+  it('a firm whose newest profile is 1.5.0 (a LanaPays.Us payout wallet per currency, KIND 30972 v1.7.0) is named like any other — no wallet goes out', async () => {
+    const v150 = dealerEvent(krog, 'krog-menjave', dealerContent({
+      host: 'krogmenjave.test', name: 'Krog menjave, trgovanje in kroženje vrednosti d.o.o.',
+      payoutWallet: TEST_PAYOUT_WALLET, receiveWallet: TEST_RECEIVE_WALLET, receiveWallets: { EUR: TEST_EUR_WALLET, GBP: TEST_GBP_WALLET },
+      payoutWallets: { EUR: TEST_PAYOUT_EUR_WALLET, GBP: TEST_PAYOUT_GBP_WALLET },
+    }), { at: NOW_S - 60 });
+    assert.equal(JSON.parse(v150.content).version, '1.5.0');
+    // Ravena Plus names only a payout wallet per currency (receive_wallets is optional in "1.5.0") — still named, it says it buys.
+    const ravena150 = dealerEvent(ravena, 'ravena-plus', dealerContent({
+      host: 'ravenaplus.test', name: 'Ravena Plus d.o.o.', roles: ['sells', 'buys'], payoutWallets: { EUR: TEST_PAYOUT_EUR_WALLET },
+    }), { at: NOW_S - 60 });
+    assert.equal(JSON.parse(ravena150.content).version, '1.5.0');
+    const relays = fakeRelays([...events, v150, ravena150], 2, 2, true);
+    const files = fakeSites(sites);
+    const answer = await createBuyingDealersReader({
+      db: () => paramsDb(JSON.stringify(params38888({ reliable }))),
+      author: authority.pub,
+      now: () => NOW_MS,
+      reader: { fetchEvents: relays.source, fetchWellKnown: files.lookup },
+    }).get();
+    assert.equal(answer.status, 'read');
+    assert.deepEqual(answer.buyers.map((b) => [b.slug, b.eventId, b.signedAt]), [
+      ['krog-menjave', v150.id, new Date((NOW_S - 60) * 1000).toISOString()],
+      ['ravena-plus', ravena150.id, new Date((NOW_S - 60) * 1000).toISOString()],
+    ]);
+    const text = JSON.stringify(answer);
+    for (const wallet of [TEST_PAYOUT_EUR_WALLET, TEST_PAYOUT_GBP_WALLET, TEST_EUR_WALLET, TEST_GBP_WALLET, TEST_RECEIVE_WALLET, TEST_PAYOUT_WALLET]) {
+      assert.ok(!text.includes(wallet), 'no wallet is in the answer');
+    }
+    assert.ok(!text.includes('payoutWallets'));
   });
 
   it('buyersOf keeps only "buys", in name order, links on the host', () => {
@@ -651,10 +683,11 @@ describe('a firm whose site or relays are silent once is still named', () => {
 
 /**
  * Three files are BEF Explorer's own, byte for byte (bef-explorer a7d3702;
- * dealerShape.ts as BEF Explorer reads KIND 30972 content "1.4.0" on top of it
- * — spec v1.6.0, a receive wallet per currency), and wellKnown.ts differs from
- * its original in the user-agent line only — it names this app, not BEF
- * Explorer, to the dealer's server. A change to any of them is a change to the
+ * dealerShape.ts as BEF Explorer reads KIND 30972 content "1.4.0" — spec
+ * v1.6.0, a receive wallet per currency — and "1.5.0" — spec v1.7.0, a
+ * LanaPays.Us payout wallet per currency — on top of it), and wellKnown.ts
+ * differs from its original in the user-agent line only — it names this app,
+ * not BEF Explorer, to the dealer's server. A change to any of them is a change to the
  * dealer rule: make it in bef-explorer first, copy it here (and to
  * lana.discount), and update the hash in the same commit.
  */
@@ -664,7 +697,7 @@ describe('the files copied from BEF Explorer', () => {
   it('are the copies they claim to be', () => {
     assert.equal(sha('bankSchemes.ts'), '25f6993f075bf37be1b70fcffd0e95284aec6d8f8d8ee4a3e259659c95865488');
     assert.equal(sha('lanaAddress.ts'), 'f709b6a06475413d4dfcaf4179328e3bf7726b410b40633504a9e26afeea9b02');
-    assert.equal(sha('dealerShape.ts'), '244b5fbf5c9442eaa4eb05647230016ca01bb9988980f45b794335da74c7b01d');
+    assert.equal(sha('dealerShape.ts'), 'bb9ab675d0380149014262ddd6130859f034c63ff92b83ecd63ccc6ff518ee42');
     // bef-explorer's is c5669bb3…c229, lana.discount's c6be9bec…7289.
     assert.equal(sha('wellKnown.ts'), '4c5eafb2d0452264cecea6d008f14121c13d4509c90051a628b3d7ac25aaf524');
     assert.ok(file('wellKnown.ts').toString('utf8').includes("'user-agent': 'MejmoSefajn (app.mejmosefajn.org) KIND 30972 reader'"));
