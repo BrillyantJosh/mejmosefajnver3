@@ -22,6 +22,7 @@ import cashoutsRoutes from './routes/cashouts.js';
 import buyingDealersRoutes from './routes/buyingDealers.js';
 import { processPendingTasks, setSSEHandlers } from './lib/aiTasks.js';
 import { syncUnregisteredLana } from './lib/unregisteredLana.js';
+import { withTimeout } from './lib/withTimeout.js';
 
 const app = express();
 
@@ -242,19 +243,6 @@ async function syncKind38888ToDb(): Promise<boolean> {
 setSSEHandlers(emitAiTaskUpdate, isUserConnectedToAiTasks);
 
 let heartbeatCount = 0;
-
-/** Wraps an async operation with a timeout to prevent it from blocking the heartbeat forever */
-function withTimeout<T>(fn: () => Promise<T>, label: string, ms: number): Promise<T | undefined> {
-  return Promise.race([
-    fn(),
-    new Promise<undefined>((resolve) =>
-      setTimeout(() => {
-        console.warn(`⏰ ${label} timed out after ${ms / 1000}s — skipping this cycle`);
-        resolve(undefined);
-      }, ms)
-    ),
-  ]);
-}
 
 const heartbeatTimer = setInterval(async () => {
   heartbeatCount++;
