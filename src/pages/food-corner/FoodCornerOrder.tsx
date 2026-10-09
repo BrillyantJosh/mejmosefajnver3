@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, MinusCircle, RefreshCw, Send, ShoppingBasket, Store } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Loader2, MapPin, MinusCircle, RefreshCw, Send, ShoppingBasket, Store } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import foodCornerTranslations, { FoodCornerKey } from "@/i18n/modules/foodCorner
 import {
   FOOD_CORNER_ORDER_KIND,
   FoodCornerListing,
+  FoodCornerProducer,
 } from "@/types/foodCorner";
 import {
   addFoodCornerWeeks,
@@ -120,6 +121,96 @@ function formatCountdown(ms: number): string {
   if (d || h || m) parts.push(`${m}m`);
   parts.push(`${s}s`);
   return parts.join(" ");
+}
+
+// Title, supplier and description of one offer. Collapsed they are clipped so
+// the grid stays tidy; a measured check (so it follows the real card width on
+// phones too) shows a "Show more" toggle only when something really is cut
+// off, and tapping the text or the toggle reveals the whole thing.
+function OfferText({ listing, producer }: { listing: FoodCornerListing; producer?: FoodCornerProducer }) {
+  const { t } = useTranslation(foodCornerTranslations);
+  const [expanded, setExpanded] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const producerRef = useRef<HTMLSpanElement>(null);
+  const descriptionRef = useRef<HTMLParagraphElement>(null);
+
+  useLayoutEffect(() => {
+    if (expanded) return;
+    const measure = () => {
+      const title = titleRef.current;
+      const name = producerRef.current;
+      const description = descriptionRef.current;
+      setClipped(
+        (!!title && title.scrollWidth > title.clientWidth) ||
+        (!!name && name.scrollWidth > name.clientWidth) ||
+        (!!description && description.scrollHeight > description.clientHeight + 1),
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    for (const el of [titleRef.current, producerRef.current, descriptionRef.current]) {
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, [expanded, listing.title, listing.content, producer?.name, producer?.city]);
+
+  const toggle = () => setExpanded((open) => !open);
+  // Tapping the text toggles too — but not when the buyer is selecting a bit
+  // of it to copy, which on desktop also ends with a click.
+  const onTextClick = () => {
+    if (window.getSelection()?.toString()) return;
+    toggle();
+  };
+
+  return (
+    <div
+      className={clipped ? "min-w-0 fc-offer-text cursor-pointer" : "min-w-0 fc-offer-text"}
+      onClick={clipped ? onTextClick : undefined}
+    >
+      <h3 ref={titleRef} className={expanded ? "font-semibold break-words" : "font-semibold truncate"}>{listing.title}</h3>
+      {producer && (
+        <p
+          className={
+            expanded
+              ? "text-xs font-medium text-primary flex items-start gap-1 mt-0.5"
+              : "text-xs font-medium text-primary truncate flex items-center gap-1 mt-0.5"
+          }
+        >
+          <Store className={expanded ? "h-3 w-3 shrink-0 mt-0.5" : "h-3 w-3 shrink-0"} />
+          <span ref={producerRef} className={expanded ? "break-words" : "truncate"}>
+            {producer.name}
+            {producer.city ? ` · ${producer.city}` : ""}
+          </span>
+        </p>
+      )}
+      <p
+        ref={descriptionRef}
+        className={
+          expanded
+            ? "text-xs text-muted-foreground whitespace-pre-wrap break-words"
+            : "text-xs text-muted-foreground line-clamp-2"
+        }
+      >
+        {listing.content}
+      </p>
+      {clipped && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={(event) => {
+            event.stopPropagation();
+            toggle();
+          }}
+          className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+        >
+          {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          {expanded ? t("order.showLess") : t("order.showMore")}
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function FoodCornerOrder() {
@@ -816,19 +907,7 @@ export default function FoodCornerOrder() {
                       )}
                       <CardContent className="p-4 space-y-3">
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h3 className="font-semibold truncate">{listing.title}</h3>
-                            {producer && (
-                              <p className="text-xs font-medium text-primary truncate flex items-center gap-1 mt-0.5">
-                                <Store className="h-3 w-3 shrink-0" />
-                                <span className="truncate">
-                                  {producer.name}
-                                  {producer.city ? ` · ${producer.city}` : ""}
-                                </span>
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground line-clamp-2">{listing.content}</p>
-                          </div>
+                          <OfferText listing={listing} producer={producer} />
                           <Badge variant="secondary" className="shrink-0">{listing.type}</Badge>
                         </div>
                         <div className="flex items-center justify-between gap-3">
