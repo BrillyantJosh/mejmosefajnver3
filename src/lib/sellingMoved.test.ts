@@ -244,15 +244,28 @@ describe('readBuyingDealers', () => {
 
 /* ── the pages ───────────────────────────────────────────────────────────── */
 
-describe('both Sell pages show the notice', () => {
+describe('the Sell pages: /bef/sell shows the notice, /discount/sell says "Coming soon"', () => {
   const notice = read('src/components/discount/SellingMovedNotice.tsx');
   const discountSell = read('src/pages/discount/DiscountSell.tsx');
   const befSell = read('src/pages/bef/BefSell.tsx');
   const befLayout = read('src/pages/bef/BefLayout.tsx');
   const hook = read('src/hooks/useBuyingDealers.ts');
 
-  it('/discount/sell: the notice as the page’s h1, and its line about past sales under the Transactions tab as the module labels it', () => {
-    assert.match(discountSell, /<SellingMovedNotice headingLevel="h1" pastSalesTab=\{\{ label: t\("layout\.nav\.transactions"\), lang: tabLang \}\} \/>/);
+  it('/discount/sell names no firm: "Coming soon" as the page’s h1 (Brilly, 12. 10. 2026)', () => {
+    const code = discountSell.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(!/SellingMovedNotice|useBuyingDealers|buying-dealers|<a\b|Button/.test(code), 'no notice, no read of the firms, no link');
+    assert.ok(!/Krog|Ravena/i.test(code), 'no firm typed in');
+    assert.match(code, /<h1 [^>]*>\s*\{words\("moved\.comingSoon"\)\}\s*<\/h1>/);
+    assert.equal(en('moved.comingSoon'), 'Coming soon');
+    assert.equal(sl('moved.comingSoon'), 'Kmalu');
+  });
+
+  it('/discount/sell: one card, one language — its line about past sales inside it, under the Transactions tab as the module labels it', () => {
+    assert.match(discountSell, /<section\s+data-testid="selling-coming-soon"\s+lang=\{cardLang\}/);
+    const body = discountSell.slice(discountSell.indexOf('<section'), discountSell.indexOf('</section>'));
+    assert.ok(body.includes('data-testid="past-sales"'), 'the line is inside the card');
+    assert.match(body, /<span lang=\{tabLang\}>\{pastSales\.tab\}<\/span>/);
+    assert.match(discountSell, /const pastSales = pastSalesParts\(words, t\("layout\.nav\.transactions"\)\);/);
     assert.match(discountSell, /const tabLang = discountTranslations\[lang\] \? lang : "en";/);
     const said = (lang: string, tabLang: string) => {
       const p = pastSalesParts(translatorFor(sellingMovedTranslations, lang), (discountTranslations as unknown as Record<string, Record<string, string>>)[tabLang]['layout.nav.transactions']);

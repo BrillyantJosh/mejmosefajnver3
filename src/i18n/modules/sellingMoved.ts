@@ -59,6 +59,9 @@ const sellingMoved = {
 
   // ── /discount/sell only: what was sold to lana.discount before stays in the module ──
   "moved.pastSales": "Your past sales and payouts stay here, under {tab}.",
+
+  // ── /discount/sell only, instead of the firms (Brilly, 12. 10. 2026: "napiši coming soon namesto teh dveh podjetij") ──
+  "moved.comingSoon": "Coming soon",
 } as const;
 
 export type SellingMovedKey = keyof typeof sellingMoved;
@@ -89,6 +92,7 @@ const translations: TranslationDict<SellingMovedKey> = {
 
     // The module's own line, formal like the notice above it in the same card ("Tvoje" before 8. 10.).
     "moved.pastSales": "Vaše pretekle prodaje in izplačila ostanejo tukaj, pod {tab}.",
+    "moved.comingSoon": "Kmalu",
   },
   de: {
     // ── heading ──
@@ -113,6 +117,7 @@ const translations: TranslationDict<SellingMovedKey> = {
     "moved.source": "Gelesen aus dem eigenen signierten Profil jedes Unternehmens (KIND 30972) auf den Lana-Relays.",
 
     "moved.pastSales": "Ihre bisherigen Verkäufe und Auszahlungen bleiben hier, unter {tab}.",
+    "moved.comingSoon": "Demnächst",
   },
   hu: {
     // ── heading ── (a colon before the names: the verb comes first in Hungarian)
@@ -138,6 +143,7 @@ const translations: TranslationDict<SellingMovedKey> = {
 
     // "a" before the tab: its label starts with a consonant (Transactions).
     "moved.pastSales": "A korábbi eladásaid és kifizetéseid itt maradnak, a {tab} fül alatt.",
+    "moved.comingSoon": "Hamarosan",
   },
   it: {
     // ── heading ──
@@ -162,6 +168,7 @@ const translations: TranslationDict<SellingMovedKey> = {
     "moved.source": "Letto dal profilo firmato di ciascuna azienda (KIND 30972) sui relay Lana.",
 
     "moved.pastSales": "Le tue vendite e i tuoi pagamenti precedenti restano qui, sotto {tab}.",
+    "moved.comingSoon": "Prossimamente",
   },
 };
 

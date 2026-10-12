@@ -7,8 +7,10 @@ import { useBuyingDealers } from "@/hooks/useBuyingDealers";
 import { BEF_DIRECTORY_URL, noticeWords, pastSalesParts } from "@/lib/sellingMoved";
 
 /**
- * WHERE SELLING WENT — the Sell page of the Lana Discount module (/discount/sell)
- * and of the BEF module (/bef/sell), one notice for both.
+ * WHERE SELLING WENT — the Sell page of the BEF module (/bef/sell). The Lana
+ * Discount module's Sell page (/discount/sell) showed it too until 12 Oct 2026;
+ * it now says only "Coming soon" (src/pages/discount/DiscountSell.tsx), so
+ * `pastSalesTab` has no caller for now and is kept for when it shows firms again.
  *
  * Both pages used to send a seller to lana.discount/offer. Lana.discount no
  * longer buys LANA (8 Oct 2026): "napiši da sta odkup Lan prevzela firme Krog
