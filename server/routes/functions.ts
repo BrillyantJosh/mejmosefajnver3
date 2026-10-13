@@ -17,6 +17,7 @@ import { sendPushToUser } from '../lib/pushNotification.js';
 import { verifyEvent } from 'nostr-tools';
 import { blockIfFrozen } from '../lib/walletFreeze.js';
 import { readFromRelaysServer } from '../lib/relayReadServer.js';
+import { guardSendLanaTransaction } from '../lib/walletFreeze.js';
 import { findDuplicateConfirmations } from '../../src/lib/unconditionalPaymentGuard.js';
 import { consolidationFee, MIN_INPUTS, MIN_NET } from '../../src/lib/consolidationPlan.js';
 import { newestPerProcess } from '../../src/lib/ownProcessRecords.js';
@@ -3033,13 +3034,17 @@ router.post('/send-lana-transaction', async (req: Request, res: Response) => {
     //     only ever used to make the guard STRICTER — omitting it lands in the
     //     ordinary capped path, and the unforgeable half of the Lana8Wonder gate
     //     is the wallet type the guard reads from the registrar's own list.
-    const emptyingWallet = !!req.body.emptyWallet;
-    const frozenError = await blockIfFrozen(req.body.senderAddress, 'send-lana-transaction', {
-      cappedSpendLana: Number(req.body.amount),
-      emptyingWallet,
-      requireKnownState: emptyingWallet || req.body.purpose === 'lana8wonder-cashout',
-    });
-    if (frozenError) return res.json({ success: false, error: frozenError });
+    //
+    // And the DESTINATION of a Lana8Wonder cash-out (9 Oct 2026): money cashed
+    // out into a frozen Main Wallet was swept away by that wallet's max-cap
+    // release an hour and a half later. A cash-out into a frozen wallet is now
+    // refused (409 DESTINATION_FROZEN), and so is one whose destination cannot
+    // be read (503 DESTINATION_UNVERIFIED / 409 DESTINATION_NOT_REGISTERED) —
+    // all before any key is decoded. Both gates live in guardSendLanaTransaction
+    // (server/lib/walletFreeze.ts) so scripts/testCashOutDestinationGate.ts can
+    // run them exactly as composed here.
+    const refusal = await guardSendLanaTransaction(req.body);
+    if (refusal) return res.status(refusal.status).json(refusal.body);
 
     const result = await sendLanaTransaction(req.body);
     console.log('📋 send-lana-transaction result:', { success: result.success, error: result.error, txHash: result.txHash });

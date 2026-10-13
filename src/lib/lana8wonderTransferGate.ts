@@ -121,3 +121,65 @@ export function transferGateExplanation(gate: TransferGate): string {
 export function transferGateResolution(gate: TransferGate, walletId: string): FreezeResolution {
   return freezeResolution(gate.state === 'frozen' ? gate.reason || '' : '', walletId);
 }
+
+// ───────────────────── the wallet the cash-out lands in ─────────────────────
+//
+// Everything above judges the wallet the money LEAVES. On 9 Oct 2026 a cash-out
+// of 137.50 LANA went into a Main Wallet that was frozen `frozen_max_cap`, and
+// the max-cap release — a donation of the whole Main balance — took it along
+// an hour and a half later. The owner's rule since: a cash-out never goes into
+// a frozen wallet; unfreeze that wallet first, then cash out. Same three values
+// as the source, same "only clear opens it". The server refuses the same case
+// (guardSendLanaTransaction); this is what keeps the person from getting there.
+
+/** Wallet types a Lana8Wonder cash-out may be paid into. */
+export const CASHOUT_DESTINATION_TYPES: readonly string[] = ['Wallet', 'Main Wallet'];
+
+export interface CashOutDestination {
+  walletId: string;
+  walletType: string;
+  /** May this wallet receive the cash-out? Only 'clear' says yes. */
+  gate: TransferGate;
+}
+
+/**
+ * Every wallet the cash-out could be paid into, each with its own gate. A frozen
+ * one is listed, not hidden — hiding it would leave the person wondering where
+ * their Main Wallet went instead of telling them what to do about it.
+ */
+export function cashOutDestinations(
+  wallets: GateCheckableWallet[] | null | undefined,
+  resolved: boolean,
+  sourceWalletId: string,
+): CashOutDestination[] {
+  return (wallets || [])
+    .filter(w => CASHOUT_DESTINATION_TYPES.includes(w.walletType || '') && w.walletId !== sourceWalletId)
+    .map(w => ({
+      walletId: w.walletId,
+      walletType: w.walletType || '',
+      gate: lana8wonderTransferGate(wallets, resolved, w.walletId),
+    }));
+}
+
+export type CashOutDestinationSummary =
+  /** At least one destination may receive the cash-out. */
+  | { state: 'open' }
+  /** No Wallet / Main Wallet at all — the transfer page says so itself. */
+  | { state: 'none' }
+  /** Every destination is frozen or unreadable: unfreeze first. */
+  | { state: 'blocked'; destination: CashOutDestination };
+
+/**
+ * Can this cash-out go anywhere? When it cannot, names the one destination to
+ * deal with first: a frozen Main Wallet if there is one (that is where a
+ * cash-out is normally paid), else any frozen one, else the first unreadable.
+ */
+export function cashOutDestinationSummary(destinations: CashOutDestination[]): CashOutDestinationSummary {
+  if (destinations.length === 0) return { state: 'none' };
+  if (destinations.some(d => mayTransfer(d.gate))) return { state: 'open' };
+  const destination =
+    destinations.find(d => d.gate.state === 'frozen' && d.walletType === 'Main Wallet') ||
+    destinations.find(d => d.gate.state === 'frozen') ||
+    destinations[0];
+  return { state: 'blocked', destination };
+}

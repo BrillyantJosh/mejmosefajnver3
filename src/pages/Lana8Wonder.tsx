@@ -21,6 +21,8 @@ import FreezeFirstNotice from '@/components/lana8wonder/FreezeFirstNotice';
 import { useRecentSends } from '@/hooks/useRecentSends';
 import { choosePlanEvent } from '@/lib/planRead';
 import {
+  cashOutDestinations,
+  cashOutDestinationSummary,
   lana8wonderTransferGate,
   mayTransfer,
   transferGateExplanation,
@@ -334,6 +336,13 @@ const Lana8Wonder = () => {
   // frozen. See src/lib/lana8wonderTransferGate — `clear` now has to be earned.
   const gateFor = (address: string) => lana8wonderTransferGate(wallets, walletsResolved, address);
 
+  // …and may the wallet it would be paid INTO receive it? A cash-out into a
+  // frozen Main Wallet is lost to that wallet's release (9 Oct 2026), so when
+  // every Wallet / Main Wallet is frozen or unreadable the Transfer button gives
+  // way to "unfreeze the destination first".
+  const destinationFor = (sourceAddress: string) =>
+    cashOutDestinationSummary(cashOutDestinations(wallets, walletsResolved, sourceAddress));
+
   // What to do FIRST when the plan cannot pay out: judged from the plan's own
   // wallets, so a frozen wallet elsewhere is not reported as a blocked cash-out.
   const freezeNotice = useMemo(
@@ -601,6 +610,44 @@ const Lana8Wonder = () => {
                               // rather than a dead button or, as before, a live
                               // one.
                               const gate = gateFor(account.wallet);
+                              const destination = destinationFor(account.wallet);
+                              if (mayTransfer(gate) && destination.state === 'blocked') {
+                                const blocked = destination.destination;
+                                const dres = transferGateResolution(blocked.gate, blocked.walletId);
+                                return (
+                                  <div className="flex flex-col gap-1.5 self-end md:self-auto md:items-end">
+                                    {blocked.gate.state === 'frozen' && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="whitespace-nowrap border-blue-500/50 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10"
+                                        onClick={() => {
+                                          if (dres.external) window.open(dres.href, '_blank', 'noopener,noreferrer');
+                                          else navigate(dres.href);
+                                        }}
+                                      >
+                                        <Snowflake className="h-4 w-4 mr-2" />
+                                        {t(dres.kind === 'self'
+                                          ? 'plan.freezeFirst.action.self'
+                                          : dres.kind === 'own-process'
+                                            ? 'plan.freezeFirst.action.own'
+                                            : 'plan.freezeFirst.action.registrar')}
+                                        {dres.external && <ExternalLink className="h-3 w-3 ml-2 opacity-70" />}
+                                      </Button>
+                                    )}
+                                    <p className="text-xs opacity-80 max-w-xs md:text-right">
+                                      {blocked.gate.state === 'frozen'
+                                        ? t('plan.freezeFirst.destinationBlocked', {
+                                            type: blocked.walletType,
+                                            reason: t((['frozen_max_cap', 'frozen_l8w', 'frozen_too_wild', 'frozen_unreg_Lanas', 'frozen_own_person', 'frozen'].includes(blocked.gate.reason || '')
+                                              ? `plan.freezeFirst.reason.${blocked.gate.reason}`
+                                              : 'plan.freezeFirst.reason.other') as Parameters<typeof t>[0]).toLowerCase(),
+                                          })
+                                        : t('plan.freezeFirst.destinationUnknown')}
+                                    </p>
+                                  </div>
+                                );
+                              }
                               if (mayTransfer(gate)) {
                                 return (
                                   <Button

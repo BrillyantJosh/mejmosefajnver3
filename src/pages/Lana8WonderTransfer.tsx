@@ -23,6 +23,8 @@ import { QRScanner } from '@/components/QRScanner';
 import { useTranslation } from '@/i18n/I18nContext';
 import lana8wonderTranslations from '@/i18n/modules/lana8wonder';
 import {
+  cashOutDestinations,
+  cashOutDestinationSummary,
   lana8wonderTransferGate,
   mayTransfer,
   transferGateExplanation,
@@ -37,7 +39,8 @@ interface LocationState {
   accountId: number;
 }
 
-const ALLOWED_WALLET_TYPES = ['Wallet', 'Main Wallet'];
+/** Registrar freeze codes that have their own translated label. */
+const KNOWN_FREEZE_REASONS = ['frozen_max_cap', 'frozen_l8w', 'frozen_too_wild', 'frozen_unreg_Lanas', 'frozen_own_person', 'frozen'];
 
 export default function Lana8WonderTransfer() {
   const navigate = useNavigate();
@@ -66,10 +69,33 @@ export default function Lana8WonderTransfer() {
   const submitLock = useRef(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
 
-  // Filter wallets to only show allowed types and exclude source wallet
-  const destinationWallets = wallets.filter(
-    w => ALLOWED_WALLET_TYPES.includes(w.walletType) && w.walletId !== state?.sourceWalletId
-  );
+  // Where the cash-out may be paid: Wallet / Main Wallet, never the source —
+  // and now each judged for its OWN freeze. On 9 Oct 2026 a cash-out went into
+  // a Main Wallet frozen `frozen_max_cap`, and that wallet's release (a
+  // donation of its whole balance) swept the payout away with it. A frozen
+  // destination stays in the list so the person sees why and what to do, but
+  // it cannot be sent to. The server refuses the same case.
+  const destinationWallets = cashOutDestinations(wallets, walletsResolved, state?.sourceWalletId || '');
+  const selectedOption = destinationWallets.find(w => w.walletId === selectedDestination);
+  const destinationSummary = cashOutDestinationSummary(destinationWallets);
+  // The destination the warning is about: the chosen one if it cannot receive,
+  // otherwise — when none of them can — the one to unfreeze first.
+  const blockedDestination =
+    selectedOption && !mayTransfer(selectedOption.gate)
+      ? selectedOption
+      : !selectedOption && destinationSummary.state === 'blocked'
+        ? destinationSummary.destination
+        : null;
+  const destinationAllowed = !!selectedOption && mayTransfer(selectedOption.gate);
+
+  const reasonLabel = (reason?: string) =>
+    t((KNOWN_FREEZE_REASONS.includes(reason || '')
+      ? `plan.freezeFirst.reason.${reason}`
+      : 'plan.freezeFirst.reason.other') as Parameters<typeof t>[0]).toLowerCase();
+  const destinationMessage = (gateState: string, reason?: string) =>
+    gateState === 'frozen'
+      ? t('transfer.destinationFrozen', { reason: reasonLabel(reason) })
+      : t('transfer.destinationUnknown');
 
   // Validate private key with debounce
   useEffect(() => {
@@ -122,6 +148,12 @@ export default function Lana8WonderTransfer() {
 
     if (state.sourceWalletId === selectedDestination) {
       toast.error(t('transfer.sameWalletError'));
+      return;
+    }
+
+    // Same moment-of-sending re-check for the wallet the money lands in.
+    if (!destinationAllowed) {
+      toast.error(destinationMessage(selectedOption?.gate.state || 'unknown', selectedOption?.gate.reason));
       return;
     }
 
@@ -263,7 +295,7 @@ export default function Lana8WonderTransfer() {
     );
   }
 
-  const isFormValid = isKeyValid && selectedDestination && !isSubmitting;
+  const isFormValid = isKeyValid && selectedDestination && destinationAllowed && !isSubmitting;
 
   return (
     <div className="container mx-auto p-3 md:p-4 pb-24 space-y-4 md:space-y-6">
@@ -336,7 +368,17 @@ export default function Lana8WonderTransfer() {
                         <span className="font-mono text-xs truncate max-w-[200px]">
                           {wallet.walletId}
                         </span>
-                        <span className="text-xs text-muted-foreground">{wallet.walletType}</span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          {wallet.walletType}
+                          {!mayTransfer(wallet.gate) && (
+                            <span className="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-400">
+                              · <Snowflake className="h-3 w-3" />
+                              {wallet.gate.state === 'frozen'
+                                ? t('transfer.destinationFrozenBadge')
+                                : t('transfer.destinationUnknownBadge')}
+                            </span>
+                          )}
+                        </span>
                       </div>
                     </SelectItem>
                   ))}
@@ -344,6 +386,49 @@ export default function Lana8WonderTransfer() {
               </Select>
             </div>
           )}
+
+          {/* A cash-out never goes into a frozen wallet: say which one, why,
+              and where it gets unfrozen — then the person comes back here. */}
+          {!walletsLoading && blockedDestination && (() => {
+            const res = transferGateResolution(blockedDestination.gate, blockedDestination.walletId);
+            return (
+              <Alert variant="destructive" className="border-blue-500/50 bg-blue-500/10">
+                <Snowflake className="h-4 w-4 text-blue-500" />
+                <AlertTitle className="text-blue-700 dark:text-blue-400">
+                  {blockedDestination.gate.state === 'frozen'
+                    ? t('transfer.destinationFrozenTitle')
+                    : t('transfer.destinationUnknownTitle')}
+                </AlertTitle>
+                <AlertDescription className="text-blue-700/80 dark:text-blue-300/80">
+                  <span className="block mb-1">
+                    {destinationMessage(blockedDestination.gate.state, blockedDestination.gate.reason)}
+                  </span>
+                  <span className="block mb-3 font-mono text-xs break-all opacity-80">
+                    {blockedDestination.walletType} · {blockedDestination.walletId}
+                  </span>
+                  {blockedDestination.gate.state === 'frozen' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-blue-500/50 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10"
+                      onClick={() => {
+                        if (res.external) window.open(res.href, '_blank', 'noopener,noreferrer');
+                        else navigate(res.href);
+                      }}
+                    >
+                      <Snowflake className="h-4 w-4 mr-2" />
+                      {t(res.kind === 'self'
+                        ? 'plan.freezeFirst.action.self'
+                        : res.kind === 'own-process'
+                          ? 'plan.freezeFirst.action.own'
+                          : 'plan.freezeFirst.action.registrar')}
+                      {res.external && <ExternalLink className="h-3 w-3 ml-2 opacity-70" />}
+                    </Button>
+                  )}
+                </AlertDescription>
+              </Alert>
+            );
+          })()}
         </CardContent>
       </Card>
 
