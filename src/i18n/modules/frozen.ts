@@ -57,6 +57,9 @@ const frozen = {
   'frozen.loadingOwn': 'Looking for your request…',
   'frozen.sendFailed': 'The request could not be sent',
   'frozen.cancel': 'Not now',
+  'frozen.waitUntil': 'You can send a request to re-enter three months after the decision — from {date}.',
+  'frozen.waitUnknown':
+    'You can send a request to re-enter three months after the decision. Its date could not be read just now, so the form is not shown — please try again later.',
 
   'frozen.back': 'Back to sign in',
 };
@@ -113,6 +116,9 @@ export const frozenDict: TranslationDict<keyof typeof frozen> = {
     'frozen.loadingOwn': 'Iščem tvojo prošnjo…',
     'frozen.sendFailed': 'Prošnje ni bilo mogoče poslati',
     'frozen.cancel': 'Ne zdaj',
+    'frozen.waitUntil': 'Prošnjo za ponovni vstop lahko oddaš tri mesece po odločitvi — od {date} naprej.',
+    'frozen.waitUnknown':
+      'Prošnjo za ponovni vstop lahko oddaš tri mesece po odločitvi. Datuma odločitve zdaj ni bilo mogoče prebrati, zato obrazca ne pokažemo — poskusi znova pozneje.',
 
     'frozen.back': 'Nazaj na prijavo',
   },

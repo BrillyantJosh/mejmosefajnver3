@@ -5,6 +5,7 @@ import { useTranslation, useLangControl } from '@/i18n/I18nContext';
 import { frozenDict } from '@/i18n/modules/frozen';
 import { specificGround, type FreezeVerdict } from '@/lib/ownFreezeGate';
 import { ReentryRequestForm } from '@/components/ReentryRequestForm';
+import { reentryOpensAt } from '@/lib/reentryWindow';
 
 /**
  * Shown INSTEAD of the app when a commission decision stands.
@@ -45,6 +46,15 @@ export const FrozenOutScreen = ({
       ? new Date(verdict.since * 1000).toLocaleDateString(undefined, {
           year: 'numeric', month: 'long', day: 'numeric',
         })
+      : null;
+
+  // The form opens three months after the decision (src/lib/reentryWindow.ts);
+  // with no readable date it stays closed rather than skip the wait.
+  const opensAt = reentryOpensAt(verdict.since);
+  const canApply = opensAt !== null && Math.floor(Date.now() / 1000) >= opensAt;
+  const opensOn =
+    opensAt !== null
+      ? new Date(opensAt * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
       : null;
 
   return (
@@ -106,14 +116,20 @@ export const FrozenOutScreen = ({
           </div>
         </div>
 
-        {/* The one act left to them. Without it a sanction has no route back. */}
-        {signWith && relays && relays.length > 0 && (
-          <ReentryRequestForm
-            privateKeyHex={signWith}
-            relays={relays}
-            violationEventId={verdict.violationEventId}
-            onSent={() => { /* the form shows its own confirmation */ }}
-          />
+        {/* The one act left to them — from three months after the decision. Without it a sanction has no route back. */}
+        {canApply ? (
+          signWith && relays && relays.length > 0 && (
+            <ReentryRequestForm
+              privateKeyHex={signWith}
+              relays={relays}
+              violationEventId={verdict.violationEventId}
+              onSent={() => { /* the form shows its own confirmation */ }}
+            />
+          )
+        ) : (
+          <p data-testid="reentry-wait" className="rounded-2xl border border-border bg-card p-5 text-sm leading-relaxed text-foreground">
+            {opensOn ? t('frozen.waitUntil', { date: opensOn }) : t('frozen.waitUnknown')}
+          </p>
         )}
 
         <Button variant="outline" onClick={onBack} className="w-full sm:w-auto">
