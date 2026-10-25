@@ -27,6 +27,14 @@ export interface FreezeVerdict {
   since?: number;
   /** True when nothing could be determined — the caller decides what to do. */
   unknown?: boolean;
+  /**
+   * True when the relays could not be READ at all (none listed, no signer list,
+   * no relay answered, or the read failed) — as opposed to relays that answered
+   * and hold no registry record for this person. Sign-in refuses on it: an
+   * excluded person must never get in because the network wobbled (Brilly,
+   * 25. 10. 2026: "Nikakor se ne sme imeti možnosti se logirati dokler je izključen").
+   */
+  unread?: boolean;
   /** The KIND 87058 this freeze comes from, so a request can name it. */
   violationEventId?: string;
   /**
@@ -115,7 +123,7 @@ export async function checkGrossViolationFreeze(
   const cached = readCache(hex);
 
   if (!relays?.length) {
-    return cached?.frozen ? { ...cached } : { frozen: false, unknown: true };
+    return cached?.frozen ? { ...cached } : { frozen: false, unknown: true, unread: true };
   }
 
   const pool = new SimplePool();
@@ -124,7 +132,7 @@ export async function checkGrossViolationFreeze(
     if (registrarSigners.length === 0) {
       // Without a signer list there is nothing to trust a wallet record
       // against, so no new verdict can be formed.
-      return cached?.frozen ? { ...cached } : { frozen: false, unknown: true };
+      return cached?.frozen ? { ...cached } : { frozen: false, unknown: true, unread: true };
     }
     const walletRead = await readFromRelays(pool, relays, { kinds: [30889], '#d': [hex] }, { budgetMs: READ_BUDGET_MS });
     if (walletRead.answered.length === 0) {
@@ -133,7 +141,7 @@ export async function checkGrossViolationFreeze(
       console.warn(
         `📡 No relay answered for KIND 30889 (${walletRead.failed.map((f) => `${f.url}: ${f.reason}`).join(' | ')}) — the freeze gate reports UNKNOWN, not "not frozen"`,
       );
-      return cached?.frozen ? { ...cached } : { frozen: false, unknown: true };
+      return cached?.frozen ? { ...cached } : { frozen: false, unknown: true, unread: true };
     }
 
     const trusted = (walletRead.events as Event[]).filter((e) => registrarSigners.includes(e.pubkey));
@@ -195,7 +203,7 @@ export async function checkGrossViolationFreeze(
     writeCache(hex, verdict);
     return verdict;
   } catch {
-    return cached?.frozen ? { ...cached } : { frozen: false, unknown: true };
+    return cached?.frozen ? { ...cached } : { frozen: false, unknown: true, unread: true };
   } finally {
     try { pool.close(relays); } catch { /* already closed */ }
   }

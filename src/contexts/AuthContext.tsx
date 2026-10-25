@@ -242,6 +242,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('Sign-in refused: commission gross-violation decision stands');
         throw new FrozenOutError(gate);
       }
+      // Could not ask at all: not "not excluded". Nobody gets in on a check that
+      // did not happen — an excluded person must never slip through a relay
+      // outage (Brilly, 25. 10. 2026). Relays that answered and simply hold no
+      // registry record for this person are an answer, and do not stop anyone.
+      if (gate.unread) {
+        console.warn('Sign-in refused: the exclusion check could not read the relays');
+        throw new Error(
+          'Sign-in is paused: we could not confirm with the Lana relays that this account is open. Please try again in a few minutes.',
+        );
+      }
       let profileFields: SessionProfileFields = {};
       let profileEventAt: number | undefined = undefined;
       let profileLangAt: number | undefined = undefined;
