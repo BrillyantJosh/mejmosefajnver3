@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useLanacrowdProjects, LanacrowdProject } from "@/hooks/useLanacrowdProjects";
 import { useNostrUserWallets } from "@/hooks/useNostrUserWallets";
@@ -172,6 +172,17 @@ const BatchFunding = () => {
 
   const [step, setStep] = useState<BatchStep>('select');
   const [selectedWalletId, setSelectedWalletId] = useState<string>("");
+
+  // Arrived from a wallet's "Donate" button (/wallet): start with that wallet chosen,
+  // if it is one of the person's wallets this page offers. The choice stays theirs.
+  const [searchParams] = useSearchParams();
+  const walletFromLink = searchParams.get('wallet');
+  useEffect(() => {
+    if (!walletFromLink || selectedWalletId) return;
+    if (wallets?.some(w => w.walletId === walletFromLink && w.walletType !== 'Lana8Wonder')) {
+      setSelectedWalletId(walletFromLink);
+    }
+  }, [wallets, walletFromLink, selectedWalletId]);
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [loadingBalances, setLoadingBalances] = useState(false);
   const [entries, setEntries] = useState<BatchEntry[]>([]);
