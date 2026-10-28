@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { freezeResolution } from "@/lib/freezeResolution";
 import { makeRequestGate } from "@/lib/balanceLoad";
-import { Wallet as WalletIcon, CreditCard, FileText, ExternalLink, TrendingUp, Copy, QrCode, Snowflake, ShieldAlert, Layers, HeartHandshake } from "lucide-react";
+import { Wallet as WalletIcon, CreditCard, FileText, ExternalLink, TrendingUp, Copy, QrCode, Snowflake, ShieldAlert, Layers, HeartHandshake, HandCoins } from "lucide-react";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -567,18 +567,30 @@ export default function Wallet() {
                   </Button>
                 )}
 
-                {/* Donate to 100 Million Ideas projects from this wallet — Main Wallet and Wallet only
-                    (Brilly, 28. 10. 2026). Opens batch funding with this wallet already chosen. */}
+                {/* Donate to 100 Million Ideas projects from this wallet, and Unconditional Financing
+                    beside it — Main Wallet and Wallet only, never a frozen one (Brilly, 28. 10. 2026).
+                    Donate opens batch funding with this wallet already chosen. */}
                 {(wallet.walletType === "Main Wallet" || wallet.walletType === "Wallet") && !wallet.freezeStatus && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => window.location.href = `/100millionideas/batch-funding?wallet=${encodeURIComponent(wallet.walletId)}`}
-                  >
-                    <HeartHandshake className="h-4 w-4 mr-2" />
-                    Donate
-                  </Button>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-full min-h-9 w-full whitespace-normal py-1.5"
+                      onClick={() => window.location.href = `/100millionideas/batch-funding?wallet=${encodeURIComponent(wallet.walletId)}`}
+                    >
+                      <HeartHandshake className="h-4 w-4 mr-2" />
+                      Donate
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-full min-h-9 w-full whitespace-normal py-1.5"
+                      onClick={() => window.location.href = "/unconditional-financing/requests"}
+                    >
+                      <HandCoins className="h-4 w-4 mr-2 shrink-0" />
+                      Unconditional Financing
+                    </Button>
+                  </div>
                 )}
 
                 {/* Consolidate — surfaced when this wallet has too many UTXOs */}
