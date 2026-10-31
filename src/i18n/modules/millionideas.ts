@@ -8,7 +8,7 @@ const millionideas = {
   // ── batch ──
   "batch.addressLabel": "Address:",
   "batch.back": "Back",
-  "batch.backToProjects": "Back to Projects",
+  "batch.backToProjects": "To projects",
   "batch.balanceLabel": "Balance:",
   "batch.batchFunding": "Batch Funding",
   "batch.batchSummary": "Batch Summary",
@@ -426,7 +426,7 @@ const translations: TranslationDict<MillionideasKey> = {
     // ── batch ──
     "batch.addressLabel": "Naslov:",
     "batch.back": "Nazaj",
-    "batch.backToProjects": "Nazaj na projekte",
+    "batch.backToProjects": "Na projekte",
     "batch.balanceLabel": "Stanje:",
     "batch.batchFunding": "Skupinsko financiranje",
     "batch.batchSummary": "Povzetek skupine",

@@ -512,9 +512,8 @@ const BatchFunding = () => {
       <div className="border-b bg-background sticky top-0 z-10">
         <div className="container mx-auto p-4 flex items-center justify-between">
           <Button
-            variant="ghost"
             onClick={() => navigate('/100millionideas/projects')}
-            className="gap-2"
+            className="gap-2 bg-green-500 hover:bg-green-600 text-white"
           >
             <ArrowLeft className="h-4 w-4" />
             {t('batch.backToProjects')}
