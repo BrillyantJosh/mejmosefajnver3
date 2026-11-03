@@ -15,8 +15,8 @@ import { BefText, shortWallet } from "./BefText";
 type SignedIn = Extract<BefStage, { kind: "signedIn" }>;
 
 /**
- * The door in front of a BEF page that needs the person signed in (Interest,
- * My Circle). There is nothing to press: opening the page signs in on its own
+ * The door in front of a BEF page that needs the person signed in (My
+ * Circle). There is nothing to press: opening the page signs in on its own
  * (BefPersonProvider), the page's content shows once BEF has opened a session,
  * and a short note says what BEF Explorer checks and keeps — information,
  * never a step to get past.
@@ -25,14 +25,7 @@ type SignedIn = Extract<BefStage, { kind: "signedIn" }>;
  * wallet or profile is missing, or the refusal in plain words with the one
  * thing the person can do about it.
  */
-export function BefDoor({
-  children,
-  interestOpen = null,
-}: {
-  children: (signedIn: SignedIn) => ReactNode;
-  /** For the registration card: whether any split is open for interest (null: not known). */
-  interestOpen?: boolean | null;
-}) {
+export function BefDoor({ children }: { children: (signedIn: SignedIn) => ReactNode }) {
   const { t } = useTranslation(befText);
   const { stage, ensureSignedIn, retry } = useBefPerson();
 
@@ -89,7 +82,7 @@ export function BefDoor({
     case "register":
       return (
         <div className="space-y-4">
-          <BefRegistration mode={stage.mode} address={stage.address} interestOpen={interestOpen} />
+          <BefRegistration mode={stage.mode} address={stage.address} />
           {note}
         </div>
       );

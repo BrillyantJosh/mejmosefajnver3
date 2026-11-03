@@ -1,9 +1,9 @@
 /**
  * The BEF module's Explorer: BEF Explorer's scenario calculator, rebuilt in
  * MejmoSefajn's look. What it works out itself (which rounds are offered, which
- * published limit binds, what "Express interest" carries, how a typed amount
- * reads), what it asks BEF for, and that it shows BEF's words and BEF's
- * numbers — never its own.
+ * published limit binds, how a typed amount reads), where "Express interest"
+ * leads (the BEF page of LetsBalance.world), what it asks BEF for, and that it
+ * shows BEF's words and BEF's numbers — never its own.
  *   npx tsx scripts/testBefExplorer.ts
  *   BEF_EXPLORER_DIR=/path/to/bef-explorer npx tsx scripts/testBefExplorer.ts
  *   npx tsx scripts/testBefExplorer.ts --without-bef   (on purpose, with no bef-explorer)
@@ -25,7 +25,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { BefApiError, createBefClient, type Company, type ScenarioResponse, type SplitsResponse } from '../src/lib/bef/api.js';
-import { readPrefill } from '../src/lib/bef/prefill.js';
+import { LETSBALANCE_BEF_URL } from '../src/lib/bef/base.js';
 import { offersBef, SCENARIO_PROBLEMS } from '../src/lib/bef/problems.js';
 import befVendorTranslations from '../src/i18n/modules/befVendor.js';
 import befTranslations from '../src/i18n/modules/bef.js';
@@ -37,7 +37,6 @@ import {
   CALC_DEFAULTS,
   CALC_ROUNDS,
   companyTradesIn,
-  interestQuery,
   loadFigures,
   nextHasAnyPublished,
   offeredRounds,
@@ -206,21 +205,17 @@ async function main() {
   }
 
   /* ──────────────────────────────────────────────────── express interest ── */
-  console.log('— "Express interest" carries what BEF’s calculator carries —');
+  console.log('— "Express interest" opens the BEF page of LetsBalance.world —');
   {
-    const splits = splitsFixture();
-    const q = (scope: CalcScope, amount: string, currentSplit: number | null = 9, s: SplitsResponse | null = splits) =>
-      interestQuery({ splits: s, scope, currentSplit, currency: 'GBP', round: 2, amount: parseCalcAmount(amount) });
-    check('current: split number, currency, round, whole amount', q('current', '1234.99') === 'split=9&currency=GBP&round=2&amount=1234', q('current', '1234.99'));
-    check('next: the next split’s number', q('next', '5000') === 'split=10&currency=GBP&round=2&amount=5000');
-    check('next without the splits: the current number + 1', q('next', '5000', 9, null) === 'split=10&currency=GBP&round=2&amount=5000');
-    check('no split known: left out', q('current', '5000', null) === 'currency=GBP&round=2&amount=5000');
-    check('an amount under 1 or unreadable: left out', q('current', '0,5') === 'split=9&currency=GBP&round=2' && q('current', 'abc') === 'split=9&currency=GBP&round=2');
-    check('"10.000" goes as 10000', q('current', '10.000').endsWith('amount=10000'));
-    const back = readPrefill(new URLSearchParams(q('next', '7.500')));
-    check('the Interest page reads it back exactly', back.split === 10 && back.currency === 'GBP' && back.round === 2 && back.amount === 7500, back);
     const page = read(PAGE);
-    check('the page links to /bef/interest with that query', /to=\{\{ pathname: "\/bef\/interest", search: `\?\$\{query\}` \}\}/.test(page));
+    // KIND 30970 is replaced by the KIND 30975 a person signs there (Brilly, 3. 11. 2026).
+    check('the button is a link to LetsBalance.world, in a new tab', /<a href=\{LETSBALANCE_BEF_URL\} target="_blank" rel="noopener noreferrer">\s*<HandHeart[^>]*\/>\s*\{t\("calc\.expressInterest"\)\}/.test(page));
+    check('…to its BEF page', LETSBALANCE_BEF_URL === 'https://letsbalance.world/pays-us?view=bef');
+    check('it no longer opens /bef/interest with a query', !/\/bef\/interest|interestQuery|search: `\?/.test(page));
+    for (const lang of ['en', 'sl', 'de', 'hu', 'it'] as const) {
+      const note = (befExplorerTranslations[lang] as Record<string, string>)['explorer.expressInterestNote'] ?? '';
+      check(`${lang}: the note names LetsBalance.world and 30 days, and no key or sign-in`, note.includes('LetsBalance.world') && note.includes('30') && !/MejmoSefajn|BEF Explorer/.test(note), note);
+    }
   }
 
   /* ─────────────────────────────────────────────────────────── companies ── */
@@ -410,9 +405,8 @@ async function main() {
       'if (nxt?.maxPerPerson != null && nxt.maxPerPerson > 0) {',
       'publishedLimits.reduce((a, b) => (b.amount < a.amount ? b : a))',
       "const typedAmount = Number(amount.replace(/[,\\s]/g, ''));",
-      // :117-123 — what Express interest carries
-      "const interestSplit = scope === 'next' ? (splits?.next?.number ?? (currentSplit != null ? currentSplit + 1 : null)) : currentSplit;",
-      "...(Number.isFinite(typedAmount) && typedAmount >= 1 ? { amount: String(Math.floor(typedAmount)) } : {}),",
+      // (:117-123, what Express interest carries, is no longer ported: the
+      // button opens LetsBalance.world and carries nothing.)
       // :125-162 — asking, and asking again after every change
       'if (bindingLimit && value > bindingLimit.amount) {',
       'const result = await api.scenario({ amount: value, currency, round, split: scope, sellerId, treasuryId });',
@@ -420,8 +414,7 @@ async function main() {
       // :170-173 — companies in a route
       "(c.currencies ?? [c.currency]).includes(currency) && c.asset.toUpperCase() === 'LANA' && c.enabled === 1;",
       '<select value={currency} onChange={(e) => { setCurrency(e.target.value); setSellerId(null); setTreasuryId(null); }}>',
-      // :305-311, :337 — the only two links
-      "to={{ pathname: '/interest', search: `?${interestQuery}` }}",
+      // :337 — the risks link (BEF's other one, to its /interest, is LetsBalance.world here)
       '<Link to="/risks">{t(\'calc.viewAllAssumptions\')}</Link>',
       // :348 — an assumption without words reads as the server's English
       '<li key={i}>{t(a.key as Key) === a.key ? a.text : t(a.key as Key, a.vars)}</li>',
@@ -501,9 +494,6 @@ async function main() {
       const alpha = sellers.find((c) => c.name === 'Alpha Seller')!;
       const withSeller = await runScenario(client, { amountText: '1000', currency: 'EUR', round: 1, scope: 'current', sellerId: alpha.id, treasuryId: null, binding: null });
       check('a chosen seller comes back with its published status', withSeller.kind === 'result' && withSeller.scenario.statuses.seller === 'CURRENT' && withSeller.scenario.input.sellerId === alpha.id && !scenarioIsStale(withSeller.scenario, { amountText: '1000', currency: 'EUR', round: 1, scope: 'current', sellerId: alpha.id, treasuryId: null }));
-      const q = interestQuery({ splits, scope: 'next', currentSplit: 9, currency: 'EUR', round: 1, amount: parseCalcAmount('4.999') });
-      check('Express interest on the next split names split 10', q === 'split=10&currency=EUR&round=1&amount=4999', q);
-
       // ── who has already expressed interest, from BEF's own /api/interests ──
       const hex = (c: string) => c.repeat(64);
       const addPerson = db.prepare('INSERT INTO people (hex, name, display_name, country, email, phone, wallet, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
@@ -556,7 +546,7 @@ async function main() {
     const page = read(PAGE);
     check('the page uses the module’s one client', page.includes('import { befClient } from "@/lib/bef/config";') && /useExplorerFigures\(befClient\)/.test(page) && /useScenario\(befClient,/.test(page));
     const external = EXPLORER_SOURCES.flatMap((rel) => [...read(rel).matchAll(/href=\{?"?([^"}\s>]+)/g)].map((m) => m[1]));
-    check('its links out are befexplorer.com’s, opened in a new tab', external.length > 0 && external.every((href) => /BEF_CALCULATOR_URL|risksUrl/.test(href)) && EXPLORER_SOURCES.every((rel) => [...read(rel).matchAll(/<a\s[^>]*>/g)].every((m) => /target="_blank"/.test(m[0]) && /rel="noopener noreferrer"/.test(m[0]))), external);
+    check('its links out are befexplorer.com’s and LetsBalance.world’s, opened in a new tab', external.length > 0 && external.every((href) => /BEF_CALCULATOR_URL|risksUrl|LETSBALANCE_BEF_URL/.test(href)) && EXPLORER_SOURCES.every((rel) => [...read(rel).matchAll(/<a\s[^>]*>/g)].every((m) => /target="_blank"/.test(m[0]) && /rel="noopener noreferrer"/.test(m[0]))), external);
   }
 
   /* ─────────────────────────────────────────── the figures on a phone ── */

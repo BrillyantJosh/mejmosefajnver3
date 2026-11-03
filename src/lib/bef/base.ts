@@ -5,14 +5,23 @@
  * server, so every person's requests come from their own address and BEF's
  * per-address limits keep meaning one person. BEF lets exactly this app's
  * origins in, on exactly the routes in its server/lib/crossOrigin.ts
- * CROSS_ORIGIN_ROUTES; BEF_ROUTES is that list, and scripts/testBef.ts fails
- * when the two differ.
+ * CROSS_ORIGIN_ROUTES; BEF_ROUTES is that list without its interest routes
+ * (BEF_INTEREST_ROUTES_LEFT_OUT), and scripts/testBef.ts fails when the two
+ * differ otherwise.
  *
  * Pure: no import.meta, so the test scripts can import it (./config.ts is the
  * Vite side).
  */
 
 export const BEF_PUBLIC_URL = 'https://befexplorer.com';
+
+/**
+ * Where an interest is expressed now: the BEF page of LetsBalance.world —
+ * support, sell, or sell and buy, for at most 30 days (KIND 30975, a firm
+ * takes it up with KIND 40971). The KIND 30970 BEF Explorer took is
+ * replaced, and this module sends none (Brilly, 3. 11. 2026).
+ */
+export const LETSBALANCE_BEF_URL = 'https://letsbalance.world/pays-us?view=bef';
 
 /** BEF's local harness (fake Registrar, fake relays) — never production data. */
 export const BEF_DEV_URL = 'http://127.0.0.1:3127';
@@ -31,9 +40,6 @@ export const BEF_ROUTES = [
   ['POST', '/api/person/register'],
   ['GET', '/api/person/me'],
   ['POST', '/api/person/logout'],
-  ['GET', '/api/interest/windows'],
-  ['GET', '/api/interest/mine'],
-  ['POST', '/api/interest'],
   ['GET', '/api/cards/mine'],
   ['POST', '/api/cards/status'],
   ['POST', '/api/cards'],
@@ -43,6 +49,14 @@ export const BEF_ROUTES = [
   ['GET', '/api/interests'],
   ['GET', '/api/companies'],
   ['GET', '/api/scenario'],
+] as const;
+
+/** BEF still lets these in; this module no longer reads or sends an interest
+ * (KIND 30970), so a request to them is refused here before anything is sent. */
+export const BEF_INTEREST_ROUTES_LEFT_OUT = [
+  ['GET', '/api/interest/windows'],
+  ['GET', '/api/interest/mine'],
+  ['POST', '/api/interest'],
 ] as const;
 
 export type BefMethod = 'GET' | 'POST';

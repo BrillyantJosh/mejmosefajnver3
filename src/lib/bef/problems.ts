@@ -1,7 +1,8 @@
 /**
  * BEF's refusals → the words the module shows, and what the person can do.
  *
- * Every code BEF Explorer can answer on the routes the module calls is put
+ * Every code BEF Explorer can answer on the routes the module calls (no
+ * interest route any more: ./base.ts BEF_INTEREST_ROUTES_LEFT_OUT) is put
  * into words here — BEF's own text (src/i18n/modules/befVendor.ts) where it
  * fits a person who is already logged in, MejmoSefajn's own text
  * (src/i18n/modules/bef.ts) where BEF's would send them to type a key or to
@@ -80,23 +81,6 @@ export const REGISTRATION_PROBLEMS: Table = {
   consent_invalid: ['person.reg.err.consent_invalid', 'none'],
 };
 
-/** POST /api/interest and GET /api/interest/windows. */
-export const INTEREST_PROBLEMS: Table = {
-  no_parameters: ['interest.noParameters', 'retry'],
-  relay_writes_disabled: ['interest.err.relay_writes_disabled', 'none'],
-  stale_clock: ['interest.err.stale_clock', 'retry'],
-  stale_event: ['interest.err.stale_event', 'none'],
-  split_not_available: ['interest.err.split_not_available', 'none'],
-  window_closed: ['interest.err.window_closed', 'none'],
-  params_changed: ['interest.err.params_changed', 'none'],
-  limits: ['interest.err.limits', 'none'],
-  // BEF refuses a withdrawal (an interest is changed, never taken back); the
-  // module signs none, so this can only be a fault here.
-  no_withdrawal: ['interest.err.rejected', 'none'],
-  publish_failed: ['interest.err.publish_failed', 'none'],
-  outcome_unknown: ['interest.outcomeUnknown', 'none'],
-};
-
 /** POST /api/cards and /api/cards/status. */
 export const CARD_PROBLEMS: Table = {
   bad_card: ['cards.err.badId', 'none'],
@@ -149,6 +133,10 @@ export const GENERIC_CODES = [
   'no_data_yet',
   'bad_split',
   'no_payouts_published',
+  // GET /api/interests before any KIND 38888 is published: the public list
+  // only says it cannot be shown (explorer/PublicInterestsList.tsx). It had
+  // words of its own while the module sent interests.
+  'no_parameters',
   // Sent only without a CORS header: a browser never reads it, and it arrives as `network`.
   'cross_site',
 ] as const;
@@ -157,7 +145,6 @@ export const GENERIC_CODES = [
 export const MAPPED_CODES: ReadonlySet<string> = new Set([
   ...Object.keys(DOOR_PROBLEMS),
   ...Object.keys(REGISTRATION_PROBLEMS),
-  ...Object.keys(INTEREST_PROBLEMS),
   ...Object.keys(CARD_PROBLEMS),
   ...Object.keys(SCENARIO_PROBLEMS),
 ]);
@@ -196,6 +183,5 @@ export function registrationProblem(err: unknown): BefProblem {
   return lookup(err, REGISTRATION_PROBLEMS, DOOR_PROBLEMS);
 }
 
-export const interestProblem = (err: unknown): BefProblem => lookup(err, INTEREST_PROBLEMS, DOOR_PROBLEMS);
 export const cardsProblem = (err: unknown): BefProblem => lookup(err, CARD_PROBLEMS, DOOR_PROBLEMS);
 export const scenarioProblem = (err: unknown): BefProblem => lookup(err, SCENARIO_PROBLEMS, DOOR_PROBLEMS);

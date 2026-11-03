@@ -1,15 +1,18 @@
 import { SUPPORTED_LANGS, TranslationDict } from '../types';
 import befText, { type BefTextKey } from './befText';
 
-// MejmoSefajn's own words for the BEF module's Interest page — only the two
-// answers BEF Explorer's own texts (./befVendor.ts) word for its own site: a
-// late answer that did arrive, and sending switched off "on this server" (here
-// that would read as MejmoSefajn's). Everything else on the page is BEF's text
-// or the module's (./bef.ts), through ./befText.ts.
+// MejmoSefajn's own words for the BEF module's Interest page, which now only
+// says where an interest is expressed: the BEF page of LetsBalance.world —
+// support, sell, or sell and buy, for at most 30 days (KIND 30975, taken up by
+// one firm with KIND 40971). The KIND 30970 this page signed and sent through
+// BEF Explorer is replaced, and earlier interests here are closed (Brilly,
+// 3. 11. 2026). The tab's name is still the module's (./bef.ts nav.interest).
 // English is the required base (fallback); every language mirrors every key.
 const befInterest = {
-  "interest.arrived": "No answer came back in time, but BEF Explorer has received it. It is shown below.",
-  "interest.relayWritesOff": "Sending to the relays is switched off on BEF Explorer right now. Nothing was sent.",
+  "interest.moved.title": "Interest is now expressed on LetsBalance.world",
+  "interest.moved.text": "Interest is now expressed on the BEF page of LetsBalance.world: support, sell, or sell and buy, valid up to 30 days.",
+  "interest.moved.closed": "Interests expressed here earlier are closed. Nothing is signed or sent from this page any more.",
+  "interest.moved.open": "Open the BEF page on LetsBalance.world",
 } as const;
 
 export type BefInterestKey = keyof typeof befInterest;
@@ -17,20 +20,28 @@ export type BefInterestKey = keyof typeof befInterest;
 const own: TranslationDict<BefInterestKey> = {
   en: befInterest,
   sl: {
-    "interest.arrived": "Odgovor ni prišel pravočasno, a BEF Explorer je poslano prejel. Prikazano je spodaj.",
-    "interest.relayWritesOff": "Pošiljanje na releje je na BEF Explorerju trenutno izklopljeno. Nič ni bilo poslano.",
+    "interest.moved.title": "Interes se zdaj izrazi na LetsBalance.world",
+    "interest.moved.text": "Interes se zdaj izrazi na strani BEF na LetsBalance.world: podpora, prodaja ali prodaja in nakup, velja največ 30 dni.",
+    "interest.moved.closed": "Interesi, izraženi tukaj prej, so zaprti. S te strani se nič več ne podpiše in ne pošlje.",
+    "interest.moved.open": "Odpri stran BEF na LetsBalance.world",
   },
   de: {
-    "interest.arrived": "Es kam keine Antwort rechtzeitig zurück, aber das Gesendete ist bei BEF Explorer angekommen. Es wird unten angezeigt.",
-    "interest.relayWritesOff": "Das Senden an die Relays ist bei BEF Explorer gerade abgeschaltet. Es wurde nichts gesendet.",
+    "interest.moved.title": "Interesse wird jetzt auf LetsBalance.world bekundet",
+    "interest.moved.text": "Interesse wird jetzt auf der BEF-Seite von LetsBalance.world bekundet: unterstützen, verkaufen oder verkaufen und kaufen, gültig bis zu 30 Tage.",
+    "interest.moved.closed": "Hier früher bekundete Interessen sind geschlossen. Von dieser Seite wird nichts mehr signiert oder gesendet.",
+    "interest.moved.open": "BEF-Seite auf LetsBalance.world öffnen",
   },
   hu: {
-    "interest.arrived": "Nem érkezett időben válasz, de amit küldtél, megérkezett a BEF Explorerhez. Lent látod.",
-    "interest.relayWritesOff": "A relékre küldés a BEF Exploreren most ki van kapcsolva. Nem ment el semmi.",
+    "interest.moved.title": "Az érdeklődést most a LetsBalance.world oldalon jelezheted",
+    "interest.moved.text": "Az érdeklődést most a LetsBalance.world BEF oldalán jelezheted: támogatás, eladás, vagy eladás és vétel, legfeljebb 30 napig érvényes.",
+    "interest.moved.closed": "Az itt korábban jelzett érdeklődések lezárultak. Ez az oldal már semmit nem ír alá és nem küld el.",
+    "interest.moved.open": "A BEF oldal megnyitása a LetsBalance.world-ön",
   },
   it: {
-    "interest.arrived": "Nessuna risposta è arrivata in tempo, ma quanto inviato è arrivato a BEF Explorer. È mostrato qui sotto.",
-    "interest.relayWritesOff": "L’invio ai relay è disattivato su BEF Explorer in questo momento. Non è stato inviato nulla.",
+    "interest.moved.title": "L’interesse si esprime ora su LetsBalance.world",
+    "interest.moved.text": "L’interesse si esprime ora sulla pagina BEF di LetsBalance.world: sostegno, vendita, oppure vendita e acquisto, valido fino a 30 giorni.",
+    "interest.moved.closed": "Gli interessi espressi qui in precedenza sono chiusi. Da questa pagina non si firma né si invia più nulla.",
+    "interest.moved.open": "Apri la pagina BEF su LetsBalance.world",
   },
 };
 

@@ -6,8 +6,11 @@
  *   sign-in       kind 27235 → POST /api/person/session
  *   registration  kind 27235 (register URL) + kind 27235 Registrar consent
  *                 + (when the key has no profile) the KIND 0 profile → POST /api/person/register
- *   interest      KIND 30970 built by vendor server/lib/interestEvent.ts → POST /api/interest
  *   cards         KIND 30971 built by vendor server/lib/cardListEvent.ts → POST /api/cards
+ *
+ * No interest: the KIND 30970 is replaced by the KIND 30975 a person signs on
+ * the BEF page of LetsBalance.world, and nothing here signs one any more
+ * (Brilly, 3. 11. 2026).
  *
  * Ported from bef-explorer src/lib/personSignIn.ts. The events are the same
  * byte for byte in shape; the key comes from MejmoSefajn's session (read the
@@ -21,7 +24,6 @@ import { finalizeEvent, type VerifiedEvent } from 'nostr-tools/pure';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { convertWifToIds, generateCompressedPublicKey } from '../crypto';
 import { BefApiError, type BefChallenge, type BefClient, type BefSession } from './api';
-import { buildInterestTemplate, type InterestDraft } from './vendor/server/lib/interestEvent.ts';
 import { buildCardListTemplate } from './vendor/server/lib/cardListEvent.ts';
 import { buildProfileContent, type ProfileInput } from './vendor/server/lib/personProfile.ts';
 
@@ -134,11 +136,6 @@ export type ProfileFields = Omit<ProfileInput, 'wallet'>;
 export function signProfile(key: BefKey, fields: ProfileFields, wallet: string, lang: string, createdAt: number): VerifiedEvent {
   const content = JSON.stringify(buildProfileContent({ ...fields, wallet }));
   return sign(key, { kind: 0, created_at: createdAt, tags: [['lang', lang]], content });
-}
-
-/** The KIND 30970 exactly as vendor server/lib/interestEvent.ts defines it. */
-export function signInterest(key: BefKey, draft: InterestDraft, createdAt: number): VerifiedEvent {
-  return sign(key, buildInterestTemplate(draft, createdAt));
 }
 
 /** The person's KIND 30971 list of cards exactly as vendor server/lib/cardListEvent.ts defines it. */

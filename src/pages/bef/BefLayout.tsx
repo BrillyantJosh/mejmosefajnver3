@@ -18,6 +18,9 @@ import { BefPersonProvider } from "./BefPersonProvider";
  * it names the firms that buy LANA instead (./BefSell.tsx) — "naredi ta isti
  * popravek za prodajo tudi na strani https://app.mejmosefajn.org/discount/sell"
  * (Brilly, 8. 10. 2026) — and, being in-app, is highlighted when open.
+ *
+ * The Interest tab stays where people know it, and now says where an interest
+ * is expressed: the BEF page of LetsBalance.world (./BefInterest.tsx).
  */
 export default function BefLayout() {
   const { t } = useTranslation(befText);

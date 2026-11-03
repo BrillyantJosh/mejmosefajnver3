@@ -7,10 +7,14 @@
  *
  * Where bef-explorer is at hand (next to this repo, or BEF_EXPLORER_DIR), the
  * events are also run through BEF's OWN server checks — the sign-in, the
- * Registrar consent, the profile, the interest and the card list — and the
+ * Registrar consent, the profile and the card list — and the
  * copies, texts, route list and host list are compared with BEF's. Without it
  * those parts say "skipped", the rest still runs, and the run fails unless
  * --without-bef was given: a green run has compared this build with BEF.
+ *
+ * No interest: the module neither reads nor sends a KIND 30970 any more (an
+ * interest is expressed on the BEF page of LetsBalance.world), and the client
+ * refuses BEF's interest routes before anything is sent.
  *
  * Nothing here touches a network, a relay or the Registrar: fetch is faked.
  */
@@ -20,7 +24,7 @@ import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { verifyEvent } from 'nostr-tools/pure';
 import { convertWifToIds } from '../src/lib/crypto.js';
-import { BEF_DEV_URL, BEF_PUBLIC_URL, BEF_ROUTES, isBefRoute, resolveBefBase } from '../src/lib/bef/base.js';
+import { BEF_DEV_URL, BEF_INTEREST_ROUTES_LEFT_OUT, BEF_PUBLIC_URL, BEF_ROUTES, isBefRoute, LETSBALANCE_BEF_URL, resolveBefBase } from '../src/lib/bef/base.js';
 import { BefApiError, createBefClient, localExpiryMs, type BefChallenge, type BefSession } from '../src/lib/bef/api.js';
 import {
   BefKeyError,
@@ -31,7 +35,6 @@ import {
   signCardList,
   signIn,
   signingTime,
-  signInterest,
   signLogin,
   signProfile,
   signRegistrarRequest,
@@ -43,14 +46,12 @@ import {
   DOOR_PROBLEMS,
   doorProblem,
   GENERIC_CODES,
-  INTEREST_PROBLEMS,
   MAPPED_CODES,
   offersBef,
   REGISTRATION_PROBLEMS,
   registrationProblem,
   SCENARIO_PROBLEMS,
 } from '../src/lib/bef/problems.js';
-import { parseWholeAmount, prefillQuery, readPrefill } from '../src/lib/bef/prefill.js';
 import { SUPPORTED_LANGS } from '../src/i18n/types.js';
 import befTranslations from '../src/i18n/modules/bef.js';
 import { befCircleTranslations } from '../src/i18n/modules/befCircle.js';
@@ -172,7 +173,10 @@ async function main() {
     const fresh = await generateBefVendor(BEF, commitLine);
     check('befVendor.ts is exactly what syncBef.ts generates now', readFileSync(VENDOR_DICT, 'utf8') === fresh.source, { keys: fresh.keys });
     const { CROSS_ORIGIN_ROUTES } = await bef('server/lib/crossOrigin.ts');
-    check('BEF_ROUTES equals BEF CROSS_ORIGIN_ROUTES, in order', JSON.stringify(BEF_ROUTES) === JSON.stringify(CROSS_ORIGIN_ROUTES), CROSS_ORIGIN_ROUTES);
+    // BEF may still let its interest routes in; the module asks none of them.
+    const leftOut = (route: readonly string[]) => BEF_INTEREST_ROUTES_LEFT_OUT.some(([m, p]) => m === route[0] && p === route[1]);
+    const theirs = (CROSS_ORIGIN_ROUTES as (readonly string[])[]).filter((route) => !leftOut(route));
+    check('BEF_ROUTES equals BEF CROSS_ORIGIN_ROUTES without the interest routes, in order', JSON.stringify(BEF_ROUTES) === JSON.stringify(theirs), CROSS_ORIGIN_ROUTES);
   } else {
     skipped('drift check');
   }
@@ -184,7 +188,6 @@ async function main() {
   const profileGate = HAVE_BEF ? await bef('server/lib/profileGate.ts') : null;
   const befCountries = HAVE_BEF ? await bef('server/lib/countries.ts') : null;
   const relayClient = HAVE_BEF ? await bef('server/lib/relayClient.ts') : null;
-  const befInterest = HAVE_BEF ? await bef('server/lib/interestEvent.ts') : null;
   const befCards = HAVE_BEF ? await bef('server/lib/cardListEvent.ts') : null;
   const base = BEF_PUBLIC_URL;
   const now = Math.floor(Date.now() / 1000);
@@ -348,21 +351,16 @@ async function main() {
     skipped('BEF server checks of sign-in and registration');
   }
 
-  console.log('— interest and card list are BEF’s canonical events —');
-  if (befInterest && befCards && relayClient) {
+  console.log('— the card list is BEF’s canonical event —');
+  if (befCards && relayClient) {
     const key = sampleKey!;
-    const draft = { split: 12, currency: 'EUR' as const, rounds: [{ round: 1, amount: 1000 }, { round: 3, amount: 250 }], status: 'active' as const, wallet: key.address, paramsEventId: 'c'.repeat(64) };
-    const interest = signInterest(key, draft, now);
-    check('KIND 30970 signature passes BEF checkEventSignature', relayClient.checkEventSignature(interest).ok === true);
-    const parsed = befInterest.parseInterestEvent(interest);
-    check('KIND 30970 parses back to the same draft', parsed.ok === true && JSON.stringify(parsed.draft) === JSON.stringify(draft), parsed);
     const cardHexes = ['d'.repeat(64), sampleKey!.hex === 'e'.repeat(64) ? 'f'.repeat(64) : 'e'.repeat(64)];
     const list = signCardList(key, cardHexes, now);
     check('KIND 30971 signature passes BEF checkEventSignature', relayClient.checkEventSignature(list).ok === true);
     const cards = befCards.parseCardListEvent(list);
     check('KIND 30971 parses back to the same cards', cards.ok === true && JSON.stringify(cards.cards) === JSON.stringify(cardHexes), cards);
   } else {
-    skipped('BEF shape checks of interest and card list');
+    skipped('BEF shape checks of the card list');
   }
 
   /* ────────────────────────────────────────────────────────────── config ── */
@@ -408,10 +406,17 @@ async function main() {
       check(`sent: ${m} ${p}`, calls.length === before + 1 && calls[calls.length - 1].url === `${BEF_PUBLIC_URL}${p}`);
     }
     check('POST /api/person/register is allowed (registration in the module)', isBefRoute('POST', '/api/person/register'));
+    // An interest is expressed on LetsBalance.world now: no KIND 30970 is read or sent.
+    for (const [m, p] of BEF_INTEREST_ROUTES_LEFT_OUT) {
+      const before = calls.length;
+      check(`an interest route is refused before fetch: ${m} ${p}`, !isBefRoute(m, p) && (await code(() => client.request(p, { method: m, body: m === 'POST' ? {} : undefined }))) === 'route_not_allowed' && calls.length === before);
+    }
+    check('the client has no interest calls', !('interest' in client));
+    check('interests are expressed on the BEF page of LetsBalance.world', LETSBALANCE_BEF_URL === 'https://letsbalance.world/pays-us?view=bef');
 
     calls.length = 0;
-    respond = async () => json({ interests: [] });
-    await client.interest.mine('t'.repeat(64));
+    respond = async () => json({ cards: [] });
+    await client.cards.mine('t'.repeat(64));
     const get = calls[0];
     const headers = get.init.headers as Record<string, string>;
     check('fetch options: cors, no credentials, no redirects, no referrer, no cache',
@@ -419,29 +424,28 @@ async function main() {
     check('a GET sends no content-type and no body', !('content-type' in headers) && get.init.body === undefined, headers);
     check('the token travels in x-person-token', headers['x-person-token'] === 't'.repeat(64));
     calls.length = 0;
-    await client.interest.windows();
+    await client.figures.splits();
     check('no token, no x-person-token header', !('x-person-token' in (calls[0].init.headers as Record<string, string>)));
     calls.length = 0;
     await client.person.session({ kind: 27235 });
     check('a POST sends content-type application/json and the body', (calls[0].init.headers as Record<string, string>)['content-type'] === 'application/json' && calls[0].init.body === JSON.stringify({ event: { kind: 27235 } }));
 
     respond = async () => { throw new TypeError('Failed to fetch'); };
-    check('no answer to a read: network', (await code(() => client.interest.windows())) === 'network');
-    check('no answer to an interest: outcome_unknown', (await code(() => client.interest.submit('t'.repeat(64), {}))) === 'outcome_unknown');
+    check('no answer to a read: network', (await code(() => client.figures.splits())) === 'network');
     check('no answer to a card list: outcome_unknown', (await code(() => client.cards.publish('t'.repeat(64), {}, null))) === 'outcome_unknown');
     check('no answer to a registration: registration_outcome_unknown', (await code(() => client.person.register({ event: {}, registrarAuth: {} }))) === 'registration_outcome_unknown');
     check('no answer to a sign-in: network (it is never retried by itself)', (await code(() => client.person.session({}))) === 'network');
 
     respond = (call) => new Promise((_, reject) => call.init.signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
     check('too slow: timeout', (await code(() => client.request('/api/splits', { timeoutMs: 20 }))) === 'timeout');
-    check('too slow on a publish: outcome_unknown', (await code(() => client.request('/api/interest', { method: 'POST', timeoutMs: 20, unknownOutcome: 'outcome_unknown' }))) === 'outcome_unknown');
+    check('too slow on a publish: outcome_unknown', (await code(() => client.request('/api/cards', { method: 'POST', timeoutMs: 20, unknownOutcome: 'outcome_unknown' }))) === 'outcome_unknown');
 
     respond = async () => new Response('Too many', { status: 429 });
     check('429: rate_limited', (await code(() => client.figures.splits())) === 'rate_limited');
     respond = async () => new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } });
     check('HTML where JSON was expected: network', (await code(() => client.figures.bootstrap())) === 'network');
     respond = async () => new Response('<html>502</html>', { status: 502, headers: { 'content-type': 'text/html' } });
-    check('an HTML 502 to a publish: outcome_unknown', (await code(() => client.interest.submit('t'.repeat(64), {}))) === 'outcome_unknown');
+    check('an HTML 502 to a publish: outcome_unknown', (await code(() => client.cards.publish('t'.repeat(64), {}, null))) === 'outcome_unknown');
     respond = async () => json({ error: 'not_registered', address: 'Laddr', profile: 'found' }, 409);
     const refusal = await throws(() => client.person.session({}));
     check('a refusal keeps its code and body', refusal instanceof BefApiError && refusal.code === 'not_registered' && refusal.status === 409 && refusal.body.address === 'Laddr');
@@ -505,25 +509,12 @@ async function main() {
     check('a BEF that does not answer changes nothing', (await throws(() => forgetBefPerson(failing, storage))) === null && !storage.map.has(BEF_TOKEN_KEY));
   }
 
-  /* ─────────────────────────────────────────────────────────────── prefill ── */
-  console.log('— the Explorer’s prefill is read as BEF reads it —');
-  {
-    const p = readPrefill(new URLSearchParams('split=12&currency=gbp&round=2&amount=5.000'));
-    check('split, currency, round and a grouped amount', p.split === 12 && p.currency === 'GBP' && p.round === 2 && p.amount === 5000, p);
-    const bad = readPrefill(new URLSearchParams('split=1.5&currency=JPY&round=4&amount=12,5'));
-    check('a decimal split, JPY, round 4 and a decimal amount are left out', bad.split === null && bad.currency === null && bad.round === null && bad.amount === null, bad);
-    check('BEF cuts ".00" off an amount', readPrefill(new URLSearchParams('amount=250.00')).amount === 250);
-    check('a negative or zero amount is left out', readPrefill(new URLSearchParams('amount=-5')).amount === null && readPrefill(new URLSearchParams('amount=0')).amount === null);
-    check('parseWholeAmount refuses decimals', Number.isNaN(parseWholeAmount('12,5')) && parseWholeAmount('') === null && parseWholeAmount("1'000") === 1000);
-    check('prefillQuery: only set values, a whole amount', prefillQuery({ split: 12, currency: 'EUR', round: 1, amount: 99.9 }) === 'split=12&currency=EUR&round=1&amount=99' && prefillQuery({ currency: null }) === '');
-  }
-
   /* ─────────────────────────────────────────────────────── refusal coverage ── */
   console.log('— every refusal BEF can answer has words —');
   {
     const texts = befTranslations.en as Record<string, string>;
     const vendor = befVendorTranslations.en as Record<string, string>;
-    const tables = { DOOR_PROBLEMS, REGISTRATION_PROBLEMS, INTEREST_PROBLEMS, CARD_PROBLEMS, SCENARIO_PROBLEMS };
+    const tables = { DOOR_PROBLEMS, REGISTRATION_PROBLEMS, CARD_PROBLEMS, SCENARIO_PROBLEMS };
     for (const [name, table] of Object.entries(tables)) {
       const missing = Object.values(table).filter(([key]) => !(key in texts) && !(key in vendor)).map(([key]) => key);
       check(`${name}: every text exists`, missing.length === 0, missing);
@@ -549,7 +540,7 @@ async function main() {
     if (HAVE_BEF) {
       const SOURCES = [
         'server/routes/person.ts',
-        'server/routes/interest.ts',
+        // Not server/routes/interest.ts: the module calls none of its routes.
         'server/routes/cards.ts',
         'server/routes/publicApi.ts',
         'server/lib/signInGate.ts',
@@ -718,7 +709,7 @@ async function main() {
       .filter((f) => /^bef\w*\.ts$/.test(f) && f !== 'befVendor.ts')
       .map((f) => `src/i18n/modules/${f}`);
     const sources = [...dictionaries, ...sourcesUnder('src/pages/bef'), ...sourcesUnder('src/components/bef')];
-    check('the copy check reads the pages’ sub-folders and every own dictionary', sources.some((f) => f.includes('/bef/interest/')) && dictionaries.includes('src/i18n/modules/befVendorHu.ts'), sources);
+    check('the copy check reads the pages’ sub-folders and every own dictionary', sources.some((f) => f.includes('/bef/circle/')) && dictionaries.includes('src/i18n/modules/befVendorHu.ts'), sources);
     const found: string[] = [];
     for (const rel of sources) {
       const text = read(rel);

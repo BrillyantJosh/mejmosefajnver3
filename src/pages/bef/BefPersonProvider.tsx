@@ -17,7 +17,7 @@ import { befKeyFromSession, register as registerWallet, signIn, type BefKey, typ
  * The person's BEF Explorer session, for the pages of the BEF module.
  *
  * The person is already logged in to MejmoSefajn with their key, so there is
- * nothing to type: a page that needs BEF (Interest, My Circle) opens
+ * nothing to type: a page that needs BEF (My Circle) opens
  * <BefDoor>, and the sign-in runs on its own — a stored session for this
  * person is resumed through /me, otherwise a challenge is signed with the
  * MejmoSefajn key and exchanged for a session token, exactly BEF's own person

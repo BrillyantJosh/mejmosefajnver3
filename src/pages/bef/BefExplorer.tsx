@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { AlertTriangle, ExternalLink, HandHeart, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,6 @@ import { PublicInterestsList } from "@/components/bef/explorer/PublicInterestsLi
 import {
   bindingLimit,
   CALC_DEFAULTS,
-  interestQuery,
   offeredRounds,
   parseCalcAmount,
   publishedLimits,
@@ -25,7 +23,7 @@ import {
 } from "@/components/bef/explorer/scenarioModel";
 import { useExplorerFigures, useScenario } from "@/components/bef/explorer/useExplorer";
 import { useExplorerText } from "@/components/bef/explorer/useExplorerText";
-import { BEF_PUBLIC_URL } from "@/lib/bef/base";
+import { BEF_PUBLIC_URL, LETSBALANCE_BEF_URL } from "@/lib/bef/base";
 import { befClient } from "@/lib/bef/config";
 import { offersBef, type BefProblem } from "@/lib/bef/problems";
 import { fmtMoney } from "@/lib/bef/vendor/src/lib/format.ts";
@@ -43,9 +41,11 @@ const BEF_CALCULATOR_URL = `${BEF_PUBLIC_URL}/calculator`;
  * page does before asking: which rounds are offered and which published limit
  * binds the amount (@/components/bef/explorer/scenarioModel.ts).
  *
- * "Express interest" opens the module's Interest page with the same query BEF
- * Explorer's calculator gives its own: split number, currency, round and a
- * whole amount. An interest is not an order, and nothing is sold here.
+ * "Express interest" opens the BEF page of LetsBalance.world in a new tab:
+ * an interest is expressed there now — support, sell, or sell and buy, for at
+ * most 30 days — and no longer as a KIND 30970 through BEF Explorer (Brilly,
+ * 3. 11. 2026). It carries nothing from the calculator. An interest is not an
+ * order, and nothing is sold here.
  *
  * At the foot of the page, who has already expressed interest — BEF's own
  * public list (GET /api/interests), as krogmenjave.com/povprasevanja shows it.
@@ -132,8 +132,6 @@ function Calculator({ figures }: { figures: ExplorerFigures }) {
   });
   const dimmed = loading || scenarioIsStale(scenario, { amountText: amount, currency, round, scope, sellerId, treasuryId });
 
-  const query = interestQuery({ splits, scope, currentSplit, currency, round, amount: typedAmount });
-
   return (
     <div className="space-y-4">
       <ScenarioInputs
@@ -172,15 +170,16 @@ function Calculator({ figures }: { figures: ExplorerFigures }) {
       <ScenarioLegs scenario={scenario} currency={currency} round={round} dimmed={dimmed} />
 
       {/* The figures follow every change, so this is no calculate button. It
-          opens the non-binding interest page for the split NUMBER, currency,
-          round and amount shown here — an interest is not an order, and
-          nothing is sold here. */}
+          opens the BEF page of LetsBalance.world, where an interest is
+          expressed now — an interest is not an order, and nothing is sold
+          here. */}
       <div className="space-y-2 pt-1">
         <Button asChild size="lg" className="h-12 w-full whitespace-normal sm:w-auto sm:min-w-[16rem]">
-          <Link to={{ pathname: "/bef/interest", search: `?${query}` }}>
+          <a href={LETSBALANCE_BEF_URL} target="_blank" rel="noopener noreferrer">
             <HandHeart className="h-4 w-4" />
             {t("calc.expressInterest")}
-          </Link>
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
         </Button>
         <p className="text-xs leading-relaxed text-muted-foreground">{t("explorer.expressInterestNote")}</p>
       </div>

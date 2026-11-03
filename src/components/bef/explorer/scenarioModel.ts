@@ -1,8 +1,10 @@
 /**
  * The Explorer's calculator without React: what BEF Explorer's calculator
  * (bef-explorer src/components/Calculator.tsx) works out in the browser before
- * it asks the server — which rounds are offered, which published limits bind,
- * what "Express interest" carries — and the reads it makes.
+ * it asks the server — which rounds are offered and which published limits
+ * bind — and the reads it makes. "Express interest" carries nothing any more:
+ * it opens the BEF page of LetsBalance.world (src/lib/bef/base.ts
+ * LETSBALANCE_BEF_URL).
  *
  * The scenario itself is BEF's. /api/scenario computes every figure and BEF is
  * the single mathematical authority; nothing here recomputes one. The limits
@@ -15,9 +17,7 @@
  * Relative imports only, so the test script can load it without Vite.
  */
 import { BefApiError, type BefClient, type Bootstrap, type Company, type ScenarioResponse, type SplitsResponse } from "../../../lib/bef/api";
-import { prefillQuery } from "../../../lib/bef/prefill";
 import { scenarioProblem, type BefProblem } from "../../../lib/bef/problems";
-import type { InterestCurrency } from "../../../lib/bef/vendor/server/lib/interestEvent.ts";
 
 /** Calculator.tsx:14 */
 export const CALC_CURRENCIES = ["EUR", "GBP", "USD"] as const;
@@ -44,8 +44,7 @@ export interface ExplorerFigures {
  * BEF reads the field as Number(the text without commas and spaces)
  * (Calculator.tsx:112). That turns "10.000" — how the limit line itself writes
  * ten thousand in Slovenian, German or Italian — into 10, and "12,5" into 125.
- * Here grouping is read as grouping, as the Interest page reads a whole amount
- * (src/lib/bef/prefill.ts parseWholeAmount), and a decimal comma as a decimal.
+ * Here grouping is read as grouping, and a decimal comma as a decimal.
  * Whatever is read, the scenario says it back as "You pay".
  */
 export function parseCalcAmount(text: string): number {
@@ -135,35 +134,6 @@ export function publishedLimits(
 /** The smallest published limit is the one the amount may not exceed; the first on a tie (Calculator.tsx:106-108). */
 export const bindingLimit = (limits: PublishedLimit[]): PublishedLimit | null =>
   limits.length ? limits.reduce((a, b) => (b.amount < a.amount ? b : a)) : null;
-
-/**
- * What "Express interest" carries to the Interest page (Calculator.tsx:115-123):
- * the split as a NUMBER — the Interest page knows splits by number, not as
- * current or next — the currency, the round and a whole amount.
- */
-export function interestQuery({
-  splits,
-  scope,
-  currentSplit,
-  currency,
-  round,
-  amount,
-}: {
-  splits: SplitsResponse | null;
-  scope: CalcScope;
-  currentSplit: number | null;
-  currency: string;
-  round: number;
-  amount: number;
-}): string {
-  const split = scope === "next" ? (splits?.next?.number ?? (currentSplit != null ? currentSplit + 1 : null)) : currentSplit;
-  return prefillQuery({
-    split,
-    currency: currency as InterestCurrency,
-    round,
-    amount: Number.isFinite(amount) && amount >= 1 ? amount : null,
-  });
-}
 
 /**
  * A company belongs in a route selector when it is active and actually trades

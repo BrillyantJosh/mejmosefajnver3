@@ -41,9 +41,6 @@ const bef = {
   // ── registration ──
   "reg.replacesProfile": "When you logged in, MejmoSefajn found a public profile for this key. Publishing this form replaces that whole profile on the relays: anything else it holds, such as your language or picture, is removed.",
   "reg.signedWithSession": "You do not need to type your key: MejmoSefajn signs with the key you are logged in with.",
-
-  // ── interest ──
-  "interest.outcomeUnknown": "No answer came back in time, so it may have gone through. Check your interest below before sending again.",
 } as const;
 
 export type BefKey = keyof typeof bef;
@@ -78,9 +75,6 @@ const translations: TranslationDict<BefKey> = {
     // ── registration ──
     "reg.replacesProfile": "Ko si se prijavil, je MejmoSefajn za ta ključ našel javni profil. Objava tega obrazca ta profil na relejih v celoti zamenja: vse ostalo, kar je v njem, na primer jezik ali slika, se odstrani.",
     "reg.signedWithSession": "Ključa ti ni treba vpisati: MejmoSefajn podpiše s ključem, s katerim si prijavljen.",
-
-    // ── interest ──
-    "interest.outcomeUnknown": "Odgovor ni prišel pravočasno, zato je morda šlo skozi. Preden pošlješ znova, preveri svoj interes spodaj.",
   },
   de: {
     // ── layout ──
@@ -110,9 +104,6 @@ const translations: TranslationDict<BefKey> = {
     // ── registration ──
     "reg.replacesProfile": "Bei Ihrer Anmeldung hat MejmoSefajn für diesen Schlüssel ein öffentliches Profil gefunden. Wenn Sie dieses Formular veröffentlichen, ersetzt es dieses Profil auf den Relays vollständig: alles andere darin, etwa Ihre Sprache oder Ihr Bild, wird entfernt.",
     "reg.signedWithSession": "Sie müssen Ihren Schlüssel nicht eingeben: MejmoSefajn signiert mit dem Schlüssel, mit dem Sie angemeldet sind.",
-
-    // ── interest ──
-    "interest.outcomeUnknown": "Es kam keine Antwort rechtzeitig zurück, daher ist es vielleicht durchgegangen. Prüfen Sie Ihr Interesse unten, bevor Sie erneut senden.",
   },
   hu: {
     // ── layout ──
@@ -142,9 +133,6 @@ const translations: TranslationDict<BefKey> = {
     // ── registration ──
     "reg.replacesProfile": "Amikor bejelentkeztél, a MejmoSefajn talált egy nyilvános profilt ehhez a kulcshoz. Ha közzéteszed ezt az űrlapot, az a teljes profilt lecseréli a reléken: minden más, ami benne van, például a nyelved vagy a képed, eltűnik belőle.",
     "reg.signedWithSession": "Nem kell megadnod a kulcsodat: a MejmoSefajn azzal a kulccsal ír alá, amellyel be vagy jelentkezve.",
-
-    // ── interest ──
-    "interest.outcomeUnknown": "Nem érkezett időben válasz, így lehet, hogy elment. Mielőtt újra elküldöd, nézd meg lent az érdeklődésedet.",
   },
   it: {
     // ── layout ──
@@ -174,9 +162,6 @@ const translations: TranslationDict<BefKey> = {
     // ── registration ──
     "reg.replacesProfile": "Quando hai effettuato l’accesso, MejmoSefajn ha trovato un profilo pubblico per questa chiave. Pubblicare questo modulo sostituisce per intero quel profilo sui relay: tutto il resto che contiene, come la lingua o l’immagine, viene rimosso.",
     "reg.signedWithSession": "Non devi inserire la chiave: MejmoSefajn firma con la chiave con cui sei connesso.",
-
-    // ── interest ──
-    "interest.outcomeUnknown": "Nessuna risposta è arrivata in tempo, quindi potrebbe essere andato a buon fine. Controlla il tuo interesse qui sotto prima di inviare di nuovo.",
   },
 };
 

@@ -5,7 +5,8 @@ import { TranslationDict } from '../types';
 // (./befVendor.ts, generated); these are only what BEF says elsewhere on its
 // site or not at all:
 //   - loading and failing to load the figures from befexplorer.com,
-//   - the "Express interest" note, which on BEF asks for a key to be typed,
+//   - the "Express interest" note, which on BEF asks for a key to be typed and
+//     here says that the button opens the BEF page of LetsBalance.world,
 //   - the "Source" and "Last checked" lines, which BEF writes in English only,
 //   - BEF's site-wide disclaimer (its footer, which this page has no copy of);
 //     scripts/testBefExplorer.ts checks it still says what BEF's footer says,
@@ -24,7 +25,7 @@ const befExplorer = {
 
   // ── the calculator ──
   "explorer.infoLabel": "More about this",
-  "explorer.expressInterestNote": "Non-binding: not an order and not a reservation. It opens the Interest page, where you can say how much you would co-create in this split. You do not type your key there: MejmoSefajn signs you in to BEF Explorer.",
+  "explorer.expressInterestNote": "Non-binding: not an order and not a reservation. It opens the BEF page of LetsBalance.world in a new tab, where an interest is expressed now: support, sell, or sell and buy, valid up to 30 days.",
   "explorer.source": "Source: {source}",
   "explorer.lastChecked": "Last checked: {time} UTC",
 
@@ -40,7 +41,7 @@ const befExplorer = {
   "expressed.noneYet": "Nobody has expressed interest in this split yet. You could be the first.",
   "expressed.loading": "Loading the expressed interests…",
   "expressed.unavailable": "The expressed interests cannot be shown right now.",
-  "expressed.source": "Source: the signed public events (KIND 30970) people express on BEF Explorer, kept by BEF Explorer. The name is from each person’s own public profile; wallet, e-mail, telephone and country are never shown.",
+  "expressed.source": "Source: the signed public events (KIND 30970) people expressed on BEF Explorer until 3 November 2026, kept by BEF Explorer as history. The name is from each person’s own public profile; wallet, e-mail, telephone and country are never shown.",
 
   // ── BEF Explorer's site-wide disclaimer ──
   "explorer.disclaimerTitle": "Disclaimer",
@@ -62,7 +63,7 @@ const translations: TranslationDict<BefExplorerKey> = {
 
     // ── the calculator ──
     "explorer.infoLabel": "Več o tem",
-    "explorer.expressInterestNote": "Nezavezujoče: ni naročilo in ni rezervacija. Odpre stran Interes, kjer poveš, koliko bi ko-kreiral v tem splitu. Ključa tam ne vpisuješ: MejmoSefajn te prijavi v BEF Explorer.",
+    "explorer.expressInterestNote": "Nezavezujoče: ni naročilo in ni rezervacija. V novem zavihku odpre stran BEF na LetsBalance.world, kjer se interes zdaj izrazi: podpora, prodaja ali prodaja in nakup, velja največ 30 dni.",
     "explorer.source": "Vir: {source}",
     "explorer.lastChecked": "Nazadnje preverjeno: {time} UTC",
 
@@ -78,7 +79,7 @@ const translations: TranslationDict<BefExplorerKey> = {
     "expressed.noneYet": "V tem splitu še nihče ni izrazil interesa. Lahko si prvi.",
     "expressed.loading": "Nalagam izražene interese…",
     "expressed.unavailable": "Izraženih interesov trenutno ni mogoče prikazati.",
-    "expressed.source": "Vir: podpisani javni dogodki (KIND 30970), ki jih ljudje oddajo na BEF Explorerju in jih ta hrani. Ime je iz javnega profila osebe; denarnice, e-pošte, telefona in države seznam nikoli ne pokaže.",
+    "expressed.source": "Vir: podpisani javni dogodki (KIND 30970), ki so jih ljudje do 3. 11. 2026 oddali na BEF Explorerju in jih ta hrani kot zgodovino. Ime je iz javnega profila osebe; denarnice, e-pošte, telefona in države seznam nikoli ne pokaže.",
 
     // ── BEF Explorer's site-wide disclaimer ──
     "explorer.disclaimerTitle": "Izjava o omejitvi odgovornosti",
@@ -95,7 +96,7 @@ const translations: TranslationDict<BefExplorerKey> = {
 
     // ── the calculator ──
     "explorer.infoLabel": "Mehr dazu",
-    "explorer.expressInterestNote": "Unverbindlich: kein Auftrag und keine Reservierung. Öffnet die Seite Interesse, wo Sie angeben können, wie viel Sie in diesem Split ko-kreieren würden. Ihren Schlüssel geben Sie dort nicht ein: MejmoSefajn meldet Sie bei BEF Explorer an.",
+    "explorer.expressInterestNote": "Unverbindlich: kein Auftrag und keine Reservierung. Öffnet in einem neuen Tab die BEF-Seite von LetsBalance.world, wo Interesse jetzt bekundet wird: unterstützen, verkaufen oder verkaufen und kaufen, gültig bis zu 30 Tage.",
     "explorer.source": "Quelle: {source}",
     "explorer.lastChecked": "Zuletzt geprüft: {time} UTC",
 
@@ -111,7 +112,7 @@ const translations: TranslationDict<BefExplorerKey> = {
     "expressed.noneYet": "In diesem Split hat noch niemand Interesse bekundet. Sie könnten die erste Person sein.",
     "expressed.loading": "Die Interessenbekundungen werden geladen…",
     "expressed.unavailable": "Die Interessenbekundungen können gerade nicht angezeigt werden.",
-    "expressed.source": "Quelle: die signierten öffentlichen Events (KIND 30970), die Menschen auf BEF Explorer abgeben und die BEF Explorer aufbewahrt. Der Name stammt aus dem eigenen öffentlichen Profil; Wallet, E-Mail, Telefon und Land zeigt die Liste nie.",
+    "expressed.source": "Quelle: die signierten öffentlichen Events (KIND 30970), die Menschen bis zum 3. November 2026 auf BEF Explorer abgegeben haben und die BEF Explorer als Verlauf aufbewahrt. Der Name stammt aus dem eigenen öffentlichen Profil; Wallet, E-Mail, Telefon und Land zeigt die Liste nie.",
 
     // ── BEF Explorer's site-wide disclaimer ──
     "explorer.disclaimerTitle": "Haftungsausschluss",
@@ -128,7 +129,7 @@ const translations: TranslationDict<BefExplorerKey> = {
 
     // ── the calculator ──
     "explorer.infoLabel": "Bővebben",
-    "explorer.expressInterestNote": "Nem kötelező érvényű: nem megrendelés és nem foglalás. Megnyitja az Érdeklődés oldalt, ahol megadhatod, mennyivel vennél részt a ko-kreációban ebben a Splitben. A kulcsodat ott nem kell beírnod: a MejmoSefajn bejelentkeztet a BEF Explorerbe.",
+    "explorer.expressInterestNote": "Nem kötelező érvényű: nem megrendelés és nem foglalás. Új lapon megnyitja a LetsBalance.world BEF oldalát, ahol most az érdeklődést jelezheted: támogatás, eladás, vagy eladás és vétel, legfeljebb 30 napig érvényes.",
     "explorer.source": "Forrás: {source}",
     "explorer.lastChecked": "Utoljára ellenőrizve: {time} UTC",
 
@@ -144,7 +145,7 @@ const translations: TranslationDict<BefExplorerKey> = {
     "expressed.noneYet": "Ebben a Splitben még senki sem jelzett érdeklődést. Te lehetsz az első.",
     "expressed.loading": "A jelzett érdeklődések betöltése…",
     "expressed.unavailable": "A jelzett érdeklődéseket most nem lehet megmutatni.",
-    "expressed.source": "Forrás: a nyilvános, aláírt események (KIND 30970), amelyeket az emberek a BEF Exploreren adnak le, és amelyeket a BEF Explorer megőriz. A név mindenki saját nyilvános profiljából való; pénztárcát, e-mailt, telefont és országot a lista soha nem mutat.",
+    "expressed.source": "Forrás: a nyilvános, aláírt események (KIND 30970), amelyeket az emberek 2026. november 3-ig a BEF Exploreren adtak le, és amelyeket a BEF Explorer előzményként megőriz. A név mindenki saját nyilvános profiljából való; pénztárcát, e-mailt, telefont és országot a lista soha nem mutat.",
 
     // ── BEF Explorer's site-wide disclaimer ──
     "explorer.disclaimerTitle": "Felelősségkizárás",
@@ -161,7 +162,7 @@ const translations: TranslationDict<BefExplorerKey> = {
 
     // ── the calculator ──
     "explorer.infoLabel": "Maggiori informazioni",
-    "explorer.expressInterestNote": "Non vincolante: non è un ordine né una prenotazione. Apre la pagina Interesse, dove puoi indicare quanto co-creeresti in questo split. Lì non devi inserire la chiave: MejmoSefajn ti fa accedere a BEF Explorer.",
+    "explorer.expressInterestNote": "Non vincolante: non è un ordine né una prenotazione. Apre in una nuova scheda la pagina BEF di LetsBalance.world, dove ora si esprime l’interesse: sostegno, vendita, oppure vendita e acquisto, valido fino a 30 giorni.",
     "explorer.source": "Fonte: {source}",
     "explorer.lastChecked": "Ultima verifica: {time} UTC",
 
@@ -177,7 +178,7 @@ const translations: TranslationDict<BefExplorerKey> = {
     "expressed.noneYet": "In questo split nessuno ha ancora manifestato interesse. Potresti essere il primo.",
     "expressed.loading": "Caricamento delle manifestazioni di interesse…",
     "expressed.unavailable": "Le manifestazioni di interesse non possono essere mostrate in questo momento.",
-    "expressed.source": "Fonte: gli eventi pubblici firmati (KIND 30970) che le persone inviano su BEF Explorer e che BEF Explorer conserva. Il nome proviene dal profilo pubblico di ciascuno; portafoglio, e-mail, telefono e paese non compaiono mai.",
+    "expressed.source": "Fonte: gli eventi pubblici firmati (KIND 30970) che le persone hanno inviato su BEF Explorer fino al 3 novembre 2026 e che BEF Explorer conserva come storico. Il nome proviene dal profilo pubblico di ciascuno; portafoglio, e-mail, telefono e paese non compaiono mai.",
 
     // ── BEF Explorer's site-wide disclaimer ──
     "explorer.disclaimerTitle": "Avvertenza",

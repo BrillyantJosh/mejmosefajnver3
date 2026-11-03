@@ -1,83 +1,49 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { Card, CardContent } from "@/components/ui/card";
-import { BefDoor } from "@/components/bef/BefDoor";
-import { InterestForm } from "@/components/bef/interest/InterestForm";
-import { NonBindingNotice } from "@/components/bef/interest/NonBindingNotice";
-import { anyRoundOpen } from "@/components/bef/interest/interestModel";
+import { ExternalLink, HandHeart } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/i18n/I18nContext";
 import befInterestText from "@/i18n/modules/befInterest";
-import { readPrefill } from "@/lib/bef/prefill";
-import { useBefPerson } from "./BefPersonProvider";
+import { LETSBALANCE_BEF_URL } from "@/lib/bef/base";
 
 /**
- * Interest — a non-binding interest in a split's rounds (KIND 30970), signed
- * with the MejmoSefajn key and sent through BEF Explorer.
+ * Interest — where an interest is expressed now: the BEF page of
+ * LetsBalance.world, where a person signs a KIND 30975 BEF Interest (support,
+ * sell, or sell and buy, valid at most 30 days) and one firm takes it up with
+ * a KIND 40971. The buy-only KIND 30970 this page used to sign with the
+ * MejmoSefajn key and send through BEF Explorer is replaced; earlier interests
+ * here are closed (Brilly, 3. 11. 2026).
  *
- * Whether any split is open for interest is read first, without signing in, so
- * nobody registers a wallet and publishes a profile only to learn afterwards
- * that there is nothing to express interest in; a failed read says nothing and
- * never stands in the way of the door. The door then signs in by itself
- * (BefPersonProvider), and the form shows the person's interests and one card
- * per open split.
+ * So the page signs nothing, sends nothing and opens no BEF Explorer session:
+ * it says so, and links to LetsBalance.world in a new tab. A link from the
+ * Explorer with the old query (split, currency, round, amount) lands here too
+ * and the query is ignored — LetsBalance.world asks for what it needs itself.
  *
- * Query parameters from the Explorer pre-fill the form: split (the split
- * NUMBER), currency, round, amount — the same query BEF Explorer's calculator
- * links to its own /interest with.
- *
- * Ported from bef-explorer src/pages/InterestPage.tsx.
+ * An h2: BefLayout already has the page's h1 ("BEF").
  */
 export default function BefInterest() {
-  const { t } = useTranslation(befInterestText);
-  const [params] = useSearchParams();
-  const prefill = useMemo(() => readPrefill(params), [params]);
-  const { stage, client } = useBefPerson();
-  /** true / false once read; null while loading or when the read failed. */
-  const [interestOpen, setInterestOpen] = useState<boolean | null>(null);
-
-  // Read when the page opens, and again when the registration card opens: a new
-  // KIND 38888 may have opened or closed a split in the meantime.
-  const registering = stage.kind === "register";
-  useEffect(() => {
-    let cancelled = false;
-    client.interest.windows().then(
-      (windows) => {
-        if (!cancelled) setInterestOpen(anyRoundOpen(windows));
-      },
-      () => {
-        if (!cancelled) setInterestOpen(null);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [client, registering]);
+  const { t, lang } = useTranslation(befInterestText);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl sm:text-2xl font-semibold">{t("interest.title")}</h2>
-        <p className="text-sm text-muted-foreground leading-relaxed">{t("interest.sub")}</p>
-      </div>
+    <div className="mx-auto max-w-2xl px-1 py-6 sm:py-10">
+      <section
+        data-testid="interest-moved"
+        lang={lang}
+        className="min-w-0 rounded-2xl border border-border bg-card p-5 sm:p-8 text-center"
+      >
+        <HandHeart className="mx-auto h-8 w-8 text-primary" aria-hidden="true" />
+        <h2 className="mt-3 text-xl sm:text-2xl font-semibold text-foreground leading-snug break-words">
+          {t("interest.moved.title")}
+        </h2>
+        <p className="mt-3 text-sm sm:text-base text-muted-foreground leading-relaxed">{t("interest.moved.text")}</p>
 
-      <NonBindingNotice />
+        <Button asChild size="lg" className="mt-6 h-auto min-h-12 w-full whitespace-normal sm:w-auto sm:min-w-[16rem]">
+          <a href={LETSBALANCE_BEF_URL} target="_blank" rel="noopener noreferrer">
+            {t("interest.moved.open")}
+            <ExternalLink className="h-4 w-4 shrink-0" />
+          </a>
+        </Button>
 
-      {stage.kind !== "signedIn" && interestOpen === false && (
-        <Card role="status">
-          <CardContent className="space-y-2 p-6">
-            <h3 className="text-lg font-semibold">{t("interest.noneOpen")}</h3>
-            <p className="text-sm text-muted-foreground">{t("interest.noneOpenText")}</p>
-            <p className="text-xs text-muted-foreground">{t("interest.noneOpenSignIn")}</p>
-            <Link to="/bef" className="inline-block text-sm font-medium text-primary hover:underline">
-              {t("interest.backToCalculator")}
-            </Link>
-          </CardContent>
-        </Card>
-      )}
-
-      <BefDoor interestOpen={interestOpen}>
-        {(signedIn) => <InterestForm key={signedIn.hex} signedIn={signedIn} prefill={prefill} />}
-      </BefDoor>
+        <p className="mt-6 text-xs text-muted-foreground leading-relaxed">{t("interest.moved.closed")}</p>
+      </section>
     </div>
   );
 }

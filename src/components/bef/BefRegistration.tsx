@@ -61,13 +61,10 @@ const LEAVING = ["wrong_key", "owner_unknown", "profile_incomplete", "account_ch
 export function BefRegistration({
   mode,
   address,
-  interestOpen,
 }: {
   mode: RegistrationMode;
   /** The wallet as BEF named it; the profile names the same form. */
   address: string;
-  /** Whether any split is open for interest right now (null: not known). */
-  interestOpen: boolean | null;
 }) {
   const { t } = useTranslation(befText);
   const lang = useLang();
@@ -317,12 +314,6 @@ export function BefRegistration({
                 </pre>
               </details>
             </>
-          )}
-
-          {interestOpen === false && (
-            <Alert>
-              <AlertDescription>{t("person.reg.interestClosed")}</AlertDescription>
-            </Alert>
           )}
 
           {problem && (

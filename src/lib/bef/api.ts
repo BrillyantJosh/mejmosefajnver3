@@ -1,8 +1,8 @@
 /**
  * The BEF Explorer API, called from this browser across origins.
  *
- * Ported from bef-explorer src/lib/api.ts (personRequest, the person, interest
- * and cards calls, and the public reads the calculator makes), with a base URL
+ * Ported from bef-explorer src/lib/api.ts (personRequest, the person and
+ * cards calls, and the public reads the calculator makes), with a base URL
  * and the rules a call to another site needs:
  *   - only a method and path in ./base.ts BEF_ROUTES is ever sent;
  *   - no cookies (credentials: 'omit'), no redirects followed, no referrer, no
@@ -18,7 +18,7 @@
  * a fake fetch. ./config.ts makes the app's one client.
  */
 import { isBefRoute, type BefMethod } from './base';
-import type { InterestCurrency, InterestLimitError, InterestRound, InterestStatus } from './vendor/server/lib/interestEvent.ts';
+import type { InterestCurrency } from './vendor/server/lib/interestEvent.ts';
 
 export const BEF_TOKEN_HEADER = 'x-person-token';
 
@@ -71,48 +71,10 @@ export interface BefMe {
 
 /* ------------------------------------------------------------ interest -- */
 
-export type CurrencyAmounts = Record<InterestCurrency, number | null>;
-
-export interface InterestWindowRound {
-  round: number;
-  open: boolean;
-  /** KIND 38888 round size per currency: null = not published, 0 = not offered. */
-  size: CurrencyAmounts;
-  perPerson?: CurrencyAmounts;
-}
-
-export interface InterestWindow {
-  split: number;
-  scope: 'current' | 'next';
-  open: boolean;
-  rounds: InterestWindowRound[];
-  capacity: CurrencyAmounts;
-}
-
-export interface InterestWindows {
-  currentSplit: number | null;
-  /** The KIND 38888 event whose limits apply — signed into every interest. */
-  paramsEventId: string;
-  windows: InterestWindow[];
-}
-
-export interface InterestView {
-  split: number;
-  currency: InterestCurrency;
-  rounds: InterestRound[];
-  total: number;
-  status: InterestStatus;
-  eventId: string;
-  createdAt: number;
-  receivedAt: string;
-  relaysAccepted: number | null;
-  relaysTotal: number | null;
-}
-
-export interface InterestSubmitResult {
-  interest: InterestView;
-  relays: { accepted: number; total: number };
-}
+// None: an interest is expressed on the BEF page of LetsBalance.world now
+// (./base.ts LETSBALANCE_BEF_URL), and this client neither reads nor sends a
+// KIND 30970 (Brilly, 3. 11. 2026). Who expressed one before is still BEF's
+// public list, below.
 
 /* --------------------------------------------------------------- cards -- */
 
@@ -349,8 +311,6 @@ export interface BefErrorBody {
   /** Registration: which profile field BEF refused. */
   field?: string;
   detail?: string;
-  /** Interest: the limits the amounts did not fit. */
-  errors?: InterestLimitError[];
   accepted?: number;
   total?: number;
   /** Cards: the card ids a list was refused for. */
@@ -358,8 +318,6 @@ export interface BefErrorBody {
   max?: number;
   remaining?: number;
   nextSlotAt?: string | null;
-  /** Interest: the KIND 38888 event that applies now. */
-  paramsEventId?: string;
   /** Scenario, amount_above_limit. */
   limit?: number;
   limitLabel?: string;
@@ -524,21 +482,6 @@ export function createBefClient({
       request<void>('/api/person/logout', { method: 'POST', token, keepalive, timeoutMs: BEF_TIMEOUTS.logout }),
   };
 
-  const interest = {
-    /** Public: the current and the next split, open or not, with their limits. */
-    windows: () => request<InterestWindows>('/api/interest/windows'),
-    mine: (token: string) => request<{ interests: InterestView[] }>('/api/interest/mine', { token }),
-    /** { event } the signed KIND 30970. */
-    submit: (token: string, event: unknown) =>
-      request<InterestSubmitResult>('/api/interest', {
-        method: 'POST',
-        token,
-        body: { event },
-        timeoutMs: BEF_TIMEOUTS.publish,
-        unknownOutcome: 'outcome_unknown',
-      }),
-  };
-
   const cards = {
     mine: (token: string) => request<CardsMine>('/api/cards/mine', { token }),
     /** A POST, so a card's id never sits in a URL or a request log. */
@@ -582,7 +525,7 @@ export function createBefClient({
     },
   };
 
-  return { base: origin, request, noteServerTime, serverNowSeconds, person, interest, cards, figures };
+  return { base: origin, request, noteServerTime, serverNowSeconds, person, cards, figures };
 }
 
 export type BefClient = ReturnType<typeof createBefClient>;
