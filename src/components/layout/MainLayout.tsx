@@ -7,7 +7,6 @@ import logoNightImage from "@/assets/lana-logo-white.png";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { groupMenuModules } from "@/lib/menuOrder";
-import type { LayoutContext } from "@/lib/layoutContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,9 +78,8 @@ export default function MainLayout() {
 
   // The whole registry, not just the enabled set: the two named groups are the
   // standard menu and must appear whatever a person's saved settings say
-  // (a stale `enabled: false` was quietly emptying a named module out of it).
-  // groupMenuModules applies `enabled` to the trailing group only, and leaves
-  // MENU_HIDDEN (Lana8Wonder) out entirely — the home page warns instead.
+  // (a stale `enabled: false` was quietly emptying Lana8Wonder out of it).
+  // groupMenuModules applies `enabled` to the trailing group only.
   const menuGroups = useMemo(() => groupMenuModules(modules), [modules]);
   const appVersion = import.meta.env.VITE_APP_VERSION || 'dev';
 
@@ -702,7 +700,7 @@ export default function MainLayout() {
 
       {/* Main Content */}
       <main className="container px-4 py-6">
-        <Outlet context={{ lana8WonderCashOuts: relayWarnings.cashOutCount } satisfies LayoutContext} />
+        <Outlet />
       </main>
 
       {/* Version indicator for debugging — under any bottom bar (z-50), which

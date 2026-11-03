@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Sparkles, HelpCircle, PlayCircle, Video as VideoIcon, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt, Users, Sprout, AlertTriangle } from "lucide-react";
+import { Loader2, Sparkles, HelpCircle, PlayCircle, Video as VideoIcon, Calendar, Globe, MapPin, Share2, ChevronLeft, ChevronRight, MessageSquare, Vote, ArrowRight, CheckCircle, Shield, LogIn, Receipt, Users, Sprout } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import LazyYouTube from "@/components/LazyYouTube";
 import { formatDistanceToNow, format } from "date-fns";
@@ -13,7 +13,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNostrUserAcknowledgement } from "@/hooks/useNostrUserAcknowledgement";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useLayoutContext } from "@/lib/layoutContext";
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -226,7 +225,6 @@ export default function Home() {
   const newsFeedRef = useRef<HTMLDivElement>(null);
   const mobileScrollerRef = useRef<HTMLDivElement>(null);
   const { session } = useAuth();
-  const { lana8WonderCashOuts } = useLayoutContext();
 
   // Move to a different news page AND reset scroll position.
   //   • Desktop (lg+): scroll the page vertically so the top of the feed is visible
@@ -430,30 +428,6 @@ export default function Home() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* Lana8Wonder is not in the menu (Brilly, 3. 11. 2026): this is the only way
-          in, and it shows only while funds there wait to be paid out. */}
-      {lana8WonderCashOuts > 0 && (
-        <div
-          role="alert"
-          className="mb-6 rounded-2xl border border-red-500/40 bg-red-500/10 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
-        >
-          <AlertTriangle className="h-7 w-7 text-red-500 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-red-600 dark:text-red-400">Lana8Wonder: funds are waiting to be paid out</p>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {lana8WonderCashOuts === 1
-                ? 'One of your Lana8Wonder accounts has funds waiting to be paid out.'
-                : `${lana8WonderCashOuts} of your Lana8Wonder accounts have funds waiting to be paid out.`}
-            </p>
-          </div>
-          <Button asChild className="bg-red-500 hover:bg-red-600 text-white shrink-0">
-            <Link to="/lana8wonder">
-              Open Lana8Wonder <ArrowRight className="h-4 w-4 ml-1" />
-            </Link>
-          </Button>
-        </div>
-      )}
-
       {/* Active Voting Banner — hidden if user already voted */}
       {activeVoting.length > 0 && (
         <div className="mb-6 space-y-3">

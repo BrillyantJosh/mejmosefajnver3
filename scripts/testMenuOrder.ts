@@ -4,7 +4,7 @@
  *   npx tsx scripts/testMenuOrder.ts
  */
 import { readFileSync } from 'node:fs';
-import { groupMenuModules, MENU_GROUP_CORE, MENU_GROUP_COMMUNITY, MENU_GROUP_REST_LEAD, MENU_HIDDEN } from '../src/lib/menuOrder.js';
+import { groupMenuModules, MENU_GROUP_CORE, MENU_GROUP_COMMUNITY, MENU_GROUP_REST_LEAD } from '../src/lib/menuOrder.js';
 
 /**
  * The registry imports image assets, so it cannot be imported outside Vite —
@@ -37,20 +37,10 @@ console.log('— the declared order —');
   const mods = [{ id: 'chat' }, { id: 'wallet' }, { id: 'lanadiscount' }, { id: 'plan15' }, { id: 'lana8wonder' }, { id: 'unconditionalpayment' }];
   const g = groupMenuModules(mods);
   check('group 2 in declared order, not input order',
-    ids(g.core).join() === 'wallet,unconditionalpayment,plan15', ids(g.core));
+    ids(g.core).join() === 'wallet,unconditionalpayment,lana8wonder,plan15', ids(g.core));
   check('group 3 in declared order',
     ids(g.community).join() === 'lanadiscount,chat', ids(g.community));
   check('nothing left over here', g.rest.length === 0, ids(g.rest));
-}
-
-console.log('— Lana8Wonder is not in the menu —');
-{
-  // Brilly, 3. 11. 2026: out of the menu; only a home-page warning while funds wait.
-  const g = groupMenuModules([{ id: 'lana8wonder', enabled: true }, { id: 'wallet' }]);
-  const shown = [...ids(g.core), ...ids(g.community), ...ids(g.rest)];
-  check('not shown, even when enabled in settings', !shown.includes('lana8wonder'), shown);
-  check('and named nowhere else in the menu',
-    ![...MENU_GROUP_CORE, ...MENU_GROUP_COMMUNITY, ...MENU_GROUP_REST_LEAD].includes('lana8wonder'));
 }
 
 console.log('— where BEF sits —');
@@ -82,15 +72,15 @@ console.log('— nothing disappears —');
   const g = groupMenuModules(DEFAULT_MODULES);
   const shown = new Set([...ids(g.core), ...ids(g.community), ...ids(g.rest)]);
   const expected = new Set([
-    ...DEFAULT_MODULES.filter((m) => m.enabled && !MENU_HIDDEN.includes(m.id)).map((m) => m.id),
+    ...DEFAULT_MODULES.filter((m) => m.enabled).map((m) => m.id),
     ...MENU_GROUP_CORE, ...MENU_GROUP_COMMUNITY,
   ]);
-  check('every enabled module, plus every named one, appears exactly once (except the hidden ones)',
+  check('every enabled module, plus every named one, appears exactly once',
     shown.size === expected.size && [...expected].every((id) => shown.has(id)),
     { expected: expected.size, shown: shown.size });
   const overlap = ids(g.rest).filter((id) => shown.has(id) && (MENU_GROUP_CORE.includes(id) || MENU_GROUP_COMMUNITY.includes(id)));
   check('the trailing group never repeats a named module', overlap.length === 0, overlap);
-  const trailing = DEFAULT_MODULES.filter((m) => m.enabled && !MENU_GROUP_CORE.includes(m.id) && !MENU_GROUP_COMMUNITY.includes(m.id) && !MENU_HIDDEN.includes(m.id));
+  const trailing = DEFAULT_MODULES.filter((m) => m.enabled && !MENU_GROUP_CORE.includes(m.id) && !MENU_GROUP_COMMUNITY.includes(m.id));
   check('the trailing group leads with the pinned module, then registry order',
     ids(g.rest).join() === [...MENU_GROUP_REST_LEAD, ...ids(trailing).filter((id) => !MENU_GROUP_REST_LEAD.includes(id))].join(),
     ids(g.rest));
@@ -102,17 +92,17 @@ console.log('— nothing disappears —');
 console.log('— every named id exists in the registry —');
 {
   const known = new Set(DEFAULT_MODULES.map((m) => m.id));
-  for (const id of [...MENU_GROUP_CORE, ...MENU_GROUP_COMMUNITY, ...MENU_HIDDEN]) {
+  for (const id of [...MENU_GROUP_CORE, ...MENU_GROUP_COMMUNITY]) {
     check(`"${id}" is a real module`, known.has(id as never));
   }
 }
 
 console.log('— settings cannot empty the standard groups —');
 {
-  // The reported case was a saved KIND 37334 carrying {"id":"Lana8Wonder","enabled":false};
-  // Lana8Wonder has since left the menu (3. 11. 2026), so PLAN15 stands in for a named module.
-  const g = groupMenuModules(DEFAULT_MODULES.map((m) => (m.id === 'plan15' ? { ...m, enabled: false } : m)));
-  check('a disabled named module still shows', ids(g.core).includes('plan15'), ids(g.core));
+  // The reported case: this person's saved KIND 37334 carries
+  // {"id":"Lana8Wonder","enabled":false}, which used to remove it from the menu.
+  const g = groupMenuModules(DEFAULT_MODULES.map((m) => (m.id === 'lana8wonder' ? { ...m, enabled: false } : m)));
+  check('a disabled named module still shows', ids(g.core).includes('lana8wonder'), ids(g.core));
   check('and keeps its place in the order',
     ids(g.core).join() === MENU_GROUP_CORE.join(), ids(g.core));
 }
