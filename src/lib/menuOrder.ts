@@ -19,9 +19,17 @@
 export const MENU_GROUP_CORE: string[] = [
   'wallet',
   'unconditionalpayment',
-  'lana8wonder',
   'plan15',
   'bef',
+];
+
+/**
+ * Never in the menu, whatever a person's settings say; the page itself stays.
+ * Lana8Wonder (Brilly, 3. 11. 2026): out of the menu — the home page shows a
+ * warning, with a link to it, only while funds there wait to be paid out.
+ */
+export const MENU_HIDDEN: string[] = [
+  'lana8wonder',
 ];
 
 /** Group 3 — the places that money moves through. */
@@ -82,7 +90,7 @@ export function groupMenuModules<T extends MenuModule>(modules: T[]): GroupedMen
   const core = pick(MENU_GROUP_CORE);
   const community = pick(MENU_GROUP_COMMUNITY);
 
-  const claimed = new Set<string>([...MENU_GROUP_CORE, ...MENU_GROUP_COMMUNITY]);
+  const claimed = new Set<string>([...MENU_GROUP_CORE, ...MENU_GROUP_COMMUNITY, ...MENU_HIDDEN]);
   // The trailing group honours `enabled`, including for its pinned lead.
   const trailing = modules.filter((m) => !claimed.has(m.id) && m.enabled !== false);
   const lead = MENU_GROUP_REST_LEAD
