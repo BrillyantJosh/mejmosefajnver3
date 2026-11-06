@@ -92,7 +92,7 @@ export function verifySignedAction(event: unknown, expect: SignedActionExpectati
     return refuse('Event expired — check the device clock and retry');
   }
 
-  const methodTag = Array.isArray(e.tags) ? e.tags.find((t: string[]) => t[0] === 'method')?.[1] : undefined;
+  const methodTag = Array.isArray(e.tags) ? e.tags.find((t: string[]) => Array.isArray(t) && t[0] === 'method')?.[1] : undefined;
   if (typeof methodTag !== 'string' || methodTag.toUpperCase() !== expect.method.toUpperCase()) {
     return refuse('Event was signed for a different request method');
   }

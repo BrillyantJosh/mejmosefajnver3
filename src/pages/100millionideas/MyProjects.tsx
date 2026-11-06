@@ -10,6 +10,7 @@ import { LanacrowdProject } from "@/hooks/useLanacrowdProjects";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { SimplePool, finalizeEvent } from "nostr-tools";
+import { LANACROWD_ACTION_DELETE, signLanacrowdAction } from "@/lib/lanacrowdSigned";
 import { toast } from "@/hooks/use-toast";
 import millionideasTranslations from "@/i18n/modules/millionideas";
 import { useTranslation } from "@/i18n/I18nContext";
@@ -54,10 +55,15 @@ const MyProjects = () => {
     setDeletingId(project.id);
     try {
       // 1. Server-side delete (authoritative — blocks if any donation exists)
-      const res = await fetch(`/api/lanacrowd/projects/${encodeURIComponent(project.id)}`, {
+      const url = `/api/lanacrowd/projects/${encodeURIComponent(project.id)}`;
+      const event = signLanacrowdAction(
+        { method: "DELETE", url, action: LANACROWD_ACTION_DELETE, id: project.id },
+        session.nostrPrivateKey,
+      );
+      const res = await fetch(url, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requesterPubkey: session.nostrHexId }),
+        body: JSON.stringify({ event }),
       });
 
       if (!res.ok) {

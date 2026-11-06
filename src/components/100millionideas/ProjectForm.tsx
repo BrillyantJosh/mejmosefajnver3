@@ -422,30 +422,7 @@ export default function ProjectForm({ mode, initialData, onSubmitSuccess }: Proj
         await fetch(`${API_URL}/api/lanacrowd/projects/upsert`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project: {
-              id: dTag,
-              eventId: signedEvent.id,
-              pubkey: session.nostrHexId,
-              ownerPubkey: session.nostrHexId,
-              title: title.trim(),
-              shortDesc: shortDesc.trim(),
-              content: content.trim(),
-              fiatGoal: parseFloat(fiatGoal),
-              currency,
-              wallet,
-              responsibilityStatement: responsibilityStatement.trim(),
-              projectType,
-              whatType: whatType || null,
-              status,
-              coverImage: finalCoverUrl || null,
-              galleryImages: uploadedGalleryUrls,
-              videos: videoUrls.filter(u => u.trim()),
-              files: fileUrls.filter(u => u.trim()),
-              participants: [],
-              nostrCreatedAt: signedEvent.created_at,
-            }
-          }),
+          body: JSON.stringify({ event: signedEvent }),
         });
         console.log('✅ Project upserted to server SQLite');
       } catch (upsertErr) {

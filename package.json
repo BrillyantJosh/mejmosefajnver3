@@ -16,6 +16,7 @@
     "lint": "eslint .",
     "test:voice": "node --import tsx --test server/test/dm-audio-cleanup.test.ts",
     "test:sell-moved": "node --import tsx --test server/test/buyingDealers.test.ts server/test/befDealers.test.ts server/test/buyingDealersRoute.test.ts src/lib/sellingMoved.test.ts",
+    "test:lanacrowd": "node --import tsx --test server/test/lanacrowdSigned.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -1128,7 +1128,11 @@ export async function indexLanacrowdFromRelays(db: any): Promise<void> {
         const participants = getAllTags('p').filter((t: string[]) => (t[2] === 'participant' || t[3] === 'participant')).map((t: string[]) => t[1]);
 
         // Fetch existing admin overrides to preserve them
-        const existing = db.prepare('SELECT is_hidden, is_approved, is_funded, is_completed, completion_comment FROM lanacrowd_projects WHERE id = ?').get(evt.dTag) as any;
+        const existing = db.prepare('SELECT pubkey, owner_pubkey, is_hidden, is_approved, is_funded, is_completed, completion_comment FROM lanacrowd_projects WHERE id = ?').get(evt.dTag) as any;
+
+        // A KIND 31234 is addressed by author + d-tag: another author's event with
+        // this d-tag is a different address, not a new version of this project.
+        if (existing && existing.pubkey !== evt.pubkey && existing.owner_pubkey !== evt.pubkey) continue;
 
         upsertProject.run(
           evt.dTag,

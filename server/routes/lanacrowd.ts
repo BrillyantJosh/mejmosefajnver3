@@ -5,10 +5,26 @@
  * Writes: client publishes to Nostr first, then calls upsert/record here
  * so the project is immediately visible — no waiting for relay propagation.
  * Background indexer (heartbeat) acts as safety net.
+ * Every write rests on a signed event: see server/lib/lanacrowdSigned.ts.
  */
 
 import { Router } from 'express';
 import { getDb } from '../db/connection.js';
+import { consumeSignedAction, isRefused, verifySignedAction } from '../lib/ufSignedAction.js';
+import {
+  DELETION_KIND,
+  DELETION_MAX_AGE_SECONDS,
+  DONATION_KIND,
+  LANACROWD_ACTION_ADMIN,
+  LANACROWD_ACTION_DELETE,
+  MAX_FUTURE_SECONDS,
+  PROJECT_KIND,
+  deletionNames,
+  donationFromEvent,
+  isEventRefused,
+  projectFromEvent,
+  readSignedEvent,
+} from '../lib/lanacrowdSigned.js';
 
 const router = Router();
 
@@ -223,17 +239,33 @@ router.get('/projects/:id', (req, res) => {
 // ──────────────────────────────────────────────
 // POST /api/lanacrowd/projects/upsert
 // Called immediately after successful Nostr publish
+// Body: { event: <the signed KIND 31234> }
+// The project is read from the event. A project belongs to its signer, and an
+// older version of it does not replace a newer one.
 // ──────────────────────────────────────────────
 router.post('/projects/upsert', (req, res) => {
   const db = getDb();
-  const p = req.body?.project;
-  if (!p || !p.id || !p.title) {
-    return res.status(400).json({ error: 'Missing required project fields' });
-  }
+  const signed = readSignedEvent(req.body?.event, PROJECT_KIND);
+  if (isEventRefused(signed)) return res.status(signed.status).json({ error: signed.error });
+  const evt = signed.event;
+
+  const p = projectFromEvent(evt);
+  if (!p) return res.status(400).json({ error: 'Missing required project fields' });
+  if (p.ownerPubkey !== evt.pubkey) return res.status(403).json({ error: 'A project is signed by its owner' });
 
   try {
     // Preserve existing admin overrides — only upsert content fields
-    const existing = db.prepare('SELECT is_hidden, is_approved, is_funded, is_completed, completion_comment FROM lanacrowd_projects WHERE id = ?').get(p.id) as any;
+    const existing = db.prepare('SELECT pubkey, owner_pubkey, event_id, nostr_created_at, is_hidden, is_approved, is_funded, is_completed, completion_comment FROM lanacrowd_projects WHERE id = ?').get(p.id) as any;
+
+    if (existing) {
+      if (existing.pubkey !== evt.pubkey && existing.owner_pubkey !== evt.pubkey) {
+        return res.status(403).json({ error: 'Not authorized to change this project' });
+      }
+      if (existing.event_id === evt.id) return res.json({ success: true });
+      if (evt.created_at < existing.nostr_created_at) {
+        return res.status(409).json({ error: 'A newer version of this project is already stored' });
+      }
+    }
 
     db.prepare(`
       INSERT INTO lanacrowd_projects (
@@ -277,30 +309,30 @@ router.post('/projects/upsert', (req, res) => {
         updated_at = datetime('now')
     `).run(
       p.id,
-      p.eventId || null,
-      p.pubkey || '',
-      p.ownerPubkey || p.pubkey || '',
+      p.eventId,
+      p.pubkey,
+      p.ownerPubkey,
       p.title,
-      p.shortDesc || '',
-      p.content || '',
-      parseFloat(p.fiatGoal) || 0,
-      p.currency || 'EUR',
-      p.wallet || '',
-      p.responsibilityStatement || '',
-      p.projectType || 'Inspiration',
-      p.whatType || null,
-      p.status || 'active',
-      p.coverImage || null,
-      JSON.stringify(p.galleryImages || []),
-      JSON.stringify(p.videos || []),
-      JSON.stringify(p.files || []),
-      JSON.stringify(p.participants || []),
+      p.shortDesc,
+      p.content,
+      p.fiatGoal,
+      p.currency,
+      p.wallet,
+      p.responsibilityStatement,
+      p.projectType,
+      p.whatType,
+      p.status,
+      p.coverImage,
+      JSON.stringify(p.galleryImages),
+      JSON.stringify(p.videos),
+      JSON.stringify(p.files),
+      JSON.stringify(p.participants),
       existing ? existing.is_hidden : 0,
       existing ? existing.is_approved : 0,
       existing ? existing.is_funded : 0,
       existing ? existing.is_completed : 0,
       existing ? existing.completion_comment : null,
-      p.nostrCreatedAt || Math.floor(Date.now() / 1000),
+      p.nostrCreatedAt,
     );
 
     res.json({ success: true });
@@ -313,28 +345,49 @@ router.post('/projects/upsert', (req, res) => {
 // ──────────────────────────────────────────────
 // PATCH /api/lanacrowd/projects/:id/admin
 // Admin-only: toggle hidden/approved/funded/completed
+// Body: { event: <signed kind 27235> }
+//   content: {"action":"lanacrowd-project-admin","id":"<d-tag>", …the fields}
+//   tags:    ['u', <this url>], ['method', 'PATCH'], ['nonce', <random>]
+// The SIGNER must be an admin; the fields are read from the signed content.
 // ──────────────────────────────────────────────
 router.patch('/projects/:id/admin', (req, res) => {
   const db = getDb();
-  const { adminPubkey, is_hidden, is_approved, is_funded, is_completed, completion_comment } = req.body;
+  const signed = verifySignedAction(req.body?.event, {
+    method: 'PATCH',
+    action: LANACROWD_ACTION_ADMIN,
+    target: req.params.id,
+  });
+  if (isRefused(signed)) return res.status(signed.status).json({ error: signed.error });
 
-  if (!adminPubkey || !getAdmins().includes(adminPubkey)) {
+  if (!getAdmins().includes(signed.pubkey)) {
     return res.status(403).json({ error: 'Not authorized' });
   }
 
+  const { is_hidden, is_approved, is_funded, is_completed, completion_comment } = signed.payload;
+  // Only update provided fields
+  const sets: string[] = [];
+  const vals: any[] = [];
+
+  for (const [column, value] of Object.entries({ is_hidden, is_approved, is_funded, is_completed })) {
+    if (value === undefined) continue;
+    if (typeof value !== 'boolean') return res.status(400).json({ error: `${column} must be true or false` });
+    sets.push(`${column} = ?`);
+    vals.push(value ? 1 : 0);
+  }
+  if (completion_comment !== undefined) {
+    if (completion_comment !== null && typeof completion_comment !== 'string') {
+      return res.status(400).json({ error: 'completion_comment must be text' });
+    }
+    sets.push('completion_comment = ?');
+    vals.push(completion_comment || null);
+  }
+
+  if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+  const spentPatch = consumeSignedAction(signed);
+  if (spentPatch) return res.status(spentPatch.status).json({ error: spentPatch.error });
+
   try {
-    // Only update provided fields
-    const sets: string[] = [];
-    const vals: any[] = [];
-
-    if (is_hidden !== undefined) { sets.push('is_hidden = ?'); vals.push(is_hidden ? 1 : 0); }
-    if (is_approved !== undefined) { sets.push('is_approved = ?'); vals.push(is_approved ? 1 : 0); }
-    if (is_funded !== undefined) { sets.push('is_funded = ?'); vals.push(is_funded ? 1 : 0); }
-    if (is_completed !== undefined) { sets.push('is_completed = ?'); vals.push(is_completed ? 1 : 0); }
-    if (completion_comment !== undefined) { sets.push('completion_comment = ?'); vals.push(completion_comment || null); }
-
-    if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
-
     sets.push("updated_at = datetime('now')");
     vals.push(req.params.id);
 
@@ -353,36 +406,73 @@ router.patch('/projects/:id/admin', (req, res) => {
 // ──────────────────────────────────────────────
 // DELETE /api/lanacrowd/projects/:id
 // Owner or 100M admin can delete a project that has received NO donations.
-// Body: { requesterPubkey: string }
+// Body: { event } — one of:
+//   a signed kind 27235, content {"action":"lanacrowd-project-delete","id":"<d-tag>"},
+//     tags ['u', <this url>], ['method', 'DELETE'], ['nonce', <random>]; or
+//   the owner's KIND 5 deletion request naming the project in its `a` tag, which
+//     is what a server holding the signed event but not the key can pass on.
 //
 // The Nostr KIND 5 deletion event must be published from the client (we can't
 // sign it here without the private key). This endpoint only:
-//   1. Verifies the requester owns the project (or is a 100M admin)
+//   1. Verifies the signer owns the project (or is a 100M admin)
 //   2. Refuses if any donation has been recorded for this project
 //   3. Removes the project row from SQLite so it disappears immediately
 // ──────────────────────────────────────────────
 router.delete('/projects/:id', (req, res) => {
   const db = getDb();
   const dTag = req.params.id;
-  const requesterPubkey = (req.body?.requesterPubkey || '').trim();
+  const nowSec = Math.floor(Date.now() / 1000);
 
-  if (!requesterPubkey) {
-    return res.status(400).json({ error: 'requesterPubkey required' });
+  let signer: string;
+  let deletionSignedAt: number | null = null;
+  let action: ReturnType<typeof verifySignedAction> | null = null;
+
+  if (req.body?.event?.kind === DELETION_KIND) {
+    const signed = readSignedEvent(req.body.event, DELETION_KIND);
+    if (isEventRefused(signed)) return res.status(signed.status).json({ error: signed.error });
+    if (!deletionNames(signed.event, dTag)) {
+      return res.status(401).json({ error: 'Event was signed for a different project' });
+    }
+    const age = nowSec - signed.event.created_at;
+    if (age > DELETION_MAX_AGE_SECONDS || age < -MAX_FUTURE_SECONDS) {
+      return res.status(401).json({ error: 'Event expired — check the device clock and retry' });
+    }
+    signer = signed.event.pubkey;
+    deletionSignedAt = signed.event.created_at;
+  } else {
+    action = verifySignedAction(req.body?.event, {
+      method: 'DELETE',
+      action: LANACROWD_ACTION_DELETE,
+      target: dTag,
+    });
+    if (isRefused(action)) return res.status(action.status).json({ error: action.error });
+    signer = action.pubkey;
   }
 
   try {
     const project = db.prepare(
-      'SELECT owner_pubkey, pubkey FROM lanacrowd_projects WHERE id = ?',
+      'SELECT owner_pubkey, pubkey, is_hidden, nostr_created_at FROM lanacrowd_projects WHERE id = ?',
     ).get(dTag) as any;
 
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    const isOwner =
-      project.owner_pubkey === requesterPubkey || project.pubkey === requesterPubkey;
-    const isAdmin = getAdmins().includes(requesterPubkey);
+    const isOwner = project.owner_pubkey === signer || project.pubkey === signer;
+    // A KIND 5 speaks for its author's own events only.
+    const isAdmin = deletionSignedAt === null && getAdmins().includes(signer);
 
     if (!isOwner && !isAdmin) {
       return res.status(403).json({ error: 'Not authorized to delete this project' });
+    }
+
+    // A project an admin hid stays an admin's to deal with: the indexer re-creates
+    // a deleted row from the relays, and the new row is not hidden.
+    if (project.is_hidden && !isAdmin) {
+      return res.status(403).json({ error: 'This project was hidden by an administrator — only an administrator can delete it' });
+    }
+
+    // A deletion request covers what existed when it was signed, not a later version.
+    if (deletionSignedAt !== null && deletionSignedAt < project.nostr_created_at) {
+      return res.status(409).json({ error: 'The project has changed since this deletion was signed' });
     }
 
     // Block deletion if any donation has ever been recorded.
@@ -398,10 +488,15 @@ router.delete('/projects/:id', (req, res) => {
       });
     }
 
+    if (action && !isRefused(action)) {
+      const spentDelete = consumeSignedAction(action);
+      if (spentDelete) return res.status(spentDelete.status).json({ error: spentDelete.error });
+    }
+
     const result = db.prepare('DELETE FROM lanacrowd_projects WHERE id = ?').run(dTag);
     if (result.changes === 0) return res.status(404).json({ error: 'Project not found' });
 
-    console.log(`🗑️ Deleted lanacrowd project ${dTag} by ${requesterPubkey.slice(0, 16)}…`);
+    console.log(`🗑️ Deleted lanacrowd project ${dTag} by ${signer.slice(0, 16)}…`);
     res.json({ success: true });
   } catch (err: any) {
     console.error('❌ DELETE /api/lanacrowd/projects/:id error:', err);
@@ -412,13 +507,17 @@ router.delete('/projects/:id', (req, res) => {
 // ──────────────────────────────────────────────
 // POST /api/lanacrowd/donations/record
 // Called after successful KIND 60200 Nostr publish
+// Body: { event: <the signed KIND 60200> }
+// The donation is read from the event and stored under its event id, so sending
+// the same event again changes nothing.
 // ──────────────────────────────────────────────
 router.post('/donations/record', (req, res) => {
   const db = getDb();
-  const d = req.body?.donation;
-  if (!d || !d.id || !d.projectId) {
-    return res.status(400).json({ error: 'Missing required donation fields' });
-  }
+  const signed = readSignedEvent(req.body?.event, DONATION_KIND);
+  if (isEventRefused(signed)) return res.status(signed.status).json({ error: signed.error });
+
+  const d = donationFromEvent(signed.event);
+  if (!d) return res.status(400).json({ error: 'Not a donation to a project' });
 
   try {
     db.prepare(`
@@ -433,16 +532,16 @@ router.post('/donations/record', (req, res) => {
     `).run(
       d.id,
       d.projectId,
-      d.supporterPubkey || '',
-      d.projectOwnerPubkey || '',
-      d.amountLanoshis || 0,
-      parseFloat(d.amountFiat) || 0,
-      d.currency || 'EUR',
-      d.fromWallet || '',
-      d.toWallet || '',
-      d.txId || null,
-      d.message || null,
-      d.nostrCreatedAt || Math.floor(Date.now() / 1000),
+      d.supporterPubkey,
+      d.projectOwnerPubkey,
+      d.amountLanoshis,
+      d.amountFiat,
+      d.currency,
+      d.fromWallet,
+      d.toWallet,
+      d.txId,
+      d.message,
+      d.nostrCreatedAt,
     );
 
     // Auto-update funded status for this project

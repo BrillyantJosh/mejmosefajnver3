@@ -229,27 +229,7 @@ const DonatePrivateKey = () => {
         await fetch('/api/lanacrowd/donations/record', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            donation: {
-              id: signedProjectEvent.id,
-              projectId: projectId || '',
-              supporterPubkey: session.nostrHexId,
-              projectOwnerPubkey: project.ownerPubkey,
-              amountLanoshis: projectLanoshis,
-              // Rounded to cents like the amount_fiat tag above: the mentor
-              // split is a float multiplication, which stored values such as
-              // 31.680000000000003.
-              amountFiat: hasMentorSplit
-                ? Number((parseFloat(amount) * 0.90).toFixed(2))
-                : parseFloat(amount),
-              currency: project.currency,
-              fromWallet: selectedWalletId,
-              toWallet: project.wallet,
-              txId: txHash,
-              message: message || '',
-              nostrCreatedAt: nowTs,
-            }
-          }),
+          body: JSON.stringify({ event: signedProjectEvent }),
         });
         console.log('✅ Donation recorded in server SQLite');
       } catch (recordErr) {

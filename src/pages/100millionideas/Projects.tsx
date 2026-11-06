@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { useAdmin } from "@/contexts/AdminContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
+import { LANACROWD_ACTION_ADMIN, signLanacrowdAction } from "@/lib/lanacrowdSigned";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -188,10 +189,16 @@ const Projects = () => {
   };
 
   const patchAdmin = async (dTag: string, patch: Record<string, any>) => {
-    const res = await fetch(`/api/lanacrowd/projects/${encodeURIComponent(dTag)}/admin`, {
+    if (!session?.nostrPrivateKey) throw new Error('Not authenticated');
+    const url = `/api/lanacrowd/projects/${encodeURIComponent(dTag)}/admin`;
+    const event = signLanacrowdAction(
+      { method: 'PATCH', url, action: LANACROWD_ACTION_ADMIN, id: dTag, fields: patch },
+      session.nostrPrivateKey,
+    );
+    const res = await fetch(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminPubkey: session?.nostrHexId, ...patch }),
+      body: JSON.stringify({ event }),
     });
     if (!res.ok) throw new Error(`Admin update failed: HTTP ${res.status}`);
   };
