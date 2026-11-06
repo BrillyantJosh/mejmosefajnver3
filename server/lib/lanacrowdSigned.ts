@@ -10,6 +10,10 @@
  *   POST   /projects/upsert      the KIND 31234 the owner just published
  *   POST   /donations/record     the KIND 60200 the donor just published
  *
+ * An admin's decision is also an event of its own (decisionFor): the row changes only
+ * once the relays have that event, so what this app shows and what LetsBalance.world
+ * reads from the relays stay the same.
+ *
  * The published events are what a server without the person's key can pass on
  * (LetsBalance.world holds them, never the key), and they read exactly like the
  * relay indexer reads them (indexLanacrowdFromRelays in nostr.ts), so a row written
@@ -122,4 +126,43 @@ export function donationFromEvent(evt: Event) {
 export function deletionNames(evt: Event, projectId: string): boolean {
   return tagValue(evt, 'k') === String(PROJECT_KIND)
     && tagValue(evt, 'a') === `${PROJECT_KIND}:${evt.pubkey}:${projectId}`;
+}
+
+/** A project as a decision about it reads it. */
+export interface DecisionProject {
+  id: string;
+  pubkey: string;
+  wallet: string;
+  fiatGoal: number;
+  currency: string;
+  status: string;
+  isHidden: boolean;
+  isApproved: boolean;
+}
+
+/**
+ * The event an admin's change becomes on the relays, or null when it decides nothing there (a draft
+ * is not shown anywhere yet). LetsBalance.world reads these and nothing else: an approval names the
+ * project's address, wallet, goal and currency, and counts only for what it names.
+ */
+export function decisionFor(
+  p: DecisionProject,
+  fields: { is_hidden?: boolean; is_approved?: boolean; is_completed?: boolean; completion_comment?: string | null },
+  signer: string,
+  at: number,
+): { kind: number; tags: string[][]; content: string } | null {
+  if (fields.is_completed !== undefined) {
+    const common = [['service', 'lanacrowd'], ['project', p.id], ['p', signer, 'reviewer']];
+    return fields.is_completed
+      ? { kind: 60201, tags: [...common, ['status', 'completed'], ['timestamp_completed', String(at)]], content: fields.completion_comment || '' }
+      : { kind: 60201, tags: [...common, ['status', 'reopened']], content: '' };
+  }
+  if (fields.is_hidden === undefined && fields.is_approved === undefined) return null;
+  const hidden = fields.is_hidden ?? p.isHidden,
+    isApproved = fields.is_approved ?? p.isApproved;
+  const base = (status: string) => [['d', p.id], ['service', 'lanacrowd'], ['status', status], ['a', `31234:${p.pubkey}:${p.id}`]];
+  if (hidden) return { kind: 31235, tags: [...base('blocked'), ['reason', 'Hidden by an admin']], content: '' };
+  if (!isApproved) return { kind: 31235, tags: [...base('blocked'), ['reason', 'Not approved']], content: '' };
+  if (p.status !== 'active') return null;
+  return { kind: 31235, tags: [...base('visible'), ['wallet', p.wallet], ['fiat_goal', String(p.fiatGoal)], ['currency', p.currency]], content: '' };
 }

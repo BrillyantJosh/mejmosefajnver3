@@ -3,7 +3,16 @@ import { Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
 import { supabase } from '@/integrations/supabase/client';
 
-const AUTHORITY_PUBKEY = '18a908e89354fb2d142d864bfcbea7a7ed4486c8fb66b746fcebe66ed372115e';
+/** The projects whose newest decision is a block: a newer approval lifts an older block. */
+export const blockedByNewest = (events: Event[]) => {
+  const newest = new Map<string, Event>();
+  for (const e of events) {
+    const d = e.tags.find((t) => t[0] === 'd')?.[1];
+    const held = d ? newest.get(d) : undefined;
+    if (d && (!held || e.created_at > held.created_at)) newest.set(d, e);
+  }
+  return new Set([...newest].filter(([, e]) => e.tags.find((t) => t[0] === 'status')?.[1] === 'blocked').map(([d]) => d));
+};
 
 export interface ProjectData {
   id: string;
@@ -139,8 +148,8 @@ export const useNostrProjects = () => {
             body: {
               filter: {
                 kinds: [31235],
-                authors: [AUTHORITY_PUBKEY],
-                limit: 100
+                authors: parameters.trustedSigners?.['100MillionFun'] ?? [],
+                limit: 500
               },
               timeout: 15000
             }
@@ -174,16 +183,7 @@ export const useNostrProjects = () => {
         });
         const dedupedProjects = Array.from(projectMap.values());
 
-        // Create a map of blocked projects
-        const blockedProjects = new Set<string>();
-        visibilityEvents.forEach((event: any) => {
-          const dTag = event.tags.find((t: string[]) => t[0] === 'd')?.[1];
-          const status = event.tags.find((t: string[]) => t[0] === 'status')?.[1];
-
-          if (dTag && status === 'blocked') {
-            blockedProjects.add(dTag);
-          }
-        });
+        const blockedProjects = blockedByNewest(visibilityEvents);
 
         // Filter out blocked projects and draft projects
         const visibleProjects = dedupedProjects.filter(project => {

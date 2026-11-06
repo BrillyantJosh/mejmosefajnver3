@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Event } from 'nostr-tools';
 import { useSystemParameters } from '@/contexts/SystemParametersContext';
+import { blockedByNewest } from '@/hooks/useNostrProjects';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
-const AUTHORITY_PUBKEY = '18a908e89354fb2d142d864bfcbea7a7ed4486c8fb66b746fcebe66ed372115e';
 
 export interface UserProjectData {
   id: string;
@@ -74,7 +74,7 @@ export const useNostrUserProjects = () => {
             body: { filter: { kinds: [31234], limit: 200 }, timeout: 15000 },
           }),
           supabase.functions.invoke('query-nostr-events', {
-            body: { filter: { kinds: [31235], authors: [AUTHORITY_PUBKEY], limit: 100 }, timeout: 10000 },
+            body: { filter: { kinds: [31235], authors: parameters.trustedSigners?.['100MillionFun'] ?? [], limit: 500 }, timeout: 10000 },
           }),
           supabase.functions.invoke('query-nostr-events', {
             body: { filter: { kinds: [60200], limit: 500 }, timeout: 15000 },
@@ -106,13 +106,7 @@ export const useNostrUserProjects = () => {
         });
         setProfiles(Array.from(profileMap.values()));
 
-        // Create blocked projects set
-        const blockedProjects = new Set<string>();
-        visibilityEvents.forEach(event => {
-          const dTag = event.tags.find(t => t[0] === 'd')?.[1];
-          const status = event.tags.find(t => t[0] === 'status')?.[1];
-          if (dTag && status === 'blocked') blockedProjects.add(dTag);
-        });
+        const blockedProjects = blockedByNewest(visibilityEvents);
 
         // Group donations by project
         const donationsByProject = new Map<string, Event[]>();

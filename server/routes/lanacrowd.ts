@@ -19,12 +19,14 @@ import {
   LANACROWD_ACTION_DELETE,
   MAX_FUTURE_SECONDS,
   PROJECT_KIND,
+  decisionFor,
   deletionNames,
   donationFromEvent,
   isEventRefused,
   projectFromEvent,
   readSignedEvent,
 } from '../lib/lanacrowdSigned.js';
+import { publishEventToRelays } from '../lib/nostr.js';
 
 const router = Router();
 
@@ -44,6 +46,31 @@ function getAdmins(): string[] {
   const row = db.prepare("SELECT value FROM app_settings WHERE key = '100millionideas_admins'").get() as any;
   if (!row?.value) return [];
   try { return JSON.parse(row.value); } catch { return []; }
+}
+
+/** Whose decisions LetsBalance.world and every other reader of the relays count: the signed 38888 says. */
+function getDeciders(): string[] {
+  const row = getDb().prepare('SELECT trusted_signers FROM kind_38888 ORDER BY created_at DESC LIMIT 1').get() as any;
+  try {
+    const list = JSON.parse(row?.trusted_signers || '{}')['100MillionFun'];
+    return Array.isArray(list) ? list : [];
+  } catch { return []; }
+}
+
+/** True once `needed` relays took the event; the others keep trying on their own. */
+function acceptedByRelays(relays: string[], event: unknown, needed: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let accepted = 0, left = relays.length;
+    if (!left) resolve(false);
+    for (const relay of relays) {
+      publishEventToRelays([relay], event)
+        .then((r) => !!r[0]?.success, () => false)
+        .then((ok) => {
+          if (ok && ++accepted === needed) resolve(true);
+          if (--left === 0) resolve(accepted >= needed);
+        });
+    }
+  });
 }
 
 function parseJsonArray(val: any): any[] {
@@ -345,12 +372,14 @@ router.post('/projects/upsert', (req, res) => {
 // ──────────────────────────────────────────────
 // PATCH /api/lanacrowd/projects/:id/admin
 // Admin-only: toggle hidden/approved/funded/completed
-// Body: { event: <signed kind 27235> }
-//   content: {"action":"lanacrowd-project-admin","id":"<d-tag>", …the fields}
+// Body: { event: <signed kind 27235>, decision?: <signed 31235 or 60201> }
+//   content: {"action":"lanacrowd-project-admin","id":"<d-tag>", …the fields, decision_id}
 //   tags:    ['u', <this url>], ['method', 'PATCH'], ['nonce', <random>]
 // The SIGNER must be an admin; the fields are read from the signed content.
+// A change to hidden, approved or completed also needs the signer in the signed 38888
+// and that decision's event, which goes to the relays before the row changes.
 // ──────────────────────────────────────────────
-router.patch('/projects/:id/admin', (req, res) => {
+router.patch('/projects/:id/admin', async (req, res) => {
   const db = getDb();
   const signed = verifySignedAction(req.body?.event, {
     method: 'PATCH',
@@ -384,10 +413,45 @@ router.patch('/projects/:id/admin', (req, res) => {
 
   if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
+  const decides = is_hidden !== undefined || is_approved !== undefined || is_completed !== undefined;
+  let decision: any = null;
+  if (decides) {
+    if (is_completed !== undefined && (is_hidden !== undefined || is_approved !== undefined)) {
+      return res.status(400).json({ error: 'One decision at a time' });
+    }
+    if (!getDeciders().includes(signed.pubkey)) {
+      return res.status(403).json({ error: 'This key is not in the signed 38888: its decision would not count', code: 'NOT_A_DECIDER' });
+    }
+    const project = db.prepare('SELECT * FROM lanacrowd_projects WHERE id = ?').get(req.params.id) as any;
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (req.body?.decision) {
+      const read = readSignedEvent(req.body.decision, req.body.decision.kind);
+      if (isEventRefused(read)) return res.status(read.status).json({ error: read.error });
+      decision = read.event;
+    }
+    const age = decision ? Math.floor(Date.now() / 1000) - decision.created_at : 0;
+    const want = decisionFor(
+      { id: project.id, pubkey: project.pubkey, wallet: project.wallet, fiatGoal: project.fiat_goal, currency: project.currency, status: project.status, isHidden: !!project.is_hidden, isApproved: !!project.is_approved },
+      { is_hidden, is_approved, is_completed, completion_comment } as any,
+      signed.pubkey,
+      decision?.created_at ?? 0,
+    );
+    const sameEvent = !!want && !!decision && decision.kind === want.kind && decision.content === want.content && JSON.stringify(decision.tags) === JSON.stringify(want.tags);
+    if (want ? !sameEvent || decision.pubkey !== signed.pubkey || signed.payload.decision_id !== decision.id || age > DELETION_MAX_AGE_SECONDS || age < -MAX_FUTURE_SECONDS : !!decision) {
+      return res.status(400).json({ error: 'The decision does not match this change' });
+    }
+  }
+
   const spentPatch = consumeSignedAction(signed);
   if (spentPatch) return res.status(spentPatch.status).json({ error: spentPatch.error });
 
   try {
+    if (decision) {
+      const relays = getRelays();
+      if (!(await acceptedByRelays(relays, decision, Math.min(2, relays.length)))) {
+        return res.status(502).json({ error: 'The relays did not take this decision: nothing was changed', code: 'NOT_ON_RELAYS' });
+      }
+    }
     sets.push("updated_at = datetime('now')");
     vals.push(req.params.id);
 

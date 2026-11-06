@@ -37,3 +37,49 @@ export function signLanacrowdAction(
     hexToBytes(privateKeyHex),
   );
 }
+
+/** A project as a decision about it reads it. */
+export interface DecisionProject {
+  id: string;
+  pubkey: string;
+  wallet: string;
+  fiatGoal: number;
+  currency: string;
+  status: string;
+  isHidden: boolean;
+  isApproved: boolean;
+}
+
+/**
+ * The event an admin's change becomes on the relays, or null when it decides nothing there (a draft
+ * is not shown anywhere yet). LetsBalance.world reads these and nothing else: an approval names the
+ * project's address, wallet, goal and currency, and counts only for what it names.
+ */
+export function decisionFor(
+  p: DecisionProject,
+  fields: { is_hidden?: boolean; is_approved?: boolean; is_completed?: boolean; completion_comment?: string | null },
+  signer: string,
+  at: number,
+): { kind: number; tags: string[][]; content: string } | null {
+  if (fields.is_completed !== undefined) {
+    const common = [['service', 'lanacrowd'], ['project', p.id], ['p', signer, 'reviewer']];
+    return fields.is_completed
+      ? { kind: 60201, tags: [...common, ['status', 'completed'], ['timestamp_completed', String(at)]], content: fields.completion_comment || '' }
+      : { kind: 60201, tags: [...common, ['status', 'reopened']], content: '' };
+  }
+  if (fields.is_hidden === undefined && fields.is_approved === undefined) return null;
+  const hidden = fields.is_hidden ?? p.isHidden,
+    isApproved = fields.is_approved ?? p.isApproved;
+  const base = (status: string) => [['d', p.id], ['service', 'lanacrowd'], ['status', status], ['a', `31234:${p.pubkey}:${p.id}`]];
+  if (hidden) return { kind: 31235, tags: [...base('blocked'), ['reason', 'Hidden by an admin']], content: '' };
+  if (!isApproved) return { kind: 31235, tags: [...base('blocked'), ['reason', 'Not approved']], content: '' };
+  if (p.status !== 'active') return null;
+  return { kind: 31235, tags: [...base('visible'), ['wallet', p.wallet], ['fiat_goal', String(p.fiatGoal)], ['currency', p.currency]], content: '' };
+}
+
+/** The signed decision for a change, or null when the change decides nothing on the relays. */
+export function signLanacrowdDecision(p: DecisionProject, fields: Parameters<typeof decisionFor>[1], signer: string, privateKeyHex: string) {
+  const at = Math.floor(Date.now() / 1000);
+  const decision = decisionFor(p, fields, signer, at);
+  return decision && finalizeEvent({ ...decision, created_at: at }, hexToBytes(privateKeyHex));
+}

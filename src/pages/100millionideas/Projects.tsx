@@ -12,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { useAdmin } from "@/contexts/AdminContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
-import { LANACROWD_ACTION_ADMIN, signLanacrowdAction } from "@/lib/lanacrowdSigned";
+import { LANACROWD_ACTION_ADMIN, signLanacrowdAction, signLanacrowdDecision } from "@/lib/lanacrowdSigned";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -175,32 +175,32 @@ const Projects = () => {
       .catch(() => setSummary(null));
   }, [filter, actionLoading]);
 
-  const publishNostrEvent = async (eventTemplate: { kind: number; tags: string[][]; content: string }) => {
-    if (!session?.nostrPrivateKey) return;
-    const signed = finalizeEvent(
-      { ...eventTemplate, created_at: Math.floor(Date.now() / 1000) },
-      hexToBytes(session.nostrPrivateKey)
-    );
-    const { data, error } = await supabase.functions.invoke("publish-dm-event", {
-      body: { event: signed },
-    });
-    if (error) console.error("Failed to publish Nostr event:", error);
-    else console.log(`✅ Published KIND ${eventTemplate.kind} to ${data?.publishedTo || 0} relays`);
-  };
-
+  /** A decision reaches the relays first, on the server: when they refuse it, nothing changes here either. */
   const patchAdmin = async (dTag: string, patch: Record<string, any>) => {
-    if (!session?.nostrPrivateKey) throw new Error('Not authenticated');
+    if (!session?.nostrPrivateKey || !session.nostrHexId) throw new Error('Not authenticated');
+    const p = projects.find(x => x.id === dTag);
+    if (!p) throw new Error('Unknown project');
+    const decision = signLanacrowdDecision(p, patch, session.nostrHexId, session.nostrPrivateKey);
     const url = `/api/lanacrowd/projects/${encodeURIComponent(dTag)}/admin`;
     const event = signLanacrowdAction(
-      { method: 'PATCH', url, action: LANACROWD_ACTION_ADMIN, id: dTag, fields: patch },
+      { method: 'PATCH', url, action: LANACROWD_ACTION_ADMIN, id: dTag, fields: { ...patch, ...(decision ? { decision_id: decision.id } : {}) } },
       session.nostrPrivateKey,
     );
     const res = await fetch(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event }),
+      body: JSON.stringify({ event, decision }),
     });
-    if (!res.ok) throw new Error(`Admin update failed: HTTP ${res.status}`);
+    if (!res.ok) {
+      const { code } = await res.json().catch(() => ({ code: '' }));
+      throw new Error(code || `Admin update failed: HTTP ${res.status}`);
+    }
+  };
+
+  /** What went wrong, when the person can do something about it. */
+  const decisionFailure = (err: unknown, otherwise: 'projects.toast.approvalFailed' | 'projects.toast.visibilityFailed' | 'projects.toast.statusFailed') => {
+    const code = err instanceof Error ? err.message : '';
+    return code === 'NOT_A_DECIDER' ? t('projects.toast.notDecider') : code === 'NOT_ON_RELAYS' ? t('projects.toast.notOnRelays') : t(otherwise);
   };
 
   const handleToggleApproved = async (dTag: string) => {
@@ -217,7 +217,7 @@ const Projects = () => {
       });
     } catch (err) {
       console.error(err);
-      toast({ title: t('projects.toast.errorTitle'), description: t('projects.toast.approvalFailed'), variant: "destructive" });
+      toast({ title: t('projects.toast.errorTitle'), description: decisionFailure(err, 'projects.toast.approvalFailed'), variant: "destructive" });
     } finally {
       setActionLoading(null);
     }
@@ -230,20 +230,6 @@ const Projects = () => {
       const p = projects.find(x => x.id === dTag);
       const nowHidden = !p?.isHidden;
 
-      // Publish KIND 31235 visibility event to Nostr (for decentralized record)
-      if (nowHidden) {
-        await publishNostrEvent({
-          kind: 31235,
-          tags: [
-            ["d", dTag],
-            ["service", "lanacrowd"],
-            ["status", "blocked"],
-            ["p", session.nostrHexId, "reviewer"],
-          ],
-          content: "",
-        });
-      }
-
       await patchAdmin(dTag, { is_hidden: nowHidden });
       await refetch();
       toast({
@@ -252,7 +238,7 @@ const Projects = () => {
       });
     } catch (err) {
       console.error(err);
-      toast({ title: t('projects.toast.errorTitle'), description: t('projects.toast.visibilityFailed'), variant: "destructive" });
+      toast({ title: t('projects.toast.errorTitle'), description: decisionFailure(err, 'projects.toast.visibilityFailed'), variant: "destructive" });
     } finally {
       setActionLoading(null);
     }
@@ -282,20 +268,6 @@ const Projects = () => {
 
     setActionLoading(dTag);
     try {
-      if (nowCompleted && comment) {
-        await publishNostrEvent({
-          kind: 60201,
-          tags: [
-            ["service", "lanacrowd"],
-            ["project", dTag],
-            ["p", session.nostrHexId, "reviewer"],
-            ["status", "completed"],
-            ["timestamp_completed", String(Math.floor(Date.now() / 1000))],
-          ],
-          content: comment,
-        });
-      }
-
       await patchAdmin(dTag, {
         is_completed: nowCompleted,
         completion_comment: nowCompleted ? (comment || null) : null,
@@ -307,7 +279,7 @@ const Projects = () => {
       });
     } catch (err) {
       console.error(err);
-      toast({ title: t('projects.toast.errorTitle'), description: t('projects.toast.statusFailed'), variant: "destructive" });
+      toast({ title: t('projects.toast.errorTitle'), description: decisionFailure(err, 'projects.toast.statusFailed'), variant: "destructive" });
     } finally {
       setActionLoading(null);
     }

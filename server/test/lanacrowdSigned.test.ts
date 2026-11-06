@@ -2,7 +2,8 @@
  * LanaCrowd writes: each one rests on a signed event.
  *   npm run test:lanacrowd
  *
- *   PATCH  /projects/:id/admin  signed by an admin, the fields from the signed content
+ *   PATCH  /projects/:id/admin  signed by an admin, the fields from the signed content;
+ *                               a decision only from a key of the signed 38888, on the relays first
  *   DELETE /projects/:id        signed by the owner or an admin, or the owner's KIND 5
  *   POST   /projects/upsert     the owner's KIND 31234
  *   POST   /donations/record    the donor's KIND 60200
@@ -38,7 +39,7 @@ const { getDb, closeDb } = await import('../db/connection.js') as any;
 const { default: lanacrowdRoutes } = await import('../routes/lanacrowd.js');
 const { indexLanacrowdFromRelays } = await import('../lib/nostr.js');
 const { closeRelayPool } = await import('../lib/relayPool.js');
-const { LANACROWD_ACTION_ADMIN, LANACROWD_ACTION_DELETE, signLanacrowdAction } = await import('../../src/lib/lanacrowdSigned.js');
+const { LANACROWD_ACTION_ADMIN, LANACROWD_ACTION_DELETE, signLanacrowdAction, signLanacrowdDecision } = await import('../../src/lib/lanacrowdSigned.js');
 
 const toHex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 interface Key { sk: Uint8Array; hex: string; pk: string }
@@ -47,6 +48,7 @@ const newKey = (): Key => { const sk = generateSecretKey(); return { sk, hex: to
 const admin = newKey();
 const owner = newKey();
 const stranger = newKey();
+const lastingAdmin = newKey();
 const donor = newKey();
 const now = () => Math.floor(Date.now() / 1000);
 const PROJECT = `project:${'a'.repeat(8)}-aaaa-4aaa-8aaa-${'a'.repeat(12)}`;
@@ -54,10 +56,18 @@ const OTHER = `project:${'b'.repeat(8)}-bbbb-4bbb-8bbb-${'b'.repeat(12)}`;
 const WALLET = 'L'.padEnd(34, 'q');
 
 const relayEvents: Event[] = [];
+/** What reached the fake relay, and whether it takes events at all. */
+const published: Event[] = [];
+let relayTakes = true;
 const relay = new WebSocketServer({ port: 0, host: '127.0.0.1' });
 relay.on('connection', (socket) => {
   socket.on('message', (raw) => {
     const [type, sub, filter] = JSON.parse(raw.toString());
+    if (type === 'EVENT') {
+      if (relayTakes) published.push(sub);
+      socket.send(JSON.stringify(['OK', sub.id, relayTakes, relayTakes ? '' : 'blocked: no']));
+      return;
+    }
     if (type !== 'REQ') return;
     for (const e of relayEvents) if (filter.kinds?.includes(e.kind)) socket.send(JSON.stringify(['EVENT', sub, e]));
     socket.send(JSON.stringify(['EOSE', sub]));
@@ -70,8 +80,8 @@ before(async () => {
   await new Promise<void>((resolve) => { if (relay.address()) resolve(); else relay.on('listening', () => resolve()); });
   // The seed points at the real relays: replace it before anything can read it.
   getDb().prepare('DELETE FROM kind_38888').run();
-  getDb().prepare(`INSERT INTO kind_38888 (event_id, pubkey, created_at, relays, electrum_servers, exchange_rates, raw_event)
-                   VALUES ('test', 'x', ?, ?, '[]', '{}', '{}')`).run(now(), JSON.stringify([`ws://127.0.0.1:${(relay.address() as AddressInfo).port}`]));
+  getDb().prepare(`INSERT INTO kind_38888 (event_id, pubkey, created_at, relays, electrum_servers, exchange_rates, trusted_signers, raw_event)
+                   VALUES ('test', 'x', ?, ?, '[]', '{}', ?, '{}')`).run(now(), JSON.stringify([`ws://127.0.0.1:${(relay.address() as AddressInfo).port}`]), JSON.stringify({ '100MillionFun': [admin.pk] }));
 
   const app = express();
   app.use(express.json({ limit: '2mb' }));
@@ -106,15 +116,26 @@ const donationsOf = (id = PROJECT) => getDb().prepare('SELECT * FROM lanacrowd_d
 
 beforeEach(() => {
   relayEvents.length = 0;
+  published.length = 0;
+  relayTakes = true;
   const db = getDb();
   db.prepare('DELETE FROM lanacrowd_projects').run();
   db.prepare('DELETE FROM lanacrowd_donations').run();
   db.prepare(`INSERT INTO app_settings (key, value) VALUES ('100millionideas_admins', ?)
-              ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(JSON.stringify([admin.pk]));
+              ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(JSON.stringify([admin.pk, lastingAdmin.pk]));
 });
 
 const adminAction = (by: Key, id: string, fields: Record<string, unknown>) =>
   signLanacrowdAction({ method: 'PATCH', url: `/api/lanacrowd/projects/${id}/admin`, action: LANACROWD_ACTION_ADMIN, id, fields }, by.hex);
+/** As the admin screen sends a change: the project as the screen has it, its decision, and the action naming that decision. */
+const screenProject = (id = PROJECT) => {
+  const r = row(id);
+  return { id: r.id, pubkey: r.pubkey, wallet: r.wallet, fiatGoal: r.fiat_goal, currency: r.currency, status: r.status, isHidden: !!r.is_hidden, isApproved: !!r.is_approved };
+};
+const change = (by: Key, fields: Record<string, unknown>, id = PROJECT) => {
+  const decision = signLanacrowdDecision(screenProject(id), fields, by.pk, by.hex);
+  return { event: adminAction(by, id, { ...fields, ...(decision ? { decision_id: decision.id } : {}) }), decision };
+};
 const deleteAction = (by: Key, id: string) =>
   signLanacrowdAction({ method: 'DELETE', url: `/api/lanacrowd/projects/${id}`, action: LANACROWD_ACTION_DELETE, id }, by.hex);
 
@@ -248,26 +269,26 @@ describe('PATCH /projects/:id/admin', () => {
 
   it('writes what the admin signed, and only that, once', async () => {
     seedProject();
-    const event = adminAction(admin, PROJECT, { is_hidden: true });
-    const r = await send('PATCH', `/projects/${PROJECT}/admin`, { event, is_hidden: false, is_approved: false, adminPubkey: stranger.pk });
+    const hide = change(admin, { is_hidden: true });
+    const r = await send('PATCH', `/projects/${PROJECT}/admin`, { ...hide, is_hidden: false, is_approved: false, adminPubkey: stranger.pk });
     assert.equal(r.status, 200);
     assert.deepEqual(flags(), [1, 1, 0, 0], 'the flags in the body count for nothing');
 
-    assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, { event: adminAction(admin, PROJECT, { is_hidden: false }) })).status, 200);
-    assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, { event })).status, 401, 'a replay does not undo what the admin did after');
+    assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, change(admin, { is_hidden: false }))).status, 200);
+    assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, hide)).status, 401, 'a replay does not undo what the admin did after');
     assert.deepEqual(flags(), [0, 1, 0, 0]);
   });
 
   it('handles each toggle of the admin screen, and two clicks in the same second', async () => {
     seedProject(PROJECT, { is_approved: 0 });
     for (const fields of [{ is_approved: true }, { is_approved: false }, { is_approved: true }]) {
-      assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, { event: adminAction(admin, PROJECT, fields) })).status, 200);
+      assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, change(admin, fields))).status, 200);
     }
     assert.equal(row().is_approved, 1);
-    assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, { event: adminAction(admin, PROJECT, { is_completed: true, completion_comment: 'Funds delivered' }) })).status, 200);
+    assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, change(admin, { is_completed: true, completion_comment: 'Funds delivered' }))).status, 200);
     assert.equal(row().is_completed, 1);
     assert.equal(row().completion_comment, 'Funds delivered');
-    assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, { event: adminAction(admin, PROJECT, { is_completed: false, completion_comment: null }) })).status, 200);
+    assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, change(admin, { is_completed: false, completion_comment: null }))).status, 200);
     assert.equal(row().is_completed, 0);
     assert.equal(row().completion_comment, null);
   });
@@ -278,6 +299,103 @@ describe('PATCH /projects/:id/admin', () => {
     assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, { event: adminAction(admin, PROJECT, { completion_comment: 5 }) })).status, 400);
     assert.equal((await send('PATCH', `/projects/${PROJECT}/admin`, { event: adminAction(admin, PROJECT, {}) })).status, 400);
     assert.deepEqual(flags(), [0, 1, 0, 0]);
+  });
+
+  describe('a decision on the relays', () => {
+    const tagsOf = (e: Event) => Object.fromEntries(e.tags.map((t) => [t[0], t[1]]));
+    const patch = (body: unknown) => send('PATCH', `/projects/${PROJECT}/admin`, body);
+
+    it('an approval names the address, wallet, goal and currency, as LetsBalance reads them', async () => {
+      seedProject(PROJECT, { is_approved: 0 });
+      assert.equal((await patch(change(admin, { is_approved: true }))).status, 200);
+      assert.equal(published.length, 1);
+      assert.equal(published[0].kind, 31235);
+      assert.equal(published[0].pubkey, admin.pk);
+      assert.deepEqual(published[0].tags, [['d', PROJECT], ['service', 'lanacrowd'], ['status', 'visible'], ['a', `31234:${owner.pk}:${PROJECT}`], ['wallet', WALLET], ['fiat_goal', '100'], ['currency', 'EUR']]);
+      assert.equal(published[0].content, '');
+    });
+
+    it('hiding, un-hiding and withdrawing an approval each leave their event', async () => {
+      seedProject();
+      for (const [fields, status] of [[{ is_hidden: true }, 'blocked'], [{ is_hidden: false }, 'visible'], [{ is_approved: false }, 'blocked']] as const) {
+        published.length = 0;
+        assert.equal((await patch(change(admin, fields))).status, 200);
+        assert.equal(tagsOf(published[0]).status, status, JSON.stringify(fields));
+      }
+      published.length = 0;
+      assert.equal((await patch(change(admin, { is_hidden: true }))).status, 200);
+      assert.equal((await patch(change(admin, { is_approved: true }))).status, 200);
+      assert.equal(tagsOf(published[1]).status, 'blocked', 'approving a hidden project does not show it');
+    });
+
+    it('completing and reopening both reach the relays, signed by the reviewer', async () => {
+      seedProject();
+      assert.equal((await patch(change(admin, { is_completed: true, completion_comment: 'Funds delivered' }))).status, 200);
+      assert.equal(published[0].kind, 60201);
+      assert.deepEqual(published[0].tags.slice(0, 4), [['service', 'lanacrowd'], ['project', PROJECT], ['p', admin.pk, 'reviewer'], ['status', 'completed']]);
+      assert.equal(published[0].tags[4][1], String(published[0].created_at));
+      assert.equal(published[0].content, 'Funds delivered');
+      assert.equal((await patch(change(admin, { is_completed: false, completion_comment: null }))).status, 200);
+      assert.deepEqual(published[1].tags, [['service', 'lanacrowd'], ['project', PROJECT], ['p', admin.pk, 'reviewer'], ['status', 'reopened']]);
+    });
+
+    it('a draft is decided in the database alone: nothing is shown anywhere yet', async () => {
+      seedProject(PROJECT, { is_approved: 0 });
+      getDb().prepare("UPDATE lanacrowd_projects SET status = 'draft'").run();
+      const sent = change(admin, { is_approved: true });
+      assert.equal(sent.decision, null);
+      assert.equal((await patch(sent)).status, 200);
+      assert.equal(row().is_approved, 1);
+      assert.equal(published.length, 0);
+    });
+
+    it('an admin whose key the signed 38888 does not name decides nothing', async () => {
+      seedProject();
+      const r = await patch(change(lastingAdmin, { is_hidden: true }));
+      assert.equal(r.status, 403);
+      assert.equal(r.body.code, 'NOT_A_DECIDER');
+      assert.deepEqual(flags(), [0, 1, 0, 0]);
+      assert.equal(published.length, 0);
+    });
+
+    it('when the relays do not take it, nothing changes here', async () => {
+      seedProject();
+      relayTakes = false;
+      const r = await patch(change(admin, { is_hidden: true }));
+      assert.equal(r.status, 502);
+      assert.equal(r.body.code, 'NOT_ON_RELAYS');
+      assert.deepEqual(flags(), [0, 1, 0, 0]);
+    });
+
+    it('refuses a change without its event, or with an event that says something else', async () => {
+      seedProject();
+      const refused = async (body: unknown, why: string) => {
+        assert.equal((await patch(body)).status, 400, why);
+        assert.deepEqual(flags(), [0, 1, 0, 0], why);
+        assert.equal(published.length, 0, why);
+      };
+      await refused({ event: adminAction(admin, PROJECT, { is_hidden: true }) }, 'no decision');
+      const approve = signLanacrowdDecision({ ...screenProject(), isApproved: false }, { is_approved: true }, admin.pk, admin.hex)!;
+      await refused({ event: adminAction(admin, PROJECT, { is_hidden: true, decision_id: approve.id }), decision: approve }, 'an approval sent for a hide');
+      const otherWallet = signLanacrowdDecision({ ...screenProject(), wallet: 'L'.padEnd(34, 'z') }, { is_approved: true }, admin.pk, admin.hex)!;
+      await refused({ event: adminAction(admin, PROJECT, { is_approved: true, decision_id: otherWallet.id }), decision: otherWallet }, 'an approval of other terms');
+      const hide = signLanacrowdDecision(screenProject(), { is_hidden: true }, admin.pk, admin.hex)!;
+      await refused({ event: adminAction(admin, PROJECT, { is_hidden: true, decision_id: 'f'.repeat(64) }), decision: hide }, 'the action names another decision');
+      await refused({ event: adminAction(admin, PROJECT, { is_hidden: true, is_completed: true }) }, 'two decisions at once');
+      const late = finalizeEvent({ kind: hide.kind, tags: hide.tags, content: '', created_at: now() - 90000 }, admin.sk);
+      await refused({ event: adminAction(admin, PROJECT, { is_hidden: true, decision_id: late.id }), decision: late }, 'an old decision');
+    });
+
+    it('takes the signers from the signed 38888, not from the admin list', async () => {
+      seedProject();
+      getDb().prepare('UPDATE kind_38888 SET trusted_signers = ?').run(JSON.stringify({ '100MillionFun': [lastingAdmin.pk] }));
+      try {
+        assert.equal((await patch(change(admin, { is_hidden: true }))).status, 403);
+        assert.equal((await patch(change(lastingAdmin, { is_hidden: true }))).status, 200);
+      } finally {
+        getDb().prepare('UPDATE kind_38888 SET trusted_signers = ?').run(JSON.stringify({ '100MillionFun': [admin.pk] }));
+      }
+    });
   });
 
   it('answers 404 for a project that does not exist', async () => {
