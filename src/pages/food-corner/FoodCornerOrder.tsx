@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Loader2, MapPin, MinusCircle, RefreshCw, Send, ShoppingBasket, Store } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Loader2, MapPin, MinusCircle, RefreshCw, Search, Send, ShoppingBasket, Store, X } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,7 @@ import {
   slovenianPluralForm,
   type FoodCornerListingCategory,
 } from "@/lib/foodCorner";
+import { normalizeSearchText, offerMatchesSearch } from "@/lib/foodCornerSearch";
 import type { FoodCornerNode } from "@/types/foodCorner";
 
 function firstImage(listing: FoodCornerListing): string | undefined {
@@ -325,14 +326,21 @@ export default function FoodCornerOrder() {
       ),
     [catalogByKind, lang],
   );
+  // Free-text search over product and supplier name (case and diacritics
+  // ignored). It only narrows what is SHOWN: the cart is built from `catalog`
+  // and `quantities` (keyed by offer ref), never from `filteredCatalog`, so an
+  // offer in the cart that the search hides keeps its quantity and its price
+  // in the total.
+  const [searchText, setSearchText] = useState("");
+  const normalizedSearch = normalizeSearchText(searchText);
   const filteredCatalog = useMemo(
     () =>
       catalogByKind.filter((l) => {
         const catOk = selectedCats.size === 0 || l.tags.some((t) => selectedCats.has(t));
         const ecoOk = selectedEco.size === 0 || l.eco.some((t) => selectedEco.has(t));
-        return catOk && ecoOk;
+        return catOk && ecoOk && offerMatchesSearch(normalizedSearch, l.title, producerByUnitRef.get(l.unitRef)?.name);
       }),
-    [catalogByKind, selectedCats, selectedEco],
+    [catalogByKind, selectedCats, selectedEco, normalizedSearch, producerByUnitRef],
   );
 
   // Estimated pickup date = the pickup that follows the next order cutoff. Read-only.
@@ -520,6 +528,7 @@ export default function FoodCornerOrder() {
     setQuantities({});
     setSelectedCats(new Set());
     setSelectedEco(new Set());
+    setSearchText("");
   };
 
   const updateQuantity = (listingRef: string, value: string) => {
@@ -810,6 +819,40 @@ export default function FoodCornerOrder() {
             </Button>
           </div>
 
+          {/* Search by product or supplier name — narrows the cards below, never the cart */}
+          {catalog.length > 0 && (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                inputMode="search"
+                enterKeyHint="search"
+                autoComplete="off"
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setSearchText("");
+                }}
+                placeholder={t("order.search.placeholder")}
+                aria-label={t("order.search.label")}
+                className="pl-9 pr-10"
+              />
+              {searchText && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0.5 top-1/2 h-9 w-9 -translate-y-1/2 text-muted-foreground"
+                  onClick={() => setSearchText("")}
+                  aria-label={t("order.search.clear")}
+                  title={t("order.search.clear")}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* Offer-category chooser: Produce (36500) vs Beauty & Care (36509) */}
           {showKindChooser && (
             <div className="flex flex-wrap items-center gap-1.5">
@@ -886,7 +929,7 @@ export default function FoodCornerOrder() {
               {filteredCatalog.length === 0 ? (
                 <Card>
                   <CardContent className="p-6 text-center text-muted-foreground">
-                    {t("order.filter.noMatch")}
+                    {normalizedSearch ? t("order.search.noMatch", { query: searchText.trim() }) : t("order.filter.noMatch")}
                   </CardContent>
                 </Card>
               ) : (
