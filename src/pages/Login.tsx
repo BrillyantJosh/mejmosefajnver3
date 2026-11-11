@@ -2,7 +2,8 @@ import { convertWifToIds } from '@/lib/crypto';
 import { FrozenOutError, type FreezeVerdict } from '@/lib/ownFreezeGate';
 import { FrozenOutScreen } from '@/components/FrozenOutScreen';
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { safeReturnPath } from '@/lib/loginReturn';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +34,9 @@ const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { parameters, refetch } = useSystemParameters();
+  // Where to go after signing in: the page that sent the person here (?next=), else home.
+  const [searchParams] = useSearchParams();
+  const returnTo = safeReturnPath(searchParams.get('next'));
 
   // Force-refresh KIND 38888 when login page loads to ensure fresh relay/system data
   useEffect(() => {
@@ -76,7 +80,7 @@ const Login = () => {
         title: "Login successful",
         description: `Welcome to LanaCoin environment. Session valid for ${rememberMe ? '90' : '30'} days.`
       });
-      navigate('/');
+      navigate(returnTo);
     } catch (error) {
       // A standing commission decision is not a failed sign-in. The person is
       // shown what was decided and how to come back, instead of an error that

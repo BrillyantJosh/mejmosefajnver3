@@ -1,4 +1,5 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { loginReturningTo } from "@/lib/loginReturn";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,9 @@ const isPastOccurrence = (entry: { start: Date; end?: Date }): boolean =>
 export default function PublicEvent() {
   const { dTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Every sign-in button here comes back to this event once signed in.
+  const signInHere = () => navigate(loginReturningTo(location.pathname));
   const { parameters } = useSystemParameters();
   const { t } = useTranslation(eventsTranslations);
 
@@ -93,7 +97,7 @@ export default function PublicEvent() {
           </Button>
           <Button 
             variant="outline"
-            onClick={() => navigate('/login')} 
+            onClick={signInHere} 
             className="w-full"
           >
             <LogIn className="h-4 w-4 mr-2" />
@@ -362,7 +366,7 @@ export default function PublicEvent() {
                     </div>
                     <Button 
                       className="w-full"
-                      onClick={() => navigate('/login')}
+                      onClick={signInHere}
                     >
                       <Wallet className="h-4 w-4 mr-2" />
                       {event.fiatValue ? t('card.pay', { amount: String(event.fiatValue) }) : t('card.donate')} {t('public.loginRequired')}
@@ -459,7 +463,7 @@ export default function PublicEvent() {
                 <p className="text-sm text-muted-foreground">{t('public.loginToRegister')}</p>
                 <Button 
                   className="w-full"
-                  onClick={() => navigate('/login')}
+                  onClick={signInHere}
                 >
                   <LogIn className="h-4 w-4 mr-2" />
                   {t('public.loginButton')}
