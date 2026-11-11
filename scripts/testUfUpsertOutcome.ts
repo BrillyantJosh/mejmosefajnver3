@@ -50,11 +50,25 @@ console.log('— what the server\'s answer means to the person —');
   }
 }
 
+console.log('— an edit that could not be applied yet —');
+{
+  for (const sl of [false, true]) {
+    const lang = sl ? 'SL' : 'EN';
+    const o = upsertOutcome(503, 'Your wallet list could not be read just now — the receiving wallet was not changed yet', sl, true);
+    check(`${lang} edit 503 → pending, about the changes, not about membership`,
+      o.kind === 'pending' && !/Lana8Wonder|membership|članstv/.test(o.message) && (sl ? /Spremembe so objavljene/.test(o.message) : /Your changes are published/.test(o.message)), o);
+    check(`${lang} edit 500 → the same`, upsertOutcome(500, 'x', sl, true).kind === 'pending');
+    check(`${lang} edit 403 (not your wallet) → refused, with the server's reason`,
+      (() => { const r = upsertOutcome(403, 'This wallet is not one of your registered wallets.', sl, true); return r.kind === 'refused' && /registered wallets/.test(r.message); })());
+    check(`${lang} a new request's 503 still speaks of membership`, /Lana8Wonder/.test((upsertOutcome(503, '', sl) as any).message));
+  }
+}
+
 console.log('— the form —');
 {
   const form = readFileSync(new URL('../src/pages/unconditional-financing/UFRequestForm.tsx', import.meta.url), 'utf8');
   check('the answer is read through upsertOutcome, not through one status code',
-    /import \{ upsertOutcome \} from "@\/lib\/ufUpsertOutcome"/.test(form) && /upsertOutcome\(upsert\.status, body\?\.error, sl\)/.test(form) && !/res\.status === 403/.test(form));
+    /import \{ upsertOutcome \} from "@\/lib\/ufUpsertOutcome"/.test(form) && /upsertOutcome\(upsert\.status, body\?\.error, sl, isEdit\)/.test(form) && !/res\.status === 403/.test(form));
   check('any answer that is not 2xx is looked at', /if \(upsert && !upsert\.ok\) \{/.test(form));
   check('a refusal stops the form and keeps the person on it', /if \(outcome\.kind === "refused"\) throw new Error\(outcome\.message\);/.test(form));
   check('"cannot tell" is a warning, then the form is left — it never reaches the success toast',

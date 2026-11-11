@@ -88,9 +88,10 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
     wallets.find((w) => w.walletType === "Wallet");
   // A new request may receive on ANY of the author's registered wallets
   // (KIND 30889). Frozen ones are left out — financing cannot be properly
-  // received on them. On an EDIT the wallet is NOT reconsidered at all: the
-  // request keeps the address it was published with, so correcting the text can
-  // never silently redirect where contributions arrive.
+  // received on them. On an EDIT the request keeps its address unless the owner
+  // deliberately picks another of their OWN registered wallets (Brilly,
+  // 11. 11. 2026); the server checks the choice against the Lana Registrar's
+  // record (server/lib/ufWallet.ts), so correcting the text never moves it.
   const [chosenWalletId, setChosenWalletId] = useState("");
   // Only these types can receive a financing (same trio the wallet page treats
   // as spendable everyday wallets) — LanaPays.Us, Retail, Knights and
@@ -103,8 +104,8 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
   const chosenWallet =
     selectableWallets.find((w) => w.walletId === chosenWalletId) || mainWallet;
 
-  /** Where the funds arrive: fixed at first publication, never changed by an edit. */
-  const receivingWallet = existing ? existing.wallet : chosenWallet?.walletId || "";
+  /** Where the funds arrive: on an edit the published address, unless the owner picked another of their own. */
+  const receivingWallet = existing ? chosenWalletId || existing.wallet : chosenWallet?.walletId || "";
 
   // ── Form state (prefilled from the request being edited) ──
   const [requestType, setRequestType] = useState<UfRequestType>(
@@ -521,7 +522,7 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
       }
       if (upsert && !upsert.ok) {
         const body = await upsert.json().catch(() => ({}));
-        const outcome = upsertOutcome(upsert.status, body?.error, sl);
+        const outcome = upsertOutcome(upsert.status, body?.error, sl, isEdit);
         if (outcome.kind === "refused") throw new Error(outcome.message);
         if (outcome.kind === "pending") {
           toast.warning(outcome.message, { duration: 20000 });
@@ -963,14 +964,54 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
         </CardHeader>
         <CardContent className="space-y-3">
           {isEdit ? (
-            // An existing request keeps the address it was published with.
-            <div className="rounded-lg border bg-muted/40 p-3">
-              <p className="font-mono text-sm break-all">{receivingWallet}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {sl
-                  ? "Denarnica tega zahtevka ostane nespremenjena — urejanje besedila je ne premakne."
-                  : "This request keeps its receiving wallet — editing the text does not change it."}
-              </p>
+            // The published address stays unless the owner picks another of their own wallets.
+            <div className="space-y-3">
+              <div className="rounded-lg border bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">{sl ? "Zdaj prejema" : "Receiving now"}</p>
+                <p className="font-mono text-sm break-all">{existing?.wallet}</p>
+              </div>
+              {walletsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {sl ? "Nalaganje denarnic ..." : "Loading wallets..."}
+                </div>
+              ) : selectableWallets.length > 0 ? (
+                <div className="space-y-2">
+                  <Label htmlFor="receivingWallet">
+                    {sl ? "Zamenjaj z drugo svojo denarnico" : "Change to another of your wallets"}
+                  </Label>
+                  <Select value={receivingWallet} onValueChange={setChosenWalletId}>
+                    <SelectTrigger id="receivingWallet">
+                      <SelectValue placeholder={sl ? "Izberi denarnico" : "Choose a wallet"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectableWallets.map((w) => (
+                        <SelectItem key={w.walletId} value={w.walletId}>
+                          <span className="flex flex-col items-start">
+                            <span className="text-sm">
+                              {w.walletType}
+                              {w.walletId === existing?.wallet ? (sl ? " · zdaj" : " · now") : ""}
+                              {w.note ? ` — ${w.note}` : ""}
+                            </span>
+                            <span className="font-mono text-xs text-muted-foreground">{w.walletId}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {sl
+                      ? "Izbereš lahko le eno od svojih registriranih denarnic. Nova vplačila bodo prihajala nanjo; kar je že prišlo, ostane, kjer je."
+                      : "You can only choose one of your own registered wallets. New contributions will arrive there; what has already arrived stays where it is."}
+                  </p>
+                </div>
+              ) : null}
+              {receivingWallet !== existing?.wallet && (
+                <p className="text-sm font-medium text-foreground">
+                  {sl ? "Ko shraniš, bodo nova vplačila prihajala na:" : "Once you save, new contributions will arrive at:"}{" "}
+                  <span className="font-mono break-all">{receivingWallet}</span>
+                </p>
+              )}
             </div>
           ) : walletsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1012,8 +1053,8 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
                 <p className="font-mono text-sm break-all">{receivingWallet}</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {sl
-                    ? "Prejeta sredstva bodo prišla na to denarnico. Po odprtju financiranja je ni več mogoče zamenjati."
-                    : "Contributions will arrive here. Once funding opens, this can no longer be changed."}
+                    ? "Prejeta sredstva bodo prišla na to denarnico. Po odprtju financiranja jo lahko zamenjaš le z drugo svojo registrirano denarnico."
+                    : "Contributions will arrive here. Once funding opens, it can only be changed to another of your own registered wallets."}
                 </p>
               </div>
 

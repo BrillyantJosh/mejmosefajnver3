@@ -22,8 +22,20 @@ export type UpsertOutcome =
   | { kind: "pending"; message: string }
   | { kind: "refused"; message: string };
 
-export function upsertOutcome(status: number, serverMessage: unknown, sl: boolean): UpsertOutcome {
+export function upsertOutcome(status: number, serverMessage: unknown, sl: boolean, isEdit = false): UpsertOutcome {
   if (status >= 200 && status < 300) return { kind: "listed" };
+
+  // An EDIT of a request that is already listed: nothing about membership. The
+  // usual reason is a change of receiving wallet the server could not check
+  // against the registry just now; the relay re-index applies it once it can.
+  if (isEdit && (status === 503 || status === 429 || status >= 500)) {
+    return {
+      kind: "pending",
+      message: sl
+        ? "Spremembe so objavljene, vendar jih strežnik zdaj ni mogel uveljaviti. Uveljavil jih bo sam v približno pol ure. Ne objavljaj jih še enkrat."
+        : "Your changes are published, but the server could not apply them right now. It will apply them on its own within about half an hour. Please do not publish them again.",
+    };
+  }
 
   if (status === 503) {
     return {

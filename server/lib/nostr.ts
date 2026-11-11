@@ -4,7 +4,8 @@
  */
 
 import { verifyEvent } from 'nostr-tools';
-import { computeEligibility } from './ufEligibility.js';
+import { computeEligibility, relaysOf } from './ufEligibility.js';
+import { checkOwnReceivingWallet } from './ufWallet.js';
 import { isWalletPinned, resolveKnownFundingOpensAt, resolveNewRequestTiming } from './ufMaturing.js';
 import WebSocket from 'ws';
 import { poolQuery } from './relayPool.js';
@@ -1586,9 +1587,25 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
           });
           // The receiving address may still change while the request matures,
           // but is PINNED once funding is open — an edit must never redirect
-          // contributions away from the address people are giving to.
+          // contributions away from the address people are giving to — except to
+          // another of the owner's own registered wallets, and only from a version
+          // newer than the one the database holds (an older copy on a lagging relay
+          // must not move it back). Not checkable now = this version waits whole
+          // (nothing of it is written, so the next scan still sees it as newer and asks again).
           if (existing.wallet && isWalletPinned(existing.funding_opens_at, nowSec)) {
-            wallet = existing.wallet;
+            if (wallet && wallet !== existing.wallet && evt.created_at > (existing.nostr_created_at || 0)) {
+              const verdict = await checkOwnReceivingWallet(db, relaysOf(db), evt.pubkey, wallet, queryEventsWithRelayStatus);
+              if ('unknown' in verdict) {
+                console.warn(`⚠️ indexUnconditionalFinancingFromRelays: ${evt.dTag} asks for another receiving wallet, which cannot be checked now (${verdict.unknown}) — waits for the next scan`);
+                continue;
+              }
+              if (verdict.ok !== true) {
+                console.warn(`⚠️ indexUnconditionalFinancingFromRelays: ${evt.dTag} asks for a receiving wallet that is not the owner's own usable wallet — kept the old one (${verdict.reason})`);
+                wallet = existing.wallet;
+              }
+            } else {
+              wallet = existing.wallet;
+            }
           }
         } else {
           // A request this database has not seen.

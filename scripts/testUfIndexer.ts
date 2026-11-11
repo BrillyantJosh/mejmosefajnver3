@@ -59,6 +59,7 @@ const days = (seconds: number) => (seconds / DAY).toFixed(2);
 interface Key { sk: Uint8Array; pk: string }
 const newKey = (): Key => { const sk = generateSecretKey(); return { sk, pk: getPublicKey(sk) }; };
 const service = newKey();   // stands in for the Lana8Wonder service key (signs every KIND 88888 plan)
+const registrar = newKey(); // stands in for the Lana Registrar (signs wallet lists, KIND 30889) — known, as in production
 
 // ── fake relays that answer like real ones ─────────────────
 interface FakeRelay {
@@ -188,7 +189,7 @@ function freshDb(o: DbOpts = {}) {
   initializeSchema(db);
   db.prepare(`INSERT INTO kind_38888 (event_id, pubkey, created_at, relays, electrum_servers, exchange_rates, split, trusted_signers, raw_event)
               VALUES ('test', 'x', ?, ?, '[]', '{}', '9', ?, ?)`)
-    .run(now, JSON.stringify(o.relayUrls ?? [o.relayUrl ?? RELAY_URL]), JSON.stringify({ Lana8Wonder: [service.pk] }), JSON.stringify(o.calendar ?? calendarEvent(now, DAY)));
+    .run(now, JSON.stringify(o.relayUrls ?? [o.relayUrl ?? RELAY_URL]), JSON.stringify({ Lana8Wonder: [service.pk], LanaRegistrar: [registrar.pk] }), JSON.stringify(o.calendar ?? calendarEvent(now, DAY)));
   setSetting(db, 'unconditional_financing_maturing_days', String(MATURING_DAYS));
   if (o.lastScanAt) setSetting(db, 'unconditional_financing_last_indexed_at', String(o.lastScanAt));
   return db;

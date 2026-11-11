@@ -22,7 +22,8 @@ import { verifyEvent } from 'nostr-tools';
 import { getDb } from '../db/connection.js';
 import { queryEventsWithRelayStatus } from '../lib/nostr.js';
 import { getUfSettings, maxAmountFor } from '../lib/ufSettings.js';
-import { computeEligibility } from '../lib/ufEligibility.js';
+import { computeEligibility, relaysOf } from '../lib/ufEligibility.js';
+import { checkOwnReceivingWallet } from '../lib/ufWallet.js';
 import { UF_FUTURE_SKEW_SECONDS, UF_PAST_SKEW_SECONDS } from '../lib/ufMaturing.js';
 import {
   UF_ACTION_DELETE_REQUEST,
@@ -398,11 +399,21 @@ router.post('/requests/upsert', async (req, res) => {
 
     // Where the money lands. While the request matures it may still change (no
     // funds are in flight and the restarted window gives the community a fresh
-    // look at it); once funding is open it is PINNED, so an edit can never
-    // redirect contributions away from the address people are giving to.
+    // look at it). Once funding is open it is PINNED — an edit can never redirect
+    // contributions away from the address people are giving to — except to
+    // another of the OWNER'S OWN registered wallets, checked against the Lana
+    // Registrar's record (server/lib/ufWallet.ts; Brilly, 11. 11. 2026).
     let wallet = getTag(evt, 'wallet') || '';
     if (existing && existing.wallet && nowSec >= existing.funding_opens_at) {
-      wallet = existing.wallet;
+      if (wallet && wallet !== existing.wallet) {
+        const verdict = await checkOwnReceivingWallet(db, relaysOf(db), evt.pubkey, wallet, queryEventsWithRelayStatus);
+        if ('unknown' in verdict) {
+          return res.status(503).json({ error: `Your wallet list could not be read just now (${verdict.unknown}) — the receiving wallet was not changed yet` });
+        }
+        if (verdict.ok === false) return res.status(403).json({ error: verdict.reason });
+      } else {
+        wallet = existing.wallet;
+      }
     }
 
     let publishedAt: number;
