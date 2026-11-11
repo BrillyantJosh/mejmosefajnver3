@@ -39,6 +39,8 @@ import { useHeaderRelayWarnings } from "@/hooks/useHeaderRelayWarnings";
 import { useNostrWallets } from "@/hooks/useNostrWallets";
 import InstallPromptBanner from "./InstallPromptBanner";
 import InstallAppDialog from "./InstallAppDialog";
+// TEMPORARY campaign (21. 11. 2026) — delete with src/campaigns/mejmoSeFajn2026 after the event.
+import MejmoInvite from "@/campaigns/mejmoSeFajn2026/MejmoInvite";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -702,6 +704,9 @@ export default function MainLayout() {
       <main className="container px-4 py-6">
         <Outlet />
       </main>
+
+      {/* TEMPORARY campaign (21. 11. 2026) — delete after the event. */}
+      <MejmoInvite />
 
       {/* Version indicator for debugging — under any bottom bar (z-50), which
           on a phone it used to sit on top of, over the last tab's name. */}
