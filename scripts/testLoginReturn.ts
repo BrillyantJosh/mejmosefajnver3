@@ -40,9 +40,14 @@ console.log('— the pages —');
   const event = readFileSync(new URL('../src/pages/PublicEvent.tsx', import.meta.url), 'utf8');
   check('sign-in goes to the checked "next", not always home',
     /const returnTo = safeReturnPath\(searchParams\.get\('next'\)\);/.test(login) && /navigate\(returnTo\);/.test(login) && !/navigate\('\/'\);/.test(login));
-  check('every sign-in button on the event page comes back to it',
+  check('every sign-in button on the event page leads, once signed in, to the event inside the app (where registering happens)',
     !/navigate\('\/login'\)/.test(event) && (event.match(/onClick=\{signInHere\}/g) || []).length === 3
-      && /const signInHere = \(\) => navigate\(loginReturningTo\(location\.pathname\)\);/.test(event));
+      && /const inAppEventPath = `\/events\/detail\/\$\{encodeURIComponent\(decodedDTag\)\}`;/.test(event)
+      && /const signInHere = \(\) => navigate\(loginReturningTo\(inAppEventPath\)\);/.test(event));
+  check('someone already signed in is sent to the event inside the app — never asked to sign in again (the loop)',
+    /if \(session && decodedDTag\) return <Navigate to=\{inAppEventPath\} replace \/>;/.test(event)
+      && event.indexOf('return <Navigate to={inAppEventPath}') < event.indexOf('if (loading)'));
+  check('…and that is the app’s own event page', /<Route path="detail\/:dTag" element=\{<EventDetail \/>\} \/>/.test(readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')));
 }
 
 console.log(failures === 0 ? '\n✅ all passed' : `\n❌ ${failures} failed`);

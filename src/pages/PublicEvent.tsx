@@ -1,4 +1,5 @@
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useNavigate, Navigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { loginReturningTo } from "@/lib/loginReturn";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,14 +28,21 @@ const isPastOccurrence = (entry: { start: Date; end?: Date }): boolean =>
 export default function PublicEvent() {
   const { dTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
-  // Every sign-in button here comes back to this event once signed in.
-  const signInHere = () => navigate(loginReturningTo(location.pathname));
+  const { session } = useAuth();
   const { parameters } = useSystemParameters();
   const { t } = useTranslation(eventsTranslations);
 
   // Decode the URL-encoded dTag
   const decodedDTag = dTag ? decodeURIComponent(dTag) : '';
+
+  // This page is the PUBLIC face of an event and never knows who is signed in;
+  // registering and paying happen on the event's page inside the app. So a sign-in
+  // button here lands you there once signed in, and someone already signed in who
+  // opens a shared link goes straight there too — coming back to this page after
+  // signing in only asked for sign-in again (Brilly, 11. 11. 2026: "spet zahteva
+  // prijavo in sem v loopu").
+  const inAppEventPath = `/events/detail/${encodeURIComponent(decodedDTag)}`;
+  const signInHere = () => navigate(loginReturningTo(inAppEventPath));
   
   const relays = parameters?.relays && parameters.relays.length > 0
     ? parameters.relays
@@ -67,6 +75,8 @@ export default function PublicEvent() {
     if (event?.organizerPubkey) return `${event.organizerPubkey.slice(0, 8)}...`;
     return 'Unknown';
   };
+
+  if (session && decodedDTag) return <Navigate to={inAppEventPath} replace />;
 
   if (loading) {
     return (
