@@ -116,7 +116,7 @@ export default function MejmoInvite() {
 
   const text =
     mood === "going"
-      ? sl ? "Komaj čakamo, da se vidimo. Pripravi plesne copate in nasmeh 💃🕺" : "We can't wait to see you. Bring your dancing shoes and your smile 💃🕺"
+      ? sl ? "Komaj čakamo, da se vidimo. Pripravi plesne čevlje in nasmeh do ušes 💃🏻🕺🏻" : "We can't wait to see you. Bring your dancing shoes and an ear-to-ear smile 💃🏻🕺🏻"
       : mood === "declined"
         ? sl
           ? `Rekel/a si, da ne prideš. Ampak ${timeLeftToChange(days, true)}, da se premisliš 😉 Možni stranski učinki: nenadzorovan smeh in nova poznanstva.`
