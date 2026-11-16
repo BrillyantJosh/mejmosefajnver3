@@ -30,6 +30,7 @@ import {
 } from "@/hooks/useNostrProfilesCacheBulk";
 import { useUfSettings } from "@/hooks/useUFSettings";
 import { formatDays } from "@/lib/ufSettings";
+import { ufIsFullyFunded, ufReadsFunded } from "@/lib/ufFunded";
 
 /**
  * "All" first and selected by default: the phases split a small set of requests
@@ -67,9 +68,14 @@ const UfRequestCard = ({ request, profile, sl }: UfRequestCardProps) => {
   const totalFunded = request.totalFunded || 0;
   const totalRepaid = request.totalRepaid || 0;
   const financiers = request.financierCount || 0;
+  // The goal is reached: "Financiran", and no "Prispevaj" (Jasna, Brilly 16. 11. 2026;
+  // src/lib/ufFunded.ts). Below the goal the card never rounds up to "100%".
+  const isFunded = ufReadsFunded(request, totalFunded);
   const fundedPercentage =
     goalAmount > 0
-      ? Math.min(Math.round((totalFunded / goalAmount) * 100), 100)
+      ? ufIsFullyFunded(totalFunded, goalAmount)
+        ? 100
+        : Math.min(Math.round((totalFunded / goalAmount) * 100), 99)
       : 0;
 
   const daysLeft = ufMaturingDaysLeft(request.fundingOpensAt);
@@ -104,6 +110,12 @@ const UfRequestCard = ({ request, profile, sl }: UfRequestCardProps) => {
               {request.title?.trim()?.charAt(0)?.toUpperCase() || "?"}
             </span>
           </div>
+        )}
+        {isFunded && (
+          <Badge className="absolute top-3 right-3 bg-green-600 hover:bg-green-600 text-white gap-1.5 shadow">
+            <CheckCircle className="h-4 w-4" />
+            {sl ? "Financiran" : "Funded"}
+          </Badge>
         )}
         {request.phase === "repaid" && (
           <div className="absolute inset-0 bg-green-600/20 flex items-center justify-center">
@@ -211,6 +223,15 @@ const UfRequestCard = ({ request, profile, sl }: UfRequestCardProps) => {
                 ? "Odpre se kmalu"
                 : "Opens soon"}
           </Badge>
+        ) : request.phase === "repaying" && isFunded ? (
+          <Button
+            disabled
+            aria-disabled="true"
+            className="w-full bg-green-600 text-white disabled:opacity-60"
+          >
+            <CheckCircle className="h-4 w-4 mr-2" />
+            {sl ? "Financiran" : "Funded"}
+          </Button>
         ) : request.phase === "repaying" ? (
           <Button
             className="w-full bg-green-600 hover:bg-green-700 text-white"

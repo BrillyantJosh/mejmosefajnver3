@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Wallet, Loader2, Clock, AlertCircle, Snowflake, Info } from "lucide-react";
+import { ArrowLeft, Wallet, Loader2, Clock, AlertCircle, Snowflake, Info, CheckCircle } from "lucide-react";
+import { ufReadsFunded } from "@/lib/ufFunded";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/i18n/I18nContext";
@@ -137,8 +138,12 @@ const UFContribute = () => {
 
   const selectedWallet = wallets.find((w) => w.walletId === selectedWalletId);
 
+  // The goal is reached: "Financiran", no payment form (src/lib/ufFunded.ts).
+  const isFunded = ufReadsFunded(request, detail?.totalFunded ?? request.totalFunded);
+
   const canContinue =
     request.fundable &&
+    !isFunded &&
     !!session?.nostrHexId &&
     !!selectedWalletId &&
     parsedFiat > 0 &&
@@ -212,6 +217,25 @@ const UFContribute = () => {
                       : request.approval !== "approved"
                         ? sl ? "Financirati ga bo mogoče, ko ga skrbnik odobri." : "It can be funded once an administrator approves it."
                         : sl ? "Financiranje tega zahtevka ni odprto." : "Funding for this request is not open."}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : isFunded ? (
+          /* The goal is reached: no new contributions (Jasna, Brilly 16. 11. 2026). */
+          <Card className="border-green-500/30 bg-green-500/10">
+            <CardContent className="p-6">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="h-6 w-6 text-green-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-green-700 dark:text-green-500">
+                    {sl ? "Financiran" : "Funded"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {sl
+                      ? `Zahtevek je dosegel svoj cilj (${request.fiatGoal.toFixed(2)} ${currency}), zato novih prispevkov ni več mogoče dati.`
+                      : `This request has reached its goal (${request.fiatGoal.toFixed(2)} ${currency}), so no new contributions can be made.`}
                   </p>
                 </div>
               </div>

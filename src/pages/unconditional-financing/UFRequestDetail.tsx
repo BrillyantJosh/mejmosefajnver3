@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import {
   Archive,
   ArrowLeft,
+  CheckCircle,
   Clock,
   ExternalLink,
   HandCoins,
@@ -35,6 +36,7 @@ import {
   type UfFinancier,
   type UfRepayment,
 } from "@/hooks/useUFData";
+import { ufContributeCta, ufReadsFunded } from "@/lib/ufFunded";
 import UFComments from "./UFComments";
 import UFAdminBar from "./UFAdminBar";
 
@@ -139,6 +141,10 @@ const UFRequestDetail = () => {
   }
   const fiatGoal = request.fiatGoal || 0;
   const percentFunded = fiatGoal > 0 ? (totalFunded / fiatGoal) * 100 : 0;
+  // The goal is reached: the request reads "Financiran" and "Prispevaj" is no longer active
+  // (Jasna, Brilly 16. 11. 2026; src/lib/ufFunded.ts). Repaying is not touched.
+  const isFunded = ufReadsFunded(request, totalFunded);
+  const contributeCta = ufContributeCta(request, totalFunded, isRequester);
   const requesterProfile = profiles.get(request.pubkey);
 
   const fmtFiat = (n: number) => `${n.toFixed(2)} ${request.currency}`;
@@ -165,7 +171,12 @@ const UFRequestDetail = () => {
         );
       }
       case "repaying":
-        return (
+        return isFunded ? (
+          <Badge className="bg-green-600 text-white hover:bg-green-600 gap-1">
+            <CheckCircle className="h-3 w-3" />
+            {sl ? "Financiran" : "Funded"}
+          </Badge>
+        ) : (
           <Badge className="bg-green-500/15 text-green-600 dark:text-green-400 border border-green-500/30 hover:bg-green-500/15">
             {sl ? "Odprto za financiranje" : "Open for financing"}
           </Badge>
@@ -465,14 +476,25 @@ const UFRequestDetail = () => {
 
               {/* CTAs */}
               <div className="space-y-3 mt-6">
-                {/* The server's own rule: approved, not archived, open — nothing else can be funded. */}
-                {request.fundable && !isRequester && (
+                {/* The server's own rule: approved, not archived, open — nothing else can be funded.
+                    And once the goal is reached, "Financiran" stands in its place, not active. */}
+                {contributeCta === "contribute" && (
                   <Button
                     className="w-full bg-green-500 hover:bg-green-600 text-white"
                     onClick={() => navigate(`/unconditional-financing/contribute/${request.id}`)}
                   >
                     <HandCoins className="h-4 w-4 mr-2" />
                     {sl ? "Prispevaj" : "Contribute"}
+                  </Button>
+                )}
+                {contributeCta === "funded" && (
+                  <Button
+                    disabled
+                    aria-disabled="true"
+                    className="w-full bg-green-600 text-white disabled:opacity-60"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    {sl ? "Financiran" : "Funded"}
                   </Button>
                 )}
                 {isRequester && totalFunded > 0 && !request.isRepaid && (

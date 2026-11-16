@@ -44,7 +44,11 @@ export interface UfRequest {
   approval: 'pending' | 'approved';
   approvedAt: number | null;
   approvedEventId: string | null;
-  /** May a contribution be made right now? The same rule the server enforces when it is recorded. */
+  /**
+   * May a contribution be made right now? The same rule the server enforces when it is recorded.
+   * A request funded to its goal is still `fundable` here — the app closes it itself, before any
+   * LANA moves (src/lib/ufFunded.ts says why the server does not).
+   */
   fundable: boolean;
   nostrCreatedAt: number;
   totalFunded: number;

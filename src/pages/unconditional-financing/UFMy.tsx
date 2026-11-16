@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Archive, Clock, HandCoins, Heart, ImageOff, Pencil, PlusCircle, Undo2, Wallet } from "lucide-react";
+import { Archive, CheckCircle, Clock, HandCoins, Heart, ImageOff, Pencil, PlusCircle, Undo2, Wallet } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/i18n/I18nContext";
 import {
@@ -15,6 +15,7 @@ import {
   UfMySupport,
   UfMyFinancing,
 } from "@/hooks/useUFData";
+import { ufReadsFunded } from "@/lib/ufFunded";
 
 /**
  * Unconditional Financing — "My" overview.
@@ -51,6 +52,14 @@ const PhaseBadge = ({ phase, sl }: { phase: UfPhase; sl: boolean }) => {
           : "bg-amber-500 hover:bg-amber-500 text-white";
   return <Badge className={`${cls} text-xs`}>{phaseLabel(phase, sl)}</Badge>;
 };
+
+/** The goal is reached (src/lib/ufFunded.ts): no new contributions, repaying goes on as before. */
+const FundedBadge = ({ sl }: { sl: boolean }) => (
+  <Badge className="bg-green-600 hover:bg-green-600 text-white text-xs gap-1">
+    <CheckCircle className="h-3 w-3" />
+    {sl ? "Financiran" : "Funded"}
+  </Badge>
+);
 
 const CoverThumb = ({ src, alt }: { src: string | null; alt: string }) => (
   <div className="w-16 h-16 rounded bg-muted flex-shrink-0 overflow-hidden flex items-center justify-center">
@@ -96,6 +105,7 @@ const SupportCard = ({ support, sl }: { support: UfMySupport; sl: boolean }) => 
                 {request.title}
               </Link>
               <PhaseBadge phase={request.phase} sl={sl} />
+              {ufReadsFunded(request, request.totalFunded) && <FundedBadge sl={sl} />}
               {request.isArchived && (
                 <Badge variant="outline" className="text-xs gap-1">
                   <Archive className="h-3 w-3" />
@@ -177,6 +187,7 @@ const FinancingCard = ({
                 {request.title}
               </Link>
               <PhaseBadge phase={request.phase} sl={sl} />
+              {ufReadsFunded(request, financing.totalFunded) && <FundedBadge sl={sl} />}
               {request.isArchived && (
                 <Badge variant="outline" className="text-xs gap-1">
                   <Archive className="h-3 w-3" />

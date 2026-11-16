@@ -14,6 +14,7 @@ import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
 import { useLang } from "@/i18n/I18nContext";
+import { ufPreSendRefusal } from "@/lib/ufFunded";
 
 interface ContributeState {
   selectedWalletId: string;
@@ -299,23 +300,26 @@ const UFContributePrivateKey = () => {
     setIsSending(true);
 
     // Right before any money moves, ask the server again: an administrator may have archived the
-    // request, or its approval may no longer hold, since this page was opened — and the receiving
-    // wallet must still be the one shown. Anything else, or no answer: nothing is sent.
+    // request, or its approval may no longer hold, or others may have funded it to its goal since
+    // this page was opened (src/lib/ufFunded.ts) — and the receiving wallet must still be the one
+    // shown. Anything else, or no answer: nothing is sent.
     try {
       const fresh = await fetch(`${UF_API}/requests/${encodeURIComponent(request.id)}`)
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null);
-      const now = fresh?.request;
-      if (!now?.fundable || now.wallet !== request.wallet || now.currency !== request.currency) {
+      const refusal = ufPreSendRefusal(fresh, { wallet: request.wallet, currency: request.currency });
+      if (refusal) {
         toast({
           title: sl ? "Plačilo ni bilo poslano" : "Nothing was sent",
-          description: !now
+          description: refusal === "unchecked"
             ? sl ? "Stanja zahtevka zdaj ni bilo mogoče preveriti. Poskusi znova čez trenutek." : "The request could not be checked just now. Please try again in a moment."
-            : now.isArchived
+            : refusal === "archived"
               ? sl ? "Zahtevek je bil medtem arhiviran in ga ni več mogoče financirati." : "The request was archived meanwhile and can no longer be funded."
-              : !now.fundable
+              : refusal === "not_fundable"
                 ? sl ? "Zahtevka zdaj ni mogoče financirati (čaka na odobritev ali ni odprt)." : "The request cannot be funded right now (waiting for approval, or not open)."
-                : sl ? "Zahtevek se je medtem spremenil. Odpri ga znova in preveri podatke." : "The request changed meanwhile. Open it again and check the details.",
+                : refusal === "funded"
+                  ? sl ? "Zahtevek je medtem dosegel svoj cilj — financiran je, zato novih prispevkov ni več mogoče dati." : "The request reached its goal meanwhile — it is funded, so no new contributions can be made."
+                  : sl ? "Zahtevek se je medtem spremenil. Odpri ga znova in preveri podatke." : "The request changed meanwhile. Open it again and check the details.",
           variant: "destructive",
         });
         setIsSending(false);
