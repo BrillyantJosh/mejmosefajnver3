@@ -9,12 +9,16 @@ import { ArrowLeft, Users, Calendar, Edit, QrCode } from "lucide-react";
 import { format } from "date-fns";
 import { queryEventsViaServer } from "@/lib/relayReadViaServer";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdmin } from "@/contexts/AdminContext";
+import { useTranslation } from '@/i18n/I18nContext';
+import eventsTranslations from '@/i18n/modules/events';
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { LanaEvent, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNostrEventRegistrations, EventRegistration } from "@/hooks/useNostrEventRegistrations";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
 
 function AttendeeRow({ registration }: { registration: EventRegistration }) {
+  const { t } = useTranslation(eventsTranslations);
   const { profile, isLoading } = useNostrProfileCache(registration.pubkey);
   
   const displayName = profile?.display_name || profile?.full_name || registration.pubkey.slice(0, 8) + '...';
@@ -30,10 +34,10 @@ function AttendeeRow({ registration }: { registration: EventRegistration }) {
       </div>
       <div className="flex items-center gap-2">
         <Badge variant={registration.status === 'going' ? 'default' : 'secondary'}>
-          {registration.status === 'going' ? 'Going' : 'Interested'}
+          {registration.status === 'going' ? t('reg.attGoing') : t('reg.attInterested')}
         </Badge>
         {registration.seats && registration.seats > 1 && (
-          <Badge variant="outline">{registration.seats} seats</Badge>
+          <Badge variant="outline">{t('reg.attSeats', { count: String(registration.seats) })}</Badge>
         )}
       </div>
     </div>
@@ -44,12 +48,16 @@ export default function EventRegistrations() {
   const { dTag: urlDTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
   const { session } = useAuth();
+  const { isAdmin, loading: adminLoading } = useAdmin();
+  const { t } = useTranslation(eventsTranslations);
   const { parameters: systemParameters } = useSystemParameters();
   const [event, setEvent] = useState<LanaEvent | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Decode the URL-encoded dTag
   const decodedDTag = urlDTag ? decodeURIComponent(urlDTag) : '';
+
+  const backPath = decodedDTag ? `/events/detail/${encodeURIComponent(decodedDTag)}` : '/events/my';
 
   const relays = systemParameters?.relays || [];
 
@@ -172,7 +180,7 @@ export default function EventRegistrations() {
   const interestedCount = registrations.filter(r => r.status === 'interested').length;
   const totalSeats = registrations.reduce((sum, r) => sum + (r.seats || 1), 0);
 
-  if (loading) {
+  if (loading || adminLoading) {
     return (
       <div className="space-y-4 px-4">
         <Skeleton className="h-8 w-48" />
@@ -185,21 +193,34 @@ export default function EventRegistrations() {
   if (!event) {
     return (
       <div className="space-y-4 px-4">
-        <Button variant="ghost" onClick={() => navigate('/events/my')}>
+        <Button variant="ghost" onClick={() => navigate(backPath)}>
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
+          {t('reg.attBack')}
         </Button>
-        <p className="text-muted-foreground">Event not found</p>
+        <p className="text-muted-foreground">{t('reg.attNotFound')}</p>
       </div>
     );
   }
 
   const status = getEventStatus(event);
+  const isOrganizer = !!session?.nostrHexId && (event.pubkey === session.nostrHexId || event.organizerPubkey === session.nostrHexId);
+
+  if (!isOrganizer && !isAdmin) {
+    return (
+      <div className="space-y-4 px-4">
+        <Button variant="ghost" onClick={() => navigate(backPath)}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          {t('reg.attBackToEvent')}
+        </Button>
+        <p className="text-muted-foreground">{t('reg.attRestricted')}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 px-4 pb-24">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/events/my')}>
+        <Button variant="ghost" size="icon" onClick={() => navigate(backPath)} aria-label={t('reg.attBackToEvent')}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-xl font-bold truncate">{event.title}</h1>
@@ -231,14 +252,16 @@ export default function EventRegistrations() {
                 <Badge variant="outline">{event.isOnline ? 'Online' : 'Live'}</Badge>
               </div>
             </div>
-            <div className="flex gap-1">
-              <Button variant="outline" size="sm" onClick={() => navigate(`/events/checkin/${encodeURIComponent(event.dTag)}`)}>
-                <QrCode className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => navigate(`/events/edit/${event.id}`)}>
-                <Edit className="h-4 w-4" />
-              </Button>
-            </div>
+            {isOrganizer && (
+              <div className="flex gap-1">
+                <Button variant="outline" size="sm" onClick={() => navigate(`/events/checkin/${encodeURIComponent(event.dTag)}`)}>
+                  <QrCode className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => navigate(`/events/edit/${event.id}`)}>
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -248,19 +271,19 @@ export default function EventRegistrations() {
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-primary">{goingCount}</p>
-            <p className="text-sm text-muted-foreground">Going</p>
+            <p className="text-sm text-muted-foreground">{t('reg.attGoing')}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold">{interestedCount}</p>
-            <p className="text-sm text-muted-foreground">Interested</p>
+            <p className="text-sm text-muted-foreground">{t('reg.attInterested')}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold">{totalSeats}</p>
-            <p className="text-sm text-muted-foreground">Total Seats</p>
+            <p className="text-sm text-muted-foreground">{t('reg.attTotalSeats')}</p>
           </CardContent>
         </Card>
       </div>
@@ -270,7 +293,7 @@ export default function EventRegistrations() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
-            Registered Attendees ({registrations.length})
+            {t('reg.attHeading', { count: String(registrations.length) })}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -282,7 +305,7 @@ export default function EventRegistrations() {
             </div>
           ) : registrations.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">
-              No one has registered yet
+              {t('reg.attNone')}
             </p>
           ) : (
             <div>

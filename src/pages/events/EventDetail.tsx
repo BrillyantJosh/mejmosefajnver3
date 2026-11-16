@@ -11,6 +11,7 @@ import {
 import { format } from "date-fns";
 import { SimplePool, finalizeEvent } from "nostr-tools";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdmin } from "@/contexts/AdminContext";
 import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { LanaEvent, ScheduleEntry, getEventStatus } from "@/hooks/useNostrEvents";
 import { useNostrProfileCache } from "@/hooks/useNostrProfileCache";
@@ -33,6 +34,7 @@ export default function EventDetail() {
   const { dTag: urlDTag } = useParams<{ dTag: string }>();
   const navigate = useNavigate();
   const { session } = useAuth();
+  const { isAdmin } = useAdmin();
   const { parameters: systemParameters } = useSystemParameters();
   const [event, setEvent] = useState<LanaEvent | null>(null);
   const [loading, setLoading] = useState(true);
@@ -704,6 +706,17 @@ export default function EventDetail() {
                 {t('reg.going', { count: String(registrations.length) })}
               </Badge>
             </div>
+
+            {event && (isAdmin || (!!session?.nostrHexId && (event.pubkey === session.nostrHexId || event.organizerPubkey === session.nostrHexId))) && (
+              <Button
+                variant="outline"
+                className="w-full mb-4"
+                onClick={() => navigate(`/events/registrations/${encodeURIComponent(event.dTag)}`)}
+              >
+                <Users className="h-4 w-4 mr-2" />
+                {t('reg.attendeesBtn', { count: String(registrations.length) })}
+              </Button>
+            )}
 
             {(() => {
               const isPaidEvent = !!event.fiatValue && (!!event.donationWallet || !!event.donationWalletUnreg);
