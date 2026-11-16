@@ -13,7 +13,9 @@
  *    goal − raised in cents, and right before LANA is sent a payment that others overtook in the
  *    meantime is refused with the new maximum — never sent, never changed — also on the real API
  *    (1000 of 1300 → 300 at most; someone pays 100 → 300 refused, 200 at most; 200 → funded);
- * 5. the pages are wired to the rule.
+ * 5. the pages are wired to the rule;
+ * 6. the raised amount reads as a whole number, rounded DOWN (Jasna, Brilly 16. 11. 2026): it
+ *    reaches the goal exactly when the request reads "Financiran"; nothing that is paid uses it.
  * Nothing near data/mejmosefajn.db, no real relay.
  *   npx tsx scripts/testUfFunded.ts
  */
@@ -24,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import { WebSocketServer } from 'ws';
 import { finalizeEvent, generateSecretKey, getPublicKey, type Event } from 'nostr-tools';
 import { ufAmountVerdict, ufCents, ufChosenFiat, ufContributeCta, ufFreshRemainingCents, ufIsFullyFunded, ufPreSendRefusal, ufReadsFunded, ufRemainingCents } from '../src/lib/ufFunded.js';
+import { ufRaisedWhole } from '../src/lib/ufRaisedWhole.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'uf-funded-'));
 process.env.MEJMO_DB_PATH = path.join(tmp, 'throwaway.db');
@@ -116,6 +119,24 @@ console.log('— at most what is still missing (Brilly 16. 11. 2026, c) —');
   check('…an amount that cannot be read, or under a cent → nothing is sent ("unchecked")', ufPreSendRefusal(fresh(1000), shown(0)) === 'unchecked' && ufPreSendRefusal(fresh(1000), shown(NaN)) === 'unchecked' && ufPreSendRefusal(fresh(1000), shown(0.004)) === 'unchecked');
   check('…a goal that cannot be read → nothing is sent ("unchecked")', ufPreSendRefusal(fresh(10, { fiatGoal: 0 }), shown(5)) === 'unchecked');
   check('…the new maximum cannot be read from no answer → null', ufFreshRemainingCents(null) === null && ufFreshRemainingCents({}) === null && ufFreshRemainingCents({ request: { fiatGoal: 1300 } }) === null);
+}
+
+console.log('— the raised amount as a whole number, rounded down (Jasna, Brilly 16. 11. 2026) —');
+{
+  check('1300.00 raised → "1300" (the card in Jasna’s screenshot)', ufRaisedWhole(1300) === '1300' && ufRaisedWhole(1300.0) === '1300');
+  check('1299.60 → "1299", never "1300" next to a goal of 1300 while not funded', ufRaisedWhole(1299.6) === '1299' && !ufIsFullyFunded(1299.6, 1300));
+  check('1299.99 → "1299"; 1300.40 → "1300"; 1300.99 → "1300"', ufRaisedWhole(1299.99) === '1299' && ufRaisedWhole(1300.4) === '1300' && ufRaisedWhole(1300.99) === '1300');
+  const floatSum = Array.from({ length: 10 }, () => 0.1).reduce((a, b) => a + b, 0); // 0.9999999999999999, printed 1.00, funded at a goal of 1
+  check('a float sum a hair under 1 that the page prints 1.00 → "1" (same cents as "Financiran")', ufRaisedWhole(floatSum) === '1' && ufIsFullyFunded(floatSum, 1), floatSum);
+  check('1299.995 → as "Financiran" reads it', ufRaisedWhole(1299.995) === (ufIsFullyFunded(1299.995, 1300) ? '1300' : '1299'));
+  check('0, nothing, not a number → "0"', [0, undefined, null, NaN, 'x', 0.004].every((v) => ufRaisedWhole(v) === '0'));
+  check('a number that comes as text reads the same: "1299.60" → "1299"', ufRaisedWhole('1299.60') === '1299');
+  let disagree: number | null = null;
+  for (let c = 129800; c <= 130200 && disagree === null; c++) {
+    const raised = c / 100;
+    if ((Number(ufRaisedWhole(raised)) >= 1300) !== ufIsFullyFunded(raised, 1300)) disagree = raised;
+  }
+  check('cent by cent from 1298.00 to 1302.00: the whole number reaches 1300 exactly when the request is funded', disagree === null, disagree);
 }
 
 // ── the real router and indexer, on a throwaway database with a fake relay ──
@@ -344,6 +365,15 @@ console.log('— the pages are wired to the rule —');
   check('…it shows what is missing and says it in both languages', contribute.includes('`Do cilja manjka še ${remainingText} ${currency}`') && contribute.includes('`${remainingText} ${currency} left to reach the goal`'));
   check('…the input carries the maximum, and the one preset is exactly what is missing (off when nothing is)',
     /max=\{remainingCents !== null \? remainingText : undefined\}/.test(contribute) && /disabled=\{remainingCents <= 0\}\s*onClick=\{\(\) => setFiatInput\(remainingText\)\}/.test(contribute));
+  const repay = src('UFRepay.tsx');
+  check('raised as a whole number: the list card', /<span className="text-3xl font-bold">\{ufRaisedWhole\(totalFunded\)\}<\/span>/.test(list) && list.includes('from "@/lib/ufRaisedWhole"'));
+  check('…the request page, its goal as it was', /\{ufRaisedWhole\(totalFunded\)\} \{request\.currency\}/.test(detailPage) && /\{sl \? "od" : "of"\} \{fmtFiat\(fiatGoal\)\}/.test(detailPage));
+  check('…"Moje", its goal as it was', /\{ufRaisedWhole\(financing\.totalFunded\)\} \{request\.currency\}/.test(my) && /\/ \{fiat\(goal, request\.currency\)\}/.test(my));
+  check('…"Financiran" and the percent still read the exact total', /ufReadsFunded\(request, totalFunded\)/.test(list) && /ufIsFullyFunded\(totalFunded, goalAmount\)/.test(list) && /ufReadsFunded\(request, totalFunded\)/.test(detailPage) && /ufReadsFunded\(request, financing\.totalFunded\)/.test(my));
+  check('…nothing that is paid uses it: the contribute and pay pages, and repaying, keep exact amounts',
+    !contribute.includes('ufRaisedWhole') && !pay.includes('ufRaisedWhole') && !repay.includes('ufRaisedWhole') && repay.includes('{totalFunded.toFixed(2)} {currency}')
+    && list.includes('`Poplačano ${totalRepaid.toFixed(2)} / zbrano ${totalFunded.toFixed(2)} ${request.currency}`'));
+  check('…the shared formatters stay exact (repayments and contributions go through them)', my.includes('const fiat = (amount: number, currency: string) => `${amount.toFixed(2)} ${currency}`;') && detailPage.includes('const fmtFiat = (n: number) => `${n.toFixed(2)} ${request.currency}`;'));
   check('…the resume of a payment already on-chain does not go through the gate (it only records)', !/recordContribution[\s\S]{0,40}ufPreSendRefusal/.test(pay) && pay.indexOf('ufPreSendRefusal(fresh') > pay.indexOf('const handleConfirm'));
 }
 

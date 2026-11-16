@@ -37,6 +37,7 @@ import {
   type UfRepayment,
 } from "@/hooks/useUFData";
 import { ufContributeCta, ufReadsFunded } from "@/lib/ufFunded";
+import { ufRaisedWhole } from "@/lib/ufRaisedWhole";
 import UFComments from "./UFComments";
 import UFAdminBar from "./UFAdminBar";
 
@@ -447,8 +448,9 @@ const UFRequestDetail = () => {
               <div className="space-y-4">
                 <div>
                   <div className="flex items-baseline gap-2 mb-2 flex-wrap">
+                    {/* Raised as a whole number, rounded down (src/lib/ufRaisedWhole.ts); the goal as it was. */}
                     <span className="text-3xl font-bold text-green-500">
-                      {fmtFiat(totalFunded)}
+                      {ufRaisedWhole(totalFunded)} {request.currency}
                     </span>
                     <span className="text-muted-foreground">
                       {sl ? "od" : "of"} {fmtFiat(fiatGoal)}

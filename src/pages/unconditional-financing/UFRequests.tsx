@@ -31,6 +31,7 @@ import {
 import { useUfSettings } from "@/hooks/useUFSettings";
 import { formatDays } from "@/lib/ufSettings";
 import { ufIsFullyFunded, ufReadsFunded } from "@/lib/ufFunded";
+import { ufRaisedWhole } from "@/lib/ufRaisedWhole";
 
 /**
  * "All" first and selected by default: the phases split a small set of requests
@@ -160,10 +161,11 @@ const UfRequestCard = ({ request, profile, sl }: UfRequestCardProps) => {
           </div>
         </div>
 
-        {/* Funding Stats */}
+        {/* Funding Stats — raised as a whole number, rounded down (Jasna, Brilly 16. 11. 2026;
+            src/lib/ufRaisedWhole.ts). "Financiran" above stays on the exact cents. */}
         <div className="flex items-baseline justify-between pt-4 mt-auto">
           <div>
-            <span className="text-3xl font-bold">{totalFunded.toFixed(2)}</span>
+            <span className="text-3xl font-bold">{ufRaisedWhole(totalFunded)}</span>
             <span className="text-lg text-muted-foreground ml-1">
               {request.currency}
             </span>

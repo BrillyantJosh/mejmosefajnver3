@@ -16,6 +16,7 @@ import {
   UfMyFinancing,
 } from "@/hooks/useUFData";
 import { ufReadsFunded } from "@/lib/ufFunded";
+import { ufRaisedWhole } from "@/lib/ufRaisedWhole";
 
 /**
  * Unconditional Financing — "My" overview.
@@ -207,8 +208,9 @@ const FinancingCard = ({
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">
                   {sl ? "Financirano" : "Funded"}:{" "}
+                  {/* Raised as a whole number, rounded down (src/lib/ufRaisedWhole.ts); the goal as it was. */}
                   <span className="text-foreground font-medium">
-                    {fiat(financing.totalFunded, request.currency)}
+                    {ufRaisedWhole(financing.totalFunded)} {request.currency}
                   </span>{" "}
                   / {fiat(goal, request.currency)}
                 </span>
