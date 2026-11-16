@@ -14,7 +14,7 @@ import { useSystemParameters } from "@/contexts/SystemParametersContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { finalizeEvent } from "nostr-tools";
 import { useLang } from "@/i18n/I18nContext";
-import { ufPreSendRefusal } from "@/lib/ufFunded";
+import { ufFreshRemainingCents, ufPreSendRefusal } from "@/lib/ufFunded";
 
 interface ContributeState {
   selectedWalletId: string;
@@ -69,6 +69,9 @@ const UFContributePrivateKey = () => {
   // never re-enable into a second payment.
   const txHashRef = useRef<string | null>(null);
   const [paidUnrecorded, setPaidUnrecorded] = useState(false);
+  // Others paid since the amount was chosen and it is now more than what is missing: the new
+  // maximum in cents. Nothing was sent; the amount is never changed here — the person chooses again.
+  const [overRemainingCents, setOverRemainingCents] = useState<number | null>(null);
   const resumeAttemptedRef = useRef(false);
 
   const PENDING_KEY = `uf-pending-contribution-${id}`;
@@ -274,7 +277,7 @@ const UFContributePrivateKey = () => {
 
   const handleConfirm = async () => {
     const request = detail?.request;
-    if (!isValid || !request || !parameters || stateMissing || paidUnrecorded) return;
+    if (!isValid || !request || !parameters || stateMissing || paidUnrecorded || overRemainingCents !== null) return;
 
     if (!session?.nostrHexId || !session?.nostrPrivateKey) {
       toast({
@@ -301,13 +304,32 @@ const UFContributePrivateKey = () => {
 
     // Right before any money moves, ask the server again: an administrator may have archived the
     // request, or its approval may no longer hold, or others may have funded it to its goal since
-    // this page was opened (src/lib/ufFunded.ts) — and the receiving wallet must still be the one
-    // shown. Anything else, or no answer: nothing is sent.
+    // this page was opened (src/lib/ufFunded.ts) — the receiving wallet must still be the one
+    // shown, and the chosen amount at most what is still missing. Anything else, or no answer:
+    // nothing is sent. The amount is never changed here.
     try {
       const fresh = await fetch(`${UF_API}/requests/${encodeURIComponent(request.id)}`)
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null);
-      const refusal = ufPreSendRefusal(fresh, { wallet: request.wallet, currency: request.currency });
+      const refusal = ufPreSendRefusal(fresh, {
+        wallet: request.wallet,
+        currency: request.currency,
+        fiatAmount: fiatAmount ?? 0,
+      });
+      if (refusal === "over_remaining") {
+        // Others paid in between: tell the new maximum and let the person choose again.
+        const left = ufFreshRemainingCents(fresh) ?? 0;
+        setOverRemainingCents(left);
+        toast({
+          title: sl ? "Plačilo ni bilo poslano" : "Nothing was sent",
+          description: sl
+            ? `Medtem so prispevali drugi. Do cilja manjka še ${(left / 100).toFixed(2)} ${request.currency}, izbrani znesek je ${(fiatAmount ?? 0).toFixed(2)} ${request.currency}. Izberi znesek znova.`
+            : `Others contributed meanwhile. ${(left / 100).toFixed(2)} ${request.currency} left to reach the goal, you chose ${(fiatAmount ?? 0).toFixed(2)} ${request.currency}. Please choose the amount again.`,
+          variant: "destructive",
+        });
+        setIsSending(false);
+        return;
+      }
       if (refusal) {
         toast({
           title: sl ? "Plačilo ni bilo poslano" : "Nothing was sent",
@@ -578,10 +600,38 @@ const UFContributePrivateKey = () => {
           </CardContent>
         </Card>
 
+        {/* Others paid in between and the chosen amount is now more than what is missing. */}
+        {overRemainingCents !== null && (
+          <Card className="border-destructive/40 bg-destructive/10">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                <div className="space-y-1 text-sm">
+                  <p className="font-semibold">
+                    {sl ? "Plačilo ni bilo poslano" : "Nothing was sent"}
+                  </p>
+                  <p>
+                    {sl
+                      ? `Medtem so prispevali drugi. Do cilja manjka še ${(overRemainingCents / 100).toFixed(2)} ${request.currency}, izbrani znesek je ${fiatAmount!.toFixed(2)} ${request.currency}.`
+                      : `Others contributed meanwhile. ${(overRemainingCents / 100).toFixed(2)} ${request.currency} left to reach the goal, you chose ${fiatAmount!.toFixed(2)} ${request.currency}.`}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => navigate(`/unconditional-financing/contribute/${id}`)}
+              >
+                {sl ? "Izberi znesek znova" : "Choose the amount again"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Confirm */}
         <Button
           onClick={handleConfirm}
-          disabled={!isValid || isValidating || isSending || paidUnrecorded}
+          disabled={!isValid || isValidating || isSending || paidUnrecorded || overRemainingCents !== null}
           className="w-full bg-green-500 hover:bg-green-600 text-white h-12 disabled:opacity-50"
         >
           {isSending ? (

@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Wallet, Loader2, Clock, AlertCircle, Snowflake, Info, CheckCircle } from "lucide-react";
-import { ufReadsFunded } from "@/lib/ufFunded";
+import { ufAmountVerdict, ufChosenFiat, ufReadsFunded, ufRemainingCents } from "@/lib/ufFunded";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useLang } from "@/i18n/I18nContext";
@@ -115,8 +115,14 @@ const UFContribute = () => {
   const rates = (parameters?.exchangeRates ?? {}) as unknown as Record<string, number>;
   const rate = rates[currency] ?? 0;
 
-  const parsedFiat = parseFloat(fiatInput) || 0;
-  const lanaAmount = rate > 0 ? parsedFiat / rate : 0;
+  // At most what is still missing (Brilly 16. 11. 2026; src/lib/ufFunded.ts): the chosen amount in
+  // whole cents as the page prints it — the one number checked, shown, signed and recorded.
+  const raised = detail?.totalFunded ?? request.totalFunded;
+  const remainingCents = ufRemainingCents(raised, request.fiatGoal);
+  const remainingText = remainingCents !== null ? (remainingCents / 100).toFixed(2) : "";
+  const fiatAmount = ufChosenFiat(fiatInput);
+  const amountVerdict = ufAmountVerdict(fiatAmount, raised, request.fiatGoal);
+  const lanaAmount = rate > 0 && fiatAmount > 0 ? fiatAmount / rate : 0;
   const selectedWalletBalance =
     selectedWalletId && walletBalances[selectedWalletId] !== undefined
       ? walletBalances[selectedWalletId]
@@ -139,14 +145,14 @@ const UFContribute = () => {
   const selectedWallet = wallets.find((w) => w.walletId === selectedWalletId);
 
   // The goal is reached: "Financiran", no payment form (src/lib/ufFunded.ts).
-  const isFunded = ufReadsFunded(request, detail?.totalFunded ?? request.totalFunded);
+  const isFunded = ufReadsFunded(request, raised);
 
   const canContinue =
     request.fundable &&
     !isFunded &&
     !!session?.nostrHexId &&
     !!selectedWalletId &&
-    parsedFiat > 0 &&
+    amountVerdict === "ok" &&
     rate > 0 &&
     hasSufficientBalance &&
     !!mainWallet &&
@@ -167,7 +173,7 @@ const UFContribute = () => {
     navigate(`/unconditional-financing/contribute/${id}/private-key`, {
       state: {
         selectedWalletId,
-        fiatAmount: parsedFiat,
+        fiatAmount,
         lanaAmount,
         rate,
         message,
@@ -419,8 +425,51 @@ const UFContribute = () => {
                     placeholder="0.00"
                     step="0.01"
                     min="0"
+                    max={remainingCents !== null ? remainingText : undefined}
                   />
                 </div>
+
+                {/* At most what is still missing to the goal (Brilly 16. 11. 2026). */}
+                {remainingCents !== null && (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-muted-foreground">
+                      {sl
+                        ? `Do cilja manjka še ${remainingText} ${currency}`
+                        : `${remainingText} ${currency} left to reach the goal`}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={remainingCents <= 0}
+                      onClick={() => setFiatInput(remainingText)}
+                    >
+                      {sl ? `Vse manjkajoče: ${remainingText} ${currency}` : `All that is missing: ${remainingText} ${currency}`}
+                    </Button>
+                  </div>
+                )}
+
+                {amountVerdict === "over" && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      {sl
+                        ? `Znesek je večji od tega, kar še manjka. Do cilja manjka še ${remainingText} ${currency} — vnesi največ toliko.`
+                        : `The amount is more than what is still missing. ${remainingText} ${currency} left to reach the goal — enter at most that.`}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {amountVerdict === "no_goal" && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      {sl
+                        ? "Cilja tega zahtevka ni mogoče prebrati, zato ni znano, koliko še manjka — prispevek zdaj ni mogoč."
+                        : "This request's goal cannot be read, so what is still missing is unknown — contributing is not possible right now."}
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 {rate <= 0 && (
                   <Alert variant="destructive">
@@ -433,7 +482,7 @@ const UFContribute = () => {
                   </Alert>
                 )}
 
-                {parsedFiat > 0 && rate > 0 && (
+                {amountVerdict === "ok" && rate > 0 && (
                   <div className="bg-muted p-4 rounded-md space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">
@@ -526,10 +575,10 @@ const UFContribute = () => {
               disabled={!canContinue}
               className="w-full bg-green-500 hover:bg-green-600 text-white h-12 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {parsedFiat > 0 && rate > 0
+              {amountVerdict === "ok" && rate > 0
                 ? sl
-                  ? `Prispevaj ${parsedFiat.toFixed(2)} ${currency} (≈ ${lanaAmount.toFixed(2)} LANA)`
-                  : `Contribute ${parsedFiat.toFixed(2)} ${currency} (≈ ${lanaAmount.toFixed(2)} LANA)`
+                  ? `Prispevaj ${fiatAmount.toFixed(2)} ${currency} (≈ ${lanaAmount.toFixed(2)} LANA)`
+                  : `Contribute ${fiatAmount.toFixed(2)} ${currency} (≈ ${lanaAmount.toFixed(2)} LANA)`
                 : sl
                   ? "Nadaljuj"
                   : "Continue"}
@@ -540,7 +589,7 @@ const UFContribute = () => {
                 {sl ? "Najprej izberi denarnico." : "Please select a wallet first."}
               </p>
             )}
-            {selectedWalletId && parsedFiat === 0 && (
+            {selectedWalletId && amountVerdict === "empty" && (
               <p className="text-sm text-center text-muted-foreground">
                 {sl ? "Vnesi znesek prispevka." : "Please enter a contribution amount."}
               </p>

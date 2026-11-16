@@ -9,7 +9,11 @@
  *    check stops a payment to a funded request, and the server still records and re-indexes every
  *    real contribution — also one that lands after the goal (its LANA is already on-chain when it
  *    is recorded) — and repaying is untouched;
- * 4. the pages are wired to the rule.
+ * 4. at most what is still missing (Brilly, 16. 11. 2026, point c): the form refuses more than
+ *    goal − raised in cents, and right before LANA is sent a payment that others overtook in the
+ *    meantime is refused with the new maximum — never sent, never changed — also on the real API
+ *    (1000 of 1300 → 300 at most; someone pays 100 → 300 refused, 200 at most; 200 → funded);
+ * 5. the pages are wired to the rule.
  * Nothing near data/mejmosefajn.db, no real relay.
  *   npx tsx scripts/testUfFunded.ts
  */
@@ -19,7 +23,7 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { WebSocketServer } from 'ws';
 import { finalizeEvent, generateSecretKey, getPublicKey, type Event } from 'nostr-tools';
-import { ufCents, ufContributeCta, ufIsFullyFunded, ufPreSendRefusal, ufReadsFunded } from '../src/lib/ufFunded.js';
+import { ufAmountVerdict, ufCents, ufChosenFiat, ufContributeCta, ufFreshRemainingCents, ufIsFullyFunded, ufPreSendRefusal, ufReadsFunded, ufRemainingCents } from '../src/lib/ufFunded.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'uf-funded-'));
 process.env.MEJMO_DB_PATH = path.join(tmp, 'throwaway.db');
@@ -69,7 +73,7 @@ console.log('— what the pages do with it —');
   check('…archived → nothing', ufContributeCta({ ...open, isArchived: true, fundable: false }, 1300, false) === 'none');
   check('…not fundable (waiting, maturing) → nothing', ufContributeCta({ ...open, fundable: false, phase: 'maturing' }, 0, false) === 'none');
 
-  const shown = { wallet: 'LOwnMain', currency: 'EUR' };
+  const shown = { wallet: 'LOwnMain', currency: 'EUR', fiatAmount: 100 };
   const fresh = (req: Record<string, unknown>, totalFunded?: number) => ({ request: { fundable: true, isArchived: false, fiatGoal: 1300, totalFunded: 0, wallet: 'LOwnMain', currency: 'EUR', ...req }, totalFunded });
   check('right before LANA is sent: open, below the goal, same wallet → may send', ufPreSendRefusal(fresh({}, 1000), shown) === null);
   check('…others funded it to the goal since the page opened → nothing is sent ("funded")', ufPreSendRefusal(fresh({}, 1300), shown) === 'funded');
@@ -79,6 +83,39 @@ console.log('— what the pages do with it —');
   check('…archived → "archived"', ufPreSendRefusal(fresh({ isArchived: true, fundable: false }, 0), shown) === 'archived');
   check('…not fundable → "not_fundable"', ufPreSendRefusal(fresh({ fundable: false }, 0), shown) === 'not_fundable');
   check('…another wallet or currency → "changed"', ufPreSendRefusal(fresh({ wallet: 'LOther' }, 0), shown) === 'changed' && ufPreSendRefusal(fresh({ currency: 'GBP' }, 0), shown) === 'changed');
+}
+
+console.log('— at most what is still missing (Brilly 16. 11. 2026, c) —');
+{
+  check('missing at 1000 of 1300 → 300.00 (30000 cents)', ufRemainingCents(1000, 1300) === 30000);
+  check('…at the goal, or over it → 0, never below', ufRemainingCents(1300, 1300) === 0 && ufRemainingCents(2000, 1300) === 0);
+  check('…nothing raised → the whole goal', ufRemainingCents(0, 1300) === 130000 && ufRemainingCents(undefined, 1300) === 130000);
+  const floatSum = Array.from({ length: 10 }, () => 0.1).reduce((a, b) => a + b, 0); // 0.9999999999999999, printed 1.00
+  check('…in cents as the page prints: a float sum printed 1.00 of 2 → 1.00 missing', ufRemainingCents(floatSum, 2) === 100, ufRemainingCents(floatSum, 2));
+  check('…a goal that cannot be read → null (no maximum to show, nothing may be given)', ufRemainingCents(10, 0) === null && ufRemainingCents(10, undefined) === null && ufRemainingCents(10, 'x') === null);
+  check('the example: at 1000 of 1300, 300 → ok', ufAmountVerdict(300, 1000, 1300) === 'ok');
+  check('…1000 (which would end at 2000 of 1300) → over', ufAmountVerdict(1000, 1000, 1300) === 'over');
+  check('…300.01 → over (one cent too many)', ufAmountVerdict(300.01, 1000, 1300) === 'over');
+  check('…299.99 → ok', ufAmountVerdict(299.99, 1000, 1300) === 'ok');
+  check('…0, nothing, under a cent, negative → empty', ['0', '', 0.004, -5, NaN, undefined].every((a) => ufAmountVerdict(a, 1000, 1300) === 'empty'));
+  check('…no readable goal → no_goal, whatever the amount', ufAmountVerdict(10, 0, 0) === 'no_goal' && ufAmountVerdict(10, 5, undefined) === 'no_goal');
+  check('the chosen amount is passed on in whole cents as printed: "300.004" → 300, "299.99" → 299.99, "abc" → 0',
+    ufChosenFiat('300.004') === 300 && String(ufChosenFiat('300.004')) === '300' && String(ufChosenFiat('299.99')) === '299.99' && ufChosenFiat('abc') === 0 && ufChosenFiat('') === 0);
+  check('…so a sub-cent input cannot slip a fraction over the goal: "300.004" at 1000 of 1300 → 300 → total exactly the goal',
+    ufAmountVerdict(ufChosenFiat('300.004'), 1000, 1300) === 'ok' && 1000 + ufChosenFiat('300.004') === 1300);
+
+  const shown = (fiatAmount: number) => ({ wallet: 'LOwnMain', currency: 'EUR', fiatAmount });
+  const fresh = (totalFunded: number, req: Record<string, unknown> = {}) => ({ request: { fundable: true, isArchived: false, fiatGoal: 1300, totalFunded: 0, wallet: 'LOwnMain', currency: 'EUR', ...req }, totalFunded });
+  check('right before LANA is sent: 300 chosen at 1000 of 1300, still 1000 → may send', ufPreSendRefusal(fresh(1000), shown(300)) === null);
+  check('…someone paid 100 meanwhile (1100 of 1300) → 300 is not sent ("over_remaining")', ufPreSendRefusal(fresh(1100), shown(300)) === 'over_remaining');
+  check('…and the page can tell the new maximum: 200.00', ufFreshRemainingCents(fresh(1100)) === 20000);
+  check('…choosing 200 then may send', ufPreSendRefusal(fresh(1100), shown(200)) === null);
+  check('…200.01 may not', ufPreSendRefusal(fresh(1100), shown(200.01)) === 'over_remaining');
+  check('…funded meanwhile → "funded" (not "over_remaining")', ufPreSendRefusal(fresh(1300), shown(300)) === 'funded');
+  check('…another wallet AND too much → "changed" first (the old amount means nothing for a changed request)', ufPreSendRefusal(fresh(1100, { wallet: 'LOther' }), shown(300)) === 'changed');
+  check('…an amount that cannot be read, or under a cent → nothing is sent ("unchecked")', ufPreSendRefusal(fresh(1000), shown(0)) === 'unchecked' && ufPreSendRefusal(fresh(1000), shown(NaN)) === 'unchecked' && ufPreSendRefusal(fresh(1000), shown(0.004)) === 'unchecked');
+  check('…a goal that cannot be read → nothing is sent ("unchecked")', ufPreSendRefusal(fresh(10, { fiatGoal: 0 }), shown(5)) === 'unchecked');
+  check('…the new maximum cannot be read from no answer → null', ufFreshRemainingCents(null) === null && ufFreshRemainingCents({}) === null && ufFreshRemainingCents({ request: { fiatGoal: 1300 } }) === null);
 }
 
 // ── the real router and indexer, on a throwaway database with a fake relay ──
@@ -149,15 +186,15 @@ const requestEvent = finalizeEvent({
   content: 'Zgodba',
 }, owner.sk);
 let txN = 0;
-const contribution = (who: Key, fiat: string, at: number) => finalizeEvent({
+const contribution = (who: Key, fiat: string, at: number, requestId = ID) => finalizeEvent({
   kind: 60210, created_at: at,
-  tags: [['service', 'unconditional-financing'], ['request', ID], ['amount_lanoshis', String(Math.round(Number(fiat) * 1e9))], ['amount_fiat', fiat], ['currency', 'EUR'],
+  tags: [['service', 'unconditional-financing'], ['request', requestId], ['amount_lanoshis', String(Math.round(Number(fiat) * 1e9))], ['amount_fiat', fiat], ['currency', 'EUR'],
     ['rate', '0.1'], ['from_wallet', 'LSup'], ['repayment_wallet', 'LSupMain'], ['to_wallet', 'LOwnMain'], ['tx', `tx-${++txN}`], ['timestamp_paid', String(at)]],
   content: '',
 }, who.sk);
 const detail = async () => (await call('GET', `/requests/${encodeURIComponent(ID)}`)).data;
 const contributionRows = () => db.prepare('SELECT id, amount_fiat FROM uf_contributions WHERE request_id = ? ORDER BY id').all(ID) as { id: string; amount_fiat: number }[];
-const shown = { wallet: 'LOwnMain', currency: 'EUR' };
+const shown = { wallet: 'LOwnMain', currency: 'EUR', fiatAmount: 5 };
 
 console.log('— on the real API: below the goal the request is open —');
 {
@@ -173,6 +210,9 @@ console.log('— on the real API: below the goal the request is open —');
   check('one contribution of 10 → 10 of 20, open', c1.status === 200 && d.totalFunded === 10 && d.request.fiatGoal === 20 && d.request.fundable === true, d?.request);
   check('…the page offers "Prispevaj"', ufContributeCta(d.request, d.totalFunded, false) === 'contribute' && !ufReadsFunded(d.request, d.totalFunded));
   check('…and right before sending, the fresh answer lets the payment go', ufPreSendRefusal(d, shown) === null);
+  check('…10 missing: 10 may go, 10.01 may not, and the API says 10.00 is the most', ufFreshRemainingCents(d) === 1000
+    && ufPreSendRefusal(d, { ...shown, fiatAmount: 10 }) === null && ufPreSendRefusal(d, { ...shown, fiatAmount: 10.01 }) === 'over_remaining'
+    && ufAmountVerdict(10.01, d.totalFunded, d.request.fiatGoal) === 'over', d.totalFunded);
 }
 
 console.log('— the goal is reached —');
@@ -225,6 +265,44 @@ console.log('— repaying is untouched —');
   check('…still "Financiran" while it is being repaid', ufReadsFunded(d.request, d.totalFunded));
 }
 
+console.log('— on the real API: at 1000 of 1300 the most is 300; someone pays first; the payment waits for a new choice —');
+{
+  const ID2 = 'uf:cap-test';
+  const ev2 = finalizeEvent({
+    kind: 31240, created_at: now - 900,
+    tags: [['d', ID2], ['service', 'unconditional-financing'], ['title', 'Kavarna'], ['summary', 'Prostor'],
+      ['request_type', 'personal_hardship'], ['fiat_goal', '1300'], ['currency', 'EUR'], ['wallet', 'LOwnMain'],
+      ['published_at', String(now - 2000)], ['funding_opens_at', String(now - 2000)], ['status', 'active'], ['client', 'mejmosefajn']],
+    content: 'Zgodba',
+  }, owner.sk);
+  const up = await quiet(() => call('POST', '/requests/upsert', { event: ev2 }));
+  const row = db.prepare('SELECT event_id FROM uf_requests WHERE id = ?').get(ID2) as { event_id?: string } | undefined;
+  const ap = await call('POST', `/requests/${encodeURIComponent(ID2)}/approve`, {
+    event: finalizeEvent({ kind: 27235, created_at: Math.floor(Date.now() / 1000), tags: [['u', `${BASE}/x`], ['method', 'POST'], ['nonce', randomHex()]],
+      content: JSON.stringify({ action: 'uf-request-approve', id: ID2, event_id: row?.event_id, fiat_goal: 1300, currency: 'EUR' }) }, admin.sk),
+  });
+  const r0 = await call('POST', '/contributions/record', { event: contribution(late, '1000', now - 80, ID2) });
+  const detail2 = async () => (await call('GET', `/requests/${encodeURIComponent(ID2)}`)).data;
+  const rows2 = () => db.prepare('SELECT id, amount_fiat FROM uf_contributions WHERE request_id = ? ORDER BY id').all(ID2) as { id: string; amount_fiat: number }[];
+  const opened = await detail2();
+  check('(setup) approved at 1300 EUR, 1000 raised', up.status === 200 && ap.status === 200 && r0.status === 200 && opened.totalFunded === 1000 && opened.request.fiatGoal === 1300, { up, ap, r0, t: opened.totalFunded });
+  check('the form: 300.00 is what is missing; 1000 is refused, 300 is not', ufRemainingCents(opened.totalFunded, opened.request.fiatGoal) === 30000
+    && ufAmountVerdict(1000, opened.totalFunded, opened.request.fiatGoal) === 'over' && ufAmountVerdict(300, opened.totalFunded, opened.request.fiatGoal) === 'ok');
+  // The person chose 300 on the page opened at 1000 — before they press Send, someone else pays 100.
+  const meanwhile = await call('POST', '/contributions/record', { event: contribution(supporter, '100', now - 60, ID2) });
+  const before = rows2();
+  const atSend = await detail2();
+  check('right before sending: 1100 of 1300 now → 300 is NOT sent ("over_remaining"), the new maximum is 200.00',
+    meanwhile.status === 200 && ufPreSendRefusal(atSend, { ...shown, fiatAmount: 300 }) === 'over_remaining' && ufFreshRemainingCents(atSend) === 20000, atSend.totalFunded);
+  check('…nothing recorded changes from the refusal (the same 2 contributions, same amounts)', JSON.stringify(rows2()) === JSON.stringify(before) && before.length === 2);
+  check('…choosing 200 again may send', ufPreSendRefusal(atSend, { ...shown, fiatAmount: 200 }) === null);
+  const last = await call('POST', '/contributions/record', { event: contribution(supporter, String(ufChosenFiat('200')), now - 40, ID2) });
+  const done = await detail2();
+  check('…recorded: exactly 1300 of 1300, "Financiran", and no one is offered more', last.status === 200 && done.totalFunded === 1300
+    && ufReadsFunded(done.request, done.totalFunded) && ufPreSendRefusal(done, { ...shown, fiatAmount: 0.01 }) === 'funded', done.totalFunded);
+  check('…the recorded fiat is the chosen amount, as it was signed (not worked back from LANA)', rows2().some((r) => r.amount_fiat === 200));
+}
+
 console.log('— the pages are wired to the rule —');
 {
   const src = (f: string) => readFileSync(new URL(`../src/pages/unconditional-financing/${f}`, import.meta.url), 'utf8');
@@ -250,6 +328,22 @@ console.log('— the pages are wired to the rule —');
   const send = pay.indexOf('"send-lana-transaction"');
   check('pay page: the fresh check runs before the LANA is sent, and stops on any refusal', gate > 0 && send > gate && /if \(refusal\) \{[\s\S]{0,2500}setIsSending\(false\);\s*return;/.test(pay.slice(gate, send)));
   check('…the old inline check is gone (it knew nothing of the goal)', !pay.includes('!now?.fundable || now.wallet !== request.wallet'));
+  check('…the fresh check is given the chosen amount', /ufPreSendRefusal\(fresh, \{[\s\S]{0,160}fiatAmount: fiatAmount/.test(pay));
+  const overBranch = pay.slice(gate, send).match(/if \(refusal === "over_remaining"\) \{([\s\S]*?)\n {6}\}\n {6}if \(refusal\) \{/);
+  check('…"over_remaining" stops before the LANA is sent, keeps the new maximum from the FRESH answer, and never touches the amount',
+    !!overBranch && /const left = ufFreshRemainingCents\(fresh\)/.test(overBranch[1]) && /setOverRemainingCents\(left\);/.test(overBranch[1])
+    && /setIsSending\(false\);\s*return;\s*$/.test(overBranch[1])
+    && !/setFiatAmount|fiatAmount\s*=(?!=)|state\.fiatAmount\s*=/.test(pay));
+  check('…the page then says the new maximum and offers to choose again on the form',
+    /overRemainingCents !== null && \([\s\S]{0,1600}\(overRemainingCents \/ 100\)\.toFixed\(2\)[\s\S]{0,1600}navigate\(`\/unconditional-financing\/contribute\/\$\{id\}`\)[\s\S]{0,200}"Izberi znesek znova"/.test(pay));
+  check('…and Send stays off until the person chooses again', /disabled=\{[^}]*overRemainingCents !== null\}/.test(pay) && /paidUnrecorded \|\| overRemainingCents !== null\) return;/.test(pay));
+  check('contribute form: Continue only for an amount within what is missing', /!!selectedWalletId &&\s*amountVerdict === "ok" &&/.test(contribute) && !contribute.includes('parsedFiat'));
+  check('…the verdict is the shared rule, on the same raised total and goal as "Financiran"',
+    /ufAmountVerdict\(fiatAmount, raised, request\.fiatGoal\)/.test(contribute) && /ufReadsFunded\(request, raised\)/.test(contribute) && /ufRemainingCents\(raised, request\.fiatGoal\)/.test(contribute));
+  check('…the amount passed on is the cents-rounded one the form checked', /const fiatAmount = ufChosenFiat\(fiatInput\)/.test(contribute) && /state: \{\s*selectedWalletId,\s*fiatAmount,\s*lanaAmount,/.test(contribute) && /fiatAmount \/ rate/.test(contribute));
+  check('…it shows what is missing and says it in both languages', contribute.includes('`Do cilja manjka še ${remainingText} ${currency}`') && contribute.includes('`${remainingText} ${currency} left to reach the goal`'));
+  check('…the input carries the maximum, and the one preset is exactly what is missing (off when nothing is)',
+    /max=\{remainingCents !== null \? remainingText : undefined\}/.test(contribute) && /disabled=\{remainingCents <= 0\}\s*onClick=\{\(\) => setFiatInput\(remainingText\)\}/.test(contribute));
   check('…the resume of a payment already on-chain does not go through the gate (it only records)', !/recordContribution[\s\S]{0,40}ufPreSendRefusal/.test(pay) && pay.indexOf('ufPreSendRefusal(fresh') > pay.indexOf('const handleConfirm'));
 }
 
