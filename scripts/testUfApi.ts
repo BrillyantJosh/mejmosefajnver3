@@ -157,6 +157,19 @@ async function main() {
     check('edit by different author → 403', r.status === 403, r);
   }
 
+  // Since 16. 11. 2026 nobody may fund a request an administrator has not approved
+  // (server/lib/ufApproval.ts; scripts/testUfApproval.ts tests that rule and the approval
+  // itself). The guards below are about contributions to approved requests, so approve the
+  // seeded ones exactly as POST /requests/:id/approve writes it.
+  {
+    const r = await call('POST', '/contributions/record', { event: contributionEvent(skSup, OPEN_ID, pkOwner, 10, 1000) });
+    check('contribution before approval → 409 NOT_APPROVED', r.status === 409 && r.data.code === 'NOT_APPROVED', r);
+    const adb = new Database(DB_PATH);
+    adb.prepare(`UPDATE uf_requests SET approved_at = ?, approved_by = 'test-admin', approved_event_id = event_id,
+                 approved_fiat_goal = fiat_goal, approved_currency = currency WHERE id IN (?, ?)`).run(now, OPEN_ID, MAT_ID);
+    adb.close();
+  }
+
   console.log('— contribution guards —');
   {
     // Maturing request → 409

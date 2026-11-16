@@ -209,11 +209,21 @@ const UFContributePrivateKey = () => {
         body: JSON.stringify({ event: signed }),
       });
       if (res.status === 409) {
+        const body = await res.json().catch(() => ({}));
+        // Archived / not approved in the moment between the check above and the payment: the
+        // event is on the relays, and the re-index counts it once the request is open again.
+        const closed = body?.code === "ARCHIVED" || body?.code === "NOT_APPROVED";
         toast({
-          title: sl ? "Financiranje še ni odprto" : "Funding not yet open",
-          description: sl
-            ? "Zahtevek še zori — prispevek je bil poslan na verigo, a strežnik ga je zavrnil, ker financiranje še ni odprto."
-            : "The request is still maturing — the payment was sent on-chain, but the server rejected the record because funding is not open yet.",
+          title: closed
+            ? sl ? "Plačilo poslano — zapis čaka" : "Payment sent — record waits"
+            : sl ? "Financiranje še ni odprto" : "Funding not yet open",
+          description: closed
+            ? sl
+              ? "Prispevek je na verigi, a zahtevek je bil ravnokar arhiviran ali čaka na odobritev, zato ga strežnik še ni zapisal. Zapisal ga bo sam, ko bo zahtevek spet odprt. NE plačuj znova."
+              : "The contribution is on-chain, but the request was just archived or is waiting for approval, so the server has not recorded it yet. It will record it on its own once the request is open again. Do NOT pay again."
+            : sl
+              ? "Zahtevek še zori — prispevek je bil poslan na verigo, a strežnik ga je zavrnil, ker financiranje še ni odprto."
+              : "The request is still maturing — the payment was sent on-chain, but the server rejected the record because funding is not open yet.",
           variant: "destructive",
         });
       }
@@ -287,6 +297,34 @@ const UFContributePrivateKey = () => {
     }
 
     setIsSending(true);
+
+    // Right before any money moves, ask the server again: an administrator may have archived the
+    // request, or its approval may no longer hold, since this page was opened — and the receiving
+    // wallet must still be the one shown. Anything else, or no answer: nothing is sent.
+    try {
+      const fresh = await fetch(`${UF_API}/requests/${encodeURIComponent(request.id)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+      const now = fresh?.request;
+      if (!now?.fundable || now.wallet !== request.wallet || now.currency !== request.currency) {
+        toast({
+          title: sl ? "Plačilo ni bilo poslano" : "Nothing was sent",
+          description: !now
+            ? sl ? "Stanja zahtevka zdaj ni bilo mogoče preveriti. Poskusi znova čez trenutek." : "The request could not be checked just now. Please try again in a moment."
+            : now.isArchived
+              ? sl ? "Zahtevek je bil medtem arhiviran in ga ni več mogoče financirati." : "The request was archived meanwhile and can no longer be funded."
+              : !now.fundable
+                ? sl ? "Zahtevka zdaj ni mogoče financirati (čaka na odobritev ali ni odprt)." : "The request cannot be funded right now (waiting for approval, or not open)."
+                : sl ? "Zahtevek se je medtem spremenil. Odpri ga znova in preveri podatke." : "The request changed meanwhile. Open it again and check the details.",
+          variant: "destructive",
+        });
+        setIsSending(false);
+        return;
+      }
+    } catch {
+      setIsSending(false);
+      return;
+    }
 
     try {
       toast({

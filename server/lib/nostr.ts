@@ -7,6 +7,7 @@ import { verifyEvent } from 'nostr-tools';
 import { computeEligibility, relaysOf } from './ufEligibility.js';
 import { checkOwnReceivingWallet } from './ufWallet.js';
 import { isWalletPinned, resolveKnownFundingOpensAt, resolveNewRequestTiming } from './ufMaturing.js';
+import { editAllowedAfterApproval, fundingRefusal, wasApproved } from './ufApproval.js';
 import WebSocket from 'ws';
 import { poolQuery } from './relayPool.js';
 import { getUfSettings } from './ufSettings.js';
@@ -1513,6 +1514,7 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
     };
 
     let requestsIndexed = 0;
+    const lockedAfterApproval: string[] = [];
     for (const evt of requestsByKey.values()) {
       try {
         const getTag = (name: string) => evt.tags?.find((t: string[]) => t[0] === name)?.[1];
@@ -1530,7 +1532,10 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         // nostr identity of an addressable event is (pubkey, d) — a different
         // author may never take over an existing row by reusing its d-tag.
         const readExisting = () => db.prepare(
-          'SELECT pubkey, is_hidden, is_repaid, published_at, funding_opens_at, wallet, nostr_created_at FROM uf_requests WHERE id = ?'
+          `SELECT pubkey, is_hidden, is_repaid, published_at, funding_opens_at, wallet, nostr_created_at,
+                  title, short_desc, content, request_type, fiat_goal, currency, cover_image, gallery_images,
+                  crowdfunding_refs, status, approved_at
+             FROM uf_requests WHERE id = ?`
         ).get(evt.dTag) as any;
         let existing = readExisting();
         if (existing && existing.pubkey && existing.pubkey !== evt.pubkey) continue;
@@ -1555,6 +1560,25 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         // content would revert, and the wallet too while the request still matures.
         // (Nostr's own rule for an addressable event: the newest created_at wins.)
         if (existing && evt.created_at < (existing.nostr_created_at || 0)) continue;
+
+        // Approved = frozen (server/lib/ufApproval.ts, the same rule as the route): a later version
+        // that changes anything the approval covers — the amount above all — is not written. The
+        // relays may hold it; this database keeps reading the version that was approved.
+        if (existing && !editAllowedAfterApproval(existing, {
+          title,
+          shortDesc: getTag('summary') || '',
+          content: evt.content || '',
+          requestType: getTag('request_type') || 'personal_hardship',
+          fiatGoal: parseFloat(getTag('fiat_goal') || '0') || 0,
+          currency: getTag('currency') || 'EUR',
+          coverImage,
+          galleryImages,
+          crowdfundingRefs,
+          status: getTag('status') || 'active',
+        })) {
+          if (existing.nostr_created_at !== evt.created_at) lockedAfterApproval.push(evt.dTag);
+          continue;
+        }
 
         const nowSec = Math.floor(Date.now() / 1000);
 
@@ -1592,7 +1616,7 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
           // newer than the one the database holds (an older copy on a lagging relay
           // must not move it back). Not checkable now = this version waits whole
           // (nothing of it is written, so the next scan still sees it as newer and asks again).
-          if (existing.wallet && isWalletPinned(existing.funding_opens_at, nowSec)) {
+          if (existing.wallet && (isWalletPinned(existing.funding_opens_at, nowSec) || wasApproved(existing))) {
             if (wallet && wallet !== existing.wallet && evt.created_at > (existing.nostr_created_at || 0)) {
               const verdict = await checkOwnReceivingWallet(db, relaysOf(db), evt.pubkey, wallet, queryEventsWithRelayStatus);
               if ('unknown' in verdict) {
@@ -1645,6 +1669,12 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
         console.error('❌ indexUnconditionalFinancingFromRelays: failed to upsert request', evt.dTag, err);
       }
     }
+    if (lockedAfterApproval.length > 0) {
+      console.warn(
+        `⚠️ indexUnconditionalFinancingFromRelays: ${lockedAfterApproval.length} approved request(s) have a newer version on the relays ` +
+        `that changes what was approved — not written, the approved version stands: ${lockedAfterApproval.join(', ')}`,
+      );
+    }
     if (waiting.notListed > 0) {
       console.warn(
         `⚠️ indexUnconditionalFinancingFromRelays: ${waiting.notListed} unknown request(s) not listed ` +
@@ -1668,6 +1698,7 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
       (db.prepare('SELECT id FROM uf_contributions').all() as any[]).map(r => r.id),
     );
     const datedBeforeOpening = new Map<string, number>();
+    const notFundable = new Map<string, { code: string; n: number }>();
     let unsignedContributions = 0;
     const scanNowSec = Math.floor(Date.now() / 1000);
 
@@ -1680,9 +1711,24 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
 
         // The request must exist (requests are indexed above in this same run).
         const parentReq = db.prepare(
-          'SELECT pubkey, funding_opens_at FROM uf_requests WHERE id = ?'
+          `SELECT pubkey, funding_opens_at, status, is_hidden, fiat_goal, currency,
+                  approved_at, approved_fiat_goal, approved_currency
+             FROM uf_requests WHERE id = ?`
         ).get(requestId) as any;
         if (!parentReq) continue;
+
+        // Waiting for approval, archived or a draft: nobody may fund it, so a contribution this
+        // database has not counted yet is not counted now (mirrors POST /contributions/record).
+        // Not remembered as refused: once the request is approved or restored, the next scan
+        // looks at it again. One already counted stays counted.
+        if (!knownContributionIds.has(evt.id)) {
+          const refusal = fundingRefusal(parentReq);
+          if (refusal) {
+            const held = notFundable.get(requestId);
+            notFundable.set(requestId, { code: refusal.code, n: (held?.n || 0) + 1 });
+            continue;
+          }
+        }
 
         // Identity = the event SIGNER. A p-tag is attacker-controlled and must
         // never attribute a contribution (and its repayment share) to someone else.
@@ -1740,6 +1786,12 @@ export async function indexUnconditionalFinancingFromRelays(db: any): Promise<vo
       console.warn(
         `⚠️ indexUnconditionalFinancingFromRelays: ${total} contribution(s) are dated before their request opened for funding and were not indexed: ` +
         [...datedBeforeOpening].map(([id, n]) => `${id} ×${n}`).join(', '),
+      );
+    }
+    if (notFundable.size > 0) {
+      console.warn(
+        `⚠️ indexUnconditionalFinancingFromRelays: contribution(s) to requests nobody may fund (awaiting approval, archived or draft) were not indexed: ` +
+        [...notFundable].map(([id, w]) => `${id} ${w.code} ×${w.n}`).join(', '),
       );
     }
     if (unsignedContributions > 0) {

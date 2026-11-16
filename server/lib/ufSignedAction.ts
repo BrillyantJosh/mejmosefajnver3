@@ -38,6 +38,11 @@ export const UF_SIGNED_ACTION_MAX_REMEMBERED = 10_000;
 
 export const UF_ACTION_DELETE_REQUEST = 'uf-request-delete';
 export const UF_ACTION_SET_HIDDEN = 'uf-request-set-hidden';
+/** An administrator approves a request: content { action, id, event_id, fiat_goal, currency } — the exact version seen. */
+export const UF_ACTION_APPROVE = 'uf-request-approve';
+/** An administrator reads what waits for approval and what is archived: content { action, id: 'review' }. */
+export const UF_ACTION_REVIEW = 'uf-requests-review';
+export const UF_REVIEW_TARGET = 'review';
 
 export interface SignedActionExpectation {
   /** HTTP method of the route being called. */

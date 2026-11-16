@@ -138,6 +138,7 @@ const UFContribute = () => {
   const selectedWallet = wallets.find((w) => w.walletId === selectedWalletId);
 
   const canContinue =
+    request.fundable &&
     !!session?.nostrHexId &&
     !!selectedWalletId &&
     parsedFiat > 0 &&
@@ -189,8 +190,34 @@ const UFContribute = () => {
           </p>
         </div>
 
-        {/* Maturing guard — funding not yet open */}
-        {isMaturing ? (
+        {/* Not fundable for a reason other than maturing: waiting for an administrator's
+            approval, archived, or already repaid. The server refuses the record the same way
+            (server/lib/ufApproval.ts), so the payment is never even offered. */}
+        {!request.fundable && (request.approval !== "approved" || request.isArchived || !isMaturing) ? (
+          <Card className="border-amber-500/30 bg-amber-500/10">
+            <CardContent className="p-6">
+              <div className="flex items-start gap-3">
+                <Info className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-amber-700 dark:text-amber-500">
+                    {request.isArchived
+                      ? sl ? "Ta zahtevek je arhiviran" : "This request is archived"
+                      : request.approval !== "approved"
+                        ? sl ? "Ta zahtevek še čaka na odobritev" : "This request is waiting for approval"
+                        : sl ? "Tega zahtevka ni mogoče financirati" : "This request cannot be funded"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {request.isArchived
+                      ? sl ? "Arhiviranega zahtevka ni mogoče financirati." : "An archived request cannot be funded."
+                      : request.approval !== "approved"
+                        ? sl ? "Financirati ga bo mogoče, ko ga skrbnik odobri." : "It can be funded once an administrator approves it."
+                        : sl ? "Financiranje tega zahtevka ni odprto." : "Funding for this request is not open."}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : isMaturing ? (
           <Card className="border-amber-500/30 bg-amber-500/10">
             <CardContent className="p-6">
               <div className="flex items-start gap-3">

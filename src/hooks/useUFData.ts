@@ -15,7 +15,8 @@ export const UF_REPAYMENT_KIND = 60211;    // repayment record
 export const UF_COMMENT_KIND = 60212;      // maturing comment / reply
 
 export type UfRequestType = 'personal_hardship' | 'lifestyle_transition' | 'wellbeing_project';
-export type UfPhase = 'maturing' | 'repaying' | 'repaid';
+/** 'pending' = waiting for an administrator's approval: seen only by its author and the administrators. */
+export type UfPhase = 'pending' | 'maturing' | 'repaying' | 'repaid';
 
 export interface UfRequest {
   id: string;               // d-tag: uf:<uuid>
@@ -35,8 +36,16 @@ export interface UfRequest {
   fundingOpensAt: number;
   status: string;
   isHidden: boolean;
+  /** Archived by an administrator (the same flag as isHidden): out of the lists, not fundable. */
+  isArchived: boolean;
   isRepaid: boolean;
   phase: UfPhase;
+  /** Approved by an administrator — and the amount and currency are still the ones approved. */
+  approval: 'pending' | 'approved';
+  approvedAt: number | null;
+  approvedEventId: string | null;
+  /** May a contribution be made right now? The same rule the server enforces when it is recorded. */
+  fundable: boolean;
   nostrCreatedAt: number;
   totalFunded: number;
   contributionCount: number;

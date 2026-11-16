@@ -12,9 +12,15 @@
  * kind 27235 event (see server/lib/ufSignedAction.ts) and the SIGNER — owner or
  * administrator — is the only identity there is.
  *
- * Lifecycle: publish → MATURING (comments only; enforced server-side and in the
- * indexer; the length is an admin setting) → REPAYING (open for funding AND
- * repayable) → REPAID (repaid_fiat >= funded_fiat, auto-recomputed).
+ * Lifecycle: publish → PENDING (seen only by its author and the administrators;
+ * the author may still change it) → an administrator APPROVES it (signed; the
+ * version, amount and currency are pinned, and from then on nothing an approval
+ * covers may change — server/lib/ufApproval.ts) → MATURING (comments only;
+ * enforced server-side and in the indexer; the length is an admin setting) →
+ * REPAYING (open for funding AND repayable) →
+ * REPAID (repaid_fiat >= funded_fiat, auto-recomputed). An administrator may
+ * ARCHIVE a request at any point (is_hidden): out of every public list and not
+ * fundable, and reversible.
  */
 
 import { Router } from 'express';
@@ -26,12 +32,22 @@ import { computeEligibility, relaysOf } from '../lib/ufEligibility.js';
 import { checkOwnReceivingWallet } from '../lib/ufWallet.js';
 import { UF_FUTURE_SKEW_SECONDS, UF_PAST_SKEW_SECONDS } from '../lib/ufMaturing.js';
 import {
+  UF_ACTION_APPROVE,
   UF_ACTION_DELETE_REQUEST,
+  UF_ACTION_REVIEW,
   UF_ACTION_SET_HIDDEN,
+  UF_REVIEW_TARGET,
   consumeSignedAction,
   isRefused,
   verifySignedAction,
 } from '../lib/ufSignedAction.js';
+import {
+  PUBLIC_REQUEST_SQL,
+  approvalHolds,
+  editAllowedAfterApproval,
+  fundingRefusal,
+  wasApproved,
+} from '../lib/ufApproval.js';
 
 const router = Router();
 
@@ -88,13 +104,17 @@ const getPWithMarker = (evt: any, marker: string): string | undefined =>
   evt.tags?.find((t: string[]) => t[0] === 'p' && (t[3] === marker || t[2] === marker))?.[1];
 
 // Derived lifecycle phase — the single source of truth for tabs and gating.
-function phaseOf(row: any, nowSec: number): 'maturing' | 'repaying' | 'repaid' {
+// A request whose approval does not hold is 'pending', whatever its window says.
+function phaseOf(row: any, nowSec: number): 'pending' | 'maturing' | 'repaying' | 'repaid' {
   if (row.is_repaid) return 'repaid';
+  if (!approvalHolds(row)) return 'pending';
   if ((row.funding_opens_at || 0) > nowSec) return 'maturing';
   return 'repaying';
 }
 
 function requestRowToApi(row: any, nowSec: number) {
+  const approved = approvalHolds(row);
+  const phase = phaseOf(row, nowSec);
   return {
     id: row.id,
     eventId: row.event_id,
@@ -103,8 +123,9 @@ function requestRowToApi(row: any, nowSec: number) {
     shortDesc: row.short_desc,
     content: row.content,
     requestType: row.request_type,
-    fiatGoal: row.fiat_goal,
-    currency: row.currency,
+    // An approved request reads the amount PINNED at approval, never a later number.
+    fiatGoal: approved ? row.approved_fiat_goal : row.fiat_goal,
+    currency: approved ? row.approved_currency : row.currency,
     wallet: row.wallet,
     coverImage: row.cover_image,
     galleryImages: parseJsonArray(row.gallery_images),
@@ -113,8 +134,15 @@ function requestRowToApi(row: any, nowSec: number) {
     fundingOpensAt: row.funding_opens_at,
     status: row.status,
     isHidden: !!row.is_hidden,
+    /** Archived = hidden by an administrator (the same flag): out of the lists, not fundable. */
+    isArchived: !!row.is_hidden,
     isRepaid: !!row.is_repaid,
-    phase: phaseOf(row, nowSec),
+    phase,
+    approval: approved ? 'approved' : 'pending',
+    approvedAt: approved ? row.approved_at : null,
+    approvedEventId: approved ? row.approved_event_id : null,
+    /** May a contribution be made right now? The same rule /contributions/record enforces. */
+    fundable: phase === 'repaying' && !fundingRefusal(row),
     nostrCreatedAt: row.nostr_created_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -209,7 +237,8 @@ router.get('/requests', (req, res) => {
   const offset = (page - 1) * limit;
   const nowSec = Math.floor(Date.now() / 1000);
 
-  const conditions: string[] = ["r.status != 'draft'", 'r.is_hidden = 0'];
+  // Only what an administrator approved and did not archive is public (ufApproval.ts).
+  const conditions: string[] = [PUBLIC_REQUEST_SQL];
   const params: any[] = [];
 
   switch (tab) {
@@ -249,7 +278,7 @@ router.get('/requests', (req, res) => {
     // How many requests sit in each phase, so the tabs can show it. Without
     // this a request in another tab is effectively invisible: someone looking
     // at an empty (or single-entry) tab has no hint that more exist elsewhere.
-    const visible = "WHERE r.status != 'draft' AND r.is_hidden = 0";
+    const visible = `WHERE ${PUBLIC_REQUEST_SQL}`;
     const countsRow = db.prepare(`
       SELECT
         SUM(CASE WHEN r.is_repaid = 0 AND r.funding_opens_at >  ? THEN 1 ELSE 0 END) AS maturing,
@@ -362,7 +391,10 @@ router.post('/requests/upsert', async (req, res) => {
 
   try {
     const existing = db.prepare(
-      'SELECT pubkey, is_hidden, is_repaid, published_at, funding_opens_at, wallet, event_id, nostr_created_at FROM uf_requests WHERE id = ?'
+      `SELECT pubkey, is_hidden, is_repaid, published_at, funding_opens_at, wallet, event_id, nostr_created_at,
+              title, short_desc, content, request_type, fiat_goal, currency, cover_image, gallery_images,
+              crowdfunding_refs, status, approved_at
+         FROM uf_requests WHERE id = ?`
     ).get(dTag) as any;
 
     // Addressable identity is (pubkey, d): a different author may never take
@@ -384,13 +416,41 @@ router.post('/requests/upsert', async (req, res) => {
       }
     }
 
+    const imageTags = getAllTags(evt, 'img');
+    const coverImage = imageTags.find((t: string[]) => t[2] === 'cover')?.[1] || null;
+    const galleryImages = imageTags.filter((t: string[]) => t[2] === 'gallery').map((t: string[]) => t[1]);
+    const crowdfundingRefs = getAllTags(evt, 'crowdfunding').map((t: string[]) => t[1]);
+
+    // Approved = frozen. Once an administrator approved a request, a later version may not change
+    // anything the approval covers — above all not the amount (Jasna and Brilly, 16. 11. 2026). The
+    // receiving wallet is the one exception, judged below by the owner's-own-wallet rule.
+    if (existing && !editAllowedAfterApproval(existing, {
+      title,
+      shortDesc: getTag(evt, 'summary') || '',
+      content: evt.content || '',
+      requestType: getTag(evt, 'request_type') || 'personal_hardship',
+      fiatGoal: parseFloat(getTag(evt, 'fiat_goal') || '0') || 0,
+      currency: getTag(evt, 'currency') || 'EUR',
+      coverImage,
+      galleryImages,
+      crowdfundingRefs,
+      status: getTag(evt, 'status') || 'active',
+    })) {
+      return res.status(409).json({
+        error: 'This request has been approved and can no longer be changed — only its receiving wallet may move to another of your own wallets',
+        code: 'APPROVED_LOCKED',
+      });
+    }
+
     const settings = getUfSettings();
 
     // Per-group cap (admin-configurable; 0 = uncapped). Enforced on edits too,
     // otherwise a within-cap request could be edited up afterwards.
+    // (An approved request's amount was checked when it was asked for and can no longer change —
+    // the lock above — so a cap lowered later must not block it from switching its wallet.)
     const requestedGoal = parseFloat(getTag(evt, 'fiat_goal') || '0') || 0;
     const cap = maxAmountFor(getTag(evt, 'request_type') || '', settings);
-    if (cap > 0 && requestedGoal > cap) {
+    if (cap > 0 && requestedGoal > cap && !(existing && wasApproved(existing))) {
       return res.status(400).json({
         error: `Requested amount exceeds the maximum for this group (${cap})`,
         maxAmount: cap,
@@ -403,8 +463,9 @@ router.post('/requests/upsert', async (req, res) => {
     // contributions away from the address people are giving to — except to
     // another of the OWNER'S OWN registered wallets, checked against the Lana
     // Registrar's record (server/lib/ufWallet.ts; Brilly, 11. 11. 2026).
+    // An approval pins it the same way: what was approved is where the money goes.
     let wallet = getTag(evt, 'wallet') || '';
-    if (existing && existing.wallet && nowSec >= existing.funding_opens_at) {
+    if (existing && existing.wallet && (nowSec >= existing.funding_opens_at || wasApproved(existing))) {
       if (wallet && wallet !== existing.wallet) {
         const verdict = await checkOwnReceivingWallet(db, relaysOf(db), evt.pubkey, wallet, queryEventsWithRelayStatus);
         if ('unknown' in verdict) {
@@ -450,11 +511,6 @@ router.post('/requests/upsert', async (req, res) => {
         });
       }
     }
-
-    const imageTags = getAllTags(evt, 'img');
-    const coverImage = imageTags.find((t: string[]) => t[2] === 'cover')?.[1] || null;
-    const galleryImages = imageTags.filter((t: string[]) => t[2] === 'gallery').map((t: string[]) => t[1]);
-    const crowdfundingRefs = getAllTags(evt, 'crowdfunding').map((t: string[]) => t[1]);
 
     db.prepare(`
       INSERT INTO uf_requests (
@@ -510,7 +566,8 @@ router.post('/requests/upsert', async (req, res) => {
       evt.created_at || nowSec,
     );
 
-    res.json({ success: true, fundingOpensAt });
+    // A request nobody approved yet is listed for its author and the administrators only.
+    res.json({ success: true, fundingOpensAt, awaitingApproval: !(existing && wasApproved(existing)) });
   } catch (err: any) {
     console.error('❌ POST /api/unconditional-financing/requests/upsert error:', err);
     res.status(500).json({ error: err.message });
@@ -524,6 +581,8 @@ router.post('/requests/upsert', async (req, res) => {
 //   tags:    ['u', <this url>], ['method', 'PATCH']
 // The SIGNER must be an administrator, and is_hidden is read from the signed
 // content — neither a public key nor a flag in the JSON body decides anything.
+// This is ARCHIVE (true) and RESTORE (false): an archived request leaves every
+// public list and cannot be funded (ufApproval.ts); repayments stay possible.
 // ──────────────────────────────────────────────
 router.patch('/requests/:id/admin', (req, res) => {
   const db = getDb();
@@ -554,6 +613,106 @@ router.patch('/requests/:id/admin', (req, res) => {
     res.json({ success: true });
   } catch (err: any) {
     console.error('❌ PATCH /api/unconditional-financing/requests/:id/admin error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
+// POST /api/unconditional-financing/requests/:id/approve
+// Body: { event: <signed kind 27235> }
+//   content: {"action":"uf-request-approve","id":"<request id>",
+//             "event_id":"<the 31240 seen>","fiat_goal":<amount seen>,"currency":"<currency seen>"}
+//   tags:    ['u', <this url>], ['method', 'POST'], ['nonce', <random>]
+// The SIGNER must be an administrator. The approval is for the exact version the administrator
+// looked at: if the author changed it meanwhile, nothing is approved (409) and the page is
+// reloaded. On approval the version, amount and currency are pinned (ufApproval.ts). The
+// maturing window is left as it is (ufApproval.ts says why).
+// ──────────────────────────────────────────────
+router.post('/requests/:id/approve', (req, res) => {
+  const db = getDb();
+  const signed = verifySignedAction(req.body?.event, {
+    method: 'POST',
+    action: UF_ACTION_APPROVE,
+    target: req.params.id,
+  });
+  if (isRefused(signed)) return res.status(signed.status).json({ error: signed.error });
+  if (!isAdministrator(db, signed.pubkey)) return res.status(403).json({ error: 'Not an administrator' });
+
+  const { event_id: seenEventId, fiat_goal: seenGoal, currency: seenCurrency } = signed.payload;
+  if (typeof seenEventId !== 'string' || typeof seenGoal !== 'number' || typeof seenCurrency !== 'string') {
+    return res.status(400).json({ error: 'An approval names the version, amount and currency it is for' });
+  }
+
+  try {
+    const row = db.prepare('SELECT * FROM uf_requests WHERE id = ?').get(req.params.id) as any;
+    if (!row) return res.status(404).json({ error: 'Request not found' });
+    if (row.status === 'draft') return res.status(409).json({ error: 'A draft cannot be approved', code: 'DRAFT' });
+    if (row.is_hidden) return res.status(409).json({ error: 'This request is archived — restore it before approving it', code: 'ARCHIVED' });
+    if (approvalHolds(row)) return res.status(409).json({ error: 'This request is already approved', code: 'ALREADY_APPROVED' });
+    if (row.event_id !== seenEventId || row.currency !== seenCurrency || Math.abs((Number(row.fiat_goal) || 0) - seenGoal) > 1e-9) {
+      return res.status(409).json({ error: 'The request has changed since you opened it — reload it and look again', code: 'CHANGED' });
+    }
+
+    const spent = consumeSignedAction(signed);
+    if (spent) return res.status(spent.status).json({ error: spent.error });
+
+    const now = Math.floor(Date.now() / 1000);
+    // The WHERE repeats what was checked, so an edit landing between the read and this write
+    // cannot be approved in the place of the version the administrator saw.
+    const result = db.prepare(`
+      UPDATE uf_requests
+         SET approved_at = ?, approved_by = ?, approved_event_id = event_id,
+             approved_fiat_goal = fiat_goal, approved_currency = currency,
+             updated_at = datetime('now')
+       WHERE id = ? AND event_id = ? AND fiat_goal = ? AND currency = ? AND is_hidden = 0
+    `).run(now, signed.pubkey, row.id, row.event_id, row.fiat_goal, row.currency);
+    if (result.changes === 0) {
+      return res.status(409).json({ error: 'The request has changed since you opened it — reload it and look again', code: 'CHANGED' });
+    }
+    console.log(`✅ Approved UF request ${row.id} (${row.fiat_goal} ${row.currency}, event ${String(row.event_id).slice(0, 12)}…) by ${signed.pubkey.slice(0, 16)}…`);
+    res.json({ success: true, fundingOpensAt: row.funding_opens_at });
+  } catch (err: any) {
+    console.error('❌ POST /api/unconditional-financing/requests/:id/approve error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
+// POST /api/unconditional-financing/requests/review
+// Body: { event: <signed kind 27235> }
+//   content: {"action":"uf-requests-review","id":"review"}
+//   tags:    ['u', <this url>], ['method', 'POST'], ['nonce', <random>]
+// What only an administrator sees: requests waiting for approval and archived ones.
+// ──────────────────────────────────────────────
+router.post('/requests/review', (req, res) => {
+  const db = getDb();
+  const signed = verifySignedAction(req.body?.event, {
+    method: 'POST',
+    action: UF_ACTION_REVIEW,
+    target: UF_REVIEW_TARGET,
+  });
+  if (isRefused(signed)) return res.status(signed.status).json({ error: signed.error });
+  if (!isAdministrator(db, signed.pubkey)) return res.status(403).json({ error: 'Not an administrator' });
+  const spent = consumeSignedAction(signed);
+  if (spent) return res.status(spent.status).json({ error: spent.error });
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  try {
+    const rows = db.prepare(`
+      SELECT r.*, ${STATS_COLS}
+      FROM uf_requests r
+      ${STATS_JOIN}
+      WHERE r.status != 'draft'
+      ORDER BY r.nostr_created_at DESC
+    `).all() as any[];
+    const pending = rows.filter((r) => !r.is_hidden && !approvalHolds(r));
+    const archived = rows.filter((r) => !!r.is_hidden);
+    res.json({
+      pending: pending.map((r) => requestRowToApi(r, nowSec)),
+      archived: archived.map((r) => requestRowToApi(r, nowSec)),
+    });
+  } catch (err: any) {
+    console.error('❌ POST /api/unconditional-financing/requests/review error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -637,9 +796,19 @@ router.post('/contributions/record', (req, res) => {
 
   try {
     const request = db.prepare(
-      'SELECT pubkey, funding_opens_at FROM uf_requests WHERE id = ?'
+      `SELECT pubkey, funding_opens_at, status, is_hidden, fiat_goal, currency,
+              approved_at, approved_fiat_goal, approved_currency
+         FROM uf_requests WHERE id = ?`
     ).get(requestId) as any;
     if (!request) return res.status(404).json({ error: 'Request not found' });
+
+    // A contribution already counted stays counted (sending its event again changes nothing).
+    const known = db.prepare('SELECT 1 FROM uf_contributions WHERE id = ?').get(evt.id);
+    // Not approved (or the approval no longer covers what the row says), archived, or a draft:
+    // nobody may fund it, so a new contribution is not counted — the same rule the relay
+    // re-index applies. Archived and later restored, a refused one is counted by the next scan.
+    const refusal = known ? null : fundingRefusal(request);
+    if (refusal) return res.status(409).json({ error: refusal.error, code: refusal.code });
 
     // The supporter is the SIGNER — never a claimable tag.
     const supporterPubkey = evt.pubkey;
@@ -877,7 +1046,7 @@ router.get('/summary', (_req, res) => {
         SELECT request_id, SUM(total_fiat) AS total_repaid
         FROM uf_repayments GROUP BY request_id
       ) rp ON rp.request_id = r.id
-      WHERE r.status != 'draft' AND r.is_hidden = 0
+      WHERE ${PUBLIC_REQUEST_SQL}
     `).get() as any;
 
     res.json({

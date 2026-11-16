@@ -18,6 +18,8 @@ const hexToBytes = (hex: string): Uint8Array => {
 interface AdminContextType {
   isAdmin: boolean;
   is100MAdmin: boolean;
+  /** May approve, archive and restore Unconditional Financing requests (the server checks the signature). */
+  isUfAdmin: boolean;
   loading: boolean;
   appSettings: AppSettings | null;
   updateAppName: (name: string) => Promise<void>;
@@ -112,6 +114,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         discount_api_url: (getValue('discount_api_url') as string) || 'https://www.lana.discount',
         discount_api_key: (getValue('discount_api_key') as string) || '',
         uf_maturing_days: (getValue('unconditional_financing_maturing_days') as number) ?? 8,
+        uf_admins: (getValue('unconditional_financing_admins') as string[]) || [],
         uf_max_amounts: {
           personal_hardship: 0,
           lifestyle_transition: 0,
@@ -372,6 +375,16 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     )
   );
 
+  // Unconditional Financing administrators: the same two lists the server's isAdministrator reads
+  // (admin_users, and the module's own list). Showing the buttons decides nothing — the server
+  // takes the identity from the signature.
+  const isUfAdmin = Boolean(
+    session?.nostrHexId && (
+      isAdmin ||
+      (appSettings?.uf_admins || []).includes(session.nostrHexId)
+    )
+  );
+
   useEffect(() => {
     // Don't run admin check until auth has finished loading
     if (authLoading) return;
@@ -401,6 +414,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       value={{
         isAdmin,
         is100MAdmin,
+        isUfAdmin,
         loading,
         appSettings,
         updateAppName,

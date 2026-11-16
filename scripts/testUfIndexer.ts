@@ -208,6 +208,18 @@ const contributionsOf = (db: any, id: string) =>
 const watermarkOf = (db: any) =>
   parseInt((db.prepare("SELECT value FROM app_settings WHERE key = 'unconditional_financing_last_indexed_at'").get() as any)?.value ?? '0', 10);
 const scan = async (db: any) => { await indexUnconditionalFinancingFromRelays(db); };
+/**
+ * Since 16. 11. 2026 a request is fundable only once an administrator approved it, and approvals
+ * live in the database (server/lib/ufApproval.ts): a database rebuilt from the relays has none, so
+ * every request it lists waits, and its contributions with it. The scenarios below are about the
+ * WINDOW rule on a rebuild, so they do what an administrator does next — approve the requests,
+ * exactly as POST /requests/:id/approve writes it (the window untouched) — and scan again.
+ */
+const approveAll = (db: any) => db.prepare(`
+  UPDATE uf_requests SET approved_at = ?, approved_by = 'test-admin', approved_event_id = event_id,
+         approved_fiat_goal = fiat_goal, approved_currency = currency
+   WHERE approved_at IS NULL`).run(now);
+const approveAndScan = async (db: any) => { approveAll(db); await quiet(() => scan(db)); };
 const reset = () => {
   for (const r of [relay, relay2]) { r.store = []; r.refuse88888 = false; r.down = false; r.lax88888 = false; r.emptyNext88888 = 0; r.count88888 = 0; }
   resetUfIndexerCaches();
@@ -476,6 +488,9 @@ console.log('— REBUILD: the database is built again from the relays alone —'
   const db = freshDb();          // no scan watermark: this database has never scanned
   check('(precondition) the database has never completed a scan', watermarkOf(db) === 0);
   await quiet(() => scan(db));
+  check('a rebuilt database knows no approvals: no contribution is counted before an administrator approves',
+    ['uf:r1', 'uf:r2', 'uf:r4', 'uf:r5'].every((id) => contributionsOf(db, id) === 0));
+  await approveAndScan(db);
 
   const r = (id: string) => rowOf(db, id);
   check('R1 (published under 0 days): window reproduced as it was', r('uf:r1')?.funding_opens_at === R1.F && r('uf:r1')?.published_at === R1.P, r('uf:r1'));
@@ -532,6 +547,7 @@ console.log('— REBUILD that does not get through in one scan —');
     relay.refuse88888 = false;
     await new Promise((r) => setTimeout(r, 50));
     await quiet(() => scan(db));
+    await approveAndScan(db);
     check('second scan: listed with the window it really had', rowOf(db, 'uf:flaky')?.funding_opens_at === published, rowOf(db, 'uf:flaky'));
     check('…and its real contribution kept (a live-mode scan would have dropped it)', contributionsOf(db, 'uf:flaky') === 1, contributionsOf(db, 'uf:flaky'));
     check('now that everything was settled the watermark moved', watermarkOf(db) > 0, watermarkOf(db));
@@ -556,6 +572,7 @@ console.log('— REBUILD that does not get through in one scan —');
     check('…and the watermark did NOT move, because five are still waiting', watermarkOf(db) === 0, watermarkOf(db));
     await quiet(() => scan(db));
     check(`second scan: the rest are listed too (${total} of ${total})`, listed() === total, listed());
+    await approveAndScan(db);
     check('…all of them as they really were — every real contribution kept, none dropped by a premature live-mode scan', kept() === total, kept());
     check('…and then the watermark moved', watermarkOf(db) > 0, watermarkOf(db));
   }
@@ -580,6 +597,7 @@ console.log('— RESTORE from a backup that is three weeks old —');
   );
   const db = freshDb({ lastScanAt: backup });
   await quiet(() => scan(db));
+  await approveAndScan(db);
   const r = (id: string) => rowOf(db, id);
 
   check('published after the backup: believed as written, its contribution kept',
@@ -733,6 +751,7 @@ console.log('— a relay that does not answer —');
     relay2.down = false;
     await settle();
     await quiet(() => scan(db));
+    await approveAndScan(db);
     check('second scan: the request only the other relay held is listed with the window it really had',
       rowOf(db, 'uf:only-on-2')?.funding_opens_at === published, rowOf(db, 'uf:only-on-2'));
     check('…its real contribution kept (a live-mode scan would have dropped it)', contributionsOf(db, 'uf:only-on-2') === 1, contributionsOf(db, 'uf:only-on-2'));
@@ -890,6 +909,7 @@ console.log('— what the indexer will not take from the relays —');
     const owner = newKey(), supporter = newKey(), other = newKey();
     const db = freshDb({ lastScanAt: now - 600 });
     seedKnown(db, 'uf:signed', owner, now - 15 * DAY);
+    approveAll(db);
     const bad = JSON.parse(JSON.stringify(contribution(other, 'uf:signed', now - 9 * DAY)));
     bad.tags = bad.tags.map((t: string[]) => (t[0] === 'amount_fiat' ? ['amount_fiat', '999999'] : t));      // altered after signing
     relay.store.push(contribution(supporter, 'uf:signed', now - 10 * DAY), bad);

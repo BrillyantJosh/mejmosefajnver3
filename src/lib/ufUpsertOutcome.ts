@@ -22,8 +22,18 @@ export type UpsertOutcome =
   | { kind: "pending"; message: string }
   | { kind: "refused"; message: string };
 
-export function upsertOutcome(status: number, serverMessage: unknown, sl: boolean, isEdit = false): UpsertOutcome {
+export function upsertOutcome(status: number, serverMessage: unknown, sl: boolean, isEdit = false, serverCode?: unknown): UpsertOutcome {
   if (status >= 200 && status < 300) return { kind: "listed" };
+
+  // An approved request is frozen (server/lib/ufApproval.ts): the change was refused, nothing moved.
+  if (serverCode === "APPROVED_LOCKED") {
+    return {
+      kind: "refused",
+      message: sl
+        ? "Zahtevek je odobren, zato ga ni več mogoče spreminjati — zneska še posebej ne. Zamenjaš lahko le denarnico za prejem (med svojimi denarnicami)."
+        : "The request is approved and can no longer be changed — above all not the amount. You may only switch the receiving wallet (to another of your own).",
+    };
+  }
 
   // An EDIT of a request that is already listed: nothing about membership. The
   // usual reason is a change of receiving wallet the server could not check

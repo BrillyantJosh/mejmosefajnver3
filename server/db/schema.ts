@@ -397,7 +397,13 @@ export function initializeSchema(db: Database.Database): void {
       is_repaid INTEGER NOT NULL DEFAULT 0,
       nostr_created_at INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      updated_at TEXT DEFAULT (datetime('now')),
+      -- Approval (server/lib/ufApproval.ts): NULL = waiting for an administrator.
+      approved_at INTEGER,
+      approved_by TEXT,
+      approved_event_id TEXT,
+      approved_fiat_goal REAL,
+      approved_currency TEXT
     );
 
     CREATE TABLE IF NOT EXISTS uf_contributions (
@@ -542,6 +548,8 @@ export function initializeSchema(db: Database.Database): void {
     try { db.exec(sql); } catch (_) { /* column already exists */ }
   }
 
+  migrateUfApproval(db);
+
   // Migration: expand event_tickets wallet_type CHECK constraint to allow 'card' and 'bank_transfer'
   // SQLite cannot ALTER CHECK constraints, so we must recreate the table
   try {
@@ -581,4 +589,34 @@ export function initializeSchema(db: Database.Database): void {
   }
 
   console.log('SQLite schema initialized (26 tables + indexes)');
+}
+
+/**
+ * Unconditional Financing gains approval (16. 11. 2026, server/lib/ufApproval.ts).
+ *
+ * The columns arriving IS the deploy, so that is the one moment that decides what "existing"
+ * means: every request this database already lists then counts as approved, with the amount and
+ * currency it stands at pinned — nothing published before approval existed disappears. Requests
+ * the database learns about afterwards (the route, the relay re-index) wait for an administrator.
+ * All in one transaction: either the columns and the grandfathering land together, or neither.
+ * A database built from scratch gets the columns from CREATE TABLE and grandfathers nothing —
+ * everything it re-indexes from the relays then waits for approval (fail-closed).
+ */
+export function migrateUfApproval(db: Database.Database): void {
+  const has = (db.prepare('PRAGMA table_info(uf_requests)').all() as { name: string }[]).some((c) => c.name === 'approved_at');
+  if (has) return;
+  db.transaction(() => {
+    db.exec('ALTER TABLE uf_requests ADD COLUMN approved_at INTEGER');
+    db.exec('ALTER TABLE uf_requests ADD COLUMN approved_by TEXT');
+    db.exec('ALTER TABLE uf_requests ADD COLUMN approved_event_id TEXT');
+    db.exec('ALTER TABLE uf_requests ADD COLUMN approved_fiat_goal REAL');
+    db.exec('ALTER TABLE uf_requests ADD COLUMN approved_currency TEXT');
+    const result = db.prepare(`
+      UPDATE uf_requests
+         SET approved_at = ?, approved_by = 'grandfathered', approved_event_id = event_id,
+             approved_fiat_goal = fiat_goal, approved_currency = currency
+       WHERE approved_at IS NULL
+    `).run(Math.floor(Date.now() / 1000));
+    console.log(`✅ Unconditional Financing approval: ${result.changes} existing request(s) counted as approved, amounts pinned`);
+  })();
 }

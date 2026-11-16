@@ -176,6 +176,7 @@ const UFRepay = lazy(() => import("./pages/unconditional-financing/UFRepay"));
 const UFRepayPrivateKey = lazy(() => import("./pages/unconditional-financing/UFRepayPrivateKey"));
 const UFRepayResult = lazy(() => import("./pages/unconditional-financing/UFRepayResult"));
 const UFMy = lazy(() => import("./pages/unconditional-financing/UFMy"));
+const UFReview = lazy(() => import("./pages/unconditional-financing/UFReview"));
 const UnconditionalFinancingAbout = lazy(() => import("./pages/unconditional-financing/UnconditionalFinancing"));
 const AiAdvisor = lazy(() => import("./pages/AiAdvisor"));
 const Home = lazy(() => import("./pages/Home"));
@@ -393,6 +394,7 @@ const App = () => (
                     <Route path="repay/:id/private-key" element={<UFRepayPrivateKey />} />
                     <Route path="repay/:id/result" element={<UFRepayResult />} />
                     <Route path="my" element={<UFMy />} />
+                    <Route path="review" element={<UFReview />} />
                     {/* Legacy alias — About now lives at the module index */}
                     <Route path="about" element={<UnconditionalFinancingAbout />} />
                   </Route>

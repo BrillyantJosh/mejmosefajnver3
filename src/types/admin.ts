@@ -57,6 +57,7 @@ export interface AppSettings {
   discount_api_key?: string;              // Lana.Discount API key
   // Unconditional Financing settings
   uf_maturing_days?: number;              // Days a request matures before funding opens (default 8)
+  uf_admins?: string[];                   // Module administrators (app_settings unconditional_financing_admins); global admins always are
   uf_max_amounts?: UfMaxAmounts;          // Highest requestable amount per group (0 = no cap)
 }
 

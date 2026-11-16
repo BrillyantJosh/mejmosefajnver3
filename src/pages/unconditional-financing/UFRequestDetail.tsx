@@ -2,16 +2,20 @@ import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { format } from "date-fns";
 import {
+  Archive,
   ArrowLeft,
+  Clock,
   ExternalLink,
   HandCoins,
   Info,
   Link2,
   Loader2,
   Pencil,
+  ShieldCheck,
   Target,
   Undo2,
   Users,
+  Wallet,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +24,7 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdmin } from "@/contexts/AdminContext";
 import { useLang } from "@/i18n/I18nContext";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 import {
@@ -31,6 +36,7 @@ import {
   type UfRepayment,
 } from "@/hooks/useUFData";
 import UFComments from "./UFComments";
+import UFAdminBar from "./UFAdminBar";
 
 // chainz is the ONLY valid LANA explorer
 const CHAINZ_TX = "https://chainz.cryptoid.info/lana/tx.dws?";
@@ -45,7 +51,8 @@ const UFRequestDetail = () => {
   const navigate = useNavigate();
   const sl = useLang() === "sl";
   const { session } = useAuth();
-  const { detail, isLoading, error } = useUfRequest(id);
+  const { isUfAdmin } = useAdmin();
+  const { detail, isLoading, error, refetch } = useUfRequest(id);
 
   const request = detail?.request;
   const financiers: UfFinancier[] = detail?.financiers || [];
@@ -107,6 +114,29 @@ const UFRequestDetail = () => {
   }
 
   const isRequester = session?.nostrHexId === request.pubkey;
+  // Waiting for approval, or archived: seen only by its author and the administrators
+  // (server/lib/ufApproval.ts). Anyone else who follows a link learns only that much.
+  const isPending = request.approval === "pending";
+  const isArchived = !!request.isArchived;
+  const isApproved = request.approval === "approved";
+  if ((isPending || isArchived) && !isRequester && !isUfAdmin) {
+    return (
+      <div className="container mx-auto p-4 sm:p-6 pb-24 max-w-2xl">
+        <Button variant="ghost" onClick={() => navigate("/unconditional-financing/requests")} className="gap-2 mb-6">
+          <ArrowLeft className="h-4 w-4" />
+          {sl ? "Nazaj" : "Back"}
+        </Button>
+        <div className="flex flex-col items-center text-center py-12 gap-3">
+          {isArchived ? <Archive className="h-10 w-10 text-muted-foreground" /> : <Clock className="h-10 w-10 text-muted-foreground" />}
+          <p className="text-muted-foreground max-w-sm">
+            {isArchived
+              ? sl ? "Ta zahtevek je arhiviran in ni več javen." : "This request is archived and no longer public."
+              : sl ? "Ta zahtevek še čaka na odobritev skrbnika. Javen bo, ko ga skrbnik odobri." : "This request is waiting for an administrator's approval. It becomes public once approved."}
+          </p>
+        </div>
+      </div>
+    );
+  }
   const fiatGoal = request.fiatGoal || 0;
   const percentFunded = fiatGoal > 0 ? (totalFunded / fiatGoal) * 100 : 0;
   const requesterProfile = profiles.get(request.pubkey);
@@ -116,6 +146,12 @@ const UFRequestDetail = () => {
   // ── phase badge ──
   const phaseBadge = (() => {
     switch (request.phase) {
+      case "pending":
+        return (
+          <Badge className="bg-sky-500/15 text-sky-700 dark:text-sky-400 border border-sky-500/30 hover:bg-sky-500/15">
+            {sl ? "Čaka na odobritev" : "Waiting for approval"}
+          </Badge>
+        );
       case "maturing": {
         const days = ufMaturingDaysLeft(request.fundingOpensAt);
         const label =
@@ -219,7 +255,14 @@ const UFRequestDetail = () => {
           <h1 className="text-3xl font-bold mb-3">{request.title}</h1>
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <Badge variant="secondary">{ufTypeLabel(request.requestType, sl)}</Badge>
-            {phaseBadge}
+            {/* An archived request is not open for anything: its phase would only mislead. */}
+            {(!isArchived || request.phase === "repaid") && phaseBadge}
+            {isArchived && (
+              <Badge className="bg-muted text-muted-foreground border border-border hover:bg-muted gap-1">
+                <Archive className="h-3 w-3" />
+                {sl ? "Arhivirano" : "Archived"}
+              </Badge>
+            )}
             <Badge variant="outline">{request.currency}</Badge>
           </div>
           {request.shortDesc && (
@@ -233,8 +276,63 @@ const UFRequestDetail = () => {
           </p>
         </div>
 
+        {/* Administrators: approve / archive / restore */}
+        {isUfAdmin && (
+          <Alert className="border-primary/30">
+            <ShieldCheck className="h-4 w-4" />
+            <AlertTitle>{sl ? "Skrbnik" : "Administrator"}</AlertTitle>
+            <AlertDescription className="space-y-3">
+              <p>
+                {isArchived
+                  ? sl ? "Zahtevek je arhiviran: ni na seznamu in ga ni mogoče financirati." : "The request is archived: not listed and not fundable."
+                  : isPending
+                    ? sl ? "Zahtevek čaka na tvojo odobritev. Vidita ga samo avtor in skrbnik." : "The request waits for your approval. Only its author and the administrators see it."
+                    : sl ? "Zahtevek je odobren in javen. Znesek je zaklenjen." : "The request is approved and public. Its amount is locked."}
+              </p>
+              <UFAdminBar request={request} onDone={refetch} authorName={profileName(request.pubkey)} />
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* The author, while the request waits for approval */}
+        {isRequester && isPending && !isArchived && (
+          <Alert className="border-sky-500/40 bg-sky-500/5">
+            <Clock className="h-4 w-4" />
+            <AlertTitle>{sl ? "Čaka na odobritev" : "Waiting for approval"}</AlertTitle>
+            <AlertDescription>
+              {sl
+                ? "Zahtevek je oddan. Dokler ga skrbnik ne odobri, ga vidiš samo ti in skrbnik, financirati ga še ni mogoče. Do takrat ga lahko še urejaš; po odobritvi ga ne bo več mogoče spreminjati — tudi zneska ne."
+                : "Your request is submitted. Until an administrator approves it, only you and the administrators see it and it cannot be funded yet. You may still edit it until then; once approved it can no longer be changed — not the amount either."}
+              <div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2 mt-3"
+                  onClick={() => navigate(`/unconditional-financing/edit/${request.id}`)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  {sl ? "Uredi zahtevek" : "Edit the request"}
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* The author, once archived */}
+        {isRequester && isArchived && (
+          <Alert>
+            <Archive className="h-4 w-4" />
+            <AlertTitle>{sl ? "Arhivirano" : "Archived"}</AlertTitle>
+            <AlertDescription>
+              {sl
+                ? "Skrbnik je ta zahtevek arhiviral: ni več na seznamu in ga ni mogoče financirati. Kar je bilo financirano, ostane zapisano; vračati lahko še naprej."
+                : "An administrator archived this request: it is no longer listed and cannot be funded. What was funded stays recorded; you can keep repaying."}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Maturing info */}
-        {request.phase === "maturing" && (
+        {request.phase === "maturing" && !isArchived && (
           <Alert className="border-amber-500/40 bg-amber-500/5">
             <Info className="h-4 w-4" />
             <AlertTitle>{sl ? "Obdobje zorenja" : "Maturing period"}</AlertTitle>
@@ -246,8 +344,8 @@ const UFRequestDetail = () => {
                 <>
                   <p className="mt-2">
                     {sl
-                      ? "Dokler zahtevek zori, ga lahko dopolniš. Ob shranitvi se zorenje začne znova, da skupnost vidi dopolnjeno različico."
-                      : "While the request matures you can still refine it. Saving restarts maturing, so the community sees the updated version."}
+                      ? "Zahtevek je odobren, zato ga ni več mogoče spreminjati. Zamenjaš lahko le denarnico, na katero prejmeš sredstva — med svojimi denarnicami."
+                      : "The request is approved, so it can no longer be changed. You may only switch the wallet that receives the funds — to another of your own."}
                   </p>
                   <Button
                     size="sm"
@@ -255,8 +353,8 @@ const UFRequestDetail = () => {
                     className="gap-2 mt-3"
                     onClick={() => navigate(`/unconditional-financing/edit/${request.id}`)}
                   >
-                    <Pencil className="h-4 w-4" />
-                    {sl ? "Uredi besedilo" : "Edit text"}
+                    <Wallet className="h-4 w-4" />
+                    {sl ? "Zamenjaj denarnico" : "Switch wallet"}
                   </Button>
                 </>
               )}
@@ -367,7 +465,8 @@ const UFRequestDetail = () => {
 
               {/* CTAs */}
               <div className="space-y-3 mt-6">
-                {request.phase === "repaying" && !isRequester && (
+                {/* The server's own rule: approved, not archived, open — nothing else can be funded. */}
+                {request.fundable && !isRequester && (
                   <Button
                     className="w-full bg-green-500 hover:bg-green-600 text-white"
                     onClick={() => navigate(`/unconditional-financing/contribute/${request.id}`)}
@@ -386,17 +485,18 @@ const UFRequestDetail = () => {
                     {sl ? "Vrni sredstva" : "Repay"}
                   </Button>
                 )}
-                {/* The maturing banner above already offers this while the
-                    request matures; here it covers every other phase, so the
-                    author can always correct their own presentation. */}
-                {isRequester && request.phase !== "maturing" && (
+                {/* Pending: the banner above offers the edit. Maturing: the
+                    maturing banner offers the wallet switch. Here it covers the
+                    other phases of an approved request: only the receiving
+                    wallet may still move (to another of the owner's own). */}
+                {isRequester && isApproved && !isArchived && request.phase !== "maturing" && !request.isRepaid && (
                   <Button
                     variant="outline"
                     className="w-full"
                     onClick={() => navigate(`/unconditional-financing/edit/${request.id}`)}
                   >
-                    <Pencil className="h-4 w-4 mr-2" />
-                    {sl ? "Dodelaj zahtevek" : "Refine the request"}
+                    <Wallet className="h-4 w-4 mr-2" />
+                    {sl ? "Zamenjaj denarnico za prejem" : "Switch the receiving wallet"}
                   </Button>
                 )}
               </div>

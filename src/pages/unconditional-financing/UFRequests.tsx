@@ -36,7 +36,8 @@ import { formatDays } from "@/lib/ufSettings";
  * across three tabs, so opening the module on a single phase made the others
  * look like they did not exist.
  */
-type UfTab = "all" | UfPhase;
+// The public list holds approved requests only, so a request waiting for approval has no tab here.
+type UfTab = "all" | Exclude<UfPhase, "pending">;
 const TAB_ORDER: UfTab[] = ["all", "maturing", "repaying", "repaid"];
 
 /** Slovenian declension for "financer" (1 financer, 2 financerja, 3–4 financerji, 5+ financerjev). */

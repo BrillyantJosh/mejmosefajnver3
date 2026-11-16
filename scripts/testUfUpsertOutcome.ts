@@ -68,7 +68,7 @@ console.log('— the form —');
 {
   const form = readFileSync(new URL('../src/pages/unconditional-financing/UFRequestForm.tsx', import.meta.url), 'utf8');
   check('the answer is read through upsertOutcome, not through one status code',
-    /import \{ upsertOutcome \} from "@\/lib\/ufUpsertOutcome"/.test(form) && /upsertOutcome\(upsert\.status, body\?\.error, sl, isEdit\)/.test(form) && !/res\.status === 403/.test(form));
+    /import \{ upsertOutcome \} from "@\/lib\/ufUpsertOutcome"/.test(form) && /upsertOutcome\(upsert\.status, body\?\.error, sl, isEdit, body\?\.code\)/.test(form) && !/res\.status === 403/.test(form));
   check('any answer that is not 2xx is looked at', /if \(upsert && !upsert\.ok\) \{/.test(form));
   check('a refusal stops the form and keeps the person on it', /if \(outcome\.kind === "refused"\) throw new Error\(outcome\.message\);/.test(form));
   check('"cannot tell" is a warning, then the form is left — it never reaches the success toast',
@@ -79,6 +79,18 @@ console.log('— the form —');
   check('a new request\'s id is chosen once per form, so a second Publish replaces the first',
     /const newRequestId = useRef<string \| null>\(null\);/.test(form) && /if \(!existing && !newRequestId\.current\) newRequestId\.current = `uf:\$\{crypto\.randomUUID\(\)\}`;/.test(form)
       && /const dTag = existing \? existing\.id : \(newRequestId\.current as string\);/.test(form) && (form.match(/crypto\.randomUUID\(\)/g) || []).length === 1);
+}
+
+console.log('— an approved request is frozen (16. 11. 2026) —');
+{
+  for (const sl of [false, true]) {
+    const o = upsertOutcome(409, 'This request has been approved and can no longer be changed', sl, true, 'APPROVED_LOCKED');
+    check(`${sl ? 'SL' : 'EN'} 409 APPROVED_LOCKED → refused, says why and what is still possible`,
+      o.kind === 'refused' && (sl ? /odobren/.test(o.message) && /denarnico/.test(o.message) : /approved/.test(o.message) && /wallet/.test(o.message)), o);
+  }
+  const form = readFileSync(new URL('../src/pages/unconditional-financing/UFRequestForm.tsx', import.meta.url), 'utf8');
+  check('the form passes the server\'s code on', /upsertOutcome\(upsert\.status, body\?\.error, sl, isEdit, body\?\.code\)/.test(form));
+  check('an approved request republishes the APPROVED amount, never the typed one', /\["fiat_goal", String\(locked \? locked\.fiatGoal : goalNum\)\]/.test(form));
 }
 
 console.log('— the create page —');

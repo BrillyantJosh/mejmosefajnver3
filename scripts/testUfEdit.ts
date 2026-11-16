@@ -101,7 +101,9 @@ async function main() {
     check('detail shows the new date', near(det.data.request?.fundingOpensAt, expected), { got: det.data.request?.fundingOpensAt, want: expected });
     check('content was actually updated', det.data.request?.title === 'Refined title', det.data.request?.title);
     check('original publication date kept', det.data.request?.publishedAt === MATURING_PUB, det.data.request?.publishedAt);
-    check('still in maturing', det.data.request?.phase === 'maturing', det.data.request?.phase);
+    // Refining is a freedom of a request nobody approved yet (server/lib/ufApproval.ts): it reads
+    // 'pending' until an administrator approves it; the window rule below is unchanged.
+    check('still in maturing (not approved yet, so it reads pending)', det.data.request?.phase === 'pending' && det.data.request?.fundingOpensAt > now, det.data.request);
 
     console.log('— an edit in the last hour still grants a full review period —');
     r = await call('POST', '/requests/upsert', {

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock, HandCoins, Heart, ImageOff, Pencil, PlusCircle, Undo2 } from "lucide-react";
+import { Archive, Clock, HandCoins, Heart, ImageOff, Pencil, PlusCircle, Undo2, Wallet } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/i18n/I18nContext";
 import {
@@ -27,6 +27,8 @@ import {
 
 const phaseLabel = (phase: UfPhase, sl: boolean): string => {
   switch (phase) {
+    case "pending":
+      return sl ? "Čaka na odobritev" : "Waiting for approval";
     case "maturing":
       return sl ? "Zorenje" : "Maturing";
     case "repaying":
@@ -44,7 +46,9 @@ const PhaseBadge = ({ phase, sl }: { phase: UfPhase; sl: boolean }) => {
       ? "bg-green-500 hover:bg-green-500 text-white"
       : phase === "repaying"
         ? "bg-blue-500 hover:bg-blue-500 text-white"
-        : "bg-amber-500 hover:bg-amber-500 text-white";
+        : phase === "pending"
+          ? "bg-sky-600 hover:bg-sky-600 text-white"
+          : "bg-amber-500 hover:bg-amber-500 text-white";
   return <Badge className={`${cls} text-xs`}>{phaseLabel(phase, sl)}</Badge>;
 };
 
@@ -92,6 +96,12 @@ const SupportCard = ({ support, sl }: { support: UfMySupport; sl: boolean }) => 
                 {request.title}
               </Link>
               <PhaseBadge phase={request.phase} sl={sl} />
+              {request.isArchived && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <Archive className="h-3 w-3" />
+                  {sl ? "Arhivirano" : "Archived"}
+                </Badge>
+              )}
               <Badge variant="secondary" className="text-xs">
                 {support.sharePercent.toFixed(1)}%{" "}
                 {sl ? "delež" : "share"}
@@ -167,6 +177,12 @@ const FinancingCard = ({
                 {request.title}
               </Link>
               <PhaseBadge phase={request.phase} sl={sl} />
+              {request.isArchived && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <Archive className="h-3 w-3" />
+                  {sl ? "Arhivirano" : "Archived"}
+                </Badge>
+              )}
               {request.phase === "maturing" && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 text-xs font-medium px-2 py-0.5">
                   <Clock className="h-3 w-3" />
@@ -209,19 +225,20 @@ const FinancingCard = ({
               </div>
             </div>
 
-            {/* Editing is offered in EVERY phase: while the request matures an
-                edit restarts the review period, afterwards the opening date no
-                longer moves — but the author can always correct their own text. */}
+            {/* Before approval the author may change everything; after it only the
+                receiving wallet may move (server/lib/ufApproval.ts). */}
             <div className="flex flex-wrap justify-end gap-2 mt-3">
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1"
-                onClick={() => onEdit(request.id)}
-              >
-                <Pencil className="h-4 w-4" />
-                {sl ? "Uredi besedilo" : "Edit text"}
-              </Button>
+              {request.approval === "pending" ? (
+                <Button size="sm" variant="outline" className="gap-1" onClick={() => onEdit(request.id)}>
+                  <Pencil className="h-4 w-4" />
+                  {sl ? "Uredi zahtevek" : "Edit the request"}
+                </Button>
+              ) : !request.isArchived && !request.isRepaid ? (
+                <Button size="sm" variant="outline" className="gap-1" onClick={() => onEdit(request.id)}>
+                  <Wallet className="h-4 w-4" />
+                  {sl ? "Zamenjaj denarnico" : "Switch wallet"}
+                </Button>
+              ) : null}
               {canRepay && (
                 <Button size="sm" className="gap-1" onClick={() => onRepay(request.id)}>
                   <Undo2 className="h-4 w-4" />

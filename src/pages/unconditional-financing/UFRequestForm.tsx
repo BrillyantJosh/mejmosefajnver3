@@ -76,6 +76,11 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
   const newRequestId = useRef<string | null>(null);
   // Refining is a maturing-phase freedom; once funding is open the date is fixed.
   const isStillMaturing = !!existing && Math.floor(Date.now() / 1000) < existing.fundingOpensAt;
+  // Approved = frozen (server/lib/ufApproval.ts): nothing the approval covers may change — above
+  // all not the amount. Only the receiving wallet may still move, to another of the owner's own.
+  // The server refuses anything else (409); here the fields are locked and the event is built
+  // from the approved values themselves, so a wallet switch republishes exactly what was approved.
+  const isLocked = !!existing && existing.approval === "approved";
   const sl = useLang() === "sl";
   const { session } = useAuth();
   const { wallets, isLoading: walletsLoading } = useNostrWallets();
@@ -356,6 +361,10 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
       toast.error(sl ? "Za objavo se moraš prijaviti" : "You must be logged in to publish");
       return;
     }
+    if (isLocked && existing && receivingWallet === existing.wallet) {
+      toast.info(sl ? "Ni sprememb: denarnica za prejem je ista." : "Nothing to save: the receiving wallet is the same.");
+      return;
+    }
     if (!title.trim()) {
       toast.error(sl ? "Naslov je obvezen" : "Title is required");
       return;
@@ -378,7 +387,7 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
     // Per-group cap (0 = uncapped). The server enforces this too; checking here
     // keeps the user from paying the publish round-trip just to be rejected.
     const cap = ufSettings.maxAmounts[requestType] || 0;
-    if (cap > 0 && goalNum > cap) {
+    if (!isLocked && cap > 0 && goalNum > cap) {
       toast.error(
         sl
           ? `Najvišji znesek za to skupino je ${cap} ${currency}`
@@ -417,14 +426,14 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
     try {
       // Upload images. On an edit, already-published images are kept as-is
       // unless the user replaced or removed them.
-      let finalCoverUrl = keptCoverUrl;
-      if (coverFile) {
+      let finalCoverUrl = isLocked && existing ? existing.coverImage || "" : keptCoverUrl;
+      if (coverFile && !isLocked) {
         const url = await uploadImage(coverFile);
         if (url) finalCoverUrl = url;
       }
 
-      const uploadedGalleryUrls: string[] = [...keptGalleryUrls];
-      for (const file of galleryFiles) {
+      const uploadedGalleryUrls: string[] = isLocked && existing ? [...existing.galleryImages] : [...keptGalleryUrls];
+      for (const file of isLocked ? [] : galleryFiles) {
         const url = await uploadImage(file);
         if (url) uploadedGalleryUrls.push(url);
       }
@@ -449,18 +458,20 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
             ? existing.fundingOpensAt
             : nowTs + maturingSecs;
 
+      // Approved: exactly what was approved, only the wallet is new.
+      const locked = isLocked && existing ? existing : null;
       const tags: string[][] = [
         ["d", dTag],
         ["service", "unconditional-financing"],
-        ["title", title.trim()],
-        ["summary", shortDesc.trim()],
-        ["request_type", requestType],
-        ["fiat_goal", String(goalNum)],
-        ["currency", currency],
+        ["title", locked ? locked.title : title.trim()],
+        ["summary", locked ? locked.shortDesc : shortDesc.trim()],
+        ["request_type", locked ? locked.requestType : requestType],
+        ["fiat_goal", String(locked ? locked.fiatGoal : goalNum)],
+        ["currency", locked ? locked.currency : currency],
         ["wallet", receivingWallet],
         ["published_at", String(pubTs)],
         ["funding_opens_at", String(fundingOpensAt)],
-        ["status", "active"],
+        ["status", locked ? locked.status : "active"],
       ];
 
       if (finalCoverUrl) {
@@ -469,7 +480,7 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
       uploadedGalleryUrls.forEach((url) => {
         tags.push(["img", url, "gallery"]);
       });
-      allRefs.forEach((ref) => {
+      (locked ? locked.crowdfundingRefs : allRefs).forEach((ref) => {
         tags.push(["crowdfunding", ref]);
       });
       tags.push(["client", "mejmosefajn"]);
@@ -482,7 +493,7 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
           // so an edit signed with the original date would not replace it.
           created_at: nowTs,
           tags,
-          content: content.trim(),
+          content: locked ? locked.content : content.trim(),
         },
         hexToBytes(session.nostrPrivateKey)
       );
@@ -522,7 +533,7 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
       }
       if (upsert && !upsert.ok) {
         const body = await upsert.json().catch(() => ({}));
-        const outcome = upsertOutcome(upsert.status, body?.error, sl, isEdit);
+        const outcome = upsertOutcome(upsert.status, body?.error, sl, isEdit, body?.code);
         if (outcome.kind === "refused") throw new Error(outcome.message);
         if (outcome.kind === "pending") {
           toast.warning(outcome.message, { duration: 20000 });
@@ -540,17 +551,25 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
       const restarted = !!existing && fundingOpensAt > existing.fundingOpensAt;
 
       toast.success(
-        isEdit
-          ? restarted
-            ? sl
-              ? `Zahtevek je posodobljen. Zorenje se je začelo znova — financiranje se odpre ${opensLabel}.`
-              : `Request updated. Maturing has restarted — funding opens ${opensLabel}.`
+        isLocked
+          ? sl
+            ? "Denarnica za prejem je zamenjana. Vse drugo ostaja, kot je bilo odobreno."
+            : "The receiving wallet is switched. Everything else stays as it was approved."
+          : isEdit
+            ? existing?.approval === "pending"
+              ? sl
+                ? "Zahtevek je posodobljen. Še vedno čaka na odobritev skrbnika."
+                : "Request updated. It is still waiting for an administrator's approval."
+              : restarted
+                ? sl
+                  ? `Zahtevek je posodobljen. Zorenje se je začelo znova — financiranje se odpre ${opensLabel}.`
+                  : `Request updated. Maturing has restarted — funding opens ${opensLabel}.`
+                : sl
+                  ? "Zahtevek je posodobljen."
+                  : "Request updated."
             : sl
-              ? "Zahtevek je posodobljen."
-              : "Request updated."
-          : sl
-            ? `Zahtevek je objavljen. Obdobje zorenja se je začelo — komentarji so odprti, financiranje se odpre ${opensLabel}.`
-            : `Request published. The maturing period starts now — comments are open, funding opens ${opensLabel}.`
+              ? "Zahtevek je oddan. Viden bo, ko ga skrbnik odobri — do takrat ga vidiš samo ti (pod »Moje«) in ga lahko še urejaš."
+              : "Request submitted. It becomes visible once an administrator approves it — until then only you see it (under \"My\") and you may still edit it."
       );
 
       onSuccess();
@@ -578,27 +597,46 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Approval: before it the request is the author's to change, after it frozen */}
+      <Alert className={isLocked ? "border-amber-500/40 bg-amber-500/5" : "border-sky-500/40 bg-sky-500/5"}>
+        <Info className="h-4 w-4" />
+        <AlertDescription>
+          {isLocked
+            ? sl
+              ? "Zahtevek je odobren, zato besedila, slik, vrste, zneska in valute ni več mogoče spreminjati. Zamenjaš lahko le denarnico, na katero prejmeš sredstva — med svojimi denarnicami."
+              : "The request is approved, so its text, images, type, amount and currency can no longer be changed. You may only switch the wallet that receives the funds — to another of your own."
+            : sl
+              ? "Nov zahtevek najprej pregleda skrbnik. Dokler ga ne odobri, ga vidiš samo ti in ga lahko še urejaš. Po odobritvi ga ni več mogoče spreminjati — tudi zneska ne."
+              : "An administrator reviews every new request first. Until it is approved only you see it, and you may still edit it. Once approved it can no longer be changed — not the amount either."}
+        </AlertDescription>
+      </Alert>
+
       {/* Maturing-period notice */}
+      {!isLocked && (
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
           {isEdit
             ? isStillMaturing
               ? sl
-                ? `Zahtevek še zori, zato ga lahko dodelaš. Ko shraniš, se zorenje začne znova: financiranje se odpre ${formatDaysAfter(ufSettings.maturingDays, true)} od shranitve, da skupnost vidi dopolnjeno različico.`
-                : `The request is still maturing, so you can refine it. When you save, maturing restarts: funding opens ${formatDays(ufSettings.maturingDays, false)} from the moment you save, so the community sees the updated version.`
+                ? `Ko shraniš, se zorenje začne znova: financiranje se odpre ${formatDaysAfter(ufSettings.maturingDays, true)} od shranitve — a ne pred odobritvijo skrbnika.`
+                : `When you save, maturing restarts: funding opens ${formatDays(ufSettings.maturingDays, false)} from the moment you save — but not before an administrator approves it.`
               : sl
-                ? "Financiranje tega zahtevka je že odprto. Popravki besedila ne premaknejo datuma odprtja."
-                : "Funding for this request is already open. Editing the text does not move the opening date."
+                ? "Obdobje zorenja je že minilo: financiranje se odpre takoj, ko skrbnik zahtevek odobri."
+                : "The maturing period is already over: funding opens as soon as an administrator approves the request."
             : ufSettings.maturingDays === 0
               ? sl
-                ? "Financiranje tega zahtevka se odpre takoj po objavi."
-                : "Funding for this request opens immediately after publishing."
+                ? "Financiranje tega zahtevka se odpre takoj, ko ga skrbnik odobri."
+                : "Funding for this request opens as soon as an administrator approves it."
               : sl
-                ? `Po objavi zahtevek najprej ${formatDays(ufSettings.maturingDays, true)} zori — komentarji so odprti, financiranje pa še zaprto. Po ${formatDaysAfter(ufSettings.maturingDays, true)} se financiranje odpre.`
-                : `After publishing, the request matures for ${formatDays(ufSettings.maturingDays, false)} — comments are open while funding stays closed. Funding opens after ${formatDays(ufSettings.maturingDays, false)}.`}
+                ? `Po objavi zahtevek najprej ${formatDays(ufSettings.maturingDays, true)} zori — komentarji so odprti, financiranje pa še zaprto. Po ${formatDaysAfter(ufSettings.maturingDays, true)} se financiranje odpre, a ne pred odobritvijo skrbnika.`
+                : `After publishing, the request matures for ${formatDays(ufSettings.maturingDays, false)} — comments are open while funding stays closed. Funding opens after ${formatDays(ufSettings.maturingDays, false)}, but not before an administrator approves it.`}
         </AlertDescription>
       </Alert>
+      )}
+
+      {/* Everything an approval covers: locked once the request is approved. */}
+      <fieldset disabled={isLocked} className={`space-y-6 min-w-0 ${isLocked ? "pointer-events-none opacity-60" : ""}`}>
 
       {/* Request type */}
       <Card>
@@ -954,6 +992,8 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
         </Card>
       )}
 
+      </fieldset>
+
       {/* Receiving wallet — any of the author's registered (KIND 30889) wallets */}
       <Card>
         <CardHeader>
@@ -1098,13 +1138,17 @@ export default function UFRequestForm({ onSuccess, existing }: UFRequestFormProp
           ? sl
             ? "Objavljanje ..."
             : "Publishing..."
+          : isLocked
+          ? sl
+            ? "Zamenjaj denarnico"
+            : "Switch wallet"
           : isEdit
           ? sl
             ? "Shrani spremembe"
             : "Save changes"
           : sl
-          ? "Objavi zahtevek"
-          : "Publish request"}
+          ? "Oddaj zahtevek v odobritev"
+          : "Submit for approval"}
       </Button>
     </form>
   );

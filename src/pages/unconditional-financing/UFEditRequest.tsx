@@ -7,11 +7,13 @@ import { useUfRequest } from "@/hooks/useUFData";
 import UFRequestForm from "./UFRequestForm";
 
 /**
- * Refine a request that is still maturing.
+ * Edit a request while it waits for approval — or, once approved, switch its receiving wallet.
  *
  * Only the author may edit, and only their own request. Saving republishes the
- * same addressable event (same d-tag), which restarts the maturing period so
- * the community reviews the version it will actually fund.
+ * same addressable event (same d-tag). Before approval anything may change
+ * (and an edit while maturing restarts the maturing period); after approval the
+ * request is frozen and only the receiving wallet may move, to another of the
+ * owner's own wallets (server/lib/ufApproval.ts).
  */
 const UFEditRequest = () => {
   const { id } = useParams<{ id: string }>();
@@ -85,12 +87,18 @@ const UFEditRequest = () => {
       </Button>
 
       <h1 className="text-2xl font-bold mb-1">
-        {sl ? "Dodelaj zahtevek" : "Refine the request"}
+        {request.approval === "approved"
+          ? sl ? "Zamenjaj denarnico za prejem" : "Switch the receiving wallet"
+          : sl ? "Uredi zahtevek" : "Edit the request"}
       </h1>
       <p className="text-sm text-muted-foreground mb-6">
-        {sl
-          ? "Dopolni predstavitev, dokler zahtevek še zori."
-          : "Improve the presentation while the request is still maturing."}
+        {request.approval === "approved"
+          ? sl
+            ? "Zahtevek je odobren: spremeniš lahko samo denarnico, na katero prejmeš sredstva."
+            : "The request is approved: you may only change the wallet that receives the funds."
+          : sl
+            ? "Dokler ga skrbnik ne odobri, ga lahko še urejaš."
+            : "Until an administrator approves it, you may still edit it."}
       </p>
 
       <UFRequestForm existing={request} onSuccess={back} />
