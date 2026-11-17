@@ -18,6 +18,7 @@
     "test:sell-moved": "node --import tsx --test server/test/buyingDealers.test.ts server/test/befDealers.test.ts server/test/buyingDealersRoute.test.ts src/lib/sellingMoved.test.ts",
     "test:food-search": "node --import tsx --test src/lib/foodCornerSearch.test.ts",
     "test:lanacrowd": "node --import tsx --test server/test/lanacrowdSigned.test.ts",
+    "test:points-margin": "node --import tsx --test src/lib/foodCornerMargin.test.ts server/test/foodCornerOrderCheck.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

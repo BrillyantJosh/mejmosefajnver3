@@ -34,16 +34,22 @@ import {
   groupOrdersByNode,
   reconcileOrderItems,
   slugifyFoodCorner,
+  foodCornerLinePay,
+  foodCornerOrderPay,
 } from "@/lib/foodCorner";
 import { uploadToLanaMedia } from "@/lib/lanaMediaUpload";
+import { FOOD_CORNER_MAX_MARGIN, marginTags, parseMarginPercent } from "@/lib/foodCornerMargin";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
 // What the buyer is actually billed for an order: the Točka allocation total when
-// one was published (short items reduced), else the ordered total. Used for every
-// buyer/supplier roll-up so the header matches the per-order line.
-const orderEffectiveTotal = (order: FoodCornerOrderWithFulfillment) => order.allocation?.total ?? order.total;
+// one was published (short items reduced), else the ordered total — with the
+// Točka margin the buyer signed, if any. Used for every buyer/supplier roll-up so
+// the header matches the per-order line.
+const orderEffectiveTotal = (order: FoodCornerOrderWithFulfillment) => foodCornerOrderPay(order).amount;
+// What the suppliers get for the same quantities (no margin): what the Točka passes on.
+const orderSuppliersTotal = (order: FoodCornerOrderWithFulfillment) => foodCornerOrderPay(order).suppliers;
 
 function splitAreas(value: string): string[] {
   return value
@@ -98,6 +104,8 @@ export default function FoodCornerEcoPoint() {
   const [deliveryRadius, setDeliveryRadius] = useState("20");
   const [areas, setAreas] = useState("");
   const [lud16, setLud16] = useState("");
+  // Točka margin in whole percent (0–20); empty = none, prices 1:1.
+  const [marginText, setMarginText] = useState("");
   const [pauseFrom, setPauseFrom] = useState("");
   const [pauseUntil, setPauseUntil] = useState("");
   const [pauseNote, setPauseNote] = useState("");
@@ -149,6 +157,14 @@ export default function FoodCornerEcoPoint() {
     setDeliveryRadius(editingNode.deliveries[0]?.radiusKm || "20");
     setAreas(editingNode.areas.join(", "));
     setLud16(editingNode.lud16);
+    // An unreadable margin is shown as written, so saving cannot quietly turn it into 1:1.
+    setMarginText(
+      editingNode.marginPercent === null
+        ? (editingNode.rawEvent.tags.filter((tag) => tag[0] === "margin_percent").map((tag) => tag[1] ?? "").join(" ") || "?")
+        : editingNode.marginPercent
+          ? String(editingNode.marginPercent)
+          : "",
+    );
     setPauseFrom(editingNode.pause.from);
     setPauseUntil(editingNode.pause.until);
     setPauseNote(editingNode.pause.note);
@@ -179,6 +195,7 @@ export default function FoodCornerEcoPoint() {
     setDeliveryRadius("20");
     setAreas("");
     setLud16("");
+    setMarginText("");
     setPauseFrom("");
     setPauseUntil("");
     setPauseNote("");
@@ -243,6 +260,11 @@ export default function FoodCornerEcoPoint() {
       toast.error(t("ecoPoint.toast.pickSupplier"));
       return;
     }
+    const margin = parseMarginPercent(marginText);
+    if (margin === null) {
+      toast.error(t("ecoPoint.toast.marginInvalid", { max: FOOD_CORNER_MAX_MARGIN }));
+      return;
+    }
 
     const dTag = editingNode?.dTag || slugifyFoodCorner(name) || generateFoodCornerId("dp");
     const areaTags = splitAreas(areas);
@@ -262,6 +284,8 @@ export default function FoodCornerEcoPoint() {
       ...(pickupLat.trim() && pickupLon.trim() ? [["geo", pickupLat.trim(), pickupLon.trim(), pickupLabel.trim()]] : []),
       ...areaTags.map((area) => ["area", area]),
       ...(lud16.trim() ? [["lud16", lud16.trim()]] : []),
+      // No tag at 0: a Točka without a margin is exactly the Točka of before.
+      ...(margin > 0 ? [["margin_percent", String(margin)]] : []),
       ...(imageUrl.trim() ? [["image", imageUrl.trim()]] : []),
       ...(nodeStatus === "paused" || pauseFrom.trim() || pauseUntil.trim() || pauseNote.trim()
         ? [["pause", pauseFrom.trim(), pauseUntil.trim(), pauseNote.trim()]]
@@ -325,6 +349,7 @@ export default function FoodCornerEcoPoint() {
       groupOrdersByNode(weekOrders).map((g) => ({
         ...g,
         total: g.orders.reduce((s, o) => s + orderEffectiveTotal(o), 0),
+        suppliersTotal: g.orders.reduce((s, o) => s + orderSuppliersTotal(o), 0),
       })),
     [weekOrders],
   );
@@ -442,6 +467,12 @@ export default function FoodCornerEcoPoint() {
         });
         const total = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
         const currency = items[0]?.currency || order.currency || "EUR";
+        // The order's own margin (frozen at checkout) and what the buyer pays for the allocated quantities.
+        const allocMarginTags = marginTags(
+          items.map((i) => ({ price: i.unitPrice.toFixed(2), qty: String(i.qty) })),
+          order.marginPercent ?? 0,
+          currency,
+        );
         await publishEvent(
           FOOD_CORNER_ALLOCATION_KIND,
           [
@@ -451,6 +482,7 @@ export default function FoodCornerEcoPoint() {
             ["distribution_point", order.distributionPoint],
             ...items.map((i) => ["alloc", i.listingRef, String(i.qty), i.unit, i.unitPrice.toFixed(2), i.currency]),
             ["total", total.toFixed(2), currency],
+            ...allocMarginTags,
           ],
           "",
         );
@@ -483,6 +515,8 @@ export default function FoodCornerEcoPoint() {
     label: string;
     orders: FoodCornerOrderWithFulfillment[];
     total: number;
+    // What goes to the suppliers for these orders (= total without a Točka margin).
+    suppliersTotal: number;
     currency: string;
     buyers: BuyerSub[] | null; // buyer breakdown ("by supplier" and "by delivery" modes)
     suppliers?: SupplierTotals[]; // product totals per supplier (only in "by delivery" mode)
@@ -527,6 +561,7 @@ export default function FoodCornerEcoPoint() {
           label: cycle.range.end.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "numeric" }),
           orders: cycle.orders,
           total: cycle.orders.reduce((sum, o) => sum + orderEffectiveTotal(o), 0),
+          suppliersTotal: cycle.orders.reduce((sum, o) => sum + orderSuppliersTotal(o), 0),
           currency: cycle.orders[0]?.currency || "EUR",
           buyers: Array.from(subs.values()).sort((a, b) => b.total - a.total),
           suppliers: Array.from(suppliers.values()).sort((a, b) => a.name.localeCompare(b.name)),
@@ -542,9 +577,10 @@ export default function FoodCornerEcoPoint() {
         ? producers.find((p) => p.unitRef === order.sellerRef)?.name || `${order.sellerPubkey.slice(0, 12)}…`
         : buyerName(order.buyerPubkey);
       const group =
-        map.get(key) || { key, label, orders: [], total: 0, currency: order.currency, buyers: bySeller ? [] : null };
+        map.get(key) || { key, label, orders: [], total: 0, suppliersTotal: 0, currency: order.currency, buyers: bySeller ? [] : null };
       group.orders.push(order);
       group.total += orderEffectiveTotal(order);
+      group.suppliersTotal += orderSuppliersTotal(order);
       map.set(key, group);
 
       if (bySeller) {
@@ -620,12 +656,13 @@ export default function FoodCornerEcoPoint() {
             // qty when published, else ordered — so lines sum to the section total.
             reconcileOrderItems(o).map((r) => {
               const qty = r.allocatedQty ?? r.orderedQty;
+              const margin = foodCornerOrderPay(o).margin;
               const title = r.title || `${t("supplier.unknownProduct")} (${r.listingRef.slice(-6)})`;
               return (
                 `<tr><td>${escapeHtml(title)}</td>` +
                 `<td class="num">${escapeHtml(`${Number(qty.toFixed(2))} ${r.unit}`)}</td>` +
                 `<td>${escapeHtml(producerName(o))}</td>` +
-                `<td class="num">${escapeHtml(formatFoodMoney(qty * r.unitPrice, r.currency))}</td></tr>`
+                `<td class="num">${escapeHtml(formatFoodMoney(foodCornerLinePay(r.unitPrice, qty, margin), r.currency))}</td></tr>`
               );
             }),
           )
@@ -674,7 +711,14 @@ export default function FoodCornerEcoPoint() {
     win.setTimeout(() => win.print(), 300);
   };
 
-  const renderOrderRow = (order: FoodCornerOrderWithFulfillment) => (
+  // Called as .map(renderOrderRow): the second argument is the index, so the pay is computed here.
+  const renderOrderRow = (order: FoodCornerOrderWithFulfillment) => {
+    const orderPay = foodCornerOrderPay(order);
+    // The order's margin is not the one this Točka had set when it was placed (e.g. sent by
+    // a page that did not know margins): what to charge is the Točka's call, so say so.
+    const point = myNodes.find((node) => node.ref === order.distributionPoint);
+    const marginDiffers = !!point && point.createdAt <= order.createdAt && order.marginPercent !== point.marginPercent;
+    return (
     <div key={order.ref} className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 text-sm">
       <div className="flex items-start gap-2 min-w-0">
         <Badge variant={order.fulfillmentStatus ? "default" : "secondary"} className="shrink-0">
@@ -714,10 +758,27 @@ export default function FoodCornerEcoPoint() {
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {order.allocation && <Check className="h-4 w-4 text-green-600" />}
-        <span className="font-medium">{formatFoodMoney(order.allocation?.total ?? order.total, order.currency)}</span>
+        {orderPay.mismatch && (
+          <span className="text-xs font-medium text-destructive" title={t("ecoPoint.margin.mismatch")}>
+            ⚠ {t("ecoPoint.margin.mismatchShort")}
+          </span>
+        )}
+        {orderPay.margin > 0 && (
+          <span className="text-xs text-muted-foreground">{t("ecoPoint.margin.orderBadge", { percent: orderPay.margin })}</span>
+        )}
+        {marginDiffers && !orderPay.mismatch && (
+          <span
+            className="text-xs font-medium text-destructive"
+            title={t("ecoPoint.margin.differs", { order: order.marginPercent ?? "?", point: point?.marginPercent ?? "?" })}
+          >
+            ⚠ {t("ecoPoint.margin.mismatchShort")}
+          </span>
+        )}
+        <span className="font-medium">{formatFoodMoney(orderPay.amount, orderPay.currency)}</span>
       </div>
     </div>
-  );
+    );
+  };
   const pickupLatNumber = Number.parseFloat(pickupLat);
   const pickupLonNumber = Number.parseFloat(pickupLon);
   const hasPickupCoordinates = Number.isFinite(pickupLatNumber) && Number.isFinite(pickupLonNumber);
@@ -841,6 +902,25 @@ export default function FoodCornerEcoPoint() {
                 <Label>{t("ecoPoint.form.paymentAddress")}</Label>
                 <Input value={lud16} onChange={(event) => setLud16(event.target.value)} placeholder="center@lanapays.us" />
                 <p className="text-xs text-muted-foreground">{t("ecoPoint.form.paymentHint")}</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="eco-point-margin">{t("ecoPoint.form.margin")}</Label>
+                {/* A text box, not type="number": a browser turns "20%" or "+20" into "" there, which would save 1:1 unseen. */}
+                <Input
+                  id="eco-point-margin"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={4}
+                  value={marginText}
+                  onChange={(event) => setMarginText(event.target.value)}
+                  placeholder="0"
+                  aria-invalid={parseMarginPercent(marginText) === null}
+                  className="w-28"
+                />
+                <p className={`text-xs ${parseMarginPercent(marginText) === null ? "text-destructive" : "text-muted-foreground"}`}>
+                  {t("ecoPoint.form.marginHint", { max: FOOD_CORNER_MAX_MARGIN })}
+                </p>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label>{t("ecoPoint.form.description")}</Label>
@@ -1166,6 +1246,11 @@ export default function FoodCornerEcoPoint() {
                       <p className="text-sm text-muted-foreground">{node?.name || t("ecoPoint.orders.direct")}</p>
                       <p className="text-2xl font-bold">{group.orders.length}</p>
                       <p className="text-sm font-medium">{formatFoodMoney(group.total, group.currency)}</p>
+                      {Math.abs(group.total - group.suppliersTotal) >= 0.005 && (
+                        <p className="text-xs text-muted-foreground">
+                          {t("ecoPoint.margin.toSuppliers", { amount: formatFoodMoney(group.suppliersTotal, group.currency) })}
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -1318,6 +1403,11 @@ export default function FoodCornerEcoPoint() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-lg font-bold">{formatFoodMoney(group.total, group.currency)}</span>
+                          {Math.abs(group.total - group.suppliersTotal) >= 0.005 && (
+                            <span className="text-xs text-muted-foreground">
+                              {t("ecoPoint.margin.toSuppliers", { amount: formatFoodMoney(group.suppliersTotal, group.currency) })}
+                            </span>
+                          )}
                           {ordersGroupBy === "buyer" && (
                             <Button
                               type="button"

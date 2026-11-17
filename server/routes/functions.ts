@@ -17,6 +17,7 @@ import { sendPushToUser } from '../lib/pushNotification.js';
 import { verifyEvent } from 'nostr-tools';
 import { blockIfFrozen } from '../lib/walletFreeze.js';
 import { readFromRelaysServer } from '../lib/relayReadServer.js';
+import { checkFoodCornerOrder } from '../lib/foodCornerOrderCheck.js';
 import { guardSendLanaTransaction } from '../lib/walletFreeze.js';
 import { findDuplicateConfirmations } from '../../src/lib/unconditionalPaymentGuard.js';
 import { consolidationFee, MIN_INPUTS, MIN_NET } from '../../src/lib/consolidationPlan.js';
@@ -2879,6 +2880,18 @@ router.post('/publish-dm-event', async (req: Request, res: Response) => {
     }
     if (relays.length === 0) {
       relays = getRelaysFromDb();
+    }
+
+    // A Točka obilja order must carry the Točka's current margin and the amount
+    // that margin gives (17. 11. 2026); every other event passes untouched.
+    const orderCheck = await checkFoodCornerOrder(event, async (filter) => {
+      const read = await readFromRelaysServer(relays, filter, 8000);
+      return { events: read.events as any[], answered: read.answered.length };
+    });
+    if (!orderCheck.ok) {
+      const refused = orderCheck as Extract<typeof orderCheck, { ok: false }>;
+      console.warn(`⛔ KIND 36601 not published: ${refused.code}`);
+      return res.status(refused.status).json({ success: false, error: refused.code, message: refused.error });
     }
 
     console.log(`📤 Publishing KIND ${event.kind} event to ${relays.length} relays...`);

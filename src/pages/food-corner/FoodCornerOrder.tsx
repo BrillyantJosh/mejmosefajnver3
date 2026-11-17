@@ -22,7 +22,10 @@ import {
   addFoodCornerWeeks,
   describeFoodCornerPause,
   effectiveBuyerQty,
+  foodCornerLinePay,
+  foodCornerOrderPay,
   foodCornerOrderingWindow,
+  foodCornerUnitPay,
   foodCornerWeekRange,
   formatFoodMoney,
   generateFoodCornerId,
@@ -34,6 +37,7 @@ import {
   type FoodCornerListingCategory,
 } from "@/lib/foodCorner";
 import { normalizeSearchText, offerMatchesSearch } from "@/lib/foodCornerSearch";
+import { marginTags, payTotalCents } from "@/lib/foodCornerMargin";
 import type { FoodCornerNode } from "@/types/foodCorner";
 
 function firstImage(listing: FoodCornerListing): string | undefined {
@@ -273,7 +277,10 @@ export default function FoodCornerOrder() {
   );
   const selectedNode = getNodeByRef(selectedNodeRef);
   const selectedNodePaused = selectedNode ? isFoodCornerNodePaused(selectedNode) : false;
-  const canOrderFromSelectedNode = !!selectedNode && selectedNode.status === "active" && !selectedNodePaused;
+  // A Točka margin that cannot be read closes the Točka: nobody would know what an order costs.
+  const selectedMarginUnreadable = !!selectedNode && selectedNode.marginPercent === null;
+  const selectedMargin = selectedNode?.marginPercent ?? 0;
+  const canOrderFromSelectedNode = !!selectedNode && selectedNode.status === "active" && !selectedNodePaused && !selectedMarginUnreadable;
   const catalog = useMemo(
     () => (canOrderFromSelectedNode ? getNodeCatalog(selectedNodeRef) : []),
     [canOrderFromSelectedNode, getNodeCatalog, selectedNodeRef],
@@ -409,7 +416,11 @@ export default function FoodCornerOrder() {
       .map(([weeks, titles]) => ({ weeks, titles }));
   }, [selectedItems]);
 
-  const total = selectedItems.reduce((sum, item) => sum + item.qty * item.listing.price, 0);
+  // What the suppliers get (as always) and, with a Točka margin, what the buyer pays at the Točka.
+  const suppliersTotal = selectedItems.reduce((sum, item) => sum + item.qty * item.listing.price, 0);
+  const total = selectedMargin
+    ? (payTotalCents(selectedItems.map(({ listing, qty }) => ({ price: listing.price.toFixed(2), qty: String(qty) })), selectedMargin) ?? 0) / 100
+    : suppliersTotal;
   const currency = selectedItems[0]?.listing.priceCurrency || "EUR";
   const myOrders = orders.filter((order) => order.buyerPubkey === session?.nostrHexId);
 
@@ -485,7 +496,8 @@ export default function FoodCornerOrder() {
       }
       // Prefer the Točka Obilja allocation (KIND 36603) when present — that's the
       // quantity/total the buyer actually receives; else fall back to ordered.
-      g.total += order.allocation?.total ?? order.total;
+      // With a Točka margin, what the buyer pays at the Točka (allocation or order).
+      g.total += foodCornerOrderPay(order).amount;
       if (order.currency) g.currency = order.currency;
       g.createdAt = Math.max(g.createdAt, order.createdAt);
       g.hasFulfillment = g.hasFulfillment || !!order.fulfillmentStatus;
@@ -538,6 +550,16 @@ export default function FoodCornerOrder() {
     }));
   };
 
+  // The server's refusals of an order (server/lib/foodCornerOrderCheck.ts), in the buyer's words.
+  const orderErrorText = (message: string) =>
+    message === "FOOD_CORNER_MARGIN_CHANGED"
+      ? t("order.toast.marginChanged")
+      : message === "FOOD_CORNER_POINT_UNREACHABLE"
+        ? t("order.toast.pointUnreachable")
+        : message.startsWith("FOOD_CORNER_")
+          ? t("order.toast.orderRefused")
+          : message;
+
   const placeOrder = async () => {
     if (!session?.nostrHexId) return;
     if (!selectedNode) {
@@ -577,6 +599,12 @@ export default function FoodCornerOrder() {
         while (usedOrderIds.has(orderId)) orderId = generateFoodCornerId("o");
         usedOrderIds.add(orderId);
         const orderTotal = items.reduce((sum, item) => sum + item.qty * item.listing.price, 0);
+        // The Točka margin goes onto the order with what the buyer pays; none = the order of before.
+        const orderMarginTags = marginTags(
+          items.map(({ listing, qty }) => ({ price: listing.price.toFixed(2), qty: String(qty) })),
+          selectedMargin,
+          items[0]?.listing.priceCurrency || "EUR",
+        );
         // The usual pickup, moved as many weeks later as the lead time.
         const orderRequestedDate =
           leadTimeWeeks > 0 && orderWindow?.pickup
@@ -604,6 +632,7 @@ export default function FoodCornerOrder() {
             ["buyer_type", "individual"],
             ...itemTags,
             ["total", orderTotal.toFixed(2), items[0]?.listing.priceCurrency || "EUR"],
+            ...orderMarginTags,
             ["status", "placed"],
             ["fulfillment", "distribution_point"],
             ["distribution_point", selectedNode.ref],
@@ -632,11 +661,13 @@ export default function FoodCornerOrder() {
       if (sent > 0 && sent < groups.length) {
         // Part of the checkout went out: say how much, keep the note for the rest.
         toast.error(t("order.toast.partial", { sent, total: groups.length }), {
-          description: err instanceof Error ? err.message : undefined,
+          description: err instanceof Error ? orderErrorText(err.message) : undefined,
         });
         await refetch();
       } else {
-        toast.error(err instanceof Error ? err.message : t("order.toast.failed"));
+        toast.error(err instanceof Error ? orderErrorText(err.message) : t("order.toast.failed"));
+        // The Točka changed its margin since this page read it: show the new prices.
+        if (err instanceof Error && err.message === "FOOD_CORNER_MARGIN_CHANGED") await refetch();
       }
     } finally {
       setPlacingOrder(false);
@@ -702,6 +733,7 @@ export default function FoodCornerOrder() {
                   </div>
                   <div className="flex flex-wrap gap-1.5 text-xs">
                     {nodePaused && <Badge variant="secondary">{t("order.badge.paused")}</Badge>}
+                    {!!node.marginPercent && <Badge variant="outline">{t("order.margin.badge", { percent: node.marginPercent })}</Badge>}
                     {node.geoLabel && (
                       <Badge variant="outline" className="gap-1">
                         <MapPin className="h-3 w-3" />
@@ -750,11 +782,20 @@ export default function FoodCornerOrder() {
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {t("order.notAcceptingFull", {
-              name: selectedNode.name,
-              pause: describeFoodCornerPause(selectedNode) ? ` (${describeFoodCornerPause(selectedNode)})` : "",
-            })}
+            {selectedMarginUnreadable
+              ? t("order.margin.unreadable", { name: selectedNode.name })
+              : t("order.notAcceptingFull", {
+                  name: selectedNode.name,
+                  pause: describeFoodCornerPause(selectedNode) ? ` (${describeFoodCornerPause(selectedNode)})` : "",
+                })}
           </AlertDescription>
+        </Alert>
+      )}
+
+      {selectedNode && canOrderFromSelectedNode && selectedMargin > 0 && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{t("order.margin.notice", { name: selectedNode.name, percent: selectedMargin })}</AlertDescription>
         </Alert>
       )}
 
@@ -955,7 +996,7 @@ export default function FoodCornerOrder() {
                         </div>
                         <div className="flex items-center justify-between gap-3">
                           <p className="font-bold">
-                            {formatFoodMoney(listing.price, listing.priceCurrency)}
+                            {formatFoodMoney(foodCornerUnitPay(listing.price, selectedMargin), listing.priceCurrency)}
                             <span className="text-xs font-normal text-muted-foreground"> / {listing.unit}</span>
                           </p>
                           <Input
@@ -1041,11 +1082,24 @@ export default function FoodCornerOrder() {
                             <MinusCircle className="h-4 w-4" />
                           </Button>
                           <span className="truncate flex-1">{qty} {listing.unit} · {listing.title}</span>
-                          <span className="font-medium shrink-0">{formatFoodMoney(qty * listing.price, listing.priceCurrency)}</span>
+                          <span className="font-medium shrink-0">{formatFoodMoney(foodCornerLinePay(listing.price, qty, selectedMargin), listing.priceCurrency)}</span>
                         </div>
                       ))}
+                      {selectedMargin > 0 && (
+                        <div className="border-t pt-2 space-y-1 text-sm text-muted-foreground">
+                          <div className="flex justify-between">
+                            <span>{t("order.margin.suppliers")}</span>
+                            <span>{formatFoodMoney(suppliersTotal, currency)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>{t("order.margin.amount", { percent: selectedMargin })}</span>
+                            {/* pay − the suppliers' total as the order writes it, so the three lines add up */}
+                            <span>{formatFoodMoney((Math.round(total * 100) - Math.round(Number(suppliersTotal.toFixed(2)) * 100)) / 100, currency)}</span>
+                          </div>
+                        </div>
+                      )}
                       <div className="border-t pt-2 flex justify-between font-bold">
-                        <span>{t("order.cart.total")}</span>
+                        <span>{t(selectedMargin > 0 ? "order.margin.youPay" : "order.cart.total")}</span>
                         <span>{formatFoodMoney(total, currency)}</span>
                       </div>
                     </div>

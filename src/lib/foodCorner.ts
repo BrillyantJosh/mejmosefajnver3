@@ -17,6 +17,7 @@ import {
   FoodCornerRawEvent,
   FoodCornerSupplierDelivery,
 } from "@/types/foodCorner";
+import { centsText, lineCentsOf, marginOfTags, payTotalCents, priceTextCents, withMarginCents } from "@/lib/foodCornerMargin";
 
 const SHOP_BASE_URL = "https://shop.lanapays.us";
 
@@ -142,6 +143,7 @@ export function parseFoodCornerNode(event: FoodCornerRawEvent): FoodCornerNode |
     images: getTags(event, "image").map(fixImageUrl),
     websiteUrl: getTag(event, "website_url"),
     tags: getTags(event, "t"),
+    marginPercent: marginOfTags(event.tags),
     content: event.content || "",
     rawEvent: event,
   };
@@ -212,6 +214,8 @@ export function parseFoodCornerOrder(event: FoodCornerRawEvent, listingMap: Map<
       unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
       currency: tag[5] || "EUR",
       title: tag[6] || undefined, // snapshotted product name (newer orders)
+      qtyText: tag[2] || "",
+      priceText: tag[4] || "",
       listing: listingMap.get(listingRef),
     };
   });
@@ -241,6 +245,8 @@ export function parseFoodCornerOrder(event: FoodCornerRawEvent, listingMap: Map<
     requestedDate: getTag(event, "requested_date"),
     requestedWindow: getTag(event, "requested_window"),
     leadTimeWeeks: parseLeadTimeWeeks(getTag(event, "lead_time_weeks")),
+    marginPercent: marginOfTags(event.tags),
+    payTotalRecorded: getTag(event, "pay_total"),
     payment: getTags(event, "payment"),
     paid: getTag(event, "paid"),
     recurring: getTag(event, "recurring"),
@@ -299,6 +305,8 @@ export function parseFoodCornerAllocation(event: FoodCornerRawEvent): FoodCorner
       unit: tag[3] || "",
       unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
       currency: tag[5] || "EUR",
+      qtyText: tag[2] || "",
+      priceText: tag[4] || "",
     };
   });
   const totalTag = getTagFull(event, "total");
@@ -316,6 +324,8 @@ export function parseFoodCornerAllocation(event: FoodCornerRawEvent): FoodCorner
     items,
     total: Number.isFinite(totalValue) ? totalValue : items.reduce((s, i) => s + i.qty * i.unitPrice, 0),
     currency: totalTag?.[2] || items[0]?.currency || "EUR",
+    marginPercent: marginOfTags(event.tags),
+    payTotalRecorded: getTag(event, "pay_total"),
     content: event.content || "",
     rawEvent: event,
   };
@@ -767,4 +777,55 @@ export function groupOrdersByNode(orders: FoodCornerOrderWithFulfillment[]) {
     total: nodeOrders.reduce((sum, order) => sum + order.total, 0),
     currency: nodeOrders[0]?.currency || "EUR",
   }));
+}
+
+// ── Točka margin (17. 11. 2026) ─────────────────────────────────────────────
+// Every amount a buyer or the Točka sees goes through these three, so a Točka
+// without a margin shows exactly the numbers of before (the same float sums),
+// and one with a margin shows whole-cent amounts from foodCornerMargin.ts.
+
+/** A unit price as the buyer pays it at the Točka. */
+export function foodCornerUnitPay(unitPrice: number, margin: number): number {
+  if (!margin) return unitPrice;
+  return withMarginCents(priceTextCents(unitPrice.toFixed(2)) ?? 0, margin) / 100;
+}
+
+/** One line (unit price × quantity) as the buyer pays it at the Točka. */
+export function foodCornerLinePay(unitPrice: number, qty: number, margin: number): number {
+  if (!margin) return qty * unitPrice;
+  return (lineCentsOf(withMarginCents(priceTextCents(unitPrice.toFixed(2)) ?? 0, margin), String(qty)) ?? 0) / 100;
+}
+
+export interface FoodCornerOrderPay {
+  /** What the buyer pays at the Točka: the allocation when there is one, else the order. */
+  amount: number;
+  /** What the suppliers get for the same quantities (the record's own `total`). */
+  suppliers: number;
+  currency: string;
+  /** The margin the buyer signed; 0 = none. */
+  margin: number;
+  /**
+   * The record does not add up: an unreadable margin, a price or quantity that
+   * cannot be counted, or a `pay_total` that is not what its prices and margin
+   * give. `amount` is then never the record's own figure but the computed one
+   * (or, if nothing can be computed, the suppliers' amount).
+   */
+  mismatch: boolean;
+}
+
+export function foodCornerOrderPay(order: FoodCornerOrderWithFulfillment): FoodCornerOrderPay {
+  const suppliers = order.allocation?.total ?? order.total;
+  const currency = order.allocation?.currency || order.currency || "EUR";
+  const margin = order.marginPercent;
+  if (margin === null) return { amount: suppliers, suppliers, currency, margin: 0, mismatch: true };
+  if (!margin) return { amount: suppliers, suppliers, currency, margin: 0, mismatch: false };
+  const lines = order.allocation
+    ? order.allocation.items.map((item) => ({ price: item.priceText ?? item.unitPrice.toFixed(2), qty: item.qtyText ?? String(item.qty) }))
+    : order.items.map((item) => ({ price: item.priceText ?? item.unitPrice.toFixed(2), qty: item.qtyText ?? String(item.qty) }));
+  const cents = payTotalCents(lines, margin);
+  if (cents === null) return { amount: suppliers, suppliers, currency, margin, mismatch: true };
+  // The order must say what it costs; an allocation by an older Točka page may not have it yet.
+  const recorded = order.allocation ? order.allocation.payTotalRecorded : order.payTotalRecorded;
+  const mismatch = order.allocation ? !!recorded && recorded !== centsText(cents) : recorded !== centsText(cents);
+  return { amount: cents / 100, suppliers, currency, margin, mismatch };
 }

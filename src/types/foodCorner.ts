@@ -87,6 +87,10 @@ export interface FoodCornerNode {
   images: string[];
   websiteUrl: string;
   tags: string[];
+  // Točka margin in whole percent (tag `margin_percent`, 17. 11. 2026): added to
+  // every supplier price. 0 = no tag, prices 1:1 as before. null = the tag
+  // cannot be read (not 0–20, or twice) — such a Točka takes no orders.
+  marginPercent: number | null;
   content: string;
   rawEvent: FoodCornerRawEvent;
 }
@@ -147,6 +151,10 @@ export interface FoodCornerOrderItem {
   // WHAT was bought even if its listing is later delisted or not fetched.
   // Absent on orders placed before this was added.
   title?: string;
+  // The quantity and unit price exactly as written on the order, for the
+  // margin's whole-cent arithmetic (foodCornerMargin.ts).
+  qtyText?: string;
+  priceText?: string;
   listing?: FoodCornerListing;
 }
 
@@ -176,6 +184,11 @@ export interface FoodCornerOrder {
   // list puts the order into the cycle this many weeks after the one it was
   // placed in. 0 = orders without the tag, i.e. all orders before lead times.
   leadTimeWeeks: number;
+  // The Točka margin frozen onto the order at checkout (tag `margin_percent`):
+  // 0 = none, the order of before; null = unreadable. `items`/`total` stay the
+  // suppliers' prices; `payTotalRecorded` is the order's own `pay_total` text.
+  marginPercent: number | null;
+  payTotalRecorded: string;
   payment: string[];
   paid: string;
   recurring: string;
@@ -237,6 +250,8 @@ export interface FoodCornerAllocationItem {
   unit: string;
   unitPrice: number;
   currency: string;
+  qtyText?: string;
+  priceText?: string;
 }
 
 export interface FoodCornerAllocation {
@@ -251,6 +266,10 @@ export interface FoodCornerAllocation {
   items: FoodCornerAllocationItem[];
   total: number;
   currency: string;
+  // Copied from the order when it has a margin: `pay_total` is what the buyer
+  // pays for the allocated quantities.
+  marginPercent: number | null;
+  payTotalRecorded: string;
   content: string;
   rawEvent: FoodCornerRawEvent;
 }
