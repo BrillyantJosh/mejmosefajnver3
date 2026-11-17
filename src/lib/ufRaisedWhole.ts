@@ -11,6 +11,9 @@ import { ufCents } from './ufFunded';
  * whole-number goal, the whole number reaches the goal exactly when the request reads
  * "Financiran" — scripts/testUfFunded.ts checks that, cent by cent, around the goal.
  *
+ * The pages show it with a thousands separator ("1.300", 17. 11. 2026) through ufRaisedText in
+ * ./ufMainFigures — the same whole number, only grouped.
+ *
  * DISPLAY ONLY. "Financiran", what is still missing, the contribute form, everything signed or
  * sent, repayments and LANA amounts keep their exact values and never go through this.
  */

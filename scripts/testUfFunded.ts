@@ -15,7 +15,10 @@
  *    (1000 of 1300 → 300 at most; someone pays 100 → 300 refused, 200 at most; 200 → funded);
  * 5. the pages are wired to the rule;
  * 6. the raised amount reads as a whole number, rounded DOWN (Jasna, Brilly 16. 11. 2026): it
- *    reaches the goal exactly when the request reads "Financiran"; nothing that is paid uses it.
+ *    reaches the goal exactly when the request reads "Financiran"; nothing that is paid uses it;
+ * 7. the main figures — raised and goal — carry a thousands separator (Jasna, Brilly 17. 11. 2026;
+ *    src/lib/ufMainFigures.ts): "100.000", "1.300" in Slovenian, "100,000", "1,300" otherwise;
+ *    raised still rounded down, the goal never rounded ("1.300,50"); nothing that is paid uses it.
  * Nothing near data/mejmosefajn.db, no real relay.
  *   npx tsx scripts/testUfFunded.ts
  */
@@ -27,6 +30,7 @@ import { WebSocketServer } from 'ws';
 import { finalizeEvent, generateSecretKey, getPublicKey, type Event } from 'nostr-tools';
 import { ufAmountVerdict, ufCents, ufChosenFiat, ufContributeCta, ufFreshRemainingCents, ufIsFullyFunded, ufPreSendRefusal, ufReadsFunded, ufRemainingCents } from '../src/lib/ufFunded.js';
 import { ufRaisedWhole } from '../src/lib/ufRaisedWhole.js';
+import { ufGoalText, ufGroupThousands, ufRaisedText } from '../src/lib/ufMainFigures.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'uf-funded-'));
 process.env.MEJMO_DB_PATH = path.join(tmp, 'throwaway.db');
@@ -137,6 +141,46 @@ console.log('— the raised amount as a whole number, rounded down (Jasna, Brill
     if ((Number(ufRaisedWhole(raised)) >= 1300) !== ufIsFullyFunded(raised, 1300)) disagree = raised;
   }
   check('cent by cent from 1298.00 to 1302.00: the whole number reaches 1300 exactly when the request is funded', disagree === null, disagree);
+}
+
+console.log('— the main figures with a thousands separator (Jasna, Brilly 17. 11. 2026) —');
+{
+  check('raised 100000 → "100.000" (the card in Jasna’s screenshot), 1300 → "1.300" — also four digits', ufRaisedText(100000, true) === '100.000' && ufRaisedText(1300, true) === '1.300', [ufRaisedText(100000, true), ufRaisedText(1300, true)]);
+  check('…in English "100,000" and "1,300"', ufRaisedText(100000, false) === '100,000' && ufRaisedText(1300, false) === '1,300');
+  check('…three digits and less stay as they are: 999, 0', ufRaisedText(999, true) === '999' && ufRaisedText(0, true) === '0' && ufRaisedText(999, false) === '999');
+  check('…millions: 1234567.89 → "1.234.567" / "1,234,567" (still rounded down)', ufRaisedText(1234567.89, true) === '1.234.567' && ufRaisedText(1234567.89, false) === '1,234,567');
+  check('…still rounded DOWN: 1299.60 → "1.299", 99999.99 → "99.999", never the goal while not funded',
+    ufRaisedText(1299.6, true) === '1.299' && ufRaisedText(99999.99, true) === '99.999' && !ufIsFullyFunded(99999.99, 100000));
+  check('…not a number → "0", as before', [undefined, null, NaN, 'x'].every((v) => ufRaisedText(v, true) === '0' && ufRaisedText(v, false) === '0'));
+  const samples = [0, 0.99, 1, 999.99, 1000, 1299.6, 1300, 9999.99, 10000, 99999.99, 100000, 100000.5, 1234567.89, 0.1 + 0.2, Array.from({ length: 10 }, () => 0.1).reduce((a, b) => a + b, 0)];
+  check('…it is yesterday’s whole number with only the separators added (sl and en)',
+    samples.every((v) => ufRaisedText(v, true).replace(/\./g, '') === ufRaisedWhole(v) && ufRaisedText(v, false).replace(/,/g, '') === ufRaisedWhole(v)));
+  for (const goal of [1300, 100000]) {
+    let disagree: number | null = null;
+    for (let c = goal * 100 - 200; c <= goal * 100 + 200 && disagree === null; c++) {
+      const raised = c / 100;
+      if ((Number(ufRaisedText(raised, true).replace(/\./g, '')) >= goal) !== ufIsFullyFunded(raised, goal)) disagree = raised;
+    }
+    check(`…cent by cent around a goal of ${ufGoalText(goal, true)}: the grouped number reaches the goal exactly when the request is funded`, disagree === null, disagree);
+  }
+  check('goal 1300 → "1.300", 100000 → "100.000"; in English "1,300", "100,000"',
+    ufGoalText(1300, true) === '1.300' && ufGoalText(100000, true) === '100.000' && ufGoalText(1300, false) === '1,300' && ufGoalText(100000, false) === '100,000');
+  check('…a goal with cents shows them: 1300.50 → "1.300,50" / "1,300.50"; 1300.05 → "1.300,05"',
+    ufGoalText(1300.5, true) === '1.300,50' && ufGoalText(1300.5, false) === '1,300.50' && ufGoalText(1300.05, true) === '1.300,05' && ufGoalText(0.5, true) === '0,50');
+  check('…never rounded: 1299.99 → "1.299,99" (not "1.300"), 1300.50 is not "1.301" (the card used to print toFixed(0))',
+    ufGoalText(1299.99, true) === '1.299,99' && ufGoalText(1300.5, true) !== '1.301' && ufGoalText(1300.5, true) !== '1.300');
+  check('…not even below a cent (only a hand-made event could carry one): 1300.555 → "1.300,555"', ufGoalText(1300.555, true) === '1.300,555');
+  check('…millions and huge numbers: 1234567.89 → "1.234.567,89"; 1e21 → every zero written out',
+    ufGoalText(1234567.89, true) === '1.234.567,89' && ufGoalText(1234567.89, false) === '1,234,567.89' && ufGoalText(1e21, true) === '1.000.000.000.000.000.000.000');
+  check('…a goal that comes as text reads the same; not a number → "0"', ufGoalText('1300.50', true) === '1.300,50' && [undefined, null, NaN, 'x'].every((v) => ufGoalText(v, true) === '0'));
+  const back = (t: string, sl: boolean) => Number(sl ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, ''));
+  let changed: number | null = null;
+  for (let c = 1; c <= 1_000_000 && changed === null; c += c < 200_000 ? 1 : 997) {
+    const goal = c / 100;
+    if (back(ufGoalText(goal, true), true) !== goal || back(ufGoalText(goal, false), false) !== goal) changed = goal;
+  }
+  check('…every goal from 0.01 to 2000.00 cent by cent, and on to 10000: the text reads back as exactly the goal', changed === null, changed);
+  check('grouping only ever touches whole digits', ufGroupThousands('1300', true) === '1.300' && ufGroupThousands('1300', false) === '1,300' && ufGroupThousands('1e+21', true) === '1e+21' && ufGroupThousands('-1300', true) === '-1.300');
 }
 
 // ── the real router and indexer, on a throwaway database with a fake relay ──
@@ -366,12 +410,21 @@ console.log('— the pages are wired to the rule —');
   check('…the input carries the maximum, and the one preset is exactly what is missing (off when nothing is)',
     /max=\{remainingCents !== null \? remainingText : undefined\}/.test(contribute) && /disabled=\{remainingCents <= 0\}\s*onClick=\{\(\) => setFiatInput\(remainingText\)\}/.test(contribute));
   const repay = src('UFRepay.tsx');
-  check('raised as a whole number: the list card', /<span className="text-3xl font-bold">\{ufRaisedWhole\(totalFunded\)\}<\/span>/.test(list) && list.includes('from "@/lib/ufRaisedWhole"'));
-  check('…the request page, its goal as it was', /\{ufRaisedWhole\(totalFunded\)\} \{request\.currency\}/.test(detailPage) && /\{sl \? "od" : "of"\} \{fmtFiat\(fiatGoal\)\}/.test(detailPage));
-  check('…"Moje", its goal as it was', /\{ufRaisedWhole\(financing\.totalFunded\)\} \{request\.currency\}/.test(my) && /\/ \{fiat\(goal, request\.currency\)\}/.test(my));
+  const figures = readFileSync(new URL('../src/lib/ufMainFigures.ts', import.meta.url), 'utf8');
+  const fundedRule = readFileSync(new URL('../src/lib/ufFunded.ts', import.meta.url), 'utf8');
+  check('the grouped raised amount is yesterday’s whole number (ufRaisedWhole), not a new rounding', /return ufGroupThousands\(ufRaisedWhole\(totalFunded\), sl\);/.test(figures));
+  check('raised and goal with a thousands separator: the list card', /<span className="text-3xl font-bold">\{ufRaisedText\(totalFunded, sl\)\}<\/span>/.test(list)
+    && list.includes('{sl ? "Cilj:" : "Goal:"} {ufGoalText(goalAmount, sl)} {request.currency}') && !list.includes('goalAmount.toFixed(0)') && list.includes('from "@/lib/ufMainFigures"'));
+  check('…the request page', /\{ufRaisedText\(totalFunded, sl\)\} \{request\.currency\}/.test(detailPage) && detailPage.includes('{sl ? "od" : "of"} {ufGoalText(fiatGoal, sl)} {request.currency}') && detailPage.includes('from "@/lib/ufMainFigures"'));
+  check('…"Moje"', /\{ufRaisedText\(financing\.totalFunded, sl\)\} \{request\.currency\}/.test(my) && my.includes('/ {ufGoalText(goal, sl)} {request.currency}') && my.includes('from "@/lib/ufMainFigures"'));
+  check('…each in the page’s own language (sl = useLang() === "sl", passed down to the card)', [list, detailPage, my].every((s) => s.includes('const sl = useLang() === "sl";')) && /<UfRequestCard[\s\S]{0,200}sl=\{sl\}/.test(list) && /<FinancingCard[\s\S]{0,200}sl=\{sl\}/.test(my));
+  // Code only: the doc comment may name the formatter to say this rule does NOT read it.
+  const fundedRuleCode = fundedRule.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  check('…the funded rule does not read the display', fundedRuleCode.includes('export function ufIsFullyFunded') && !fundedRuleCode.includes('ufMainFigures') && !fundedRuleCode.includes('ufRaisedWhole') && !fundedRuleCode.includes('ufRaisedText') && !fundedRuleCode.includes('ufGoalText'));
   check('…"Financiran" and the percent still read the exact total', /ufReadsFunded\(request, totalFunded\)/.test(list) && /ufIsFullyFunded\(totalFunded, goalAmount\)/.test(list) && /ufReadsFunded\(request, totalFunded\)/.test(detailPage) && /ufReadsFunded\(request, financing\.totalFunded\)/.test(my));
   check('…nothing that is paid uses it: the contribute and pay pages, and repaying, keep exact amounts',
-    !contribute.includes('ufRaisedWhole') && !pay.includes('ufRaisedWhole') && !repay.includes('ufRaisedWhole') && repay.includes('{totalFunded.toFixed(2)} {currency}')
+    [contribute, pay, repay].every((s) => !s.includes('ufRaisedWhole') && !s.includes('ufMainFigures') && !s.includes('ufRaisedText') && !s.includes('ufGoalText'))
+    && repay.includes('{totalFunded.toFixed(2)} {currency}')
     && list.includes('`Poplačano ${totalRepaid.toFixed(2)} / zbrano ${totalFunded.toFixed(2)} ${request.currency}`'));
   check('…the shared formatters stay exact (repayments and contributions go through them)', my.includes('const fiat = (amount: number, currency: string) => `${amount.toFixed(2)} ${currency}`;') && detailPage.includes('const fmtFiat = (n: number) => `${n.toFixed(2)} ${request.currency}`;'));
   check('…the resume of a payment already on-chain does not go through the gate (it only records)', !/recordContribution[\s\S]{0,40}ufPreSendRefusal/.test(pay) && pay.indexOf('ufPreSendRefusal(fresh') > pay.indexOf('const handleConfirm'));

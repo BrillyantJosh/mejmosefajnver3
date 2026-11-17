@@ -4,11 +4,18 @@
  * Jasna asked, Brilly confirmed (16. 11. 2026): once a request is funded, "Prispevaj" is no longer
  * active and the request reads "Financiran".
  *
- * Funded = what the page shows as raised reaches the goal the page shows. Both are compared in
- * cents, the way the page prints them (toFixed(2)), and the goal is the one the API returns — for
- * an approved request the amount PINNED at approval, in its currency (server/lib/ufApproval.ts).
- * "1300.00 of 1300.00" is funded, "1299.99 of 1300.00" is not, and a sum of contributions that
- * lands a float hair under the goal does not keep open a request the page prints as full.
+ * Funded = what was raised reaches the goal. Both are compared in whole cents (ufCents: the
+ * amount rounded to two decimals, as toFixed(2) gives it), and the goal is the one the API returns
+ * — for an approved request the amount PINNED at approval, in its currency (server/lib/ufApproval.ts).
+ * 1300.00 raised of 1300.00 is funded, 1299.99 of 1300.00 is not, and a sum of contributions that
+ * lands a float hair under the goal does not keep open a request that is full to the cent.
+ *
+ * What the pages SHOW is no longer toFixed(2) (17. 11. 2026, src/lib/ufMainFigures.ts): the raised
+ * amount is a whole number rounded down ("1.299" until the last cent is in), and the goal is shown
+ * exactly as published ("1.300", "1.300,50"). This check does not read that text. A goal with more
+ * than two decimals (e.g. 1300.554, which the request form does not refuse) is shown as it is,
+ * "1.300,554", while this check compares 130055 cents — open for Brilly: refuse such goals, or
+ * accept that the shown goal and the compared goal differ below a cent.
  *
  * This is the APP's gate, where no LANA has moved yet: the list and the request page offer no
  * "Prispevaj", the contribute page shows no payment form, and right before LANA is sent the page
@@ -40,7 +47,7 @@
  * are recorded as they are.
  */
 
-/** Cents, exactly as the page prints the amount (toFixed(2)). Anything that is not a number is 0. */
+/** Whole cents of an amount, rounded as toFixed(2) rounds it. Anything that is not a number is 0. */
 export function ufCents(amount: unknown): number {
   const n = typeof amount === 'number' ? amount : Number(amount);
   if (!Number.isFinite(n)) return 0;

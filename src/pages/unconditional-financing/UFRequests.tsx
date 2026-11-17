@@ -31,7 +31,7 @@ import {
 import { useUfSettings } from "@/hooks/useUFSettings";
 import { formatDays } from "@/lib/ufSettings";
 import { ufIsFullyFunded, ufReadsFunded } from "@/lib/ufFunded";
-import { ufRaisedWhole } from "@/lib/ufRaisedWhole";
+import { ufGoalText, ufRaisedText } from "@/lib/ufMainFigures";
 
 /**
  * "All" first and selected by default: the phases split a small set of requests
@@ -161,17 +161,18 @@ const UfRequestCard = ({ request, profile, sl }: UfRequestCardProps) => {
           </div>
         </div>
 
-        {/* Funding Stats — raised as a whole number, rounded down (Jasna, Brilly 16. 11. 2026;
-            src/lib/ufRaisedWhole.ts). "Financiran" above stays on the exact cents. */}
+        {/* Funding Stats — raised as a whole number, rounded down (Jasna, Brilly 16. 11. 2026),
+            raised and goal with a thousands separator, the goal never rounded (17. 11. 2026;
+            src/lib/ufMainFigures.ts). "Financiran" above stays on the exact cents. */}
         <div className="flex items-baseline justify-between pt-4 mt-auto">
           <div>
-            <span className="text-3xl font-bold">{ufRaisedWhole(totalFunded)}</span>
+            <span className="text-3xl font-bold">{ufRaisedText(totalFunded, sl)}</span>
             <span className="text-lg text-muted-foreground ml-1">
               {request.currency}
             </span>
           </div>
           <div className="text-right text-sm text-muted-foreground">
-            {sl ? "Cilj:" : "Goal:"} {goalAmount.toFixed(0)} {request.currency}
+            {sl ? "Cilj:" : "Goal:"} {ufGoalText(goalAmount, sl)} {request.currency}
           </div>
         </div>
 

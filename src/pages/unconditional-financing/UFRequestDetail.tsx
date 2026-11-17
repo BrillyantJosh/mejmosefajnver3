@@ -37,7 +37,7 @@ import {
   type UfRepayment,
 } from "@/hooks/useUFData";
 import { ufContributeCta, ufReadsFunded } from "@/lib/ufFunded";
-import { ufRaisedWhole } from "@/lib/ufRaisedWhole";
+import { ufGoalText, ufRaisedText } from "@/lib/ufMainFigures";
 import UFComments from "./UFComments";
 import UFAdminBar from "./UFAdminBar";
 
@@ -448,12 +448,13 @@ const UFRequestDetail = () => {
               <div className="space-y-4">
                 <div>
                   <div className="flex items-baseline gap-2 mb-2 flex-wrap">
-                    {/* Raised as a whole number, rounded down (src/lib/ufRaisedWhole.ts); the goal as it was. */}
+                    {/* Raised as a whole number, rounded down; raised and goal with a thousands
+                        separator, the goal never rounded (src/lib/ufMainFigures.ts). */}
                     <span className="text-3xl font-bold text-green-500">
-                      {ufRaisedWhole(totalFunded)} {request.currency}
+                      {ufRaisedText(totalFunded, sl)} {request.currency}
                     </span>
                     <span className="text-muted-foreground">
-                      {sl ? "od" : "of"} {fmtFiat(fiatGoal)}
+                      {sl ? "od" : "of"} {ufGoalText(fiatGoal, sl)} {request.currency}
                     </span>
                   </div>
                   <Progress value={Math.min(percentFunded, 100)} className="mb-2" />
