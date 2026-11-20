@@ -3,8 +3,25 @@ import type { BusinessUnit } from "@/hooks/useNostrBusinessUnits";
 export const FOOD_CORNER_NODE_KIND = 30905;
 export const FOOD_CORNER_LISTING_KIND = 36500; // Pridelki / Izdelki (produce/eco)
 export const FOOD_CORNER_BEAUTY_LISTING_KIND = 36509; // Lepota & Nega (beauty & care)
-// Listing kinds the Food Corner browses/curates (produce + beauty)
-export const FOOD_CORNER_LISTING_KINDS = [FOOD_CORNER_LISTING_KIND, FOOD_CORNER_BEAUTY_LISTING_KIND];
+// Trgovina (shop) offers, e.g. Živa Center's ~1000 products (Brilly, 20. 11. 2026).
+// Unlike 36500/36509 they are NOT read wholesale for every visitor: a shop
+// can hold more offers than all the rest together, so only the ones a Točka
+// actually names are read (src/lib/foodCornerShopOffers.ts).
+export const FOOD_CORNER_SHOP_LISTING_KIND = 36502;
+// Listing kinds the Food Corner browses/curates (produce + beauty + shop)
+export const FOOD_CORNER_LISTING_KINDS = [FOOD_CORNER_LISTING_KIND, FOOD_CORNER_BEAUTY_LISTING_KIND, FOOD_CORNER_SHOP_LISTING_KIND];
+/**
+ * Whether a Točka's `seller` tag (a whole business unit) also brings that
+ * unit's SHOP offers (36502), or only its 36500/36509 ones.
+ *
+ * Off for now: "Eko točka Mihalek" already names a unit as a whole seller
+ * whose 39 old shop offers repeat 35 of its current produce offers, 7 of
+ * them at an older price (relays, 20. 11. 2026). Turning this on would put
+ * those into a live Točka without its operator choosing them. Shop offers
+ * therefore come in one by one (`listing` tags) until Brilly decides.
+ * With it on, `seller` brings every active offer of the unit, of all kinds.
+ */
+export const FOOD_CORNER_SELLER_BRINGS_SHOP_OFFERS = false;
 export const FOOD_CORNER_ORDER_KIND = 36601;
 export const FOOD_CORNER_FULFILLMENT_KIND = 36602;
 export const FOOD_CORNER_ALLOCATION_KIND = 36603;
@@ -102,7 +119,7 @@ export interface FoodCornerListing {
   listingId: string;
   dTag: string; // addressable d-tag — required for correct replaceable-event dedup
   ref: string;
-  listingKind: number; // 36500 produce | 36509 beauty — the event kind this listing came from
+  listingKind: number; // 36500 produce | 36509 beauty | 36502 shop — the event kind this listing came from
   unitRef: string;
   title: string;
   type: string;

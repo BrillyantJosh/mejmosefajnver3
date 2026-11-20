@@ -26,7 +26,8 @@ import {
 } from "@/lib/foodCorner";
 
 // Countable units that must be whole numbers (mirrors the buyer order form).
-const WHOLE_UNITS = new Set(["piece", "pieces", "pcs", "kos", "kom", "komad", "kpl", "unit", "units"]);
+// "šop" (a bunch) comes with shop offers (KIND 36502).
+const WHOLE_UNITS = new Set(["piece", "pieces", "pcs", "kos", "kom", "komad", "kpl", "unit", "units", "šop"]);
 const isWholeUnit = (unit?: string): boolean => WHOLE_UNITS.has((unit || "").trim().toLowerCase());
 
 function formatCountdown(ms: number): string {

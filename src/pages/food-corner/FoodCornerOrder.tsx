@@ -31,6 +31,7 @@ import {
   generateFoodCornerId,
   groupFoodCornerCheckout,
   isFoodCornerNodePaused,
+  FOOD_CORNER_LISTING_CATEGORIES,
   listingCategory,
   reconcileOrderItems,
   slovenianPluralForm,
@@ -45,7 +46,8 @@ function firstImage(listing: FoodCornerListing): string | undefined {
 }
 
 // Countable units that must be whole numbers (no decimals like 1.2 pieces).
-const WHOLE_UNITS = new Set(["piece", "pieces", "pcs", "kos", "kom", "komad", "kpl", "unit", "units"]);
+// "šop" (a bunch) comes with shop offers (KIND 36502), e.g. Živa Center's greens.
+const WHOLE_UNITS = new Set(["piece", "pieces", "pcs", "kos", "kom", "komad", "kpl", "unit", "units", "šop"]);
 function isWholeUnit(unit?: string): boolean {
   return WHOLE_UNITS.has((unit || "").trim().toLowerCase());
 }
@@ -97,7 +99,12 @@ const ECO_LABELS: Record<string, { en: string; sl: string }> = {
   free_range: { en: "Free range", sl: "Prosta reja" },
 };
 function tagLabel(map: Record<string, { en: string; sl: string }>, key: string, lang: string): string {
-  return map[key]?.[lang === "sl" ? "sl" : "en"] || key;
+  const known = map[key]?.[lang === "sl" ? "sl" : "en"];
+  if (known) return known;
+  // A tag without a label is shown readable: shop offers carry slugs such as
+  // "sveza-zelenjava" or "nega-las".
+  const words = key.replace(/[-_]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : key;
 }
 
 function toISODate(d: Date): string {
@@ -221,7 +228,7 @@ function OfferText({ listing, producer }: { listing: FoodCornerListing; producer
 export default function FoodCornerOrder() {
   const { session } = useAuth();
   const { t, lang } = useTranslation(foodCornerTranslations);
-  const { nodes, orders, producers, isLoading, error, refetch, getNodeCatalog, getNodeByRef } = useFoodCornerData();
+  const { nodes, orders, producers, isLoading, error, shopOffersIncomplete, refetch, getNodeCatalog, getNodeByRef } = useFoodCornerData();
 
   // Supplier (business unit) behind each offer, so buyers can see the origin
   // of what they're ordering — e.g. "Kmetija Nabernik · Cerklje na Gorenjskem".
@@ -286,28 +293,38 @@ export default function FoodCornerOrder() {
     [canOrderFromSelectedNode, getNodeCatalog, selectedNodeRef],
   );
 
-  // Offer-category chooser: produce (36500) vs beauty (36509). Only meaningful
-  // when the node curates BOTH; otherwise we just show everything.
-  const hasProduce = useMemo(() => catalog.some((l) => listingCategory(l) === "produce"), [catalog]);
-  const hasBeauty = useMemo(() => catalog.some((l) => listingCategory(l) === "beauty"), [catalog]);
-  const showKindChooser = hasProduce && hasBeauty;
-  const [selectedKinds, setSelectedKinds] = useState<Set<FoodCornerListingCategory>>(
-    () => new Set<FoodCornerListingCategory>(["produce", "beauty"]),
+  // Offer-category chooser: produce (36500), beauty (36509), shop (36502).
+  // Only meaningful when the node curates at least two of them; otherwise we
+  // just show everything.
+  const catalogCategories = useMemo(
+    () => FOOD_CORNER_LISTING_CATEGORIES.filter((category) => catalog.some((l) => listingCategory(l) === category)),
+    [catalog],
   );
+  const showKindChooser = catalogCategories.length >= 2;
+  const [selectedKinds, setSelectedKinds] = useState<Set<FoodCornerListingCategory>>(
+    () => new Set<FoodCornerListingCategory>(FOOD_CORNER_LISTING_CATEGORIES),
+  );
+  // The categories shown: those chosen that this Točka has — or, when none of
+  // the chosen ones is here (another Točka was picked), all of its categories.
+  const effectiveKinds = useMemo(() => {
+    const chosen = catalogCategories.filter((category) => selectedKinds.has(category));
+    return new Set<FoodCornerListingCategory>(chosen.length > 0 ? chosen : catalogCategories);
+  }, [catalogCategories, selectedKinds]);
   const toggleKind = (value: FoodCornerListingCategory) =>
     setSelectedKinds((prev) => {
       const next = new Set(prev);
-      // keep at least one category selected
-      if (next.has(value)) {
-        if (next.size > 1) next.delete(value);
+      for (const category of effectiveKinds) next.add(category);
+      // keep at least one category of this Točka selected
+      if (effectiveKinds.has(value)) {
+        if (effectiveKinds.size > 1) next.delete(value);
       } else {
         next.add(value);
       }
       return next;
     });
   const catalogByKind = useMemo(
-    () => (showKindChooser ? catalog.filter((l) => selectedKinds.has(listingCategory(l))) : catalog),
-    [catalog, showKindChooser, selectedKinds],
+    () => (showKindChooser ? catalog.filter((l) => effectiveKinds.has(listingCategory(l))) : catalog),
+    [catalog, showKindChooser, effectiveKinds],
   );
 
   // Group filters (category `t` tags + eco labels) derived from the chosen-kind catalog.
@@ -690,6 +707,12 @@ export default function FoodCornerOrder() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+      {shopOffersIncomplete && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{t("order.shopOffers.incomplete")}</AlertDescription>
+        </Alert>
+      )}
 
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -894,18 +917,18 @@ export default function FoodCornerOrder() {
             </div>
           )}
 
-          {/* Offer-category chooser: Produce (36500) vs Beauty & Care (36509) */}
+          {/* Offer-category chooser: Produce (36500), Beauty & Care (36509), Shop (36502) */}
           {showKindChooser && (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-xs font-medium text-muted-foreground mr-1">{t("order.filter.offerType")}:</span>
-              {(["produce", "beauty"] as const).map((cat) => (
+              {catalogCategories.map((cat) => (
                 <button
                   key={cat}
                   type="button"
                   onClick={() => toggleKind(cat)}
-                  className={`text-xs rounded-full border px-2.5 py-1 transition-colors ${selectedKinds.has(cat) ? "bg-primary text-primary-foreground border-primary" : "hover:border-primary/50"}`}
+                  className={`text-xs rounded-full border px-2.5 py-1 transition-colors ${effectiveKinds.has(cat) ? "bg-primary text-primary-foreground border-primary" : "hover:border-primary/50"}`}
                 >
-                  {cat === "produce" ? t("order.offerType.produce") : t("order.offerType.beauty")}
+                  {t(`order.offerType.${cat}` as FoodCornerKey)}
                 </button>
               ))}
             </div>

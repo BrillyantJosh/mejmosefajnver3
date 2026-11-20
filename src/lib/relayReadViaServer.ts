@@ -68,11 +68,20 @@ export async function readAllPages<E extends PagedEvent>(
 
     if (usable.length < pageSize) return { events: [...byId.values()], complete: true, pages };
 
-    const oldest = usable.reduce((min, e) => (e.created_at < min ? e.created_at : min), usable[0].created_at);
+    // The next page continues from the `pageSize`-th newest event of this one,
+    // not from its oldest. The server answers with the relays' answers put
+    // together; when the relays do not hold the same events, one relay's 500
+    // reach further back than another's, and continuing from the oldest of
+    // them skips whatever the fuller relay holds in between. Every relay that
+    // filled its page has handed over everything newer than this cut, so from
+    // here nothing is skipped. When the relays agree, this is the oldest.
+    const cut = usable
+      .map((e) => e.created_at)
+      .sort((a, b) => b - a)[pageSize - 1];
     // A full page written within one second cannot be paged past — asking
     // again would fetch the same page for ever.
-    if (until !== undefined && oldest >= until) return { events: [...byId.values()], complete: false, pages };
-    until = oldest;
+    if (until !== undefined && cut >= until) return { events: [...byId.values()], complete: false, pages };
+    until = cut;
   }
 
   return { events: [...byId.values()], complete: false, pages };

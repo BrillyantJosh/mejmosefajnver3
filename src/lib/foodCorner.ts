@@ -6,6 +6,8 @@ import {
   FOOD_CORNER_LISTING_KIND,
   FOOD_CORNER_NODE_KIND,
   FOOD_CORNER_ORDER_KIND,
+  FOOD_CORNER_SELLER_BRINGS_SHOP_OFFERS,
+  FOOD_CORNER_SHOP_LISTING_KIND,
   FoodCornerAllocation,
   FoodCornerARef,
   FoodCornerFulfillment,
@@ -468,14 +470,41 @@ export function deliveredTotalsForNode(
   return totals;
 }
 
-export type FoodCornerListingCategory = "produce" | "beauty";
+export type FoodCornerListingCategory = "produce" | "beauty" | "shop";
 
-/** Which offer category a listing belongs to (produce = 36500, beauty = 36509). */
+/** The offer categories, in the order every chooser and list shows them. */
+export const FOOD_CORNER_LISTING_CATEGORIES: readonly FoodCornerListingCategory[] = ["produce", "beauty", "shop"];
+
+/** Which offer category a listing belongs to (produce = 36500, beauty = 36509, shop = 36502). */
 export function listingCategory(listing: FoodCornerListing): FoodCornerListingCategory {
-  return listing.listingKind === FOOD_CORNER_BEAUTY_LISTING_KIND ? "beauty" : "produce";
+  if (listing.listingKind === FOOD_CORNER_BEAUTY_LISTING_KIND) return "beauty";
+  if (listing.listingKind === FOOD_CORNER_SHOP_LISTING_KIND) return "shop";
+  return "produce";
 }
 
-export function resolveNodeCatalog(node: FoodCornerNode | undefined, listings: FoodCornerListing[]): FoodCornerListing[] {
+export interface FoodCornerSellerOptions {
+  /** See FOOD_CORNER_SELLER_BRINGS_SHOP_OFFERS; a parameter only so tests can try both. */
+  sellerBringsShopOffers?: boolean;
+}
+
+/**
+ * Whether a Točka's `seller` tag for this listing's unit brings the listing.
+ * Produce and beauty offers always come with their seller; shop offers only
+ * when FOOD_CORNER_SELLER_BRINGS_SHOP_OFFERS is on — otherwise each one
+ * needs its own `listing` tag.
+ */
+export function sellerCoversListing(
+  listing: Pick<FoodCornerListing, "listingKind">,
+  { sellerBringsShopOffers = FOOD_CORNER_SELLER_BRINGS_SHOP_OFFERS }: FoodCornerSellerOptions = {},
+): boolean {
+  return listing.listingKind !== FOOD_CORNER_SHOP_LISTING_KIND || sellerBringsShopOffers;
+}
+
+export function resolveNodeCatalog(
+  node: FoodCornerNode | undefined,
+  listings: FoodCornerListing[],
+  options: FoodCornerSellerOptions = {},
+): FoodCornerListing[] {
   if (!node) return [];
   const sellers = new Set(node.sellers);
   const includedListings = new Set(node.listings);
@@ -483,7 +512,10 @@ export function resolveNodeCatalog(node: FoodCornerNode | undefined, listings: F
 
   return listings
     .filter((listing) => listing.status === "active")
-    .filter((listing) => sellers.has(listing.unitRef) || includedListings.has(listing.ref))
+    .filter(
+      (listing) =>
+        (sellers.has(listing.unitRef) && sellerCoversListing(listing, options)) || includedListings.has(listing.ref),
+    )
     .filter((listing) => !excludes.has(listing.ref))
     .sort((a, b) => a.title.localeCompare(b.title));
 }

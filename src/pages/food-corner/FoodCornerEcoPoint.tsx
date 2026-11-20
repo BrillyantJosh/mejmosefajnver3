@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Check, ChevronLeft, ChevronRight, ImagePlus, Loader2, MapPin, Plus, Printer, RefreshCw, Save, Sparkles, Store, X } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, ImagePlus, Loader2, MapPin, Plus, Printer, RefreshCw, Save, Search, Sparkles, Store, X } from "lucide-react";
 import { toast } from "sonner";
 import { AddressSearch } from "@/components/AddressSearch";
 import LocationPicker from "@/components/LocationPicker";
@@ -18,7 +18,14 @@ import { useFoodCornerPublisher } from "@/hooks/useFoodCornerPublisher";
 import { useNostrLana8Wonder } from "@/hooks/useNostrLana8Wonder";
 import { useTranslation } from "@/i18n/I18nContext";
 import foodCornerTranslations, { FoodCornerKey } from "@/i18n/modules/foodCorner";
-import { FOOD_CORNER_ALLOCATION_KIND, FOOD_CORNER_NODE_KIND, FoodCornerNodeStatus, FoodCornerOrderWithFulfillment } from "@/types/foodCorner";
+import {
+  FOOD_CORNER_ALLOCATION_KIND,
+  FOOD_CORNER_NODE_KIND,
+  FOOD_CORNER_SHOP_LISTING_KIND,
+  FoodCornerListing,
+  FoodCornerNodeStatus,
+  FoodCornerOrderWithFulfillment,
+} from "@/types/foodCorner";
 import {
   deliveredTotalsForNode,
   describeFoodCornerPause,
@@ -30,7 +37,9 @@ import {
   formatFoodMoney,
   generateFoodCornerId,
   groupFoodCornerOrdersByCycle,
+  FOOD_CORNER_LISTING_CATEGORIES,
   listingCategory,
+  sellerCoversListing,
   groupOrdersByNode,
   reconcileOrderItems,
   slugifyFoodCorner,
@@ -40,6 +49,7 @@ import {
 import { uploadToLanaMedia } from "@/lib/lanaMediaUpload";
 import { FOOD_CORNER_MAX_MARGIN, marginTags, parseMarginPercent } from "@/lib/foodCornerMargin";
 import { useNostrProfilesCacheBulk } from "@/hooks/useNostrProfilesCacheBulk";
+import { normalizeSearchText, offerMatchesSearch } from "@/lib/foodCornerSearch";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
@@ -50,6 +60,12 @@ const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"
 const orderEffectiveTotal = (order: FoodCornerOrderWithFulfillment) => foodCornerOrderPay(order).amount;
 // What the suppliers get for the same quantities (no margin): what the Točka passes on.
 const orderSuppliersTotal = (order: FoodCornerOrderWithFulfillment) => foodCornerOrderPay(order).suppliers;
+
+// A published Točka (KIND 30905) must stay below the relays' 128 KiB message
+// limit, with room for the id, signature and the message around it.
+const FOOD_CORNER_NODE_MAX_BYTES = 120_000;
+// Offers shown per supplier in the picker before "Show all" (Živa Center has ~1000).
+const PICKER_OFFERS_SHOWN = 60;
 
 function splitAreas(value: string): string[] {
   return value
@@ -65,7 +81,17 @@ export default function FoodCornerEcoPoint() {
   // No relay answered, so we do not know. The button stays shut — an Abundance
   // point is published to the relays — but the reason given is the true one.
   const lana8WonderUnknown = !lana8WonderStatus.exists && lana8WonderStatus.unreachable;
-  const { nodes, producers, orders, isLoading, refetch, deliveries } = useFoodCornerData();
+  const [showForm, setShowForm] = useState(false);
+  // Which section of the form to show: 'new' = full form (node + offers, when
+  // creating); 'node' = node fields only (Uredi); 'offers' = offer curation only
+  // (Uredi ponudbe). saveNode always re-publishes the FULL node, so neither flow
+  // drops the other section's data.
+  const [formMode, setFormMode] = useState<"new" | "node" | "offers">("new");
+  // Choosing offers needs every shop offer (36502) there is, not only the ones
+  // the Točke already name — read only while the offer section is open.
+  const choosingOffers = showForm && formMode !== "node";
+  const { nodes, producers, orders, isLoading, refetch, deliveries, shopOffersIncomplete, allShopOffersLoading } =
+    useFoodCornerData({ allShopOffers: choosingOffers });
   const { publishEvent, isPublishing } = useFoodCornerPublisher();
 
   const dayLabel = (day?: string) => (day ? t(`days.${day.trim().toLowerCase()}` as FoodCornerKey) : "");
@@ -80,12 +106,6 @@ export default function FoodCornerEcoPoint() {
   const [editingNodeRef, setEditingNodeRef] = useState<string>("");
   const editingNode = myNodes.find((node) => node.ref === editingNodeRef);
 
-  const [showForm, setShowForm] = useState(false);
-  // Which section of the form to show: 'new' = full form (node + offers, when
-  // creating); 'node' = node fields only (Uredi); 'offers' = offer curation only
-  // (Uredi ponudbe). saveNode always re-publishes the FULL node, so neither flow
-  // drops the other section's data.
-  const [formMode, setFormMode] = useState<"new" | "node" | "offers">("new");
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -112,6 +132,10 @@ export default function FoodCornerEcoPoint() {
   const [selectedSellers, setSelectedSellers] = useState<string[]>([]);
   const [selectedListings, setSelectedListings] = useState<string[]>([]);
   const [excludedListings, setExcludedListings] = useState<string[]>([]);
+  // Offer picker: a search over product and supplier names, and which
+  // suppliers show all their offers (a shop can have a thousand).
+  const [offerSearch, setOfferSearch] = useState("");
+  const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
   const [imageUrl, setImageUrl] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
 
@@ -217,9 +241,17 @@ export default function FoodCornerEcoPoint() {
     }
   };
 
-  const toggleListing = (sellerRef: string, listingRef: string, checked: boolean) => {
-    const sellerSelected = selectedSellers.includes(sellerRef);
-    if (sellerSelected) {
+  // Whether this offer is in the Točka: through its whole seller (unless
+  // excluded) or through its own `listing` tag. A shop offer comes with its
+  // seller only when FOOD_CORNER_SELLER_BRINGS_SHOP_OFFERS is on.
+  const listingViaSeller = (listing: FoodCornerListing) =>
+    selectedSellers.includes(listing.unitRef) && sellerCoversListing(listing);
+  const isListingChosen = (listing: FoodCornerListing) =>
+    listingViaSeller(listing) ? !excludedListings.includes(listing.ref) : selectedListings.includes(listing.ref);
+
+  const toggleListing = (listing: FoodCornerListing, checked: boolean) => {
+    const listingRef = listing.ref;
+    if (listingViaSeller(listing)) {
       setExcludedListings((current) =>
         checked ? current.filter((item) => item !== listingRef) : Array.from(new Set([...current, listingRef])),
       );
@@ -292,6 +324,14 @@ export default function FoodCornerEcoPoint() {
         : []),
       ["t", "eco_point"],
     ];
+
+    // The relays take a message of at most 128 KiB. Shop offers chosen one by
+    // one are a tag each (~110 bytes), so a thousand of them would not fit and
+    // the Točka would not be published at all.
+    if (new TextEncoder().encode(JSON.stringify(tags) + description.trim()).length > FOOD_CORNER_NODE_MAX_BYTES) {
+      toast.error(t("ecoPoint.toast.tooManyOffers", { count: selectedListings.length + excludedListings.length }));
+      return;
+    }
 
     try {
       await publishEvent(FOOD_CORNER_NODE_KIND, tags, description.trim());
@@ -1110,70 +1150,122 @@ export default function FoodCornerEcoPoint() {
                 <h3 className="font-semibold">{t("ecoPoint.suppliers.title")}</h3>
                 <p className="text-sm text-muted-foreground">{t("ecoPoint.suppliers.subtitle")}</p>
               </div>
-              {producers.length === 0 ? (
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={offerSearch}
+                  onChange={(event) => setOfferSearch(event.target.value)}
+                  placeholder={t("ecoPoint.offers.searchPlaceholder")}
+                  className="pl-9"
+                />
+              </div>
+              {shopOffersIncomplete && (
+                <Alert variant="destructive">
+                  <AlertDescription>{t("ecoPoint.offers.shopIncomplete")}</AlertDescription>
+                </Alert>
+              )}
+              {producers.length === 0 && !allShopOffersLoading ? (
                 <Card>
                   <CardContent className="p-5 text-sm text-muted-foreground">
                     {t("ecoPoint.suppliers.empty")}
                   </CardContent>
                 </Card>
               ) : (
-                (["produce", "beauty"] as const).map((category) => {
+                FOOD_CORNER_LISTING_CATEGORIES.map((category) => {
+                  const normalizedOfferSearch = normalizeSearchText(offerSearch);
+                  // The search narrows what is SHOWN, never what is chosen: an
+                  // offer it hides keeps its tick and stays in the Točka.
                   const catProducers = producers
-                    .map((producer) => ({
-                      producer,
-                      listings: producer.listings.filter((listing) => listingCategory(listing) === category),
-                    }))
-                    .filter((entry) => entry.listings.length > 0);
+                    .map((producer) => {
+                      const listings = producer.listings.filter((listing) => listingCategory(listing) === category);
+                      const matching = normalizedOfferSearch
+                        ? listings.filter((listing) => offerMatchesSearch(normalizedOfferSearch, listing.title, producer.name))
+                        : listings;
+                      return { producer, listings, matching };
+                    })
+                    .filter((entry) => entry.matching.length > 0);
                   return (
                     <div key={category} className="space-y-2">
                       <h4 className="text-sm font-semibold text-primary">
-                        {category === "produce" ? t("ecoPoint.offers.produce") : t("ecoPoint.offers.beauty")}
+                        {t(`ecoPoint.offers.${category}` as FoodCornerKey)}
                       </h4>
+                      {category === "shop" && !sellerCoversListing({ listingKind: FOOD_CORNER_SHOP_LISTING_KIND }) && (
+                        <p className="text-xs text-muted-foreground">{t("ecoPoint.offers.shopPickEach")}</p>
+                      )}
+                      {category === "shop" && allShopOffersLoading && (
+                        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          {t("ecoPoint.offers.shopLoading")}
+                        </p>
+                      )}
                       {catProducers.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">{t("ecoPoint.offers.emptyCategory")}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {normalizedOfferSearch ? t("ecoPoint.offers.noMatch") : t("ecoPoint.offers.emptyCategory")}
+                        </p>
                       ) : (
                         <div className="space-y-3">
-                          {catProducers.map(({ producer, listings }) => {
+                          {catProducers.map(({ producer, listings, matching }) => {
                             const sellerSelected = selectedSellers.includes(producer.unitRef);
+                            // One category is one kind, so one answer for all its offers.
+                            const sellerBrings = sellerCoversListing(listings[0]);
+                            const supplierKey = `${category}-${producer.unitRef}`;
+                            const expanded = expandedSuppliers.has(supplierKey) || !!normalizedOfferSearch;
+                            const visible = expanded ? matching : matching.slice(0, PICKER_OFFERS_SHOWN);
+                            const supplierLine = (
+                              <span className="flex-1">
+                                <span className="font-medium block">{producer.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {t("ecoPoint.suppliers.producerLine", {
+                                    place: producer.city || producer.country || producer.pubkey.slice(0, 10),
+                                    count: listings.length,
+                                  })}
+                                  {!sellerBrings &&
+                                    ` · ${t("ecoPoint.offers.chosenCount", { count: listings.filter(isListingChosen).length })}`}
+                                </span>
+                              </span>
+                            );
                             return (
-                              <Card key={`${category}-${producer.unitRef}`}>
+                              <Card key={supplierKey}>
                                 <CardContent className="p-4 space-y-3">
-                                  <label className="flex items-start gap-3">
-                                    <Checkbox
-                                      checked={sellerSelected}
-                                      onCheckedChange={(checked) => toggleSeller(producer.unitRef, checked === true)}
-                                      className="mt-1"
-                                    />
-                                    <span className="flex-1">
-                                      <span className="font-medium block">{producer.name}</span>
-                                      <span className="text-xs text-muted-foreground">
-                                        {t("ecoPoint.suppliers.producerLine", {
-                                          place: producer.city || producer.country || producer.pubkey.slice(0, 10),
-                                          count: listings.length,
-                                        })}
-                                      </span>
-                                    </span>
-                                  </label>
+                                  {sellerBrings ? (
+                                    <label className="flex items-start gap-3">
+                                      <Checkbox
+                                        checked={sellerSelected}
+                                        onCheckedChange={(checked) => toggleSeller(producer.unitRef, checked === true)}
+                                        className="mt-1"
+                                      />
+                                      {supplierLine}
+                                    </label>
+                                  ) : (
+                                    <div className="flex items-start gap-3 pl-7">{supplierLine}</div>
+                                  )}
 
                                   <div className="grid md:grid-cols-2 gap-2 pl-7">
-                                    {listings.map((listing) => {
-                                      const checked = sellerSelected
-                                        ? !excludedListings.includes(listing.ref)
-                                        : selectedListings.includes(listing.ref);
-                                      return (
-                                        <label key={listing.ref} className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                                          <Checkbox
-                                            checked={checked}
-                                            onCheckedChange={(value) => toggleListing(producer.unitRef, listing.ref, value === true)}
-                                          />
-                                          <span className="flex-1 truncate">{listing.title}</span>
-                                          <span className="text-xs text-muted-foreground shrink-0">
-                                            {formatFoodMoney(listing.price, listing.priceCurrency)}/{listing.unit}
-                                          </span>
-                                        </label>
-                                      );
-                                    })}
+                                    {visible.map((listing) => (
+                                      <label key={listing.ref} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                                        <Checkbox
+                                          checked={isListingChosen(listing)}
+                                          onCheckedChange={(value) => toggleListing(listing, value === true)}
+                                        />
+                                        <span className="flex-1 truncate">{listing.title}</span>
+                                        <span className="text-xs text-muted-foreground shrink-0">
+                                          {formatFoodMoney(listing.price, listing.priceCurrency)}/{listing.unit}
+                                        </span>
+                                      </label>
+                                    ))}
                                   </div>
+                                  {matching.length > visible.length && (
+                                    <div className="pl-7">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setExpandedSuppliers((current) => new Set(current).add(supplierKey))}
+                                      >
+                                        {t("ecoPoint.offers.showAll", { count: matching.length })}
+                                      </Button>
+                                    </div>
+                                  )}
                                 </CardContent>
                               </Card>
                             );

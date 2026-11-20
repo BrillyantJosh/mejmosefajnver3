@@ -58,6 +58,24 @@ console.log('— a list longer than one answer —');
   check('no event counted twice at the seam', new Set(read.events.map((e) => e.id)).size === 1180);
 }
 
+console.log('— relays that do not hold the same events —');
+{
+  // The server puts the relays' answers together. One relay misses every
+  // third event, so its 500 reach further back than the full relay's 500;
+  // continuing from the oldest of the merged page would step over the full
+  // relay's events in between (Točka shop offers, 20. 11. 2026).
+  const full = fakeRelay(1756);
+  const thin = full.all.filter((_, i) => i % 3 !== 0);
+  const merged = async (until?: number) => {
+    const ids = new Map<string, ReturnType<typeof event>>();
+    for (const e of await full.fetchPage(until)) ids.set(e.id, e);
+    for (const e of (until === undefined ? thin : thin.filter((x) => x.created_at <= until)).slice(0, 500)) ids.set(e.id, e);
+    return [...ids.values()];
+  };
+  const read = await readAllPages(merged, { maxPages: 20 });
+  check('every event of the fuller relay is read', read.events.length === 1756 && read.complete, { events: read.events.length, complete: read.complete });
+}
+
 console.log('— what it does not pretend —');
 {
   const relay = fakeRelay(5000);
