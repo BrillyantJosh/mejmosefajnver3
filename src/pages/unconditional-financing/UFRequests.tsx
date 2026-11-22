@@ -22,6 +22,7 @@ import {
   UfRequest,
   ufMaturingDaysLeft,
   ufTypeLabel,
+  useUfFundedRequests,
   useUfRequests,
 } from "@/hooks/useUFData";
 import {
@@ -39,8 +40,11 @@ import { ufGoalText, ufRaisedText } from "@/lib/ufMainFigures";
  * look like they did not exist.
  */
 // The public list holds approved requests only, so a request waiting for approval has no tab here.
-type UfTab = "all" | Exclude<UfPhase, "pending">;
-const TAB_ORDER: UfTab[] = ["all", "maturing", "repaying", "repaid"];
+// "funded" is not a phase: it is the open requests whose goal is reached (the "Financiran" badge),
+// a read-only filter over the same list. Such a request is also in "repaying" (shown in both).
+type UfTab = "all" | "funded" | Exclude<UfPhase, "pending">;
+const TAB_ORDER: UfTab[] = ["all", "maturing", "funded", "repaying", "repaid"];
+const PAGE_SIZE = 20;
 
 /** Slovenian declension for "financer" (1 financer, 2 financerja, 3–4 financerji, 5+ financerjev). */
 const financierLabel = (n: number, sl: boolean): string => {
@@ -288,13 +292,25 @@ const UFRequests = () => {
   const [page, setPage] = useState(1);
 
   const { settings: ufSettings } = useUfSettings();
-  const { requests, totalPages, counts, isLoading, error, refetch } = useUfRequests(
-    tab,
-    page,
-  );
+  const isFundedTab = tab === "funded";
+  const base = useUfRequests(isFundedTab ? "repaying" : tab, isFundedTab ? 1 : page, isFundedTab ? 1 : PAGE_SIZE);
+  const fundedList = useUfFundedRequests();
+  const { counts } = base;
+  const fundedPages = Math.max(1, Math.ceil(fundedList.funded.length / PAGE_SIZE));
+  const requests = isFundedTab
+    ? fundedList.funded.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    : base.requests;
+  const totalPages = isFundedTab ? fundedPages : base.totalPages;
+  const isLoading = isFundedTab ? fundedList.isLoading : base.isLoading;
+  const error = isFundedTab ? fundedList.error : base.error;
+  const refetch = isFundedTab ? fundedList.refetch : base.refetch;
   // "All" is the sum of the phases, so every tab carries a number.
   const tabCount = (t: UfTab): number =>
-    t === "all" ? counts.maturing + counts.repaying + counts.repaid : counts[t];
+    t === "all"
+      ? counts.maturing + counts.repaying + counts.repaid
+      : t === "funded"
+        ? fundedList.funded.length
+        : counts[t];
 
 
   // Bulk profile lookup for all requesters on the current page.
@@ -307,6 +323,7 @@ const UFRequests = () => {
   const tabLabels: Record<UfTab, string> = {
     all: sl ? "Vsi" : "All",
     maturing: sl ? "Zorenje" : "Maturing",
+    funded: sl ? "Financirani" : "Funded",
     repaying: sl ? "V odplačevanju" : "Repaying",
     repaid: sl ? "Poplačano" : "Repaid",
   };
@@ -327,6 +344,14 @@ const UFRequests = () => {
       hint: sl
         ? "Bodi prvi — objavi zahtevek za financiranje."
         : "Be the first — publish a financing request.",
+    },
+    funded: {
+      title: sl
+        ? "Noben zahtevek še ni financiran."
+        : "No requests are funded yet.",
+      hint: sl
+        ? "Ko zahtevek doseže cilj financiranja, se prikaže tukaj."
+        : "Once a request reaches its funding goal, it appears here.",
     },
     repaying: {
       title: sl

@@ -4,6 +4,7 @@
  * /api/unconditional-financing (mirrors useLanacrowdProjects).
  */
 import { useCallback, useEffect, useState } from 'react';
+import { ufReadsFunded } from '@/lib/ufFunded';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 export const UF_API = `${API_URL}/api/unconditional-financing`;
@@ -163,6 +164,48 @@ export function useUfRequests(tab: 'maturing' | 'repaying' | 'repaid' | 'all', p
 
   const refetch = useCallback(() => setRefreshKey((k) => k + 1), []);
   return { requests, total, totalPages, counts, isLoading, error, refetch };
+}
+
+/**
+ * Requests that read "Financiran" (goal reached, ufReadsFunded) — a read-only view over the
+ * existing public list: every page of tab=repaying is fetched and filtered here, nothing on the
+ * server or in any status changes. Gives the funded list and its count for the "Financirani" tab.
+ */
+export function useUfFundedRequests() {
+  const [funded, setFunded] = useState<UfRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    setIsLoading(true);
+    (async () => {
+      const all: UfRequest[] = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const r = await fetch(`${UF_API}/requests?tab=repaying&page=${page}&limit=100`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        all.push(...((d.requests || []) as UfRequest[]));
+        totalPages = d.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages && page <= 50);
+      return all;
+    })()
+      .then((all) => {
+        if (!alive) return;
+        setFunded(all.filter((q) => ufReadsFunded(q, q.totalFunded || 0)));
+        setError(null);
+      })
+      .catch((e) => alive && setError(e.message))
+      .finally(() => alive && setIsLoading(false));
+    return () => { alive = false; };
+  }, [refreshKey]);
+
+  const refetch = useCallback(() => setRefreshKey((k) => k + 1), []);
+  return { funded, isLoading, error, refetch };
 }
 
 export function useUfRequest(id: string | undefined) {
