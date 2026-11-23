@@ -74,6 +74,15 @@ export function ufReadsFunded(request: UfFundedRequest, totalFunded: unknown): b
 }
 
 /**
+ * Has repayment actually started? Open-for-funding phase ('repaying') and at least one repayment
+ * recorded (totalRepaid, the sum of the repayment records, is at least one cent). Funded alone is
+ * not enough. Display-only: it only sorts the "V odplačevanju" tab, nothing about money or status.
+ */
+export function ufRepaymentStarted(request: { phase: string }, totalRepaid: unknown): boolean {
+  return request.phase === 'repaying' && ufCents(totalRepaid) > 0;
+}
+
+/**
  * What is still missing to the goal, in cents: goal − raised as the page prints both, never below 0
  * (a request already at or over its goal has 0 missing). A goal that cannot be read (0, not a
  * number) gives null — there is no maximum that could honestly be shown, so nothing may be given.

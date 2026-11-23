@@ -42,6 +42,7 @@ import { ufGoalText, ufRaisedText } from "@/lib/ufMainFigures";
 // The public list holds approved requests only, so a request waiting for approval has no tab here.
 // "funded" is not a phase: it is the open requests whose goal is reached (the "Financiran" badge),
 // a read-only filter over the same list. Such a request is also in "repaying" (shown in both).
+// "repaying" is a filter too: only requests with at least one repayment recorded.
 // "open" is likewise a read-only filter: open for funding (fundable) and the goal not yet reached.
 type UfTab = "open" | "all" | "funded" | Exclude<UfPhase, "pending">;
 const TAB_ORDER: UfTab[] = ["open", "maturing", "funded", "repaying", "repaid", "all"];
@@ -293,11 +294,12 @@ const UFRequests = () => {
   const [page, setPage] = useState(1);
 
   const { settings: ufSettings } = useUfSettings();
-  const isFilterTab = tab === "funded" || tab === "open";
+  const isFilterTab = tab === "funded" || tab === "open" || tab === "repaying";
   const base = useUfRequests(isFilterTab ? "repaying" : tab, isFilterTab ? 1 : page, isFilterTab ? 1 : PAGE_SIZE);
   const fundedList = useUfFundedRequests();
   const { counts } = base;
-  const filterItems = tab === "open" ? fundedList.open : fundedList.funded;
+  const filterItems =
+    tab === "open" ? fundedList.open : tab === "repaying" ? fundedList.repaying : fundedList.funded;
   const fundedPages = Math.max(1, Math.ceil(filterItems.length / PAGE_SIZE));
   const requests = isFilterTab
     ? filterItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -314,7 +316,9 @@ const UFRequests = () => {
         ? fundedList.funded.length
         : t === "open"
           ? fundedList.open.length
-          : counts[t];
+          : t === "repaying"
+            ? fundedList.repaying.length
+            : counts[t];
 
 
   // Bulk profile lookup for all requesters on the current page.
@@ -327,10 +331,10 @@ const UFRequests = () => {
   const tabLabels: Record<UfTab, string> = {
     open: sl ? "Odprti" : "Open",
     all: sl ? "Vsi" : "All",
-    maturing: sl ? "Zorenje" : "Maturing",
+    maturing: sl ? "V zorenju" : "Maturing",
     funded: sl ? "Financirani" : "Funded",
     repaying: sl ? "V odplačevanju" : "Repaying",
-    repaid: sl ? "Poplačano" : "Repaid",
+    repaid: sl ? "Poplačani" : "Repaid",
   };
 
   const emptyStates: Record<UfTab, { title: string; hint: string }> = {
@@ -368,11 +372,11 @@ const UFRequests = () => {
     },
     repaying: {
       title: sl
-        ? "Noben zahtevek še ni odprt za financiranje."
-        : "No requests are open for funding yet.",
+        ? "Noben zahtevek še ne vrača sredstev."
+        : "No request has started repaying yet.",
       hint: sl
-        ? `Zahtevki se odprejo za financiranje po obdobju zorenja (${formatDays(ufSettings.maturingDays, true)}).`
-        : `Requests open for funding after the maturing period (${formatDays(ufSettings.maturingDays, false)}).`,
+        ? "Ko prejemnik vrne prvi znesek, se zahtevek prikaže tukaj."
+        : "Once a recipient makes the first repayment, the request appears here.",
     },
     repaid: {
       title: sl

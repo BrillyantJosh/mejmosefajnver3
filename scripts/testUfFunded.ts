@@ -28,7 +28,7 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { WebSocketServer } from 'ws';
 import { finalizeEvent, generateSecretKey, getPublicKey, type Event } from 'nostr-tools';
-import { ufAmountVerdict, ufCents, ufChosenFiat, ufContributeCta, ufFreshRemainingCents, ufIsFullyFunded, ufPreSendRefusal, ufReadsFunded, ufRemainingCents } from '../src/lib/ufFunded.js';
+import { ufAmountVerdict, ufCents, ufChosenFiat, ufContributeCta, ufFreshRemainingCents, ufIsFullyFunded, ufPreSendRefusal, ufReadsFunded, ufRemainingCents, ufRepaymentStarted } from '../src/lib/ufFunded.js';
 import { ufRaisedWhole } from '../src/lib/ufRaisedWhole.js';
 import { ufGoalText, ufGroupThousands, ufRaisedText } from '../src/lib/ufMainFigures.js';
 
@@ -72,6 +72,13 @@ console.log('— what the pages do with it —');
   check('open and funded → reads "Financiran"', ufReadsFunded(open, 1300));
   check('open, not yet funded → does not', !ufReadsFunded(open, 1000));
   check('repaid reads "Poplačano", not "Financiran"', !ufReadsFunded({ ...open, phase: 'repaid' }, 1300));
+  check('"V odplačevanju": funded but nothing repaid yet → not started; first repayment → started',
+    !ufRepaymentStarted(open, 0) && !ufRepaymentStarted(open, undefined) && !ufRepaymentStarted(open, 0.004) && ufRepaymentStarted(open, 0.01) && ufRepaymentStarted(open, 50));
+  check('"V odplačevanju": maturing, repaid or pending phases are never listed there', ['maturing', 'repaid', 'pending'].every((ph) => !ufRepaymentStarted({ phase: ph }, 50)));
+  check('tab labels: "V zorenju", "Poplačani", and the repaying tab reads the filtered list', (() => {
+    const l = readFileSync(new URL('../src/pages/unconditional-financing/UFRequests.tsx', import.meta.url), 'utf8');
+    return l.includes('sl ? "V zorenju" : "Maturing"') && l.includes('sl ? "Poplačani" : "Repaid"') && l.includes('fundedList.repaying');
+  })());
   check('maturing or waiting for approval → not "Financiran"', !ufReadsFunded({ ...open, phase: 'maturing' }, 1300) && !ufReadsFunded({ ...open, phase: 'pending' }, 1300));
   check('the "Prispevaj" place: open, below the goal → the button', ufContributeCta(open, 1000, false) === 'contribute');
   check('…funded → the disabled "Financiran", not the button', ufContributeCta(open, 1300, false) === 'funded');

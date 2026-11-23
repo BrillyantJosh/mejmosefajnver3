@@ -4,7 +4,7 @@
  * /api/unconditional-financing (mirrors useLanacrowdProjects).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { ufReadsFunded } from '@/lib/ufFunded';
+import { ufReadsFunded, ufRepaymentStarted } from '@/lib/ufFunded';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 export const UF_API = `${API_URL}/api/unconditional-financing`;
@@ -174,6 +174,7 @@ export function useUfRequests(tab: 'maturing' | 'repaying' | 'repaid' | 'all', p
 export function useUfFundedRequests() {
   const [funded, setFunded] = useState<UfRequest[]>([]);
   const [open, setOpen] = useState<UfRequest[]>([]);
+  const [repaying, setRepaying] = useState<UfRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -200,6 +201,8 @@ export function useUfFundedRequests() {
         setFunded(all.filter((q) => ufReadsFunded(q, q.totalFunded || 0)));
         // "Odprti": open for funding and the goal not yet reached (the same signals as the badge).
         setOpen(all.filter((q) => q.fundable && !ufReadsFunded(q, q.totalFunded || 0)));
+        // "V odplačevanju": repayment has really started (at least one repayment recorded).
+        setRepaying(all.filter((q) => ufRepaymentStarted(q, q.totalRepaid || 0)));
         setError(null);
       })
       .catch((e) => alive && setError(e.message))
@@ -208,7 +211,7 @@ export function useUfFundedRequests() {
   }, [refreshKey]);
 
   const refetch = useCallback(() => setRefreshKey((k) => k + 1), []);
-  return { funded, open, isLoading, error, refetch };
+  return { funded, open, repaying, isLoading, error, refetch };
 }
 
 export function useUfRequest(id: string | undefined) {
