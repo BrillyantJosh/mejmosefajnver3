@@ -43,6 +43,12 @@ export const UF_ACTION_APPROVE = 'uf-request-approve';
 /** An administrator reads what waits for approval and what is archived: content { action, id: 'review' }. */
 export const UF_ACTION_REVIEW = 'uf-requests-review';
 export const UF_REVIEW_TARGET = 'review';
+/**
+ * An administrator puts a request at the top of the "Odprti" tab, or takes it off: content
+ * { action, id, pinned: true|false } (Jasna asked, Brilly approved, 23. 11. 2026). Display order
+ * only — no amount, status, funding or repayment reads it.
+ */
+export const UF_ACTION_SET_PINNED = 'uf-request-set-pinned';
 
 export interface SignedActionExpectation {
   /** HTTP method of the route being called. */

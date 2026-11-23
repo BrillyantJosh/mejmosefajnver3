@@ -33,6 +33,8 @@ import { useUfSettings } from "@/hooks/useUFSettings";
 import { formatDays } from "@/lib/ufSettings";
 import { ufIsFullyFunded, ufReadsFunded } from "@/lib/ufFunded";
 import { ufGoalText, ufRaisedText } from "@/lib/ufMainFigures";
+import { ufIsPinned } from "@/lib/ufPinned";
+import UFPinButton from "./UFPinButton";
 
 /**
  * "All" first and selected by default: the phases split a small set of requests
@@ -64,9 +66,13 @@ interface UfRequestCardProps {
   request: UfRequest;
   profile?: CachedProfile;
   sl: boolean;
+  /** In the "Odprti" tab: the 📌 mark and, for administrators, "Na vrh" / "Odstrani z vrha". */
+  inOpenTab?: boolean;
+  /** After an administrator pinned or unpinned it: reload the list. */
+  onPinChanged?: () => void;
 }
 
-const UfRequestCard = ({ request, profile, sl }: UfRequestCardProps) => {
+const UfRequestCard = ({ request, profile, sl, inOpenTab = false, onPinChanged }: UfRequestCardProps) => {
   const navigate = useNavigate();
   // Graceful fallback when a cover image fails to load.
   const [coverError, setCoverError] = useState(false);
@@ -118,6 +124,12 @@ const UfRequestCard = ({ request, profile, sl }: UfRequestCardProps) => {
             </span>
           </div>
         )}
+        {inOpenTab && ufIsPinned(request) && (
+          <Badge className="absolute top-3 left-3 bg-background/90 text-foreground hover:bg-background/90 gap-1 shadow">
+            <span aria-hidden="true">📌</span>
+            {sl ? "Na vrhu" : "Pinned"}
+          </Badge>
+        )}
         {isFunded && (
           <Badge className="absolute top-3 right-3 bg-green-600 hover:bg-green-600 text-white gap-1.5 shadow">
             <CheckCircle className="h-4 w-4" />
@@ -137,6 +149,11 @@ const UfRequestCard = ({ request, profile, sl }: UfRequestCardProps) => {
       <CardContent className="p-6 space-y-4 flex-1 flex flex-col">
         {/* Title */}
         <h3 className="text-2xl font-bold text-green-600">{request.title}</h3>
+
+        {/* Administrators: on top of "Odprti" or off it (renders nothing for anyone else) */}
+        {inOpenTab && onPinChanged && (
+          <UFPinButton request={request} onDone={onPinChanged} />
+        )}
 
         {/* Request Type Badge */}
         <div>
@@ -465,6 +482,8 @@ const UFRequests = () => {
                 request={request}
                 profile={profiles.get(request.pubkey)}
                 sl={sl}
+                inOpenTab={tab === "open"}
+                onPinChanged={refetch}
               />
             ))}
           </div>

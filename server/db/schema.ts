@@ -403,7 +403,10 @@ export function initializeSchema(db: Database.Database): void {
       approved_by TEXT,
       approved_event_id TEXT,
       approved_fiat_goal REAL,
-      approved_currency TEXT
+      approved_currency TEXT,
+      -- On top of the "Odprti" tab (migrateUfPinned): NULL = not pinned. Display order only.
+      pinned_at INTEGER,
+      pinned_by TEXT
     );
 
     CREATE TABLE IF NOT EXISTS uf_contributions (
@@ -549,6 +552,7 @@ export function initializeSchema(db: Database.Database): void {
   }
 
   migrateUfApproval(db);
+  migrateUfPinned(db);
 
   // Migration: expand event_tickets wallet_type CHECK constraint to allow 'card' and 'bank_transfer'
   // SQLite cannot ALTER CHECK constraints, so we must recreate the table
@@ -602,6 +606,20 @@ export function initializeSchema(db: Database.Database): void {
  * A database built from scratch gets the columns from CREATE TABLE and grandfathers nothing —
  * everything it re-indexes from the relays then waits for approval (fail-closed).
  */
+/**
+ * Unconditional Financing: an administrator may put a request on top of the "Odprti" tab
+ * (23. 11. 2026). Two nullable columns, added and nothing else: every existing request reads as
+ * not pinned, and no other column is read or written. pinned_at = when it was put on top (the
+ * most recent is highest), pinned_by = the administrator who signed it.
+ */
+export function migrateUfPinned(db: Database.Database): void {
+  const cols = (db.prepare('PRAGMA table_info(uf_requests)').all() as { name: string }[]).map((c) => c.name);
+  db.transaction(() => {
+    if (!cols.includes('pinned_at')) db.exec('ALTER TABLE uf_requests ADD COLUMN pinned_at INTEGER');
+    if (!cols.includes('pinned_by')) db.exec('ALTER TABLE uf_requests ADD COLUMN pinned_by TEXT');
+  })();
+}
+
 export function migrateUfApproval(db: Database.Database): void {
   const has = (db.prepare('PRAGMA table_info(uf_requests)').all() as { name: string }[]).some((c) => c.name === 'approved_at');
   if (has) return;

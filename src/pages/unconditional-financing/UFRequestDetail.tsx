@@ -40,6 +40,7 @@ import { ufContributeCta, ufReadsFunded } from "@/lib/ufFunded";
 import { ufGoalText, ufRaisedText } from "@/lib/ufMainFigures";
 import UFComments from "./UFComments";
 import UFAdminBar from "./UFAdminBar";
+import UFPinButton from "./UFPinButton";
 
 // chainz is the ONLY valid LANA explorer
 const CHAINZ_TX = "https://chainz.cryptoid.info/lana/tx.dws?";
@@ -302,6 +303,8 @@ const UFRequestDetail = () => {
                     : sl ? "Zahtevek je odobren in javen. Znesek je zaklenjen." : "The request is approved and public. Its amount is locked."}
               </p>
               <UFAdminBar request={request} onDone={refetch} authorName={profileName(request.pubkey)} />
+              {/* On top of the "Odprti" tab — only a public request is listed there */}
+              {!isArchived && !isPending && <UFPinButton request={request} onDone={refetch} />}
             </AlertDescription>
           </Alert>
         )}

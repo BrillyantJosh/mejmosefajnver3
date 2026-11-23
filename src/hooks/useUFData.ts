@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { ufReadsFunded, ufRepaymentStarted } from '@/lib/ufFunded';
+import { ufOpenOrder } from '@/lib/ufPinned';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 export const UF_API = `${API_URL}/api/unconditional-financing`;
@@ -45,6 +46,8 @@ export interface UfRequest {
   approval: 'pending' | 'approved';
   approvedAt: number | null;
   approvedEventId: string | null;
+  /** Put on top of the "Odprti" tab by an administrator (unix seconds), or null (src/lib/ufPinned.ts). */
+  pinnedAt: number | null;
   /**
    * May a contribution be made right now? The same rule the server enforces when it is recorded.
    * A request funded to its goal is still `fundable` here — the app closes it itself, before any
@@ -200,7 +203,8 @@ export function useUfFundedRequests() {
         if (!alive) return;
         setFunded(all.filter((q) => ufReadsFunded(q, q.totalFunded || 0)));
         // "Odprti": open for funding and the goal not yet reached (the same signals as the badge).
-        setOpen(all.filter((q) => q.fundable && !ufReadsFunded(q, q.totalFunded || 0)));
+        // Requests an administrator put on top come first; the rest keep their order (ufPinned.ts).
+        setOpen(ufOpenOrder(all.filter((q) => q.fundable && !ufReadsFunded(q, q.totalFunded || 0))));
         // "V odplačevanju": repayment has really started (at least one repayment recorded).
         setRepaying(all.filter((q) => ufRepaymentStarted(q, q.totalRepaid || 0)));
         setError(null);

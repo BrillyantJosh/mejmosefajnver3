@@ -36,6 +36,7 @@ import {
   UF_ACTION_DELETE_REQUEST,
   UF_ACTION_REVIEW,
   UF_ACTION_SET_HIDDEN,
+  UF_ACTION_SET_PINNED,
   UF_REVIEW_TARGET,
   consumeSignedAction,
   isRefused,
@@ -141,6 +142,8 @@ function requestRowToApi(row: any, nowSec: number) {
     approval: approved ? 'approved' : 'pending',
     approvedAt: approved ? row.approved_at : null,
     approvedEventId: approved ? row.approved_event_id : null,
+    /** Put on top of the "Odprti" tab by an administrator (unix seconds), or null. Display order only. */
+    pinnedAt: Number(row.pinned_at) > 0 ? Number(row.pinned_at) : null,
     /** May a contribution be made right now? The same rule /contributions/record enforces. */
     fundable: phase === 'repaying' && !fundingRefusal(row),
     nostrCreatedAt: row.nostr_created_at,
@@ -673,6 +676,57 @@ router.post('/requests/:id/approve', (req, res) => {
     res.json({ success: true, fundingOpensAt: row.funding_opens_at });
   } catch (err: any) {
     console.error('❌ POST /api/unconditional-financing/requests/:id/approve error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
+// POST /api/unconditional-financing/requests/:id/pin
+// Body: { event: <signed kind 27235> }
+//   content: {"action":"uf-request-set-pinned","id":"<request id>","pinned":true|false}
+//   tags:    ['u', <this url>], ['method', 'POST'], ['nonce', <random>]
+// Jasna asked, Brilly approved (23. 11. 2026): an administrator — the same people who approve
+// requests — may put a request on top of the "Odprti" tab and take it off again. The SIGNER must
+// be an administrator; "pinned" is read from the signed content. Only pinned_at / pinned_by are
+// written: no amount, status, approval, funding window or repayment is touched, and nothing goes
+// to the relays. Putting on top a request that is already on top keeps its first time.
+// ──────────────────────────────────────────────
+router.post('/requests/:id/pin', (req, res) => {
+  const db = getDb();
+  const signed = verifySignedAction(req.body?.event, {
+    method: 'POST',
+    action: UF_ACTION_SET_PINNED,
+    target: req.params.id,
+  });
+  if (isRefused(signed)) return res.status(signed.status).json({ error: signed.error });
+  if (!isAdministrator(db, signed.pubkey)) return res.status(403).json({ error: 'Not an administrator' });
+
+  const pinned = signed.payload.pinned;
+  if (typeof pinned !== 'boolean') return res.status(400).json({ error: 'Say whether the request goes on top (pinned: true) or off it (false)' });
+
+  try {
+    const row = db.prepare('SELECT id FROM uf_requests WHERE id = ?').get(req.params.id) as any;
+    if (!row) return res.status(404).json({ error: 'Request not found' });
+
+    const spent = consumeSignedAction(signed);
+    if (spent) return res.status(spent.status).json({ error: spent.error });
+
+    const now = Math.floor(Date.now() / 1000);
+    if (pinned) {
+      db.prepare(`
+        UPDATE uf_requests
+           SET pinned_by = CASE WHEN pinned_at > 0 THEN pinned_by ELSE ? END,
+               pinned_at = CASE WHEN pinned_at > 0 THEN pinned_at ELSE ? END
+         WHERE id = ?
+      `).run(signed.pubkey, now, req.params.id);
+    } else {
+      db.prepare('UPDATE uf_requests SET pinned_at = NULL, pinned_by = NULL WHERE id = ?').run(req.params.id);
+    }
+    const after = db.prepare('SELECT pinned_at FROM uf_requests WHERE id = ?').get(req.params.id) as any;
+    console.log(`${pinned ? '📌 Pinned' : '📍 Unpinned'} UF request ${req.params.id} by ${signed.pubkey.slice(0, 16)}…`);
+    res.json({ success: true, pinnedAt: Number(after?.pinned_at) > 0 ? Number(after.pinned_at) : null });
+  } catch (err: any) {
+    console.error('❌ POST /api/unconditional-financing/requests/:id/pin error:', err);
     res.status(500).json({ error: err.message });
   }
 });

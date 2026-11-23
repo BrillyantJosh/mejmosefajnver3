@@ -8,6 +8,7 @@
  *              edit landing in between is not approved in its place;
  *  - archive / restore: the module's hide flag (out of every public list, not fundable);
  *  - review:   the requests that wait for approval and the archived ones.
+ *  - pin / unpin: on top of the "Odprti" tab, or off it (display order only, src/lib/ufPinned.ts).
  */
 import { finalizeEvent } from "nostr-tools";
 import { UF_API, type UfRequest } from "@/hooks/useUFData";
@@ -16,6 +17,7 @@ export const UF_ACTION_APPROVE = "uf-request-approve";
 export const UF_ACTION_SET_HIDDEN = "uf-request-set-hidden";
 export const UF_ACTION_REVIEW = "uf-requests-review";
 export const UF_REVIEW_TARGET = "review";
+export const UF_ACTION_SET_PINNED = "uf-request-set-pinned";
 
 const hexToBytes = (hex: string): Uint8Array =>
   new Uint8Array((hex.match(/.{1,2}/g) || []).map((b) => parseInt(b, 16)));
@@ -71,6 +73,10 @@ export const approveUfRequest = (request: Pick<UfRequest, "id" | "eventId" | "fi
 /** Archive (true) or restore (false). */
 export const setUfRequestArchived = (id: string, archived: boolean, privateKeyHex: string) =>
   send("PATCH", `${UF_API}/requests/${encodeURIComponent(id)}/admin`, UF_ACTION_SET_HIDDEN, id, privateKeyHex, { is_hidden: archived });
+
+/** Put on top of the "Odprti" tab (true) or take it off (false). */
+export const setUfRequestPinned = (id: string, pinned: boolean, privateKeyHex: string): Promise<{ success: boolean; pinnedAt: number | null }> =>
+  send("POST", `${UF_API}/requests/${encodeURIComponent(id)}/pin`, UF_ACTION_SET_PINNED, id, privateKeyHex, { pinned });
 
 export const fetchUfReview = (privateKeyHex: string): Promise<{ pending: UfRequest[]; archived: UfRequest[] }> =>
   send("POST", `${UF_API}/requests/review`, UF_ACTION_REVIEW, UF_REVIEW_TARGET, privateKeyHex);
