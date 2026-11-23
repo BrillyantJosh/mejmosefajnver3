@@ -173,6 +173,7 @@ export function useUfRequests(tab: 'maturing' | 'repaying' | 'repaid' | 'all', p
  */
 export function useUfFundedRequests() {
   const [funded, setFunded] = useState<UfRequest[]>([]);
+  const [open, setOpen] = useState<UfRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -197,6 +198,8 @@ export function useUfFundedRequests() {
       .then((all) => {
         if (!alive) return;
         setFunded(all.filter((q) => ufReadsFunded(q, q.totalFunded || 0)));
+        // "Odprti": open for funding and the goal not yet reached (the same signals as the badge).
+        setOpen(all.filter((q) => q.fundable && !ufReadsFunded(q, q.totalFunded || 0)));
         setError(null);
       })
       .catch((e) => alive && setError(e.message))
@@ -205,7 +208,7 @@ export function useUfFundedRequests() {
   }, [refreshKey]);
 
   const refetch = useCallback(() => setRefreshKey((k) => k + 1), []);
-  return { funded, isLoading, error, refetch };
+  return { funded, open, isLoading, error, refetch };
 }
 
 export function useUfRequest(id: string | undefined) {

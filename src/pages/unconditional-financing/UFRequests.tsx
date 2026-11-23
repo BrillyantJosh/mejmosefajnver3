@@ -42,8 +42,9 @@ import { ufGoalText, ufRaisedText } from "@/lib/ufMainFigures";
 // The public list holds approved requests only, so a request waiting for approval has no tab here.
 // "funded" is not a phase: it is the open requests whose goal is reached (the "Financiran" badge),
 // a read-only filter over the same list. Such a request is also in "repaying" (shown in both).
-type UfTab = "all" | "funded" | Exclude<UfPhase, "pending">;
-const TAB_ORDER: UfTab[] = ["all", "maturing", "funded", "repaying", "repaid"];
+// "open" is likewise a read-only filter: open for funding (fundable) and the goal not yet reached.
+type UfTab = "open" | "all" | "funded" | Exclude<UfPhase, "pending">;
+const TAB_ORDER: UfTab[] = ["open", "maturing", "funded", "repaying", "repaid", "all"];
 const PAGE_SIZE = 20;
 
 /** Slovenian declension for "financer" (1 financer, 2 financerja, 3–4 financerji, 5+ financerjev). */
@@ -288,29 +289,32 @@ const UfRequestCardSkeleton = () => (
 
 const UFRequests = () => {
   const sl = useLang() === "sl";
-  const [tab, setTab] = useState<UfTab>("all");
+  const [tab, setTab] = useState<UfTab>("open");
   const [page, setPage] = useState(1);
 
   const { settings: ufSettings } = useUfSettings();
-  const isFundedTab = tab === "funded";
-  const base = useUfRequests(isFundedTab ? "repaying" : tab, isFundedTab ? 1 : page, isFundedTab ? 1 : PAGE_SIZE);
+  const isFilterTab = tab === "funded" || tab === "open";
+  const base = useUfRequests(isFilterTab ? "repaying" : tab, isFilterTab ? 1 : page, isFilterTab ? 1 : PAGE_SIZE);
   const fundedList = useUfFundedRequests();
   const { counts } = base;
-  const fundedPages = Math.max(1, Math.ceil(fundedList.funded.length / PAGE_SIZE));
-  const requests = isFundedTab
-    ? fundedList.funded.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const filterItems = tab === "open" ? fundedList.open : fundedList.funded;
+  const fundedPages = Math.max(1, Math.ceil(filterItems.length / PAGE_SIZE));
+  const requests = isFilterTab
+    ? filterItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     : base.requests;
-  const totalPages = isFundedTab ? fundedPages : base.totalPages;
-  const isLoading = isFundedTab ? fundedList.isLoading : base.isLoading;
-  const error = isFundedTab ? fundedList.error : base.error;
-  const refetch = isFundedTab ? fundedList.refetch : base.refetch;
+  const totalPages = isFilterTab ? fundedPages : base.totalPages;
+  const isLoading = isFilterTab ? fundedList.isLoading : base.isLoading;
+  const error = isFilterTab ? fundedList.error : base.error;
+  const refetch = isFilterTab ? fundedList.refetch : base.refetch;
   // "All" is the sum of the phases, so every tab carries a number.
   const tabCount = (t: UfTab): number =>
     t === "all"
       ? counts.maturing + counts.repaying + counts.repaid
       : t === "funded"
         ? fundedList.funded.length
-        : counts[t];
+        : t === "open"
+          ? fundedList.open.length
+          : counts[t];
 
 
   // Bulk profile lookup for all requesters on the current page.
@@ -321,6 +325,7 @@ const UFRequests = () => {
   const { profiles } = useNostrProfilesCacheBulk(requesterPubkeys);
 
   const tabLabels: Record<UfTab, string> = {
+    open: sl ? "Odprti" : "Open",
     all: sl ? "Vsi" : "All",
     maturing: sl ? "Zorenje" : "Maturing",
     funded: sl ? "Financirani" : "Funded",
@@ -329,6 +334,14 @@ const UFRequests = () => {
   };
 
   const emptyStates: Record<UfTab, { title: string; hint: string }> = {
+    open: {
+      title: sl
+        ? "Trenutno ni zahtevkov, odprtih za financiranje."
+        : "No requests are open for funding right now.",
+      hint: sl
+        ? "Ko je zahtevek odprt za financiranje in cilj še ni dosežen, se prikaže tukaj."
+        : "A request appears here while it is open for funding and its goal is not yet reached.",
+    },
     all: {
       title: sl
         ? "Ni še nobenega zahtevka za financiranje."
