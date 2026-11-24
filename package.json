@@ -20,6 +20,7 @@
     "test:lanacrowd": "node --import tsx --test server/test/lanacrowdSigned.test.ts",
     "test:points-margin": "node --import tsx --test src/lib/foodCornerMargin.test.ts server/test/foodCornerOrderCheck.test.ts",
     "test:shop-offers": "node --import tsx --test src/lib/foodCornerShopOffers.test.ts",
+    "test:cycle-window": "TZ=Europe/Ljubljana node --import tsx --test src/lib/foodCornerCycleWindow.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

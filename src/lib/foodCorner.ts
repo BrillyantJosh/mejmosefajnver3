@@ -606,6 +606,39 @@ export function foodCornerOrderingWindow(node: FoodCornerNode, from: Date = new 
 }
 
 /**
+ * Order deadline and pickup of ONE listed cycle of a point: the cycle that
+ * foodCornerWeekRange(offset, <the point's pickup day>, from) lists. Its pickup
+ * is that range's end, at the start of the pickup window; its deadline is the
+ * one order cutoff in the week before that pickup. `cutoff` may be in the past —
+ * the cycle's ordering is then closed.
+ *
+ * foodCornerOrderingWindow answers another question — when does a NEW order
+ * close, and when is it picked up — so from the cutoff until the pickup day it
+ * already names the next cycle. The supplier's "Ta teden" used it and showed next
+ * week's deadline and delivery above this week's orders (24. 11. 2026: orders
+ * for Thursday 26. 11., header "Dostavi do: četrtek, 3. dec.").
+ */
+export function foodCornerCycleWindow(
+  node: FoodCornerNode,
+  offset: number,
+  from: Date = new Date(),
+): FoodCornerOrderingWindow {
+  const pickup = node.pickups[0];
+  const pickupWindow = pickup?.window || "";
+  if (!pickup?.day || WEEKDAY_NAMES.indexOf(pickup.day.trim().toLowerCase()) < 0) {
+    return { cutoff: null, pickup: null, pickupWindow };
+  }
+  const pickupDate = foodCornerWeekRange(offset, pickup.day, from).end;
+  const [h, m] = (pickupWindow.split(/[–—-]/)[0].trim() || "00:00").split(":").map((x) => Number.parseInt(x, 10));
+  pickupDate.setHours(Number.isFinite(h) ? h : 0, Number.isFinite(m) ? m : 0, 0, 0);
+  // A weekly cutoff falls exactly once in (pickup − 7 days, pickup].
+  const cutoff = node.orderCutoffDay
+    ? nextWeekdayOccurrence(node.orderCutoffDay, node.orderCutoffTime || "00:00", addFoodCornerWeeks(pickupDate, -1))
+    : null;
+  return { cutoff, pickup: pickupDate, pickupWindow };
+}
+
+/**
  * Week range anchored to a given weekday — the Točka Obilja order cycle runs
  * "from cutoff day to cutoff day" (e.g. Thursday→Thursday), NOT Monday→Sunday.
  * `anchorDay` is a weekday name (matches `orderCutoffDay`). offset 0 = current

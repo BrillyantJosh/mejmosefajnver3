@@ -17,10 +17,10 @@ import {
   type FoodCornerNode,
 } from "@/types/foodCorner";
 import {
+  foodCornerCycleWindow,
   foodCornerItemKey,
   foodCornerMinWeekOffset,
   foodCornerOrderInWeek,
-  foodCornerOrderingWindow,
   foodCornerWeekRange,
   formatFoodMoney,
 } from "@/lib/foodCorner";
@@ -183,10 +183,14 @@ export default function FoodCornerSupplier() {
     return arr;
   }, [ordersInWeek, nodeByRef, t]);
 
-  // Order-cutoff + delivery/pickup info for a point's current cycle.
+  // Order cutoff + delivery of the cycle on screen — the one whose orders are
+  // listed below. Not the window a NEW order would get: after the Monday cutoff
+  // that one is already next week's, and "Ta teden" then promised next week's
+  // delivery for this week's orders (24. 11. 2026). Past the cutoff the line
+  // keeps this cycle's deadline and says ordering is closed.
   const windowInfo = (node?: FoodCornerNode) => {
     if (!node) return null;
-    const win = foodCornerOrderingWindow(node, now);
+    const win = foodCornerCycleWindow(node, weekOffset, now);
     const cutoffMs = win.cutoff ? win.cutoff.getTime() - now.getTime() : null;
     return {
       cutoffStr: win.cutoff
@@ -286,7 +290,7 @@ export default function FoodCornerSupplier() {
           )
           .join("");
         const meta: string[] = [];
-        // Cutoff/delivery (next occurrence) only apply to the current cycle.
+        // Cutoff/delivery of this cycle, shown for the current cycle only.
         if (weekOffset === 0 && wi?.cutoffStr) meta.push(`${escapeHtml(t("order.deadline.label"))}: ${escapeHtml(wi.cutoffStr)}`);
         if (weekOffset === 0 && wi?.pickupStr)
           meta.push(
