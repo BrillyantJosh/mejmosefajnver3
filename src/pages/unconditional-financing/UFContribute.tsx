@@ -552,7 +552,7 @@ const UFContribute = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">
-                  {sl ? "Sporočilo (neobvezno)" : "Message (optional)"}
+                  {sl ? "Sporočilo" : "Message"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
